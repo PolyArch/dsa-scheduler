@@ -1,0 +1,88 @@
+
+Variable            optimal;
+binary variable     Mn(v,n), Ml(e,l);
+positive variables    Tv(v), Te(e);
+variables length, S;
+
+S.up                = 100;
+*Tv.up(v)            = 60;
+*Te.up(e)            = 60;
+
+
+
+Equations
+    add(v)
+    source_mapping(e,n)
+    dest_mapping(e,n)
+    incoming_links(e,r)
+    outgoing_links(e,r)
+    latency(e)
+    latency2(e)
+*    throughput(l)
+*    throughput2(n)
+    minimizing_throughput;
+
+
+set notKindN(K,n);
+notKindN(K,n)=YES;
+notKindN(K,n)$kindN(K,n)=NO;
+
+display kindN;
+display notKindN;
+
+equation assignVertex(K,v);
+assignVertex(K,v)$kindV(K,v)..     sum(n$(kindN(K,n)), Mn(v, n)) =l= 1;
+
+*equation enforceHetero(K,v);
+*enforceHetero(K,v)$kindV(K,v)..     sum(n$(notKindN(K,n)), Mn(v, n)) =e= 0;
+
+loop(K,
+Mn.fx(v,n)$(kindV(K,v) and not kindN(K,n))=0;
+);
+
+
+option reslim = 1;
+
+equation onlyOneVperN(n);
+onlyOneVperN(n)..  sum(v,Mn(v,n)) =l= 1;
+
+
+binary variable Mvl(v,l);
+
+equation calc_l_used(v,l);
+calc_l_used(v,l).. sum(e$(Gve(v,e)),Ml(e,l)) - 5*Mvl(v,l) =l= 0;
+
+*equation calc_l_used(v,e,l);
+*calc_l_used(v,e,l)$(Gve(v,e)).. Ml(e,l) =l= Mvl(v,l);
+
+
+equation onlyOneEperL(l);
+onlyOneEperL(l)..  sum(v,Mvl(v,l)) =l= 1;
+
+Tv.fx(v)$kindV('Input',v)=0;
+
+source_mapping(e,n)..       sum(l$Hnl(n,l),Ml(e,l)) =e= sum(v$Gve(v,e), Mn(v,n));
+dest_mapping(e,n)$(notKindN('Output',n)).. sum(l$Hln(l,n),Ml(e,l)) =e= sum(v$Gev(e,v), Mn(v,n));
+incoming_links(e,r)..       sum(l$Hlr(l,r),Ml(e,l)) =e= sum(l$Hrl(r,l), Ml(e,l));
+outgoing_links(e,r)..       sum(l$Hlr(l,r),Ml(e,l)) =l= 1;
+
+latency(e)..            Te(e) =e= sum(v$Gve(v,e), Tv(v)) + delta(e) + sum(l,Ml(e,l));
+latency2(e)..           Te(e) =l= sum(v$Gev(e,v), Tv(v));
+add(v)..                length =g= Tv(v);
+
+*throughput(l)..         sum(e,Ml(e,l)) =l= S;
+*throughput2(n)..         sum(v, Mn(v,n)) =l= S;
+
+*minimizing_throughput.. optimal =e= (1000 * S) + length;
+*minimizing_throughput.. optimal =e=  1000000* sum((v,k)$kindV(K,v),(1-sum(n$(kindN(K,n)), Mn(v, n)))) +  1000 * length + sum(l,sum(v,Mvl(v,l)));
+minimizing_throughput.. optimal =e=  1000000* sum((v,k)$kindV(K,v),(1-sum(n$(kindN(K,n)), Mn(v, n)))) + sum(l,sum(v,Mvl(v,l)));
+
+Model   solution    "the solution for this model" / all /;
+solution.holdFixed=1;
+solution.threads=100;
+
+solve   solution    using mip minimizing optimal;
+
+option Mvl:1:0:1;
+display Mvl.l;
+

@@ -1,0 +1,44 @@
+$batinclude dyser_kind.gams
+$batinclude dyser_model.gams
+$batinclude dyser_pdg.gams
+$batinclude constraints.gams
+option Mn:0:0:1;
+display Mn.l;
+option Ml:0:0:1;
+display Ml.l;
+file outfile / "./dyser.out" /;
+outfile.pc=8;
+outfile.pw=4096
+put outfile;
+put "# Edge -> Links" /
+loop((e), 
+    put e.tl ":"
+    loop((l)$(Ml.l(e,l)<>0),
+        put l.tl
+    );
+    put /
+);
+put "# Links -> Edges" /
+loop((l), 
+    put l.tl ":"
+    loop((e)$(Ml.l(e,l)<>0),
+        put e.tl
+    );
+    put /
+);
+put "[vertex-node-map]" /
+loop((v),
+    put v.tl ":";
+    loop((n)$(Mn.l(v,n)<>0),
+        put n.tl 
+    );
+    put /
+);
+put "[vertex-link-map]" /
+loop((v), 
+    put v.tl ":"
+    loop((l)$(Mvl.l(v,l)<>0),
+        put l.tl
+    );
+    put /
+);
