@@ -16,7 +16,10 @@ INC_DYSCHED_PATH=$(SRC_ROOT)/scheduler/inc
 
 CXXFLAGS += -I$(INC_DYMODEL_PATH) -I$(INC_DYSCHED_PATH)
 
-all: resched stat-config
+all: reschedule stat-config
+
+reschedule : reschedule.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_DYMODEL_PATH) -L$(LIB_DYSCHED_PATH) -ldymodel -ldyscheduler
 
 resched : resched.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_DYMODEL_PATH) -L$(LIB_DYSCHED_PATH) -ldymodel -ldyscheduler
@@ -25,4 +28,4 @@ stat-config : stat-config.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_DYMODEL_PATH) -L$(LIB_DYSCHED_PATH) -ldymodel -ldyscheduler
 
 clean:
-	rm -rf *.o  resched stat-config
+	rm -rf *.o  resched stat-config reschedule

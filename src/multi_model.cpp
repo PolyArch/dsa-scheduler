@@ -3,9 +3,24 @@ string multi_model = R"(
 Variable            cost,length;
 binary variable     Mn(v,n), Ml(e,l), Mvl(v,l);
 positive variable   Tv(v), Te(e),invThroughput;
+
 alias(v1,v2,v);
+alias (l1,l2,l);
+set Gvv(v,v);
+Gvv(v1,v2)=YES$(sum(e,Gve(v1,e) and Gev(e,v2))); 
+set Hll(l,l);
+Hll(l1,l2)=YES$(sum(n,Hln(l1,n) and Hnl(n,l2)) or sum(r,Hlr(l1,r) and Hrl(r,l2)));
+
+
+binary variable     Fll(l,l);
+positive variable   O(l),extra(e),maxExtra;
+
 
 $batinclude mip_start.gams
+
+alias (v1,v2,v);
+
+
 
 Equations
     assignVertex(K,v)
@@ -24,6 +39,7 @@ Mn.prior(v,n)=0;
 Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
 Ml.prior(e,l)=10;
 Mvl.prior(v,l)=100;
+Fll.prior(l,l)=100;
 
 * Set not-possible variables to 0
 loop(K,
@@ -97,7 +113,10 @@ one_loadslice(v).. sum(loadlinks,Mvl(v,loadlinks)) =l= 1;
 *latency2(e,v)$Gev(e,v)..        Tv(v) =g= Te(e);
 
 equation latency(v,e,v);
-latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =g= Tv(v1) + sum(l,Ml(e,l)) + delta(e);
+latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Ml(e,l)) + delta(e) + extra(e);
+
+equation getMismatch(e);
+getMismatch(e).. maxExtra =g= extra(e);
 
 *positive varaible Tn(n), Tr(r), Tl(l);
 
@@ -106,9 +125,16 @@ latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =g= Tv(v1) + sum(l,Ml(e,
 
 add(v)..                length =g= Tv(v);
 
+equation block_cycles(l,l,e);
+block_cycles(l1,l2,e)$Hll(l1,l2).. Ml(e,l1) + Ml(e,l2) -1 - Fll(l1,l2) =l= 0;
+
+equation ordering(l,l);
+ordering(l1,l2)$(Hll(l1,l2)).. O(l1)+1000*Fll(l1,l2)+1=l=1000 + O(l2);
+
 *obj.. cost =e= (1000 * S) + length;
 obj.. cost =e=  1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn(iv, n)))) +  1000 * length + sum(l,sum(v,Mvl(v,l)));
 *obj.. cost =e=  1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn(iv, n)))) + 1000 * length;
+*obj.. cost =e=  100000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn(iv, n)))) +100000*maxExtra+  1000 * length + sum(l,sum(v,Mvl(v,l)));
 
 Model   schedule  / all /;
 
@@ -123,7 +149,7 @@ file optfile /cplex.opt/;
 put optfile;
 *put 'mipemphasis 2'/;
 *put 'parallelmode -1'/;
-*put 'probe 3'/;
+put 'probe 2'/;
 *put 'heurfreq 1'/;
 *put 'coeredind 3'/;
 put 'mipstart 1'/;
@@ -146,5 +172,9 @@ putclose;
 *schedule.Cutoff = 1000000;
 
 solve   schedule    using mip minimizing cost;
+
+display Fll.l;
+display extra.l;
+display maxExtra.l;
   
 )";
