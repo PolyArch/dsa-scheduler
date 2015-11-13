@@ -26,8 +26,8 @@ class Scheduler {
 
   Scheduler(DY_MODEL::DyModel* dyModel) :
   _gams_files_setup(false), _use_server(false),
-    _gams_work_dir("."), _dyModel(dyModel),
-    _optcr(0.1f), _optca(0.0f), _reslim(0.0f), _showGams(true) { }
+    _gams_work_dir("gams"), _dyModel(dyModel),
+    _optcr(0.1f), _optca(0.0f), _reslim(100000.0f), _showGams(true) { }
 
   bool scheduleGAMS(DyPDG* dyPDG, Schedule*& schedule);
   
@@ -80,9 +80,10 @@ class Scheduler {
   //std::unordered_map<std::string,DyPDG_Node*> gamsToPdgnode;
   
   //typedef SchedulerMap std::unordered_map;
-  
+
   std::unordered_map<std::string,std::pair<DY_MODEL::dynode*,int> >  gamsToDynode;  
   std::unordered_map<std::string,std::pair<DY_MODEL::dylink*,int> > gamsToDylink;
+  std::unordered_map<std::string,std::pair<DY_MODEL::dyswitch*,int>>  gamsToDyswitch;
   std::unordered_map<std::string,DyPDG_Node*> gamsToPdgnode;
   std::unordered_map<std::string,DyPDG_Edge*> gamsToPdgedge;
 };

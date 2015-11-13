@@ -9,7 +9,7 @@ endif
 CXXFLAGS :=  -Wall -g -std=c++0x -lm $(FLAGS)
 SOURCES= dypdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp
 
-INCLUDE_DEST=../inc
+INCLUDE_DEST=../src
 LIB_DEST=../lib
 OBJ_DEST=../obj
 
@@ -17,8 +17,8 @@ PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
 
 SRC_ROOT=../..
-LIB_DYMODEL_PATH=$(SRC_ROOT)/dymodel/lib
-INC_DYMODEL_PATH=$(SRC_ROOT)/dymodel/inc
+LIB_DYMODEL_PATH=$(SRC_ROOT)/sb_config/lib
+INC_DYMODEL_PATH=$(SRC_ROOT)/sb_config/src
 
 all: $(LIB_DEST)/libdyscheduler.a $(LIB_DEST)/libdyscheduler.so
 
@@ -31,6 +31,10 @@ $(LIB_DEST)/libdyscheduler.a: $(OBJECTS)
     
 $(LIB_DEST)/libdyscheduler.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $^     
+
+$(OBJ_DEST)/scheduler.o: scheduler.cpp multi_model.cpp spill_model.cpp dyser_gams.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
     
 $(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<

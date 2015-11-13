@@ -1,0 +1,11 @@
+Input: 16 N1
+Input: 16 N2
+Input: 16 acc
+
+M0 =Mul16(N1, N2, acc)
+
+A0 =Add16(M0 , acc)
+
+out=Sig16(A0)
+
+Output: out

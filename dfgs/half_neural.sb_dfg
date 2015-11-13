@@ -1,0 +1,25 @@
+InputVec: 16 8 N
+InputVec: 16 8 S
+
+M0 =Mul16(N0 , S0 )
+M1 =Mul16(N1 , S1 )
+M2 =Mul16(N2 , S2 )
+M3 =Mul16(N3 , S3 )
+M4 =Mul16(N4 , S4 )
+M5 =Mul16(N5 , S5 )
+M6 =Mul16(N6 , S6 )
+M7 =Mul16(N7 , S7 )
+
+A0 =Add16(M0 , M1 )
+A1 =Add16(M2 , M3 )
+A2 =Add16(M4 , M5 )
+A3 =Add16(M6 , M7 )
+
+A8 =Add16(A0 , A1 )
+A9 =Add16(A2 , A3 )
+
+A12=Add16(A8 , A9 )
+
+out=Sig16(A12)
+
+Output: out

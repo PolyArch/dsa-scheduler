@@ -31,7 +31,7 @@ std::pair<int,int> Schedule::getConfigAndPort(DyPDG_Node* dypdg_in) {
     if (dyinput *assigned_dyinput = dynamic_cast<dyinput*>(_dynodeOf[dypdg_in].first)) {
       return make_pair(_dynodeOf[dypdg_in].second, assigned_dyinput->port());
     }
-    if (dyoutput *assigned_dyoutput = dynamic_cast<dyoutput*>(_dynodeOf[dypdg_in].first)) {
+    if (dyoutput *assigned_dyoutput=dynamic_cast<dyoutput*>(_dynodeOf[dypdg_in].first)){
       return make_pair(_dynodeOf[dypdg_in].second,assigned_dyoutput->port());
     }
   }
@@ -62,6 +62,8 @@ void Schedule::printConfigText(ostream& os, int config)
   os << "width = " << _dyModel->subModel()->sizex() << "\n";
   os << "\n";
   
+  xfer_link_to_switch(); // makes sure we have switch representation of link
+
   //for each switch -- print routing if there is some
   os << "[switch]\n";
   vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
@@ -71,39 +73,19 @@ void Schedule::printConfigText(ostream& os, int config)
       stringstream ss;
       bool anything_there=false;
       dyswitch* dysw = &switches[i][j];
-      
-      ss << i << "," << j << ":\t";
+     
+      std::map<DY_MODEL::dylink*,DY_MODEL::dylink*>& link_map = _assignSwitch[dysw]; 
+      if(link_map.size()!=0) {
+        ss << i << "," << j << ":\t";
 
-      /*
-      std::map<DY_MODEL::dylink*,DyPDG_Node*>::const_iterator ii,ee;
-      for(ii=_assignLink.begin(),ee=_assignLink.end();ii!=ee;++ii) {
-        dylink* link = ii->first;
-        DyPDG_Node* pdgnode = ii->second;
-        
-        cout << link->gams_name() << ":" << pdgnode->gamsName() << "\n";
-      }*/
-      
-      dynode::const_iterator I,E;
-      for(I=dysw->ibegin(), E=dysw->iend(); I!=E; ++I) {
-        dylink* inlink = *I;
-        if(_assignLink.count(make_pair(inlink,config))!=0) {
-          DyPDG_Node* innode = _assignLink[make_pair(inlink,config)];
-          
-          dynode::const_iterator II,EE;
-          for(II=dysw->obegin(), EE=dysw->oend(); II!=EE; ++II) {
-            dylink* outlink = *II;
-            
-            if(_assignLink.count(make_pair(outlink,config))!=0 && innode==_assignLink[make_pair(outlink,config)]) {
-              ss << DyDIR::dirName(inlink->dir(),true) << "->" << DyDIR::dirName(outlink->dir(),false) << "\t";
-              anything_there=true;
-            }
-          }
-
+        for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
+          dylink* outlink=I->first;
+          dylink* inlink=I->second;
+          ss << DyDIR::dirName(inlink->dir(),true) << "->" << DyDIR::dirName(outlink->dir(),false) << "\t";
         }
-      }
+
       ss << "\n";
-      if(anything_there) {
-        os << ss.str();
+      os << ss.str();
       }
     }
   }
@@ -233,7 +215,7 @@ vector<string> getCaptureList(boost::regex& rx, string str, string::const_iterat
 
 
 
-Schedule::Schedule(string filename) {
+Schedule::Schedule(string filename, bool multi_config) {
   enum loadstate{Dimension, Switch,FuncUnit, WidePort} state;
 
   ifstream ifs(filename.c_str(), ios::in);
@@ -313,7 +295,7 @@ Schedule::Schedule(string filename) {
               cerr << "Unrecognized param: " << lineElements[0] << "\n"; 
           }
           if(newSizeX>0 && newSizeY>0) {
-            SubModel* subModel = new SubModel(newSizeX,newSizeY,SubModel::PortType::everysw,2,2);
+            SubModel* subModel = new SubModel(newSizeX,newSizeY,SubModel::PortType::everysw,2,2,multi_config);
             _dyModel = new DyModel(subModel);
           }
           break;
@@ -635,44 +617,46 @@ void Schedule::calcAssignEdgeLink() {
     calcAssignEdgeLink_single(pdgout);
   }
   
-  for(int config = 0; config < nConfigs();++config) {
-    SubModel::const_input_iterator I,E;
-    for(I=_dyModel->subModel()->input_begin(),
-        E=_dyModel->subModel()->input_end(); I!=E; ++I) {
-      dyinput* cand_input = const_cast<dyinput*>(&(*I));
-      dylink* in_link = cand_input->getFirstInLink();
-      dylink* out_link = cand_input->getFirstOutLink();  //links to loadslice
-    
-      if(DyPDG_Node* pdgnode = pdgNodeOf(out_link,config)) {
-        assign_link(pdgnode,in_link,config);
-        
-        set<DyPDG_Edge*>::const_iterator Ie,Ee;
-        set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(out_link,config)];
-        for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-          DyPDG_Edge* pdgedge = *Ie;
-          _assignEdgeLink[make_pair(in_link,config)].insert(pdgedge);
+  if(_dyModel->subModel()->multi_config()) {
+    for(int config = 0; config < nConfigs();++config) {
+      SubModel::const_input_iterator I,E;
+      for(I=_dyModel->subModel()->input_begin(),
+          E=_dyModel->subModel()->input_end(); I!=E; ++I) {
+        dyinput* cand_input = const_cast<dyinput*>(&(*I));
+        dylink* in_link = cand_input->getFirstInLink();
+        dylink* out_link = cand_input->getFirstOutLink();  //links to loadslice
+      
+        if(DyPDG_Node* pdgnode = pdgNodeOf(out_link,config)) {
+          assign_link(pdgnode,in_link,config);
+          
+          set<DyPDG_Edge*>::const_iterator Ie,Ee;
+          set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(out_link,config)];
+          for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
+            DyPDG_Edge* pdgedge = *Ie;
+            _assignEdgeLink[make_pair(in_link,config)].insert(pdgedge);
+          }
         }
       }
+    
+      {SubModel::const_output_iterator I,E;
+      for(I=_dyModel->subModel()->output_begin(),
+          E=_dyModel->subModel()->output_end(); I!=E; ++I) {
+        dyoutput* cand_output = const_cast<dyoutput*>(&(*I));
+        dylink* in_link = cand_output->getFirstInLink();
+        dylink* out_link = cand_output->getFirstOutLink();  //links to loadslice
+      
+        if(DyPDG_Node* pdgnode = pdgNodeOf(in_link,config)) {
+          assign_link(pdgnode,out_link,config);
+          
+          set<DyPDG_Edge*>::const_iterator Ie,Ee;
+          set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(in_link,config)];
+          for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
+            DyPDG_Edge* pdgedge = *Ie;
+            _assignEdgeLink[make_pair(out_link,config)].insert(pdgedge);
+          }
+        }
+      }}
     }
-  
-    {SubModel::const_output_iterator I,E;
-    for(I=_dyModel->subModel()->output_begin(),
-        E=_dyModel->subModel()->output_end(); I!=E; ++I) {
-      dyoutput* cand_output = const_cast<dyoutput*>(&(*I));
-      dylink* in_link = cand_output->getFirstInLink();
-      dylink* out_link = cand_output->getFirstOutLink();  //links to loadslice
-    
-      if(DyPDG_Node* pdgnode = pdgNodeOf(in_link,config)) {
-        assign_link(pdgnode,out_link,config);
-        
-        set<DyPDG_Edge*>::const_iterator Ie,Ee;
-        set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(in_link,config)];
-        for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-          DyPDG_Edge* pdgedge = *Ie;
-          _assignEdgeLink[make_pair(out_link,config)].insert(pdgedge);
-        }
-      }
-    }}
   }
   
   /*
@@ -752,12 +736,14 @@ void Schedule::calcAssignEdgeLink() {
 
 
 
-int Schedule::calcLatency() {
+void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
   list<dylink*> openset;
   //map<dynode*,dylink*> came_from;
   map<dylink*,int> lat_edge;
   
-  int max_lat=0;  
+  max_lat=0;  
+  max_lat_mis=0;
+
   int config = 0;
   
   SubModel::const_input_iterator I,E;
@@ -787,12 +773,22 @@ int Schedule::calcLatency() {
     if(dyfu* next_fu = dynamic_cast<dyfu*>(node)) {
       DyPDG_Node* next_pdgnode = pdgNodeOf(node,config);
       //cout << next_fu->name() << "\n"; 
-      assert(next_pdgnode);
+      //
+      if(!next_pdgnode) {
+        //assert(next_pdgnode);
+        cout << "problem with latency calculation!\n";
+        max_lat=-1;
+        max_lat_mis=-1;
+        return;
+      }
+
       DyPDG_Inst* next_pdginst = dynamic_cast<DyPDG_Inst*>(next_pdgnode); 
       assert(next_pdginst);
     
       bool everyone_is_here = true;
+
       int latency=0;
+      int low_latency=100000000;  //magic number, forgive me
       for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
         dylink* inlink = *II;
         if(pdgNodeOf(inlink,config) != NULL) {
@@ -800,16 +796,26 @@ int Schedule::calcLatency() {
             if(lat_edge[inlink]>latency) {
               latency=lat_edge[inlink];
             }
+            if(lat_edge[inlink]<low_latency) {
+              low_latency=latency;
+            }
           } else {
             everyone_is_here = false;
             break;
           }
         }
       }
+      
+
       if(everyone_is_here) {
         dylink* new_link = next_fu->getFirstOutLink();
         lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());;
         openset.push_back(new_link);
+        
+        int diff = latency-low_latency;
+        if(diff>max_lat_mis) {
+          max_lat_mis=diff;
+        }
       }
     } else if (dynamic_cast<dyoutput*>(node)) {
       if(lat_edge[inc_link] > max_lat) {
@@ -828,9 +834,6 @@ int Schedule::calcLatency() {
     }
   }
     
-
-  return max_lat;
-  
 }
 
 void Schedule::tracePath(dynode* dyspot, DyPDG_Node* pdgnode, 

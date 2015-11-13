@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
     printHelp();
     exit(1);
   }
-  
+
   enum sched_type {
     SCHED_MIP, SCHED_GREEDY
   } stype;
@@ -104,8 +104,9 @@ int main(int argc, char* argv[])
   float relative_gap=0.1f;
   float timeout=300.0f;
   int c;
+  bool multi_config=false;
   
-  while ((c = getopt (argc, argv, "hg:a:t:s:m:")) != -1) {
+  while ((c = getopt (argc, argv, "hxg:a:t:s:m:")) != -1) {
     switch (c) {
       case 'h':
         printHelp();
@@ -113,6 +114,9 @@ int main(int argc, char* argv[])
         break;
       case 'g':
         relative_gap=atof(optarg);
+        break;
+      case 'x':
+        multi_config=true;
         break;
       case 'a':
         absolute_gap=atof(optarg);
@@ -147,14 +151,14 @@ int main(int argc, char* argv[])
     }
   }
   
-  
-  
- 
+  system("mkdir -p gams/");
+  system("mkdir -p dots/");
+
   //optind contiains configuration, [optind+1:argc) contains source files 
   
   Schedule sched(argv[optind]);
   
-  ofstream ofs("pdgout.dot", ios::out);
+  ofstream ofs("dots/pdgout.dot", ios::out);
   assert(ofs.good());
   sched.dypdg()->printGraphviz(ofs);
   ofs.close();
@@ -174,7 +178,7 @@ int main(int argc, char* argv[])
   
   if(model_file) {
     cout << "Using file for dymodel: " << model_file << "\n";
-    dymodel = new DyModel(model_file);
+    dymodel = new DyModel(model_file,multi_config);
   } else {
     cout << "Using dymodel from schedule\n";
     dymodel = sched.dyModel();

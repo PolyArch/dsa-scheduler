@@ -31,11 +31,9 @@ class proposedPaths {
 #define MAX_ROUTE 100000000
 
 
-
 Schedule* Scheduler::scheduleGreedyBFS(DyPDG* dyPDG) {
   Schedule* sched = new Schedule(_dyModel,dyPDG);
   sched->setNConfigs(1);
-  
   
   map<DyPDG_Inst*,bool> seen;
   
@@ -396,8 +394,6 @@ int Scheduler::route_to_output(Schedule* sched, DyPDG_Edge* pdgedge, dynode* sou
     //don't search this node if it's too much anyways
     //if(x->links+1>=cost_allotted) continue; 
     
-
-    
     //check neighboring nodes
     dynode::const_iterator I,E;
     for(I = node->obegin(), E = node->oend(); I!=E; ++I)
@@ -452,13 +448,13 @@ int Scheduler::route_to_output(Schedule* sched, DyPDG_Edge* pdgedge, dynode* sou
 }
 
 
-
-
 #include "spill_model.cpp"
 #include "multi_model.cpp"
+#include "single_fixed_general.cpp"
 #include "dyser_gams.cpp"
-
-
+#include "dyser_gams_hw.cpp"
+#include "timing_model.cpp"
+#include "hw_model3.cpp"
 
 
 bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
@@ -468,7 +464,7 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   string gams_out_file = ss.str();
   
   ss.str(std::string());
-  ss << _gams_work_dir << "/dyser.gams";
+  ss << "dyser.gams";
   string gams_file_name = ss.str();
   
   
@@ -476,13 +472,22 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   schedule = scheduleGreedyBFS(dyPDG);
   schedule->calcAssignEdgeLink();
   
+  //bool use_hw=true;
+  bool use_hw=false;
+
   // ----------------- setup the dymodel gams files --------------------------
   if(!_gams_files_setup) {
         
     // Print the Constraints
     ofstream ofs_constraints(_gams_work_dir+"/constraints.gams", ios::out);
     assert(ofs_constraints.good());
-    ofs_constraints << multi_model;
+    //ofs_constraints << multi_model;
+    if(use_hw) {
+      ofs_constraints << hw_model;
+    } else {
+      ofs_constraints << timing_model;
+    }
+
     ofs_constraints.close();
 
      // Print the kinds of instructions
@@ -495,13 +500,17 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   }
   
   // Print the controlling file
-  ofstream ofs_dyser_gams(gams_file_name, ios::out);
+  ofstream ofs_dyser_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_dyser_gams.good());
   
   ofs_dyser_gams << "option reslim=" << _reslim << ";\n"
                  << "option optcr="  <<  _optcr << ";\n"   
                  << "option optca="  <<  _optca << ";\n";
-  ofs_dyser_gams << dyser_gams;
+  if(use_hw) {
+    ofs_dyser_gams << dyser_gams_hw;
+  } else {
+    ofs_dyser_gams << dyser_gams;
+  }
   ofs_dyser_gams.close();
   
   ofstream ofs_mipstart(_gams_work_dir+"/mip_start.gams", ios::out);
@@ -518,6 +527,7 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
                  << "','" << spot->gams_name(config) << "')=1;\n";
   }
  
+
   Schedule::assign_link_iterator Il,El;
   for(Il = schedule->assign_link_begin(), 
       El= schedule->assign_link_end();Il!=El;++Il) {
@@ -542,7 +552,7 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
     for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
       DyPDG_Edge* pdgedge = *Ie;
       
-      ofs_mipstart << "Ml.l('" << pdgedge->gamsName() << "','" 
+      ofs_mipstart << "Mel.l('" << pdgedge->gamsName() << "','" 
                  << link->gams_name(config) << "')=1;\n";
     }
   }
@@ -575,7 +585,7 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
       ofs_mipstart << "Tv.l('" << n->gamsName() << "')="
                    << "smax((v1,e)$(Gve(v1,e) and "
                    << "Gev(e,'" << n->gamsName() << "')),Tv.l(v1)"
-                   << "+ sum(l,Ml.l(e,l)) + delta(e));\n";
+                   << "+ sum(l,Mel.l(e,l)) + delta(e));\n";
 
     }
     seen[n]=true;
@@ -591,38 +601,45 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
 
   }
 
- //ofs_mipstart << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
- ofs_mipstart << "length.l=smax(v,Tv.l(v));\n";
- ofs_mipstart << "cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));\n";
- ofs_mipstart << "display Tv.l;\n";
- ofs_mipstart << "display length.l;\n";
- ofs_mipstart << "display cost.l;\n";
- ofs_mipstart.close();
- 
- schedule->clearAll();
- 
+  //ofs_mipstart << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
+  ofs_mipstart << "length.l=smax(v,Tv.l(v));\n";
+  ofs_mipstart << "cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));\n";
+  ofs_mipstart << "display Tv.l;\n";
+  ofs_mipstart << "display length.l;\n";
+  ofs_mipstart << "display cost.l;\n";
+  ofs_mipstart.close();
+  
+  schedule->clearAll();
+
+  cout << "numNodes in scheduler: " << dyPDG->num_nodes() << "\n";
   
   int numInsts = dyPDG->inst_end()-dyPDG->inst_begin();
   int configSize = _dyModel->subModel()->sizex() * _dyModel->subModel()->sizey();
   int n_configs = numInsts / configSize + (numInsts%configSize>0);
-  
+  cout << "NumInsts in DyPDG: " <<  numInsts << "\n";
+  assert(numInsts > 0);
+
   cout << "DySER Scheduler -- Using: " << n_configs << " Configs\n";
   
   // Print the dyser model   
-  ofstream ofs_dyser_model("dyser_model.gams", ios::out);
+  ofstream ofs_dyser_model(_gams_work_dir + "/dyser_model.gams", ios::out);
   assert(ofs_dyser_model.good());
   gamsToDynode.clear(); gamsToDylink.clear();
-  _dyModel->subModel()->PrintGamsModel(ofs_dyser_model,gamsToDynode,gamsToDylink,n_configs);
+  _dyModel->subModel()->PrintGamsModel(ofs_dyser_model,gamsToDynode,gamsToDylink,gamsToDyswitch,n_configs);
+
+  cout << gamsToDynode.size() << " " << gamsToDylink.size() << " " << gamsToDyswitch.size() << "\n";
+
   ofs_dyser_model.close();
   
   // ----------------- setup the pdg gams files ------------------------------
-  ofstream ofs_dyser_pdg("dyser_pdg.gams", ios::out);
+  ofstream ofs_dyser_pdg(_gams_work_dir + "/dyser_pdg.gams", ios::out);
   if(ofs_dyser_pdg.fail()) {
-    cerr << "could not open dyser_pdg.gams";
+    cerr << "could not open " + _gams_work_dir + "/dyser_pdg.gams";
     return false;
   }
   gamsToPdgnode.clear(); gamsToPdgedge.clear();
   dyPDG->printGams(ofs_dyser_pdg,gamsToPdgnode,gamsToPdgedge);
+  dyPDG->printPortCompatibilityWith(ofs_dyser_pdg,_dyModel);
   ofs_dyser_pdg.close();
   
   // ----------------- run gams! --------------------------------------------
@@ -633,12 +650,13 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
     requestGams(fullname.c_str());
   } else {
     stringstream ss_cmd;
-    ss_cmd << "gams " << gams_file_name;
+    ss_cmd << "gams " << gams_file_name << " wdir=" << _gams_work_dir;
     if(_showGams) {
       ss_cmd << " -lo=3";
     } else {
        ss_cmd << " -o=/dev/null -lo=2"; 
     }
+    cout << ss_cmd.str().c_str() << "\n";
     system(ss_cmd.str().c_str());
   }
 
@@ -647,9 +665,9 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
 
   schedule->setNConfigs(n_configs); //update this if need less schedules?
   
-  string line, vertex_name, link_name, dynode_name,list_of_links;
+  string line, edge_name, vertex_name, switch_name, link_name, out_link_name, dynode_name,list_of_links;
   ifstream gamsout(gams_out_file.c_str());
-  enum  { VtoN,VtoL,Parse_None } parse_stage;
+  enum  { VtoN,VtoL,LtoL,EL,Parse_None } parse_stage;
   parse_stage=Parse_None;
   while(gamsout.good()) {  
     getline(gamsout,line);
@@ -659,10 +677,23 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
         parse_stage = VtoN; continue;
       } else if(ModelParsing::StartsWith(line,"[vertex-link-map]")) {
         parse_stage = VtoL; continue;
+      } else if(ModelParsing::StartsWith(line,"[switch-map]")) {
+        parse_stage = LtoL; continue;
+      } else if(ModelParsing::StartsWith(line,"[extra_lat]")) {
+        parse_stage = EL; continue;
+      } else {
+        parse_stage = Parse_None;
       }
     }
-    
-    if(parse_stage==VtoN) {
+
+    if(parse_stage==EL) {
+
+      stringstream ss(line);
+      getline(ss, edge_name, ':');
+      getline(ss, dynode_name);
+
+
+    } else if(parse_stage==VtoN) {
       stringstream ss(line);
       getline(ss, vertex_name, ':');
       getline(ss, dynode_name);
@@ -693,7 +724,39 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
         }*/
         
       //schedule
+    } else if (parse_stage==LtoL) { //PARSE SWITCH MAP --------------------------
+      stringstream ss(line);
+      getline(ss, switch_name, ':');
+      ModelParsing::trim(switch_name);
+      if(switch_name.empty()) continue;
+
+      dyswitch* dysw = gamsToDyswitch[switch_name].first;
+      if(dysw==NULL) {
+        cerr << "null dysw:\"" << switch_name << "\"\n";
+      }
+
+      while(ss.good()) {
+        getline(ss, link_name, ' ');
+        getline(ss, out_link_name, ',');
+
+        ModelParsing::trim(link_name);
+        ModelParsing::trim(out_link_name);
+
+        if(link_name.empty()) continue;
+        if(out_link_name.empty()) continue;
+        dylink* dlink = gamsToDylink[link_name].first;
+        dylink* dlink_out = gamsToDylink[out_link_name].first;
+        assert(dlink);
+        assert(dlink_out);
+        schedule->assign_switch(dysw,dlink,dlink_out);
+
+      }
+      
     } else if (parse_stage==VtoL) {
+//      if(_assignSwitch.size()!=0) {
+//        continue;
+//      }
+
       stringstream ss(line);
       getline(ss, vertex_name, ':');
       //getline(ss, list_of_links);
@@ -719,27 +782,40 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
         
         schedule->assign_link(pdgnode,dlink,config);
         
-        
-        if(dlink->dest()==_dyModel->subModel()->load_slice()) {
-          dyoutput* dyout = dynamic_cast<dyoutput*>(dlink->orig());
-          assert(dyout);
-          
-          //find output for this output edge
-          DyPDG_Node::const_edge_iterator I,E;
-          for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
-            if(DyPDG_Output* pdg_out = dynamic_cast<DyPDG_Output*>((*I)->use())) {
-              schedule->assign_node(pdg_out,dyout,config);
+        if(_dyModel->subModel()->multi_config()) {
+          if(dlink->dest()==_dyModel->subModel()->load_slice()) {
+            dyoutput* dyout = dynamic_cast<dyoutput*>(dlink->orig());
+            assert(dyout);
+            
+            //find output for this output edge
+            DyPDG_Node::const_edge_iterator I,E;
+            for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
+              if(DyPDG_Output* pdg_out = dynamic_cast<DyPDG_Output*>((*I)->use())) {
+                schedule->assign_node(pdg_out,dyout,config);
+              }
+            }
+            
+            //if(DyPDG_Output* pdg_out = dynamic_cast<DyPDG_Output*>((*(pdgnode->uses_begin()))->use())) {
+              //schedule->assign_node(pdg_out,dyout,config);
+            //}
+          }
+          if(dlink->orig()==_dyModel->subModel()->load_slice()) {
+            dyinput* dyin = dynamic_cast<dyinput*>(dlink->dest());
+            assert(dyin);
+            schedule->assign_node(pdgnode,dyin,config); 
+          }
+        } else {
+          if(dyinput* dyin = dynamic_cast<dyinput*>(dlink->orig())) {
+            schedule->assign_node(pdgnode,dyin,config); 
+          } else if(dyoutput* dyout = dynamic_cast<dyoutput*>(dlink->dest())) {
+            //find output for this output edge
+            DyPDG_Node::const_edge_iterator I,E;
+            for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
+              if(DyPDG_Output* pdg_out = dynamic_cast<DyPDG_Output*>((*I)->use())) {
+                schedule->assign_node(pdg_out,dyout,config);
+              }
             }
           }
-          
-          //if(DyPDG_Output* pdg_out = dynamic_cast<DyPDG_Output*>((*(pdgnode->uses_begin()))->use())) {
-            //schedule->assign_node(pdg_out,dyout,config);
-          //}
-        }
-        if(dlink->orig()==_dyModel->subModel()->load_slice()) {
-          dyinput* dyin = dynamic_cast<dyinput*>(dlink->dest());
-          assert(dyin);
-          schedule->assign_node(pdgnode,dyin,config); 
         }
         
         /*

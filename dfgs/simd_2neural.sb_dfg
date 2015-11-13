@@ -1,0 +1,34 @@
+InputVec: 16 4 N [0 4, 1 5, 2 6, 3 7]      #2Wide 2Deep
+InputVec: 16 8 S [0, 1, 2, 3, 4, 5, 6, 7]  #8Wide 1Deep
+Input: 16 acc1
+Input: 16 acc2
+Input: 16 pred1
+Input: 16 pred2
+
+
+
+M0 =Mul16(N0 , S0 )
+M1 =Mul16(N1 , S1 )
+M2 =Mul16(N2 , S2 )
+M3 =Mul16(N3 , S3 )
+M4 =Mul16(N0 , S4 )
+M5 =Mul16(N1 , S5 )
+M6 =Mul16(N2 , S6 )
+M7 =Mul16(N3 , S7 )
+
+A0 =Add16(M0 , M1 )
+A1 =Add16(M2 , M3 )
+A2 =Add16(M4 , M5 )
+A3 =Add16(M6 , M7 )
+
+A8 =Add16(A0 , A1 )
+A9 =Add16(A2 , A3 )
+
+R1 =Add16(A8 , acc1 )
+R2 =Add16(A9 , acc2 )
+
+out1=Sig16(R1, pred1 )
+out2=Sig16(R2, pred2 )
+
+Output: out1
+Output: out2

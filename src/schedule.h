@@ -10,7 +10,7 @@
 
 class Schedule {
   public:
-    Schedule(std::string filename); //Read in schedule (both dymodel, dypdg, and schedule from file)
+    Schedule(std::string filename, bool multi_config=false); //Read in schedule (both dymodel, dypdg, and schedule from file)
     Schedule(DY_MODEL::DyModel* model, DyPDG* pdg ) : _dyModel(model),_dyPDG(pdg) {}
     
     //Scheduling Interface:
@@ -36,18 +36,28 @@ class Schedule {
     
     //Rest of Stuff
     DyPDG* dypdg() const {return _dyPDG;}
-    
+
+    void assign_switch(DY_MODEL::dyswitch* dysw, 
+                       DY_MODEL::dylink* dlink,
+                       DY_MODEL::dylink* dlink_out) {
+      _assignSwitch[dysw][dlink_out]=dlink;
+    }
+
     void assign_node(DyPDG_Node* pdgnode,DY_MODEL::dynode* dnode, int config=0) {
       _assignNode[std::make_pair(dnode,config)]=pdgnode;
       _dynodeOf[pdgnode]=std::make_pair(dnode,config);
     }
+
     void assign_link(DyPDG_Node* pdgnode,DY_MODEL::dylink* dlink, int config=0) {
+      assert(dlink);
       std::pair<DY_MODEL::dylink*,int> thing = std::make_pair(dlink,config);
       _assignLink[thing]=pdgnode;
       _linksOf[pdgnode].push_back(thing);
     }
     
     void assign_edgelink(DyPDG_Edge* pdgedge,DY_MODEL::dylink* dlink, int config=0) {
+      assert(dlink);
+      assert(pdgedge);
       std::pair<DY_MODEL::dylink*,int> thing = std::make_pair(dlink,config);
       //_assignLink[thing]=pdgnode;
       //_linksOf[pdgnode].push_back(thing);
@@ -55,6 +65,7 @@ class Schedule {
     }
     
     DyPDG_Node* pdgNodeOf(DY_MODEL::dylink* link, int config) {
+      assert(link);
       std::pair<DY_MODEL::dylink*,int> thing = std::make_pair(link,config);
       if(_assignLink.count(thing)==0) {
         return NULL;
@@ -111,7 +122,7 @@ class Schedule {
     
     DY_MODEL::DyModel* dyModel() {return _dyModel;}
     
-    int calcLatency();
+    void calcLatency(int& lat,int& latmis);
     
     void calcAssignEdgeLink_single(DyPDG_Node* pdgnode);
     void calcAssignEdgeLink();
@@ -136,24 +147,59 @@ class Schedule {
       _assignEdgeLink.clear();
       _forwardMap.clear();
     }
-    
+
+    void xfer_link_to_switch() {
+      using namespace DY_MODEL;
+      using namespace std;
+      if(_assignSwitch.size()!=0) { //switches already assigned!
+        return;
+      }
+      int config=0;
+      vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
+      for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
+        for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j) {
+          dyswitch* dysw = &switches[i][j];
+          
+          dynode::const_iterator I,E;
+          for(I=dysw->ibegin(), E=dysw->iend(); I!=E; ++I) {
+            dylink* inlink = *I;
+            if(_assignLink.count(make_pair(inlink,config))!=0) {
+              DyPDG_Node* innode = _assignLink[make_pair(inlink,config)];
+              
+              dynode::const_iterator II,EE;
+              for(II=dysw->obegin(), EE=dysw->oend(); II!=EE; ++II) {
+                dylink* outlink = *II;
+                
+                if(_assignLink.count(make_pair(outlink,config))!=0 && innode==_assignLink[make_pair(outlink,config)]) {
+                  _assignSwitch[dysw][outlink]=inlink;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+
   private:
     int _n_configs;   
     DY_MODEL::DyModel *_dyModel;
     DyPDG*   _dyPDG;
     std::map<std::pair<DY_MODEL::dynode*,int>,DyPDG_Node*> _assignNode;
     std::map<DyPDG_Node*, std::pair<DY_MODEL::dynode*,int> > _dynodeOf;
-    std::map<DyPDG_Node*, int> _latOf;
-    
+    std::map<DyPDG_Node*, int> _latOf; 
     std::map<std::pair<DY_MODEL::dylink*,int>,DyPDG_Node*> _assignLink;
     std::map<DyPDG_Node*, std::vector<std::pair<DY_MODEL::dylink*,int>> > _linksOf;
-    
     std::map<std::pair<DY_MODEL::dylink*,int>,std::set<DyPDG_Edge*>> _assignEdgeLink;
-
     std::map< std::pair<int,int>,std::pair<int,int> > _forwardMap;
-    
     std::vector< std::vector<int> > _wide_ports;
     
+
+    std::map<DY_MODEL::dyswitch*,
+             std::map<DY_MODEL::dylink*,DY_MODEL::dylink*>> _assignSwitch; //out to in
+   
+    
+
         //helper for Schedule(filename) constructor
     void tracePath(DY_MODEL::dynode* ,DyPDG_Node* , 
        std::map<DY_MODEL::dynode*, std::map<DY_MODEL::DyDIR::DIR,DY_MODEL::DyDIR::DIR> >&,

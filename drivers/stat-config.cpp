@@ -18,6 +18,18 @@ int main(int argc, char* argv[])
   
   Schedule sched(argv[1]);
   
-  cout << "latency: " << sched.calcLatency() << "\n";  
+  int lat,latmis;
+
+  sched.calcLatency(lat,latmis);
+
+  int num_pdgnodes=
+  (sched.dypdg()->inst_end()-sched.dypdg()->inst_begin())+
+  (sched.dypdg()->input_end()-sched.dypdg()->input_begin())+
+  (sched.dypdg()->output_end()-sched.dypdg()->output_begin());
+
+  cout << "latency: " << lat << "\n";  
+  cout << "latency mismatch: " << latmis << "\n";  
+  cout << "num nodes: " << num_pdgnodes << "\n";  
+  
 }
 

@@ -9,6 +9,9 @@
 #include <unordered_map>
 #include <map>
 #include <assert.h>
+#include <sstream>
+
+#include "model.h"
 
 class DyPDG_Node;
 
@@ -107,31 +110,31 @@ class DyPDG_Node {
 };
 
 
-class DyPDG_Input : public DyPDG_Node {
+class DyPDG_IO : public DyPDG_Node {
+  public:
+  void setVPort(int vport) { _vport = vport; } 
+  int vport() {return _vport;}
+
+  protected:
+    int _vport;
+};
+
+class DyPDG_Input : public DyPDG_IO {
   public:
     void printGraphviz(std::ostream& os);
-    
-    void setVPort(int vport) { _vport = vport; } 
-    int vport() {return _vport;}
     
     std::string name() {
         std::stringstream ss;
         ss << "I" << _vport;
         return ss.str();
     }
-    
     std::string gamsName();
     
-  private:    
-    int _vport;
 };
 
-class DyPDG_Output : public DyPDG_Node {
+class DyPDG_Output : public DyPDG_IO {
   public:
     void printGraphviz(std::ostream& os);
-    
-    void setVPort(int vport) { _vport = vport; } 
-    int vport() {return _vport;}
     
     std::string name() {
         std::stringstream ss;
@@ -140,9 +143,39 @@ class DyPDG_Output : public DyPDG_Node {
     }
     
     std::string gamsName();
-    
-  private:    
-    int _vport; 
+};
+
+
+class DyPDG_VecInput {
+  public:
+
+  DyPDG_VecInput(std::string name, int id) {
+    _name=name;
+    _ID=id;
+  }
+
+  std::string gamsName() {
+    std::stringstream ss;
+    ss << "PVec" << _name ;
+    return ss.str();
+  }
+
+  void addInput(DyPDG_Input* in) { _inputs.push_back(in); }
+  void setName(std::string name) {_name=name;}
+
+  void setLocMap(std::vector<std::vector<int> > vec) { _locMap=vec;}
+  std::vector<std::vector<int> >& locMap() {return _locMap;}
+
+  int id() {return _ID;}
+
+  std::vector<DyPDG_Input*>::iterator input_begin() {return _inputs.begin();}
+  std::vector<DyPDG_Input*>::iterator input_end() {return _inputs.end();}
+
+  private:
+    std::vector<DyPDG_Input*> _inputs;
+    std::string _name;
+    std::vector<std::vector<int>> _locMap;
+    int _ID;
 };
 
 class DyPDG_Inst : public DyPDG_Node {
@@ -160,6 +193,8 @@ class DyPDG_Inst : public DyPDG_Node {
 
     void setPredInv(bool predInv) { _predInv=predInv;}
     bool predInv() {return _predInv;}
+
+     
 
     void setInst(DY_MODEL::dy_inst_t dyinst) { _dyinst=dyinst; }
     DY_MODEL::dy_inst_t inst() { return _dyinst; }
@@ -192,10 +227,11 @@ class DyPDG_Inst : public DyPDG_Node {
 class DyPDG {
   public:
     DyPDG();
+    DyPDG(std::string filename);
+
     ~DyPDG()
       {
       }
-    //DyPDG(std::string filename) {}
     void printGraphviz(std::ostream& os);
     void printGraphviz(const char *fname) {
       std::ofstream os(fname);
@@ -203,6 +239,9 @@ class DyPDG {
       printGraphviz(os);
     }
     void printGams(std::ostream& os, std::unordered_map<std::string,DyPDG_Node*>&,std::unordered_map<std::string,DyPDG_Edge*>&);
+    void printPortCompatibilityWith(std::ostream& os, DY_MODEL::DyModel* dyModel);
+
+
 
     DyPDG_Inst *CreateInst() {
       return new DyPDG_Inst();
@@ -212,6 +251,26 @@ class DyPDG {
     void addInput(DyPDG_Input* input) {_inputs.push_back(input); _nodes.push_back(input);}
     void addOutput(DyPDG_Output* output) {_outputs.push_back(output); _nodes.push_back(output);}
     
+    void addVecInput(int entries, std::string name,
+                     std::vector<std::vector<int> >& pm,
+                     std::map<std::string,DyPDG_Node*>& syms ) {
+      DyPDG_VecInput* vec_input = new DyPDG_VecInput(name,_vecInputs.size()); 
+      vec_input->setLocMap(pm);
+      _vecInputs.push_back(vec_input);
+
+      for(int i = 0; i < entries; ++i) {
+        std::stringstream ss;
+        ss << name << i;
+        DyPDG_Input* pdg_in = new DyPDG_Input();
+        std::string name = ss.str();
+        syms[name]=pdg_in;
+        pdg_in->setName(name);
+        pdg_in->setVPort(_vecInputs.size());
+        addInput(pdg_in);
+        vec_input->addInput(pdg_in);
+      }
+    }
+
     DyPDG_Edge* connect(DyPDG_Node* orig, DyPDG_Node* dest,int slot,DyPDG_Edge::EdgeType etype);
     
     typedef std::vector<DyPDG_Node*>::const_iterator   const_node_iterator;
@@ -228,7 +287,9 @@ class DyPDG {
     
     const_output_iterator output_begin() {return _outputs.begin();}
     const_output_iterator output_end() {return _outputs.end();}
-    
+
+    int num_nodes() {return _nodes.size();}
+
   private:
     std::vector<DyPDG_Node*> _nodes;
     
@@ -236,7 +297,10 @@ class DyPDG {
     std::vector<DyPDG_Inst*> _insts;
     std::vector<DyPDG_Input*> _inputs;
     std::vector<DyPDG_Output*> _outputs;
-    
+
+    std::vector<DyPDG_VecInput*> _vecInputs;
+
+
     std::vector<DyPDG_Edge*> _edges;
     
 };
