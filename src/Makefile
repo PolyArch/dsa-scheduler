@@ -17,19 +17,19 @@ PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
 
 SRC_ROOT=../..
-LIB_DYMODEL_PATH=$(SRC_ROOT)/sb_config/lib
-INC_DYMODEL_PATH=$(SRC_ROOT)/sb_config/src
+LIB_DYMODEL_PATH=$(SRC_ROOT)/softbrain-config/lib
+INC_DYMODEL_PATH=$(SRC_ROOT)/softbrain-config/src
 
-all: $(LIB_DEST)/libdyscheduler.a $(LIB_DEST)/libdyscheduler.so
+all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
 CXXFLAGS += -I$(INC_DYMODEL_PATH)
 
 CXXFLAGS += -I$(INCLUDE_DEST) -fPIC -lboost_regex
 
-$(LIB_DEST)/libdyscheduler.a: $(OBJECTS)
+$(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
     
-$(LIB_DEST)/libdyscheduler.so: $(OBJECTS)
+$(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $^     
 
 $(OBJ_DEST)/scheduler.o: scheduler.cpp multi_model.cpp spill_model.cpp dyser_gams.cpp
