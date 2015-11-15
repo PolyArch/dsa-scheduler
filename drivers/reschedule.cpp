@@ -7,7 +7,7 @@
 #include <boost/regex.hpp>
 
 using namespace std;
-using namespace DY_MODEL;
+using namespace SB_CONFIG;
 
 #include<sys/stat.h>
 

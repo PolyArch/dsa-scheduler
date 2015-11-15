@@ -12,7 +12,7 @@
 #include <assert.h>
 
 using namespace std;
-using namespace DY_MODEL;
+using namespace SB_CONFIG;
 
 //Scheduling Interface
 
@@ -74,7 +74,7 @@ void Schedule::printConfigText(ostream& os, int config)
       bool anything_there=false;
       dyswitch* dysw = &switches[i][j];
      
-      std::map<DY_MODEL::dylink*,DY_MODEL::dylink*>& link_map = _assignSwitch[dysw]; 
+      std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>& link_map = _assignSwitch[dysw]; 
       if(link_map.size()!=0) {
         ss << i << "," << j << ":\t";
 

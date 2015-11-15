@@ -196,12 +196,12 @@ class DyPDG_Inst : public DyPDG_Node {
 
      
 
-    void setInst(DY_MODEL::dy_inst_t dyinst) { _dyinst=dyinst; }
-    DY_MODEL::dy_inst_t inst() { return _dyinst; }
+    void setInst(SB_CONFIG::dy_inst_t dyinst) { _dyinst=dyinst; }
+    SB_CONFIG::dy_inst_t inst() { return _dyinst; }
 
     std::string name() {
         std::stringstream ss;
-        ss << DY_MODEL::name_of_inst(_dyinst);
+        ss << SB_CONFIG::name_of_inst(_dyinst);
         if(_imm_slot!=-1) {
           ss<<" Imm:"<<_imm;
         }
@@ -221,7 +221,7 @@ class DyPDG_Inst : public DyPDG_Node {
     int _imm_slot;
     int _subFunc;
     uint32_t _imm;
-    DY_MODEL::dy_inst_t _dyinst;
+    SB_CONFIG::dy_inst_t _dyinst;
 };
 
 class DyPDG {
@@ -239,7 +239,7 @@ class DyPDG {
       printGraphviz(os);
     }
     void printGams(std::ostream& os, std::unordered_map<std::string,DyPDG_Node*>&,std::unordered_map<std::string,DyPDG_Edge*>&);
-    void printPortCompatibilityWith(std::ostream& os, DY_MODEL::DyModel* dyModel);
+    void printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyModel);
 
 
 

@@ -6,7 +6,7 @@
 #include "scheduler.h"
 
 using namespace std;
-using namespace DY_MODEL;
+using namespace SB_CONFIG;
 
 int main(int argc, char* argv[])
 {

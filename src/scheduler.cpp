@@ -1,6 +1,6 @@
 #include "scheduler.h"
 
-using namespace DY_MODEL;
+using namespace SB_CONFIG;
 using namespace std;
 
 #include <unordered_map>
@@ -101,7 +101,7 @@ void Scheduler::applyRouting(Schedule* sched, DyPDG_Node* pdgnode,
   //<< " nlinks: " << candRouting->routing.size() << "\n";
   
   sched->assign_node(pdgnode,here,config);
-  std::map< std::pair<DY_MODEL::dylink*,int>,DyPDG_Edge* >::iterator I,E;
+  std::map< std::pair<SB_CONFIG::dylink*,int>,DyPDG_Edge* >::iterator I,E;
   for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
     sched->assign_link(I->second->def(),I->first.first, I->first.second);
     //sched->assign_edgelink(I->second,I->first.first, I->first.second);

@@ -19,3 +19,5 @@ directories:
 	${MKDIR_P} obj
 	${MKDIR_P} lib
 
+clean:
+	make -C src clean

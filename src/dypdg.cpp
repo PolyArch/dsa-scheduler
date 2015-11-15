@@ -6,7 +6,7 @@
 #include <vector>
 
 using namespace std;
-using namespace DY_MODEL;
+using namespace SB_CONFIG;
 
 int DyPDG_Node::ID_SOURCE=0;
 int DyPDG_Edge::ID_SOURCE=0;
@@ -326,7 +326,7 @@ void DyPDG::printGraphviz(ostream& os)
   os << "}\n";
 } 
 
-void DyPDG::printPortCompatibilityWith(std::ostream& os, DY_MODEL::DyModel* dyModel) {
+void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyModel) {
   os << "set cp(pv,pn) \"Port Compatibility\" \n /";   // Print the port compatibility
   bool first=true;  
 
