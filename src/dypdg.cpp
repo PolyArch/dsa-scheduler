@@ -1,9 +1,9 @@
 #include "dypdg.h"
 
-#include <boost/regex.hpp>
 #include "model_parsing.h"
 #include "dypdg.h"
 #include <vector>
+#include <regex>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -17,8 +17,42 @@ DyPDG::DyPDG() {
   std::cout << "hello\n";
 } 
 
+
+//COMMA IF NOT FIRST
+void CINF(std::ostream& os, bool& first) {
+  if(first) {
+    first=false;
+  } else {
+    os << ", " ;
+  }
+}
+
+void DyPDG::parse_and_add_vec(string name, string line, map<string,DyPDG_Node*>& syms, bool input) {
+   //parse string that looks like this: [1 2, 1 4, 2 6  3]
+   unsigned first = line.find("[");
+   string cur_cap = line.substr (first,line.find("]")-first);
+   stringstream ss(cur_cap);
+   vector<vector<int>> pm;
+   while (getline(ss, cur_cap, ',')) {
+     if(cur_cap.empty()) {continue;} 
+     istringstream ssc(cur_cap);
+     std::vector<int> m;
+     while (getline(ssc, cur_cap, ' ')) {
+       if(cur_cap.empty()) {continue;} 
+       int val;
+       istringstream(cur_cap)>>val;
+       m.push_back(val);
+     }
+     pm.push_back(m);
+   }
+   if(input) {
+     addVecInput(name,pm,syms);
+   } else {
+     addVecOutput(name,pm,syms);
+   }
+}
+
 DyPDG::DyPDG(string filename) {
-  cout << "file: " << filename << "\n";
 
   string line;
   ifstream ifs(filename.c_str());
@@ -28,15 +62,15 @@ DyPDG::DyPDG(string filename) {
     assert(0);
   }
 
-  boost::regex re_input_vec("InputVec:\\s*(\\d+)\\s*(\\d+)\\s*(\\w+)\\s*\\[((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
-  boost::regex re_input("Input:\\s*(\\d+)\\s*(\\w+)\\s*"); //bits id
-  boost::regex re_output("Output:\\s*(\\w+)\\s*");                          //out
-  boost::regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep
-  boost::regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep
-  boost::regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*\\)");//id dep dep
-  boost::smatch m;
+  regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
+  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
+  regex re_input("Input:\\s*(\\w+)\\s*"); //bits id  
+  regex re_output("Output:\\s*(\\w+)\\s*");                          //out
+  regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep
+  regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep
+  regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*\\)");//id dep dep
+  smatch m;
 
-  int num_inputs=0;
   int cur_line=0;
   map<string,DyPDG_Node*> syms;
 
@@ -51,45 +85,16 @@ DyPDG::DyPDG(string filename) {
 
     if (regex_search(line,m,re_input)) {
       //cout << m[1] << " " << m[2] << " " << m[3] << "\n";
-      int bitsper = std::stoi(m[1]); bitsper+=0;
-      string name = m[2];
-
-      DyPDG_Input* pdg_in = new DyPDG_Input();
-      syms[name]=pdg_in;
-      pdg_in->setName(name);
-      addInput(pdg_in);
-
-      num_inputs++; //not used currently
+      string name = m[1];
+      addScalarInput(name,syms);
 
     } else if (regex_search(line,m,re_input_vec)) {
-      int bitsper = std::stoi(m[1]); bitsper+=0;
-      int entries = std::stoi(m[2]);
-      string name = m[3];
-      string vec = m[4];
-
-      //parse string that looks like this: [1 2, 1 4, 2 6  3]
-      unsigned first = line.find("[");
-      string cur_cap = line.substr (first,line.find("]")-first);
-      stringstream ss(cur_cap);
-      vector<vector<int>> pm;
-      while (getline(ss, cur_cap, ',')) {
-        if(cur_cap.empty()) {continue;} 
-        istringstream ssc(cur_cap);
-        std::vector<int> m;
-        while (getline(ssc, cur_cap, ' ')) {
-          if(cur_cap.empty()) {continue;} 
-          int val;
-          istringstream(cur_cap)>>val;
-          m.push_back(val);
-        }
-        pm.push_back(m);
-      }
- 
-      addVecInput(entries,name,pm,syms);
+      string name = m[1];
+      string vec = m[2];
+      parse_and_add_vec(name,line,syms,true /*input*/);
 
     } else if (regex_search(line,m,re_Op1)) {
       //cout << "o1:" << m[1] << " " << m[2] << " " << m[3] << "\n";
-
       string var_out = m[1];
       string opcode  = m[2];
       string var_in  = m[3];
@@ -166,24 +171,10 @@ DyPDG::DyPDG(string filename) {
       connect(inc_node3, pdg_inst,2,DyPDG_Edge::ctrl_true);
       addInst(pdg_inst);
 
-    } else if (regex_search(line,m,re_output)) {     
+    } else if (regex_search(line,m,re_output)) {  //SCALAR OUTPUT ONLY
       //cout << "out:" << m[1] << "\n";    
       string var_out = m[1];
-
-      DyPDG_Node* out_node = syms[var_out];
-      if(out_node==NULL) {
-        cerr << "Could not find" + var_out + "\n";
-        assert("0");
-      }
-
-      DyPDG_Output* pdg_out = new DyPDG_Output();
-      pdg_out->setName(var_out);
-      syms[var_out]=pdg_out;
-      connect(out_node, pdg_out,0,DyPDG_Edge::data);
-      addOutput(pdg_out);
-
-      //pdg_out->setVPort(num_output_vectors++);
-
+      addScalarOutput(var_out,syms);
     } else {
       //cout << "Line: \"" << line << "\"\n";
       assert(0&&"I don't know what this line is for\n");
@@ -326,6 +317,24 @@ void DyPDG::printGraphviz(ostream& os)
   os << "}\n";
 } 
 
+
+bool is_compatible(vector<vector<int>>& vec_m, vector<pair<int, vector<int>>>& port_m) {
+  if(vec_m.size() != port_m.size()) {
+    return false;
+  }
+  for(unsigned i = 0; i < vec_m.size(); ++i) {
+    if(vec_m[i].size() != port_m[i].second.size()) {
+      return false;
+    }
+    for(unsigned j = 0; j < vec_m[i].size(); ++j) {
+      if(vec_m[i][j] != port_m[i].second[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyModel) {
   os << "set cp(pv,pn) \"Port Compatibility\" \n /";   // Print the port compatibility
   bool first=true;  
@@ -336,39 +345,40 @@ void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyM
 
     for(auto& port_interf : dyModel->subModel()->io_interf().in_vports) {
       std::vector<std::pair<int, std::vector<int> > >& port_m = port_interf.second;
-
-      if(vec_m.size() != port_m.size()) {
-        continue;
-      }
-      bool didnt_work=false;
-      for(unsigned i = 0; i < vec_m.size(); ++i) {
-        if(vec_m[i].size() != port_m[i].second.size()) {
-          didnt_work=true;
-          break;
-        }
-        for(unsigned j = 0; j < vec_m[i].size(); ++j) {
-          if(vec_m[i][j] != port_m[i].second[j]) {
-            didnt_work=true;
-            break;
-          }
-        }
-      }
-      if(!didnt_work) {
+       
+      if(is_compatible(vec_m,port_m)) {
         matching_ports.push_back(port_interf.first);
-        if(first) {
-          first=false;
-        } else {
-          os << ",";
-        }
+        CINF(os,first);
         os << vec_in->gamsName() << ".ip" << port_interf.first << " ";
       }
     }
 
     if(matching_ports.size()==0) {
-      cout << "PORT \"" << vec_in->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
+      cout << "IN PORT \"" << vec_in->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
+    }
+  }
+
+  for(auto& vec_out : _vecOutputs) {
+    vector<vector<int> >& vec_m = vec_out->locMap();
+    std::vector<int> matching_ports;
+
+    for(auto& port_interf : dyModel->subModel()->io_interf().out_vports) {
+
+      std::vector<std::pair<int, std::vector<int> > >& port_m = port_interf.second;
+
+      if(is_compatible(vec_m,port_m)) {
+        matching_ports.push_back(port_interf.first);
+        CINF(os,first);
+        os << vec_out->gamsName() << ".op" << port_interf.first << " ";
+      }
+    }
+
+    if(matching_ports.size()==0) {
+      cout << "OUT PORT \"" << vec_out->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
     }
 
   }
+
   os << "/;\n";
 }
 
@@ -417,11 +427,7 @@ void DyPDG::printGams(std::ostream& os,std::unordered_map<string,DyPDG_Node*>& n
       DyPDG_Inst* pdg_inst= *Ii;
       
       if(dy_inst == pdg_inst->inst()) {
-        if(first) {
-          first = false;
-        } else {
-          os << ", ";   
-        }
+        CINF(os,first);
         os << pdg_inst->gamsName();
       }
     }
@@ -431,11 +437,11 @@ void DyPDG::printGams(std::ostream& os,std::unordered_map<string,DyPDG_Node*>& n
   bool first=true;
   os << "set pv(*) \"Port Vectors\" \n /";   // Print the set of port vertices:
   for(auto& i : _vecInputs) {
-    if(first) {
-      first=false;
-    } else {
-      os << ", ";
-    } 
+    CINF(os,first);
+    os << i->gamsName() << " ";
+  }
+  for(auto& i : _vecOutputs) {
+    CINF(os,first);
     os << i->gamsName() << " ";
   }
   os << "/;\n";
@@ -447,15 +453,20 @@ void DyPDG::printGams(std::ostream& os,std::unordered_map<string,DyPDG_Node*>& n
     std::vector<DyPDG_Input*>::iterator I,E;
     for(I=i->input_begin(),E=i->input_end();I!=E;++I,++ind) {
       DyPDG_Input* dyin = *I;
-      if(first) {
-        first=false;
-      } else {
-        os << ", ";
-      } 
+      CINF(os,first);
       os << i->gamsName() << "." << dyin->gamsName() << " " << ind+1;
     }
   }
-   os << "/;\n";
+  for(auto& i : _vecOutputs) {
+    int ind=0;
+    std::vector<DyPDG_Output*>::iterator I,E;
+    for(I=i->output_begin(),E=i->output_end();I!=E;++I,++ind) {
+      DyPDG_Output* dyout = *I;
+      CINF(os,first);
+      os << i->gamsName() << "." << dyout->gamsName() << " " << ind+1;
+    }
+  }
+  os << "/;\n";
 
   // -------------------edges ----------------------------
   os << "set e \"edges\" \n /";   // Print the set of edges:

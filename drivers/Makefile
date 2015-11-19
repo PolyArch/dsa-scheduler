@@ -1,20 +1,16 @@
 SYS = $(shell sys)
-ifeq ($(SYS),amd64_rhel6)
-    CXX = /s/gcc-4.6.2/@sys/bin/g++
-else
-    CXX = /s/gcc-4.6.1/@sys/bin/g++
-endif
+CXX = /s/gcc-5.1.0/@sys/bin/g++
 
 
-CXXFLAGS :=  -Wall -g -std=c++0x -lboost_regex
+CXXFLAGS :=  -Wall -g -std=c++0x
 
-SRC_ROOT=../..
+SRC_ROOT=$(shell pwd)/../..
 LIB_DYMODEL_PATH=$(SRC_ROOT)/softbrain-config/lib
 INC_DYMODEL_PATH=$(SRC_ROOT)/softbrain-config/src
 LIB_DYSCHED_PATH=$(SRC_ROOT)/softbrain-scheduler/lib
 INC_DYSCHED_PATH=$(SRC_ROOT)/softbrain-scheduler/src
 
-CXXFLAGS += -I$(INC_DYMODEL_PATH) -I$(INC_DYSCHED_PATH) -Wl,-rpath,$(shell pwd)/../lib -Wl,-rpath,$(shell pwd)/../../sb_config/lib
+CXXFLAGS += -I$(INC_DYMODEL_PATH) -I$(INC_DYSCHED_PATH) -Wl,-rpath,$(LIB_DYMODEL_PATH) -Wl,-rpath,$(LIB_DYSCHED_PATH)
 
 #all: reschedule stat-config
 

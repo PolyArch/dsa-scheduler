@@ -4,12 +4,13 @@
 #include <regex>
 #include <iostream>
 #include <fstream>
-#include <boost/regex.hpp>
 
 #include "model_parsing.h"
 #include "dypdg.h"
 #include "dyinst.h"
 #include <assert.h>
+#include <regex>
+#include <list>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -54,6 +55,23 @@ int Schedule::getPortFor(DyPDG_Node* dypdg_in)
 }
 
 
+//Configuration
+//64: Active Input Ports (interfaces)
+//64: Active Output Ports (interfaces)
+//64: In Row 1 Delay
+//64: In Row 2 Delay
+//64: In Row 3 Delay
+//Switch Data 
+
+void Schedule::printConfigBits(ostream& os) 
+{
+  
+
+
+
+}
+
+
 void Schedule::printConfigText(ostream& os, int config) 
 {
   //print dimension
@@ -71,7 +89,6 @@ void Schedule::printConfigText(ostream& os, int config)
     for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j) {
     
       stringstream ss;
-      bool anything_there=false;
       dyswitch* dysw = &switches[i][j];
      
       std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>& link_map = _assignSwitch[dysw]; 
@@ -191,14 +208,14 @@ void Schedule::printConfigText(ostream& os, int config)
 
 
 
-vector<string> getCaptureList(boost::regex& rx, string str, string::const_iterator& start, bool only_once=false) {
+vector<string> getCaptureList(regex& rx, string str, string::const_iterator& start, bool only_once=false) {
     vector<string> list;
-    //boost::match_results<std::string::const_iterator> capturedTexts; 
-    boost::smatch capturedTexts;
+    //match_results<std::string::const_iterator> capturedTexts; 
+    smatch capturedTexts;
     
     std::string::const_iterator end; 
     end = str.end(); 
-    boost::match_flag_type flags = boost::match_default | boost::match_continuous; 
+    regex_constants::match_flag_type flags = regex_constants::match_default | regex_constants::match_continuous; 
     while(regex_search(start, end, capturedTexts, rx,flags)) 
     {
         start+=capturedTexts[0].length();
@@ -206,8 +223,8 @@ vector<string> getCaptureList(boost::regex& rx, string str, string::const_iterat
         for(unsigned i = 1; i < capturedTexts.size(); ++i) {
             list.push_back(capturedTexts[i].str());
         }
-      //flags |= boost::match_prev_avail; 
-      //flags |= boost::match_not_bob; 
+      //flags |= match_prev_avail; 
+      //flags |= match_not_bob; 
       if(only_once) break;
     }
     return list;
@@ -233,14 +250,14 @@ Schedule::Schedule(string filename, bool multi_config) {
   int newSizeX=-1;
   int newSizeY=-1;
   
-  boost::regex posRE("\\s*(\\d+),(\\d+):");
-  boost::regex arrowRE("\\s*(NE|SW|NW|SE|N|E|S|W|P0|P1)->(NE|SW|NW|SE|N|E|S|W|P0|P1)\\s*");
-  boost::regex dirRE("\\s*(NE|SW|NW|SE|N|E|S|W|P0|P1|IM|-)\\s*");
-  boost::regex numsRE("\\s*(\\d+)\\s*");
-  boost::regex fuRE("\\s*((?:\\w|\\-)*)\\s*");
-  boost::regex constRE("\\s*(-?(?:0x)?(?:\\d|[a-f]|[A-F])+)\\s*");
-  boost::regex portRE("\\s*(\\d+):");
-  boost::regex xnumsRE("\\s*(\\w+)\\s*");
+  regex posRE("\\s*(\\d+),(\\d+):");
+  regex arrowRE("\\s*(NE|SW|NW|SE|N|E|S|W|P0|P1)->(NE|SW|NW|SE|N|E|S|W|P0|P1)\\s*");
+  regex dirRE("\\s*(NE|SW|NW|SE|N|E|S|W|P0|P1|IM|-)\\s*");
+  regex numsRE("\\s*(\\d+)\\s*");
+  regex fuRE("\\s*((?:\\w|\\-)*)\\s*");
+  regex constRE("\\s*(-?(?:0x)?(?:\\d|[a-f]|[A-F])+)\\s*");
+  regex portRE("\\s*(\\d+):");
+  regex xnumsRE("\\s*(\\w+)\\s*");
   string line;
   
   while (ifs.good()) {
@@ -266,7 +283,7 @@ Schedule::Schedule(string filename, bool multi_config) {
       
       vector<string> lineElements;
       vector<string> caps;
-      boost::smatch captures;
+      smatch captures;
       int posX,posY;
       string::const_iterator strIter;
       DyPDG_Output* pdg_out;
@@ -833,7 +850,6 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
       }
     }
   }
-    
 }
 
 void Schedule::tracePath(dynode* dyspot, DyPDG_Node* pdgnode, 
@@ -860,12 +876,12 @@ void Schedule::tracePath(dynode* dyspot, DyPDG_Node* pdgnode,
   while(!worklist.empty()) {
     
     //cerr << "worklist: ";
-    for(unsigned i = 0; i < worklist.size(); ++i) {
-      dynode* item = worklist[i].first;
-      DyDIR::DIR dir = worklist[i].second;
-      //cerr << DyDIR::dirName(dir) << ", " << item->name() << "";
-      //cerr << " | ";
-    }
+    //for(unsigned i = 0; i < worklist.size(); ++i) {
+    //  dynode* item = worklist[i].first;
+    //  DyDIR::DIR dir = worklist[i].second;
+    //  cerr << DyDIR::dirName(dir) << ", " << item->name() << "";
+    //  cerr << " | ";
+    //}
     //cerr << "\n";
     
     dynode* curItem = worklist.back().first;

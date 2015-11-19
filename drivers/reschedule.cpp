@@ -4,7 +4,10 @@
 #include <fstream>
 
 #include "scheduler.h"
-#include <boost/regex.hpp>
+#include <regex>
+
+#include <unistd.h>
+
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -24,12 +27,12 @@ int file_exists (char * fileName)
        
 }
 
-void replaceLine(string& line, const char* name, boost::regex& rx,map<int,int> portMapping,int lineno) 
+void replaceLine(string& line, const char* name, regex& rx,map<int,int> portMapping,int lineno) 
 {
-  boost::smatch capturedTexts;
-  //boost::match_flag_type flags = boost::match_default | boost::match_continuous; 
-  //boost::match_flag_type flags; = !boost::match_continuous; 
-  boost::match_flag_type flags = boost::match_default; 
+  smatch capturedTexts;
+  //match_flag_type flags = match_default | match_continuous; 
+  //match_flag_type flags; = !match_continuous; 
+  regex_constants::match_flag_type flags = regex_constants::match_default; 
   if(regex_search(line, capturedTexts, rx,flags)) {
     //cout << "found match: " << line << "\n";
     int oldPort = atoi(capturedTexts[2].str().c_str());
@@ -48,12 +51,12 @@ void replaceLine(string& line, const char* name, boost::regex& rx,map<int,int> p
   }
 }
 
-void replaceLineOut(string& line, const char* name, boost::regex& rx,map<int,int> portMapping,int lineno) 
+void replaceLineOut(string& line, const char* name, regex& rx,map<int,int> portMapping,int lineno) 
 {
-  boost::smatch capturedTexts;
-  //boost::match_flag_type flags = boost::match_default | boost::match_continuous; 
-  //boost::match_flag_type flags; = !boost::match_continuous; 
-  boost::match_flag_type flags = boost::match_default; 
+  smatch capturedTexts;
+  //match_flag_type flags = match_default | match_continuous; 
+  //match_flag_type flags; = !match_continuous; 
+  regex_constants::match_flag_type flags = regex_constants::match_default; 
   if(regex_search(line, capturedTexts, rx,flags)) {
     //cout << "found match: " << line << "\n";
     int oldPort = atoi(capturedTexts[1].str().c_str());
@@ -243,7 +246,7 @@ int main(int argc, char* argv[])
       all_outputs &= (outPortMapping.count(widePort[j]) > 0);
       int ipm = inPortMapping.count(widePort[j]) > 0 ? inPortMapping[widePort[j]] : -1;
       int opm =outPortMapping.count(widePort[j]) > 0 ?outPortMapping[widePort[j]] : -1;
-      //cout << widePort[j] <<": "<< ipm <<", "<< opm <<", "<< all_inputs <<","<< all_outputs << "\n";
+      cout << widePort[j] <<": "<< ipm <<", "<< opm <<", "<< all_inputs <<","<< all_outputs << "\n";
     }
     
     if(all_inputs & !all_outputs) {
@@ -297,12 +300,12 @@ int main(int argc, char* argv[])
     ofstream ofs(outfile, ios::out);
     assert(ofs.good());
     
-    boost::regex rx_dyload("DyLOAD\\((.+),(\\d+)\\)");
-    boost::regex rx_dysend("DySEND\\((.+),(\\d+)\\)");
-    boost::regex rx_dysendf("DySENDF\\((.+),(\\d+)\\)");
-    boost::regex rx_dysendss("DySENDSS\\((.+),(\\d+)\\)");
-    boost::regex rx_dyrecv("DyRECV\\((\\d+),(.+)\\)");
-    boost::regex rx_dyrecvf("DyRECVF\\((\\d+),(.+)\\)");
+    regex rx_dyload("DyLOAD\\((.+),(\\d+)\\)");
+    regex rx_dysend("DySEND\\((.+),(\\d+)\\)");
+    regex rx_dysendf("DySENDF\\((.+),(\\d+)\\)");
+    regex rx_dysendss("DySENDSS\\((.+),(\\d+)\\)");
+    regex rx_dyrecv("DyRECV\\((\\d+),(.+)\\)");
+    regex rx_dyrecvf("DyRECVF\\((\\d+),(.+)\\)");
     while(ifs.good())
     {
         string line;

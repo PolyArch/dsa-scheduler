@@ -6,7 +6,6 @@
 #include "schedule.h"
 
 #include <map>
-#include <regex>
 #include <iostream>
 #include <fstream>
 #include <vector>

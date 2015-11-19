@@ -1,10 +1,5 @@
 SYS = $(shell sys)
-ifeq ($(SYS),amd64_rhel6)
-    CXX = /s/gcc-4.6.2/@sys/bin/g++
-else
-    CXX = /s/gcc-4.6.1/@sys/bin/g++
-endif
-
+CXX = /s/gcc-5.1.0/@sys/bin/g++
 
 CXXFLAGS :=  -Wall -g -std=c++0x -lm $(FLAGS)
 SOURCES= dypdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp

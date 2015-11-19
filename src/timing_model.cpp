@@ -103,7 +103,7 @@ latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Mel(e
 
 
 equation restrict_extra(e);
-restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*12;
+restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*16;
 *restrict_extra(e)..     extra(e) =l= sum(l,Mel(e,l));
 
 add(v)..                length =g= Tv(v);

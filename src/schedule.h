@@ -8,6 +8,26 @@
 #include <iostream>
 #include <fstream>
 
+
+struct sw_config {
+  unsigned pred:2;
+  unsigned opcode:5;
+  unsigned fu_in1:2;
+  unsigned fu_in2:2;
+  unsigned fu_out:2;
+  unsigned  sw_s:3;
+  unsigned sw_se:3;
+  unsigned  sw_e:3;
+  unsigned sw_ne:3;
+  unsigned  sw_n:3;
+  unsigned sw_nw:3;
+  unsigned  sw_w:3;
+  unsigned sw_sw:3;
+  unsigned   row:2;
+
+};
+
+
 class Schedule {
   public:
     Schedule(std::string filename, bool multi_config=false); //Read in schedule (both dymodel, dypdg, and schedule from file)
@@ -31,7 +51,8 @@ class Schedule {
       assert(os.good()); 
       printConfigText(os,config);
     }
-    
+   
+    void printConfigBits(std::ostream& os);
     
     
     //Rest of Stuff

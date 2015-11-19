@@ -10,6 +10,17 @@
 using namespace std;
 using namespace SB_CONFIG;
 
+std::string basename(std::string& filename) {
+  size_t lastindex = filename.find_last_of("."); 
+  string basename = filename.substr(0, lastindex); 
+ 
+  lastindex = filename.find_last_of("\\/"); 
+  if(lastindex != string::npos) {
+    basename = basename.substr(lastindex+1);
+  }
+  return basename;
+}
+
 int main(int argc, char* argv[])
 {
   
@@ -30,6 +41,8 @@ int main(int argc, char* argv[])
   system("mkdir -p dots/");
 
   DyPDG dypdg(pdg_filename);
+
+  //cout << "file: " << filename << "\n";
 
   ofstream ofs("dots/pdgout.dot", ios::out);
   assert(ofs.good());
