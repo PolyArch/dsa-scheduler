@@ -1,7 +1,7 @@
 SYS = $(shell sys)
 CXX = /s/gcc-5.1.0/@sys/bin/g++
 
-CXXFLAGS :=  -Wall -g -std=c++0x -lm $(FLAGS)
+CXXFLAGS :=  -Wall -g -std=c++11 -O0 -lm $(FLAGS)
 SOURCES= dypdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp
 
 INCLUDE_DEST=../src
@@ -25,16 +25,16 @@ $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
     
 $(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -shared -o $@ $^     
+	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^     
 
 $(OBJ_DEST)/scheduler.o: scheduler.cpp multi_model.cpp spill_model.cpp dyser_gams.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 
     
 $(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 
 .phony: clean
 
 clean:
-	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o
+	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o *.d

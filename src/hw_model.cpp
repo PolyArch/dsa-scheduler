@@ -6,20 +6,21 @@ string hw_model = R"(
 
 
 
+Variable            cost;
+binary variable     Mn(v,n), Sll(l,l), NOl(l), Mp(pv,pn);
+integer variable    Tl(l), Tn(n);
+positive variable   Mvl(v,l), Tv(v), extra(e), En(n);
 
-
-Variable            cost,length;
-binary variable     Mn(v,n), Sll(l,l), Nl(l), Mp(pv,pn);
-positive variable   Mvl(v,l), Tl(l), Tn(n), Tv(v), extra(e);
+Tl.up(l)=ORD(l);
+Tn.up(n)=60;
 
 Mn.prior(v,n)=0;
 Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
 *Mvl.prior(v,l)=100;
 Sll.prior(l,l)=5;
-Nl.prior(l,l)=5;
 
 Mvl.up(v,l)=1;
-Nl.up(l)=1;
+NOl.up(l)=1;
 
 alias(v1,v2,v);
 alias (l1,l2,l);
@@ -60,6 +61,7 @@ loop(n,
   );
 );
 
+
 * Set not-possible variables to 0
 Mn.fx(v,n)$(not c(v,n))=0;
 Mp.fx(pv,pn)$(not cp(pv,pn))=0;
@@ -73,7 +75,7 @@ Mp.fx(pv,pn)$(not cp(pv,pn))=0;
 *loop((v1,v2)$(Gvv(v1,v2) and not kindV('Output',v2)),
 *  Mvl.fx(v1,l)$(OutputL(l))=0;
 *);
-
+*
 * Set input latencies
 Tl.fx(l)$(sum(n,Hnl(n,l) and kindN('Input',n)))=0;
 
@@ -96,60 +98,61 @@ onePVperPN(pn)..                               sum(pv$cp(pv,pn),Mp(pv,pn)) =l= 1
 equation vectorPorts(pv,pn,v,n);
 vectorPorts(pv,pn,v,n)$(cp(pv,pn) and VI(pv,v)<>0 and PI(pn,n)<>0 and VI(pv,v)=PI(pn,n)).. Mp(pv,pn) =e= Mn(v,n);
 
+equation output_some_link(l2);
+output_some_link(l2)$(sum(l1$Rll(l1,l2),1)).. sum(l1$Rll(l1,l2),Sll(l1,l2))+NOl(l2)=e=1;
+
 *can only route if something routed on inputs
-equation mustMapVL(l1,l2);
-mustMapVL(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l1);
+*equation mustMapVL(l1,l2);
+*mustMapVL(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l1);
 
 *can only route if something routed on outputs
-equation mustMapVL2(l1,l2);
-mustMapVL2(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l2);
+*equation mustMapVL2(l1,l2);
+*mustMapVL2(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l2);
 
 *no routing if no mappings
-equation noWeirdInRoutes(l);
-noWeirdInRoutes(l1)$(sum(l2$Rll(l1,l2),1))..  sum(l2$Rll(l1,l2), Sll(l1,l2)) =g= Nl(l1);
-
-equation noWeirdOutRoutes(l);
-noWeirdOutRoutes(l2)$(sum(l1$Rll(l1,l2),1))..  sum(l1$Rll(l1,l2), Sll(l1,l2)) =g= Nl(l2);
+*equation noWeirdInRoutes(l);
+*noWeirdInRoutes(l1)$(sum(l2$Rll(l1,l2),1))..  sum(l2$Rll(l1,l2), Sll(l1,l2)) =g= Nl(l1);
+*
+*equation noWeirdOutRoutes(l);
+*noWeirdOutRoutes(l2)$(sum(l1$Rll(l1,l2),1))..  sum(l1$Rll(l1,l2), Sll(l1,l2)) =g= Nl(l2);
 
 equation    calcNumMapped(l);
-calcNumMapped(l)..                  sum(v,Mvl(v,l)) =e= Nl(l);
+calcNumMapped(l)..                  sum(v,Mvl(v,l)) =e= (1-NOl(l));
 
 *Every link (from a router) should have a corresponding routing-variable set (sll) 
-equation oneSwitchOut(l);
-oneSwitchOut(l2)$(sum(l1$Rll(l1,l2),1)>0).. sum(l1$Rll(l1,l2),Sll(l1,l2)) =e= Nl(l2);
+*equation oneSwitchOut(l);
+*oneSwitchOut(l2)$(sum(l1$Rll(l1,l2),1)>0).. sum(l1$Rll(l1,l2),Sll(l1,l2)) =e= Nl(l2);
 
 equation forceForward(l,l,v);
 forceForward(l1,l2,v)$(Rll(l1,l2)).. Mvl(v,l1) + Sll(l1,l2) =l= Mvl(v,l2) + 1;
 
-*equation forceBackward(l,l,v);
-*forceBackward(l1,l2,v)$(Rll(l1,l2)).. Mvl(v,l2) + Sll(l1,l2) =l= Mvl(v,l1) + 1;
-
-*equation forceRoute(l,l,v);
-*forceRoute(l1,l2,v)$(Rll(l1,l2)).. Mvl(v,l1) =e= Mvl(v,l2)
+equation forceBackward(l,l,v);
+forceBackward(l1,l2,v)$(Rll(l1,l2)).. Mvl(v,l2) + Sll(l1,l2) =l= Mvl(v,l1) + 1;
 
 source_mapping(v1,n,v2)$(Gvv(v1,v2))..  Mn(v1,n) =e= sum(l$Hnl(n,l),Mvl(v1,l));
 dest_mapping(v1,n,v2)$(Gvv(v1,v2))..    sum(l$Hln(l,n),Mvl(v1,l)) =g= Mn(v2,n);
 
+
 equation timeL(l,l), timeH(l,l);
-timeL(l1,l2)$(Rll(l1,l2)).. Tl(l1) + 1 - (1-Sll(l1,l2))*50 =l= Tl(l2);
-timeH(l1,l2)$(Rll(l1,l2)).. Tl(l1) + 1 + (1-Sll(l1,l2))*50 =g= Tl(l2);
+timeL(l1,l2)$(Rll(l1,l2)).. Tl(l1) + 1 - (1-Sll(l1,l2))*64 =l= Tl(l2);
+timeH(l1,l2)$(Rll(l1,l2)).. Tl(l1) + 1 + (1-Sll(l1,l2))*64 =g= Tl(l2);
 
 equation timeInFU(n,l);
 timeInFU(n,l)$(Hln(l,n)).. Tn(n) =e= Tl(l);
 
+En.up(n)=24;
+En.fx(n)$(not kindN('DelayFU',n))=0;
+
 equation timeOutFU(n,l);
-timeOutFU(n,l)$(Hnl(n,l)).. Tl(l) =e= Tn(n) + FULAT(n);
+timeOutFU(n,l)$(Hnl(n,l)).. Tl(l) =e= Tn(n) + FULAT(n) + En(n);
 
 equation incoming_links(v,r,l);
 incoming_links(v,r,l2)$(Hrl(r,l2))..   sum(l1$Hlr(l1,r),Mvl(v,l1)) =g= Mvl(v,l2);
-
-
 
 *not necessary, routing performed by sll
 *equation incoming_links(e,r) outgoing_links(e,r)
 *incoming_links(e,r)..   sum(l$Hlr(l,r),Ml(e,l)) =e= sum(l$Hrl(r,l), Ml(e,l));
 *outgoing_links(e,r)..   sum(l$Hlr(l,r),Ml(e,l)) =l= 1;
-
 
 *limits incomming vertices to one, but that's stupid and not what I want
 *equation limit_inc_v(v,r);
@@ -167,12 +170,11 @@ incoming_links(v,r,l2)$(Hrl(r,l2))..   sum(l1$Hlr(l1,r),Mvl(v,l1)) =g= Mvl(v,l2)
 
 
 
-*obj.. cost =e= sum(l,Nl(l));
+obj.. cost =e= sum(l,(1-NOl(l)));
 
-equation out_links(l,n);
-out_links(l,n)$(Hln(l,n) and kindN('Output',n)).. cost =g= Tl(l);
-
-obj.. cost =e= cost;
+*equation out_links(l,n);
+*out_links(l,n)$(Hln(l,n) and kindN('Output',n)).. cost =g= Tl(l);
+*obj.. cost =e= cost;
 
 
 Model   schedule  / all /;

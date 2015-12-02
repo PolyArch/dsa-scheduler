@@ -1,4 +1,4 @@
-InputVec: N [0 4, 1 5, 2 6, 3 7]      #2Wide 2Deep
+InputVec: N [0 4, 1 5, 2 6, 3 7]      #4Wide 2Deep
 InputVec: S [0, 1, 2, 3, 4, 5, 6, 7]  #8Wide 1Deep
 Input: acc1  
 Input: acc2  
@@ -22,11 +22,21 @@ A3 =Add16x4(M6 , M7 )
 A8 =Add16x4(A0 , A1 )
 A9 =Add16x4(A2 , A3 )
 
-R1 =Red16x4(A8 , acc1 )
-R2 =Red16x4(A9 , acc2 )
-
-out1=Sig16(R1, pred1 )
-out2=Sig16(R2, pred2 )
+R1 = Red16x4(A8 , acc1 )
+R2 = Red16x4(A9 , acc2 )
+out1=Sig16(R1,    pred1)
+out2=Sig16(R2,    pred2)
 
 Output: out1
 Output: out2
+
+
+#file.h
+#
+#uint64_t file[12321] = {123, ,23,21,31,2}
+#int file_size=234;
+#
+#int PortN = 5;
+#int PortS = 5;
+#int Portacc1 = 5;
+#

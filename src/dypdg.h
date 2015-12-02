@@ -27,7 +27,7 @@ class DyPDG_Edge {
        _etype=etype;
        _ID=ID_SOURCE++;
     }
-    
+
     DyPDG_Node* def() const {return _def;}
     DyPDG_Node* use() const {return _use;}
     
@@ -156,8 +156,9 @@ class DyPDG_Vec {
   std::vector<std::vector<int> >& locMap() {return _locMap;}
 
   int id() {return _ID;}
-
+  
   virtual std::string gamsName() = 0;
+  virtual std::string name() {return _name;}
 
   protected:
     std::string _name;
@@ -277,7 +278,7 @@ class DyPDG {
       assert(os.good());
       printGraphviz(os);
     }
-    void printGams(std::ostream& os, std::unordered_map<std::string,DyPDG_Node*>&,std::unordered_map<std::string,DyPDG_Edge*>&);
+    void printGams(std::ostream& os, std::unordered_map<std::string,DyPDG_Node*>&,std::unordered_map<std::string,DyPDG_Edge*>&,std::unordered_map<std::string, DyPDG_Vec*>&);
     void printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyModel);
 
 
@@ -339,10 +340,12 @@ class DyPDG {
       _vecInputs.push_back(vec_input);
 
       int entries = pm.size();
+      std::cout << "entries: " << entries << "\n";
 
       for(int i = 0; i < entries; ++i) {
         std::stringstream ss;
         ss << name << i;
+        std::cout << "name: " << name << "\n";
         DyPDG_Input* pdg_in = new DyPDG_Input();
         std::string name = ss.str();
         syms[name]=pdg_in;

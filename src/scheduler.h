@@ -83,8 +83,13 @@ class Scheduler {
   std::unordered_map<std::string,std::pair<SB_CONFIG::dynode*,int> >  gamsToDynode;  
   std::unordered_map<std::string,std::pair<SB_CONFIG::dylink*,int> > gamsToDylink;
   std::unordered_map<std::string,std::pair<SB_CONFIG::dyswitch*,int>>  gamsToDyswitch;
+
+
   std::unordered_map<std::string,DyPDG_Node*> gamsToPdgnode;
   std::unordered_map<std::string,DyPDG_Edge*> gamsToPdgedge;
+  std::unordered_map<std::string,std::pair<bool,int> >  gamsToPortN;  
+  std::unordered_map<std::string,DyPDG_Vec*>  gamsToPortV;  
+
 };
 
 

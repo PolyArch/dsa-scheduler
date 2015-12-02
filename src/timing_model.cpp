@@ -8,7 +8,7 @@ Mn.prior(v,n)=0;
 Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
 Mel.prior(e,l)=10;
 
-positive variable   Tv(v);
+integer variable   Tv(v);
 
 alias(v1,v2,v);
 alias (l1,l2,l);
@@ -24,7 +24,7 @@ InputL(l)$(sum(n$kindN('Input',n),Hnl(n,l)))=Yes;
 set OutputL(l);
 OutputL(l)$(sum(n$kindN('Output',n),Hln(l,n)))=Yes;
 
-positive variable   O(l),extra(e),maxExtra;
+positive variable   O(l),extra(e),maxExtra,Ev(v);
 
 $batinclude mip_start.gams
 alias (v1,v2,v);
@@ -98,13 +98,20 @@ limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 *                        sum(l$Hln(l,n),Mel(intedges,l)) =l= 1;                        
 
 equation latency(v,e,v);
-latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e);
-* extra(e)
+latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + Ev(v1) +extra(e);
+
+Ev.up(v)=16;
+Ev.fx(v)$(not kindV('DelayFU',v))=0;
+*extra.fx(e)=0;
+
 
 
 equation restrict_extra(e);
 restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*16;
+
 *restrict_extra(e)..     extra(e) =l= sum(l,Mel(e,l));
+
+*restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*1;
 
 add(v)..                length =g= Tv(v);
 

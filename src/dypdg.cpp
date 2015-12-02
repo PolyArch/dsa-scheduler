@@ -124,6 +124,7 @@ DyPDG::DyPDG(string filename) {
       DyPDG_Node* inc_node2 = syms[var_in2];
       if(inc_node1==NULL) {
         cerr << "Could not find \"" + var_in1 + "\" (in1,op2) \n";
+        cerr << "in line: " << line << "\n";
         assert("0");
       } else if(inc_node2==NULL) {
         cerr << "Could not find \"" + var_in2 + "\"\n (in2,op2) ";
@@ -176,7 +177,7 @@ DyPDG::DyPDG(string filename) {
       string var_out = m[1];
       addScalarOutput(var_out,syms);
     } else {
-      //cout << "Line: \"" << line << "\"\n";
+      cout << "Line: \"" << line << "\"\n";
       assert(0&&"I don't know what this line is for\n");
     }
 
@@ -355,6 +356,7 @@ void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyM
 
     if(matching_ports.size()==0) {
       cout << "IN PORT \"" << vec_in->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
+      assert(0);
     }
   }
 
@@ -375,6 +377,7 @@ void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyM
 
     if(matching_ports.size()==0) {
       cout << "OUT PORT \"" << vec_out->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
+      assert(0);
     }
 
   }
@@ -383,7 +386,10 @@ void DyPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::DyModel* dyM
 }
 
 
-void DyPDG::printGams(std::ostream& os,std::unordered_map<string,DyPDG_Node*>& node_map,std::unordered_map<std::string,DyPDG_Edge*>& edge_map) {
+void DyPDG::printGams(std::ostream& os,
+                      std::unordered_map<string,DyPDG_Node*>& node_map,
+                      std::unordered_map<std::string,DyPDG_Edge*>& edge_map,
+                      std::unordered_map<std::string, DyPDG_Vec*>& port_map) {
   
   os << "$onempty\n";
   
@@ -439,10 +445,12 @@ void DyPDG::printGams(std::ostream& os,std::unordered_map<string,DyPDG_Node*>& n
   for(auto& i : _vecInputs) {
     CINF(os,first);
     os << i->gamsName() << " ";
+    port_map[i->gamsName()]=i;
   }
   for(auto& i : _vecOutputs) {
     CINF(os,first);
     os << i->gamsName() << " ";
+    port_map[i->gamsName()]=i;
   }
   os << "/;\n";
 

@@ -25,6 +25,24 @@ loop(r,
     );
     put /
 );
+put "[port-port-map]" /
+loop(pv,
+    put pv.tl ":";
+    loop((pn)$(Mp.l(pv,pn)<>0),
+        put pn.tl
+    );
+    put /
+);
+put "[dfu-lat]" /
+loop(n$(En.l(n)<>0),
+    put n.tl ":" En.l(n) / 
+);
+
+put "[extra-lat]" /
+loop(e$(extra.l(e)<>0),
+    put e.tl ":" extra.l(e) / 
+);
+
 
 *put "[vertex-link-map]" /
 *loop(v,

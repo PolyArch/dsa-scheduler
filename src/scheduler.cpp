@@ -454,7 +454,7 @@ int Scheduler::route_to_output(Schedule* sched, DyPDG_Edge* pdgedge, dynode* sou
 #include "dyser_gams.cpp"
 #include "dyser_gams_hw.cpp"
 #include "timing_model.cpp"
-#include "hw_model3.cpp"
+#include "hw_model.cpp"
 
 
 bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
@@ -625,7 +625,8 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   ofstream ofs_dyser_model(_gams_work_dir + "/dyser_model.gams", ios::out);
   assert(ofs_dyser_model.good());
   gamsToDynode.clear(); gamsToDylink.clear();
-  _dyModel->subModel()->PrintGamsModel(ofs_dyser_model,gamsToDynode,gamsToDylink,gamsToDyswitch,n_configs);
+  _dyModel->subModel()->PrintGamsModel(ofs_dyser_model,gamsToDynode,gamsToDylink,
+                                       gamsToDyswitch,gamsToPortN,n_configs);
 
   cout << gamsToDynode.size() << " " << gamsToDylink.size() << " " << gamsToDyswitch.size() << "\n";
 
@@ -637,8 +638,10 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
     cerr << "could not open " + _gams_work_dir + "/dyser_pdg.gams";
     return false;
   }
-  gamsToPdgnode.clear(); gamsToPdgedge.clear();
-  dyPDG->printGams(ofs_dyser_pdg,gamsToPdgnode,gamsToPdgedge);
+  gamsToPdgnode.clear(); 
+  gamsToPdgedge.clear();
+  gamsToPortV.clear();
+  dyPDG->printGams(ofs_dyser_pdg,gamsToPdgnode,gamsToPdgedge,gamsToPortV);
   dyPDG->printPortCompatibilityWith(ofs_dyser_pdg,_dyModel);
   ofs_dyser_pdg.close();
   
@@ -667,11 +670,17 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, dynode_name,list_of_links;
   ifstream gamsout(gams_out_file.c_str());
-  enum  { VtoN,VtoL,LtoL,EL,Parse_None } parse_stage;
+  enum  { VtoN,VtoL,LtoL,EL,PPL, Parse_None } parse_stage;
   parse_stage=Parse_None;
   while(gamsout.good()) {  
     getline(gamsout,line);
-    if(ModelParsing::StartsWith(line,"#")) continue;
+    ModelParsing::trim_comments(line);
+    ModelParsing::trim(line);
+
+    if(line.empty()) {
+      continue;
+    }
+    //if(ModelParsing::StartsWith(line,"#")) continue;
     if(line[0]=='[') {
       if(ModelParsing::StartsWith(line,"[vertex-node-map]")) {
         parse_stage = VtoN; continue;
@@ -679,19 +688,38 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
         parse_stage = VtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[switch-map]")) {
         parse_stage = LtoL; continue;
-      } else if(ModelParsing::StartsWith(line,"[extra_lat]")) {
+      } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
         parse_stage = EL; continue;
+      } else if(ModelParsing::StartsWith(line,"[port-port-map]")) {
+        parse_stage = PPL; continue;
       } else {
         parse_stage = Parse_None;
       }
     }
 
-    if(parse_stage==EL) {
+    if(parse_stage==PPL) {
+      stringstream ss(line);
+      getline(ss, vertex_name, ':');
+      getline(ss, dynode_name);
+
+      //cout << "PORT MAP: " << vertex_name << " " <<dynode_name << "\n";
+
+      ModelParsing::trim(vertex_name);
+      ModelParsing::trim(dynode_name);
+
+      DyPDG_Vec* pv = gamsToPortV[vertex_name];
+      assert(pv);
+      std::pair<bool,int> pn = gamsToPortN[dynode_name];  
+
+
+      schedule->assign_vport(pv,pn);
+
+    } else if(parse_stage==EL) {
 
       stringstream ss(line);
       getline(ss, edge_name, ':');
       getline(ss, dynode_name);
-
+      //TODO: FINISH THIS IF EVER NEED EDGE -> LINK MAPPING
 
     } else if(parse_stage==VtoN) {
       stringstream ss(line);
@@ -864,20 +892,22 @@ bool Scheduler::scheduleGAMS(DyPDG* dyPDG,Schedule*& schedule) {
   
   if(_showGams) {
     //Print the I/Os
-    
+    std::cout << "in/out mapping:";
+
     DyPDG::const_input_iterator Ii,Ei;
     for(Ii=schedule->dypdg()->input_begin(),Ei=schedule->dypdg()->input_end();Ii!=Ei;++Ii) {
       DyPDG_Input* in = *Ii;
       pair<int,int> p = schedule->getConfigAndPort(in);
-      cout << in->name() << " " << p.first << "," << p.second << "\n";
+      cout << in->name() << " " << p.second << ", ";
     }
 
     DyPDG::const_output_iterator Io,Eo;
     for(Io=schedule->dypdg()->output_begin(),Eo=schedule->dypdg()->output_end();Io!=Eo;++Io) {
       DyPDG_Output* out = *Io;
       pair<int,int> p = schedule->getConfigAndPort(out);
-      cout << out->name() << " " << p.first << "," << p.second << "\n";
+      cout << out->name() << " " << p.second << ", ";
     }
+    std::cout << "\n";
   }
   
   

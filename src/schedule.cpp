@@ -17,13 +17,17 @@ using namespace SB_CONFIG;
 
 //Scheduling Interface
 
+extern "C" void libsbscheduler_is_present() {}
+
 void Schedule::printAllConfigs(const char *base) {
   
   for(int i = 0; i < _n_configs; ++i) {
     std::stringstream ss;
     ss << base << "-" << i;
     printConfigText(ss.str().c_str(),i);
-
+  }
+  if(*base==4) {
+    interpretConfigBits();
   }
 }
 
@@ -54,6 +58,127 @@ int Schedule::getPortFor(DyPDG_Node* dypdg_in)
   return -1; 
 }
 
+void Schedule::interpretConfigBits() {
+  DyDIR dydir;
+  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
+  DyPDG_Output* pdg_out;
+  DyPDG_Input *pdg_in;
+  DyPDG_Inst  *pdg_inst;
+
+  map<dynode*, map<DyDIR::DIR,DyDIR::DIR> > routeMap;
+  map<DyPDG_Node*, vector<DyDIR::DIR> > posMap;
+  map<dynode*, DyPDG_Node* > pdgnode_for;
+  _dyPDG = new DyPDG();
+
+
+  int cur_slice=5;
+
+  //In1, In2, In3, Opcode, S1, S2, ... S8, Row
+  vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
+  for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
+    bool left = (i==0);
+    bool right = (i==_dyModel->subModel()->sizex());
+    for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j,++cur_slice) {
+      bool top = (j==0);
+      bool bottom = (j==_dyModel->subModel()->sizey());
+      dyswitch* dysw = &switches[i][j];
+
+      int cur_bit_pos=0;
+
+      //read the [Row]
+      int row = _bitslices.read_slice(cur_slice,cur_bit_pos,cur_bit_pos+3);
+      assert(row==j);
+      cur_bit_pos+=4;
+
+      //---------------------------------DECODE SWITCHES ---------------------------
+      for(int o=0; o < 8; ++ o, cur_bit_pos += BITS_PER_DIR) {
+        uint64_t b=_bitslices.read_slice(cur_slice,cur_bit_pos,
+                                                   cur_bit_pos+BITS_PER_DIR-1);
+        DyDIR::DIR out_dir = dydir.dir_for_slot(o,top,bottom,left,right);
+        DyDIR::DIR in_dir  = dydir.decode(b,      top,bottom,left,right);
+
+        dylink* outlink = dysw->getOutLink(out_dir);
+        if(!outlink) {
+          continue; //skip if no corresponding link
+        }
+        dylink* inlink  = dysw->getInLink(in_dir);
+
+        assert(outlink->orig() == inlink->dest());
+        assign_switch(dysw,inlink,outlink);
+        //For better or worse, reconstruct takes in a route map, yes, this is redundant
+        //with assign_switch
+        routeMap[dysw][out_dir]=in_dir;
+
+        if(dyfu* fu =dynamic_cast<dyfu*>(outlink->dest())) {
+          //create corresponding PDG Node
+          pdg_inst = new DyPDG_Inst();
+          pdgnode_for[fu]=pdg_inst;
+          _dyPDG->addInst(pdg_inst);
+        } else if(dyoutput* out = dynamic_cast<dyoutput*>(outlink->dest())) {
+          pdg_out = new DyPDG_Output();
+          pdgnode_for[out]=pdg_out;
+          _dyPDG->addOutput(pdg_out);
+          pdg_out->setVPort(out->port());
+        }
+        if (dyinput* in=dynamic_cast<dyinput*>(outlink->dest())) {
+          if(pdgnode_for.count(in)==0) {
+            pdg_in = new DyPDG_Input();
+            pdgnode_for[in]=pdg_in;
+            _dyPDG->addInput(pdg_in);
+          } else {
+            pdg_in = dynamic_cast<DyPDG_Input*>(pdgnode_for[in]);
+          }
+          pdg_in->setVPort(in->port());
+        }
+      }
+    }
+  }
+  //---------------------------------DECODE FUNC UNITS ---------------------------
+  for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _dyModel->subModel()->sizey(); ++j,++cur_slice) {
+      dyfu* dyfu_node = &fus[i][j];
+      if((pdg_inst=dynamic_cast<DyPDG_Inst*>(pdgnode_for[dyfu_node]))) {
+
+        //8-switch_dirs + 4bits_for_row
+        unsigned cur_bit_pos=BITS_PER_DIR*8+4;
+  
+        for(int f=0; f < 3; ++f, cur_bit_pos += BITS_PER_DIR) {
+          uint64_t b=_bitslices.read_slice(cur_slice,cur_bit_pos,
+                                                     cur_bit_pos+BITS_PER_DIR-1);
+          DyDIR::DIR dir = dydir.fu_dir_of(b);
+          posMap[pdg_inst].push_back(dir);
+          if(dir == DyDIR::IM) {
+            pdg_inst->setImmSlot(i);
+          }
+        }
+
+        //predictate inverse
+        uint64_t b=_bitslices.read_slice(cur_slice,cur_bit_pos,cur_bit_pos);
+        pdg_inst->setPredInv(b);
+        cur_bit_pos+=1;
+
+        //opcode
+        b=_bitslices.read_slice(cur_slice,cur_bit_pos,cur_bit_pos+5-1);
+        pdg_inst->setInst(dyfu_node->fu_def()->inst_of_encoding(b));
+      }
+    }
+  }
+  reconstructSchedule(routeMap,pdgnode_for,posMap);
+
+  //
+  for(int i = 0; i < 64; ++i) {
+    uint64_t inact = _bitslices.read_slice(IN_ACT_SLICE ,i,i);
+    uint64_t outact= _bitslices.read_slice(OUT_ACT_SLICE,i,i);
+    if(inact) {
+      
+    }
+    if(outact) {
+
+    }
+  }
+
+}
+
 
 //Configuration
 //64: Active Input Ports (interfaces)
@@ -63,12 +188,134 @@ int Schedule::getPortFor(DyPDG_Node* dypdg_in)
 //64: In Row 3 Delay
 //Switch Data 
 
-void Schedule::printConfigBits(ostream& os) 
-{
-  
+void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
+  //Step 1: Place bits into fields
+
+  //Active Input Ports
+  for(auto& i : _assignVPort) {
+    std::pair<bool,int> pn = i.first;
+    //DyPDG_Vec* pv = i.second;
+    if(pn.first) { //INPUT
+      _bitslices.write(IN_ACT_SLICE, pn.second,pn.second,1);
+    } else { //OUTPUT
+      _bitslices.write(OUT_ACT_SLICE,pn.second,pn.second,1);
+    }
+  }
+
+  xfer_link_to_switch(); // makes sure we have switch representation of link
+  int cur_slice=5;
+
+  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
+
+  //In1, In2, In3, Opcode, S1, S2, ... S8, Row
+  vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
+  for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
+    bool left = (i==0);
+    bool right = (i==_dyModel->subModel()->sizex());
+    for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j,++cur_slice) {
+      bool top = (j==0);
+      bool bottom = (j==_dyModel->subModel()->sizey());
+
+      int cur_bit_pos=0;
+
+      //Write the [Row]
+      _bitslices.write(cur_slice,cur_bit_pos,cur_bit_pos+3,j);
+      cur_bit_pos+=4;
+
+      //---------------------------------ENCODE SWITCHES -------------------------------
+      dyswitch* dysw = &switches[i][j];
+      std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>& link_map = _assignSwitch[dysw]; 
+      if(link_map.size()!=0) {
+        for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
+          dylink* outlink=I->first;
+          dylink* inlink=I->second;
+          
+          int in_encode = dydir.encode(inlink->dir(),top,bottom,left,right);
+          int out_pos   = dydir.slot_for_dir(outlink->dir(),top,bottom,left,right);
+          
+          unsigned p1 = cur_bit_pos+out_pos*BITS_PER_DIR;
+          unsigned p2 = p1 + BITS_PER_DIR-1; 
+
+          _bitslices.write(cur_slice,p1,p2,in_encode);
+        }
+      }
+
+      cur_bit_pos+=BITS_PER_DIR*8;
+
+      //---------------------------------ENCODE FUNC UNITS ---------------------------
+      if(i < _dyModel->subModel()->sizex() && j < _dyModel->subModel()->sizey()) {
+        dyfu* dyfu_node = &fus[i][j];
+
+        if(_assignNode.count(make_pair(dyfu_node,0))!=0) {
+          DyPDG_Inst* pdg_node = dynamic_cast<DyPDG_Inst*>(_assignNode[make_pair(dyfu_node,0)]);
+
+          for(int i = 0; i < 3; ++i) {
+            unsigned p1 = cur_bit_pos+BITS_PER_DIR*i;
+            unsigned p2 = p1 + BITS_PER_DIR-1;
+
+            if(pdg_node->immSlot()==i) {
+              _bitslices.write(cur_slice,p1,p2,0b100);
+            } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
+              DyPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
+              if(!inc_edge) {continue;}
+              DyPDG_Node* inc_pdg_node = inc_edge->def();
+              
+              for(auto Ie=dyfu_node->ibegin(), Ee=dyfu_node->iend(); Ie!=Ee; ++Ie) {
+                dylink* inlink=*Ie;
+                if(_assignLink.count(make_pair(inlink,0))!=0
+                  &&_assignLink[make_pair(inlink,0)]==inc_pdg_node) {
+                  int in_encode = dydir.encode_fu_dir(inlink->dir());
+                  _bitslices.write(cur_slice,p1,p2,in_encode);
+                  break;
+                }
+              }
+            }
+          }
+          
+          //print predicate
+          unsigned pred_bit_pos = cur_bit_pos+BITS_PER_DIR*3+1;
+
+          unsigned p1 = pred_bit_pos;
+          unsigned p2 = p1; //only one bit
+
+          if(pdg_node->predInv()) {
+            _bitslices.write(cur_slice,p1,p2,1);        
+          } 
+          
+          unsigned opcode_bit_pos = cur_bit_pos+BITS_PER_DIR*3+2;
+          p1 = opcode_bit_pos;
+          p2 = p1+5-1; //opcode length
+          unsigned op_encode = dyfu_node->fu_def()->encoding_of(pdg_node->inst());
+          _bitslices.write(cur_slice,p1,p2,op_encode);
+        }
+      }
+    }
+  }
 
 
+  //Step 2: Write to output stream
+  os << "#ifndef " << cfg_name << "_H\n";
+  os << "#define " << cfg_name << "_H\n";
 
+  os << "#define " << cfg_name << "_size " << _bitslices.size() << "\n\n";
+
+  for(auto& i : _assignVPort) {
+    std::pair<bool,int> pn = i.first;
+    DyPDG_Vec* pv = i.second;
+    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n";    
+  }
+  os<< "\n";
+
+  os << "unsigned long long " << cfg_name << "_config[" << _bitslices.size() << "] = {";
+  for(unsigned i = 0; i < _bitslices.size(); ++i) {
+    if(i!=0) {os <<", ";}
+    if(i%8==0) {os <<"\n";}
+    os << "0x" << std::hex << _bitslices.read_slice(i);
+  }
+  os << "};\n";
+  os << std::dec;
+
+  os << "#endif //" << cfg_name << "_H\n"; 
 }
 
 
@@ -343,7 +590,7 @@ Schedule::Schedule(string filename, bool multi_config) {
                   cerr << "Bad Direction";
                   continue;
               }
-              if (inDir == DyDIR::IP0 || inDir == DyDIR::IP1 ) {
+              if (DyDIR::isInputDir(inDir)) {
                   //int n = outDir == DyDIR::OP0 ? 0:1;
                   d_input=dynamic_cast<dyinput*>(_dyModel->subModel()->switchAt(posX,posY)
                     ->getInLink(inDir)->orig());
@@ -356,7 +603,7 @@ Schedule::Schedule(string filename, bool multi_config) {
                   }
                   pdg_in->setVPort(d_input->port());
               } 
-              if (outDir == DyDIR::OP0 || outDir == DyDIR::OP1 ) {
+              if (DyDIR::isInputDir(outDir)) {
                   //int n = outDir == DyDIR::OP0 ? 0:1;
                   d_output=dynamic_cast<dyoutput*>(_dyModel->subModel()->switchAt(posX,posY)
                     ->getOutLink(outDir)->dest());
@@ -441,10 +688,6 @@ Schedule::Schedule(string filename, bool multi_config) {
           pred = atoi(caps[0].c_str());
           pdg_inst->setPredInv(pred);
           
-          //TODO: Handle predicate inversion
-          //pdg_inst->setPredicateInv((bool)pred);
-          //FuArray[posX][posY]->setPredicateInverted(numsRE.capturedTexts()[1].toInt()==1);
-
           if(strIter>=line.end()) {
               continue;
           }
@@ -495,6 +738,7 @@ Schedule::Schedule(string filename, bool multi_config) {
       }
 
   }
+  reconstructSchedule(routeMap,pdgnode_for,posMap);
 
 /*
 Debugging code to print out maps
@@ -509,31 +753,39 @@ Debugging code to print out maps
     }
   }
 */
-    //iterate over inputs
-    SubModel::const_input_iterator Iin,Ein;
-    for(Iin=_dyModel->subModel()->input_begin(), Ein=_dyModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
-        dyinput* dyinput_node = (dyinput*) &(*Iin);
-        if(pdgnode_for.count(dyinput_node)!=0) {
-            DyPDG_Node* pdg_node = pdgnode_for[dyinput_node];
-            tracePath(dyinput_node,pdg_node,routeMap,pdgnode_for,posMap);
-        }
-    }
 
-    //iterate over fus
-    vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
-    for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
-      for(int j = 0; j < _dyModel->subModel()->sizey(); ++j) {
-          dyfu* dyfu_node = &fus[i][j];
-          if(pdgnode_for.count(dyfu_node)!=0) {
-            DyPDG_Node* pdg_node = pdgnode_for[dyfu_node];
-            tracePath(dyfu_node,pdg_node,routeMap,pdgnode_for,posMap);
-          }
-          
-      }
-    }
 
 return;
   
+}
+
+void Schedule::reconstructSchedule(
+    map<dynode*, map<DyDIR::DIR,DyDIR::DIR> >& routeMap, 
+    map<dynode*, DyPDG_Node* >& pdgnode_for, 
+    map<DyPDG_Node*, vector<DyDIR::DIR> >& posMap) {
+  //iterate over inputs
+  SubModel::const_input_iterator Iin,Ein;
+  for(Iin=_dyModel->subModel()->input_begin(), 
+      Ein=_dyModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
+    dyinput* dyinput_node = (dyinput*) &(*Iin);
+    if(pdgnode_for.count(dyinput_node)!=0) {
+        DyPDG_Node* pdg_node = pdgnode_for[dyinput_node];
+        tracePath(dyinput_node,pdg_node,routeMap,pdgnode_for,posMap);
+    }
+  }
+
+  //iterate over fus
+  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
+  for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _dyModel->subModel()->sizey(); ++j) {
+      dyfu* dyfu_node = &fus[i][j];
+      if(pdgnode_for.count(dyfu_node)!=0) {
+        DyPDG_Node* pdg_node = pdgnode_for[dyfu_node];
+        tracePath(dyfu_node,pdg_node,routeMap,pdgnode_for,posMap);
+      }
+        
+    }
+  }
 }
 
 /*

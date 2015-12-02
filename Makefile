@@ -8,12 +8,15 @@ all: directories program
 
 program:
 	+make -C src
+	+make -C drivers
 
 install: program
 	${MKDIR_P} ${prefix}/lib
 	cp lib/* ${prefix}/lib
 	${MKDIR_P} ${prefix}/include/softbrain-scheduler
 	cp src/*.h ${prefix}/include/softbrain-scheduler/
+	${MKDIR_P} ${prefix}/bin
+	cp drivers/sb_sched ${prefix}/bin
 
 directories:
 	${MKDIR_P} obj
@@ -21,3 +24,4 @@ directories:
 
 clean:
 	make -C src clean
+	make -C drivers clean

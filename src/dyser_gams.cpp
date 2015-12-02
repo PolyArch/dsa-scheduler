@@ -25,9 +25,16 @@ loop(v,
     );
     put /
 );
-put "[extra_lat]" /
+put "[extra-lat]" /
 loop(e$(extra.l(e)<>0),
     put e.tl ":" extra.l(e) / 
 );
-
+put "[port-port-map]" /
+loop(pv,
+    put pv.tl ":";
+    loop((pn)$(Mp.l(pv,pn)<>0),
+        put pn.tl
+    );
+    put /
+);
 )";

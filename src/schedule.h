@@ -7,6 +7,9 @@
 #include "dypdg.h"
 #include <iostream>
 #include <fstream>
+#include "bitslice.h"
+
+
 
 
 struct sw_config {
@@ -24,7 +27,6 @@ struct sw_config {
   unsigned  sw_w:3;
   unsigned sw_sw:3;
   unsigned   row:2;
-
 };
 
 
@@ -32,7 +34,9 @@ class Schedule {
   public:
     Schedule(std::string filename, bool multi_config=false); //Read in schedule (both dymodel, dypdg, and schedule from file)
     Schedule(SB_CONFIG::DyModel* model, DyPDG* pdg ) : _dyModel(model),_dyPDG(pdg) {}
-    
+    Schedule(SB_CONFIG::DyModel* model) : _dyModel(model), _dyPDG(NULL) {}
+
+
     //Scheduling Interface:
     void printAllConfigs(const char *base);
     bool spilled(DyPDG_Node*);
@@ -52,7 +56,7 @@ class Schedule {
       printConfigText(os,config);
     }
    
-    void printConfigBits(std::ostream& os);
+    void printConfigBits(std::ostream& os, std::string cfg_name );
     
     
     //Rest of Stuff
@@ -68,6 +72,12 @@ class Schedule {
       _assignNode[std::make_pair(dnode,config)]=pdgnode;
       _dynodeOf[pdgnode]=std::make_pair(dnode,config);
     }
+
+    void assign_vport(DyPDG_Vec* pdgvec, std::pair<bool,int> pn) {
+      _assignVPort[pn]=pdgvec;
+      _vportOf[pdgvec]=pn;
+    }
+
 
     void assign_link(DyPDG_Node* pdgnode,SB_CONFIG::dylink* dlink, int config=0) {
       assert(dlink);
@@ -94,7 +104,7 @@ class Schedule {
         return _assignLink[thing];
       }
     }
-    
+
     DyPDG_Node* pdgNodeOf(SB_CONFIG::dynode* node, int config) {
       std::pair<SB_CONFIG::dynode*,int> thing = std::make_pair(node,config);
       if(_assignNode.count(thing)==0) {
@@ -154,12 +164,16 @@ class Schedule {
     
     assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
     assign_node_iterator assign_node_end() { return _assignNode.end(); }
+//    assign_node_iterator assign_vport_begin() { return _assignVPort.begin(); }
+//    assign_node_iterator assign_vport_end() { return _assignVPort.end(); }
     assign_link_iterator assign_link_begin() { return _assignLink.begin(); }
     assign_link_iterator assign_link_end() { return _assignLink.end(); }
     assign_edgelink_iterator assign_edgelink_begin() { return _assignEdgeLink.begin(); }
     assign_edgelink_iterator assign_edgelink_end() { return _assignEdgeLink.end(); }
     
     void clearAll() {
+      _assignVPort.clear();
+      _vportOf.clear();
       _assignNode.clear();
       _dynodeOf.clear();
       _latOf.clear();
@@ -201,8 +215,18 @@ class Schedule {
       }
     }
 
+  void interpretConfigBits();
+
+  bitslices<uint64_t>& slices() {return _bitslices;}
 
   private:
+    static const int IN_ACT_SLICE=0;
+    static const int OUT_ACT_SLICE=1;
+    static const int BITS_PER_DIR=3;
+    SB_CONFIG::DyDIR dydir;
+
+
+    bitslices<uint64_t> _bitslices;
     int _n_configs;   
     SB_CONFIG::DyModel *_dyModel;
     DyPDG*   _dyPDG;
@@ -214,20 +238,30 @@ class Schedule {
     std::map<std::pair<SB_CONFIG::dylink*,int>,std::set<DyPDG_Edge*>> _assignEdgeLink;
     std::map< std::pair<int,int>,std::pair<int,int> > _forwardMap;
     std::vector< std::vector<int> > _wide_ports;
-    
+
+    std::map<std::pair<bool,int>,DyPDG_Vec*> _assignVPort;
+    std::map<DyPDG_Vec*, std::pair<bool,int> > _vportOf;
+  
 
     std::map<SB_CONFIG::dyswitch*,
              std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>> _assignSwitch; //out to in
    
-    
-
-        //helper for Schedule(filename) constructor
+   
+    //called by reconstructSchedule to trace link assignment
     void tracePath(SB_CONFIG::dynode* ,DyPDG_Node* , 
-       std::map<SB_CONFIG::dynode*, std::map<SB_CONFIG::DyDIR::DIR,SB_CONFIG::DyDIR::DIR> >&,
-       std::map<SB_CONFIG::dynode*, DyPDG_Node* >&,
-       std::map<DyPDG_Node*, std::vector<SB_CONFIG::DyDIR::DIR> >&);
-  
-    
+      std::map<SB_CONFIG::dynode*,std::map<SB_CONFIG::DyDIR::DIR,SB_CONFIG::DyDIR::DIR>>&,
+      std::map<SB_CONFIG::dynode*, DyPDG_Node* >&,
+      std::map<DyPDG_Node*, std::vector<SB_CONFIG::DyDIR::DIR> >&);
+
+    //helper for reconstructing Schedule
+    void reconstructSchedule(
+      std::map<SB_CONFIG::dynode*,std::map<SB_CONFIG::DyDIR::DIR,SB_CONFIG::DyDIR::DIR>>&,
+      std::map<SB_CONFIG::dynode*, DyPDG_Node* >&,
+      std::map<DyPDG_Node*, std::vector<SB_CONFIG::DyDIR::DIR> >&);
+
+
+
+
 };
 
 #endif
