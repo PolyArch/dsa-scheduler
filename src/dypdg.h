@@ -41,7 +41,6 @@ class DyPDG_Edge {
     static int ID_SOURCE;
 };
 
-
 class DyPDG_Node {
  public:
     virtual void printGraphviz(std::ostream& os);
@@ -98,7 +97,11 @@ class DyPDG_Node {
      
      int id() {return _ID;}
      
+     void     set_value(uint64_t v) {_val=v;}
+     uint64_t get_value()           {return _val;}
+
   protected:    
+    uint64_t _val;
     int _ID;
     std::string _name;
     std::vector<DyPDG_Edge *> _ops;
@@ -115,6 +118,65 @@ class DyPDG_IO : public DyPDG_Node {
 
   protected:
     int _vport;
+};
+
+class DyPDG_Inst : public DyPDG_Node {
+  public:
+    DyPDG_Inst() : DyPDG_Node(), _predInv(false), _imm_slot(-1), _subFunc(0) {
+    }
+
+    void printGraphviz(std::ostream& os);
+
+    void setImm( uint32_t val ) { _imm=val; }
+//    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
+
+//    float getImmFloat() { return *reinterpret_cast<float*>(&_imm); } 
+    int   getImmInt() { return _imm; }
+
+    void setPredInv(bool predInv) { _predInv=predInv;}
+    bool predInv() {return _predInv;}
+
+    void setInst(SB_CONFIG::dy_inst_t dyinst) { _dyinst=dyinst; }
+    SB_CONFIG::dy_inst_t inst() { return _dyinst; }
+
+    std::string name() {
+        std::stringstream ss;
+        ss << SB_CONFIG::name_of_inst(_dyinst);
+        if(_imm_slot!=-1) {
+          ss<<" Imm:"<<_imm;
+        }
+        return ss.str();
+    }
+
+    std::string gamsName();
+
+    void setImmSlot(int i) {_imm_slot=i;}
+    int immSlot() const { return _imm_slot; }
+
+    void setSubFunc(int i) {_subFunc=i;}
+    int subFunc() const {return _subFunc;}
+
+     void     compute() {
+       if(_input_vals.size()==0) {
+         _input_vals.resize(_ops.size());
+       }
+       std::cout << name() << " (" << _ID << "): ";
+       for(unsigned i = 0; i < _ops.size(); ++i) {
+         _input_vals[i]=_ops[i]->def()->get_value();
+         std::cout << std::hex << _input_vals[i] << " ";
+       }
+       _val=SB_CONFIG::execute(_dyinst,_input_vals);
+       std::cout << " = " << _val << "\n";
+      
+     }
+
+  private:
+    std::vector<uint64_t> _input_vals;
+    bool _predInv;
+    int _imm_slot;
+    int _subFunc;
+    uint32_t _imm;
+    SB_CONFIG::dy_inst_t _dyinst;
 };
 
 class DyPDG_Input : public DyPDG_IO {
@@ -139,8 +201,16 @@ class DyPDG_Output : public DyPDG_IO {
         ss << "O" << _vport;
         return ss.str();
     }
-    
     std::string gamsName();
+
+    DyPDG_Inst* out_inst() {
+      return static_cast<DyPDG_Inst*>(_ops[0]->def());
+    }
+
+    uint64_t retrieve() {
+      assert(_ops.size()==1);
+      return _ops[0]->def()->get_value();
+    }
 };
 
 
@@ -205,65 +275,6 @@ class DyPDG_VecOutput : public DyPDG_Vec {
     std::vector<DyPDG_Output*> _outputs;
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class DyPDG_Inst : public DyPDG_Node {
-  public:
-    DyPDG_Inst() : DyPDG_Node(), _predInv(false), _imm_slot(-1), _subFunc(0) {
-    }
-
-    void printGraphviz(std::ostream& os);
-
-    void setImm( uint32_t val ) { _imm=val; }
-    void setImm( float val ) { val=*reinterpret_cast<int32_t*>(&val); }
-
-    float getImmFloat() { return *reinterpret_cast<float*>(&_imm); } 
-    int   getImmInt() { return _imm; }
-
-    void setPredInv(bool predInv) { _predInv=predInv;}
-    bool predInv() {return _predInv;}
-
-     
-
-    void setInst(SB_CONFIG::dy_inst_t dyinst) { _dyinst=dyinst; }
-    SB_CONFIG::dy_inst_t inst() { return _dyinst; }
-
-    std::string name() {
-        std::stringstream ss;
-        ss << SB_CONFIG::name_of_inst(_dyinst);
-        if(_imm_slot!=-1) {
-          ss<<" Imm:"<<_imm;
-        }
-        return ss.str();
-    }
-
-    std::string gamsName();
-
-    void setImmSlot(int i) {_imm_slot=i;}
-    int immSlot() const { return _imm_slot; }
-
-    void setSubFunc(int i) {_subFunc=i;}
-    int subFunc() const {return _subFunc;}
-    
-  private:
-    bool _predInv;
-    int _imm_slot;
-    int _subFunc;
-    uint32_t _imm;
-    SB_CONFIG::dy_inst_t _dyinst;
-};
 
 class DyPDG {
   public:
@@ -378,6 +389,11 @@ class DyPDG {
 
     int num_nodes() {return _nodes.size();}
 
+    DyPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
+    DyPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
+
+    void compute();
+
   private:
     std::vector<DyPDG_Node*> _nodes;
     
@@ -386,13 +402,14 @@ class DyPDG {
     std::vector<DyPDG_Input*> _inputs;
     std::vector<DyPDG_Output*> _outputs;
 
+    std::vector<DyPDG_Inst*> _orderedInsts;
+
+
     std::vector<DyPDG_VecInput*> _vecInputs;
     std::vector<DyPDG_VecOutput*> _vecOutputs;
-
 
     std::vector<DyPDG_Edge*> _edges;
     
 };
-
 
 #endif

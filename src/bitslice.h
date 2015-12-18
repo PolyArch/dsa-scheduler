@@ -9,14 +9,20 @@ template <class T>
 class bitslices {
 public:
   static const int asdf=1;
-  void write(unsigned slice, unsigned p1, unsigned p2, T val) {
+  void write(unsigned slice, unsigned p1, unsigned p2, T val, bool check0=true) {
+//    std::cout << slice << " " << p1 << " " << p2 << "\n";
+
     check_size(slice);
 
     T shift_val = val << p1;
     T mask = gen_mask(p1,p2);
 
     assert(((shift_val&mask) == shift_val) && "too big of val");
-    assert(((_slices[slice]&mask)==0) && "overwrote bits unintenionally?");
+    if(check0) {
+      assert(((_slices[slice]&mask)==0) && "overwrote bits unintenionally?");
+    } else {
+     _slices[slice]^=(_slices[slice]&mask);
+    }
     _slices[slice] |= shift_val;
   }
 

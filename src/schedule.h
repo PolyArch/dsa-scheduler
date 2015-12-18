@@ -105,6 +105,11 @@ class Schedule {
       }
     }
 
+    DyPDG_Node* pdgNodeOf(SB_CONFIG::dynode* node) {
+      return pdgNodeOf(node,0);
+    }
+
+
     DyPDG_Node* pdgNodeOf(SB_CONFIG::dynode* node, int config) {
       std::pair<SB_CONFIG::dynode*,int> thing = std::make_pair(node,config);
       if(_assignNode.count(thing)==0) {
@@ -222,7 +227,30 @@ class Schedule {
   private:
     static const int IN_ACT_SLICE=0;
     static const int OUT_ACT_SLICE=1;
+    static const int SWITCH_SLICE=5;
+
+    static const int NUM_IN_DIRS=8;
+
+    static const int NUM_OUT_DIRS=8;
+    static const int NUM_IN_FU_DIRS=3;
     static const int BITS_PER_DIR=3;
+    static const int BITS_PER_FU_DIR=3;
+
+    static const int ROW_LOC=0;
+    static const int ROW_BITS=4;
+
+    static const int SWITCH_LOC=ROW_LOC+ROW_BITS;
+    static const int SWITCH_BITS=BITS_PER_DIR*NUM_OUT_DIRS;
+
+    static const int FU_DIR_LOC=SWITCH_LOC+SWITCH_BITS;
+    static const int FU_DIR_BITS=BITS_PER_FU_DIR+NUM_IN_FU_DIRS;
+
+    static const int FU_PRED_INV_LOC=FU_DIR_LOC+FU_DIR_BITS;
+    static const int FU_PRED_INV_BITS=1;
+
+    static const int OPCODE_LOC=FU_PRED_INV_LOC+FU_PRED_INV_BITS;
+    static const int OPCODE_BITS=5;
+
     SB_CONFIG::DyDIR dydir;
 
 
@@ -241,7 +269,6 @@ class Schedule {
 
     std::map<std::pair<bool,int>,DyPDG_Vec*> _assignVPort;
     std::map<DyPDG_Vec*, std::pair<bool,int> > _vportOf;
-  
 
     std::map<SB_CONFIG::dyswitch*,
              std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>> _assignSwitch; //out to in

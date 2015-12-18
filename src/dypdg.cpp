@@ -4,6 +4,7 @@
 #include "dypdg.h"
 #include <vector>
 #include <regex>
+#include <set>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -11,10 +12,37 @@ using namespace SB_CONFIG;
 int DyPDG_Node::ID_SOURCE=0;
 int DyPDG_Edge::ID_SOURCE=0;
 
+void order_insts(DyPDG_Inst* inst,
+                 std::set<DyPDG_Inst*>& done_nodes,
+                 std::vector<DyPDG_Inst*>& ordered_insts) {
 
+  if(done_nodes.count(inst)) {
+    return;
+  } 
+  done_nodes.insert(inst);
+  for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+    DyPDG_Edge* edge=*i;
+    if(DyPDG_Inst* op_inst = dynamic_cast<DyPDG_Inst*>(edge->def()) ) {
+      order_insts(op_inst, done_nodes, ordered_insts); 
+    }
+  }
+  ordered_insts.push_back(inst);
+}
+
+void DyPDG::compute() {
+  if(_orderedInsts.size()==0) {
+    std::set<DyPDG_Inst*> done_nodes;
+    for(DyPDG_Output* out : _outputs) {
+      order_insts(out->out_inst(),done_nodes,_orderedInsts);
+    } 
+  }
+  for(DyPDG_Inst* inst : _orderedInsts) {
+    inst->compute();
+  }
+}
 
 DyPDG::DyPDG() {
-  std::cout << "hello\n";
+
 } 
 
 
