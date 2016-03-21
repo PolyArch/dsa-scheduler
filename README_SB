@@ -1,0 +1,9 @@
+//////////////////////////////////////////////////////
+ Softbrain Vertical Infrastructure -- CGRA COnfiguration 
+////////////////////////////////////////////////////
+
+
+This sb-vertical branch tracks the upstream origin/sb-vertical branch
+
+
+To generate the configuration shared library do -- make install prefix=$RISCV
