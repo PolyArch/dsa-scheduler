@@ -23,9 +23,9 @@ int main(int argc, char* argv[])
   sched.calcLatency(lat,latmis);
 
   int num_pdgnodes=
-  (sched.dypdg()->inst_end()-sched.dypdg()->inst_begin())+
-  (sched.dypdg()->input_end()-sched.dypdg()->input_begin())+
-  (sched.dypdg()->output_end()-sched.dypdg()->output_begin());
+  (sched.sbpdg()->inst_end()-sched.sbpdg()->inst_begin())+
+  (sched.sbpdg()->input_end()-sched.sbpdg()->input_begin())+
+  (sched.sbpdg()->output_end()-sched.sbpdg()->output_begin());
 
   cout << "latency: " << lat << "\n";  
   cout << "latency mismatch: " << latmis << "\n";  

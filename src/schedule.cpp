@@ -6,8 +6,8 @@
 #include <fstream>
 
 #include "model_parsing.h"
-#include "dypdg.h"
-#include "dyinst.h"
+#include "sbpdg.h"
+#include "sbinst.h"
 #include <assert.h>
 #include <regex>
 #include <list>
@@ -23,21 +23,27 @@ void Schedule::printAllConfigs(const char *base) {
   
   for(int i = 0; i < _n_configs; ++i) {
     std::stringstream ss;
-    ss << base << "-" << i;
+    ss << base << "-" << i << ".cfg";
     printConfigText(ss.str().c_str(),i);
   }
+
   if(*base==4) {
     interpretConfigBits();
   }
 }
 
-std::pair<int,int> Schedule::getConfigAndPort(DyPDG_Node* dypdg_in) {
-  if (_dynodeOf.count(dypdg_in) != 0) {
-    if (dyinput *assigned_dyinput = dynamic_cast<dyinput*>(_dynodeOf[dypdg_in].first)) {
-      return make_pair(_dynodeOf[dypdg_in].second, assigned_dyinput->port());
+//For a given pdgnode
+//return the input or ouput port num if the pdfgnode is a
+//sbinput ot sboutput
+std::pair<int,int> Schedule::getConfigAndPort(SbPDG_Node* sbpdg_in) {
+
+  if (_sbnodeOf.count(sbpdg_in) != 0) {
+    if (sbinput* assigned_sbinput = dynamic_cast<sbinput*>(_sbnodeOf[sbpdg_in].first)) {
+      return make_pair(_sbnodeOf[sbpdg_in].second, assigned_sbinput->port());
     }
-    if (dyoutput *assigned_dyoutput=dynamic_cast<dyoutput*>(_dynodeOf[dypdg_in].first)){
-      return make_pair(_dynodeOf[dypdg_in].second,assigned_dyoutput->port());
+
+    if (sboutput *assigned_sboutput=dynamic_cast<sboutput*>(_sbnodeOf[sbpdg_in].first)){
+      return make_pair(_sbnodeOf[sbpdg_in].second,assigned_sboutput->port());
     }
   }
   return make_pair(-1,-1); 
@@ -45,46 +51,52 @@ std::pair<int,int> Schedule::getConfigAndPort(DyPDG_Node* dypdg_in) {
 
 //Old Interface
 
-int Schedule::getPortFor(DyPDG_Node* dypdg_in) 
+//If a pdgnode is assigned a sbinput return the port num
+int Schedule::getPortFor(SbPDG_Node* sbpdg_in) 
 { 
-  if (_dynodeOf.count(dypdg_in) != 0) {
-    if (dyinput *assigned_dyinput = dynamic_cast<dyinput*>(_dynodeOf[dypdg_in].first)) {
-      return assigned_dyinput->port();
+  if (_sbnodeOf.count(sbpdg_in) != 0) {
+    if (sbinput *assigned_sbinput = dynamic_cast<sbinput*>(_sbnodeOf[sbpdg_in].first)) {
+      return assigned_sbinput->port();
     }
-    if (dyoutput *assigned_dyoutput = dynamic_cast<dyoutput*>(_dynodeOf[dypdg_in].first)) {
-      return assigned_dyoutput->port();
+
+    if (sboutput *assigned_sboutput = dynamic_cast<sboutput*>(_sbnodeOf[sbpdg_in].first)) {
+      return assigned_sboutput->port();
     }
   }
   return -1; 
 }
 
 void Schedule::interpretConfigBits() {
-  DyDIR dydir;
-  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
-  DyPDG_Output* pdg_out;
-  DyPDG_Input *pdg_in;
-  DyPDG_Inst  *pdg_inst;
+  
+  SbDIR sbdir;
+  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+  SbPDG_Output* pdg_out;
+  SbPDG_Input *pdg_in;
+  SbPDG_Inst  *pdg_inst;
 
-  map<dynode*, map<DyDIR::DIR,DyDIR::DIR> > routeMap;
-  map<DyPDG_Node*, vector<DyDIR::DIR> > posMap;
-  map<dynode*, DyPDG_Node* > pdgnode_for;
-  _dyPDG = new DyPDG();
+  map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> > routeMap;
+  map<SbPDG_Node*, vector<SbDIR::DIR> > posMap;
+  map<sbnode*, SbPDG_Node* > pdgnode_for;
+  _sbPDG = new SbPDG();
 
-  std::set<uint64_t> inputs_used;
+  std::set<uint64_t> inputs_used;       //vector ports used
   std::set<uint64_t> outputs_used;
 
   //Read input nodes?
-  for(int i = 0; i < 64; ++i) {
+  for(int i = 0; i < 64; ++i) {  //64 ports ? 
     uint64_t inact = _bitslices.read_slice(IN_ACT_SLICE ,i,i);
     uint64_t outact= _bitslices.read_slice(OUT_ACT_SLICE,i,i);
+    
     if(inact) {
-      auto& vp = _dyModel->subModel()->io_interf().in_vports[i];
+      auto& vp = _sbModel->subModel()->io_interf().in_vports[i];
       for(auto& p : vp) {     //iterate through ports of vector port i
-        inputs_used.insert(p.first);
+        inputs_used.insert(p.first);        //cgra port
       }
     }
+
+    //If the outport !=0
     if(outact) {
-      auto& vp = _dyModel->subModel()->io_interf().out_vports[i];
+      auto& vp = _sbModel->subModel()->io_interf().out_vports[i];
       for(auto& p : vp) {     //iterate through ports of vector port i
         outputs_used.insert(p.first);
       }
@@ -92,99 +104,109 @@ void Schedule::interpretConfigBits() {
   }
 
 
-  int cur_slice=SWITCH_SLICE;
+  int cur_slice=SWITCH_SLICE;       //5th slice in bitslice
 
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
-  vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
-  for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
+  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
     bool left = (i==0);
-    bool right = (i==_dyModel->subModel()->sizex());
-    for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j,++cur_slice) {
+    bool right = (i==_sbModel->subModel()->sizex());
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j,++cur_slice) {
       bool top = (j==0);
-      bool bottom = (j==_dyModel->subModel()->sizey());
-      dyswitch* dysw = &switches[i][j];
+      bool bottom = (j==_sbModel->subModel()->sizey());
+      sbswitch* sbsw = &switches[i][j];
 
      // cout << i << "," << j << "\n";
 
       //read the [Row]
-      int row = _bitslices.read_slice(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1);
+      int row = _bitslices.read_slice(cur_slice, ROW_LOC, ROW_LOC+ROW_BITS-1);
       assert(row==j);
 
       int cur_bit_pos=SWITCH_LOC;
 
       //---------------------------------DECODE SWITCHES ---------------------------
       for(int o=0; o < NUM_OUT_DIRS; ++ o, cur_bit_pos += BITS_PER_DIR) {
-        uint64_t b=_bitslices.read_slice(cur_slice,cur_bit_pos,
+        
+        uint64_t b =_bitslices.read_slice(cur_slice,cur_bit_pos,
                                                    cur_bit_pos+BITS_PER_DIR-1);
-        DyDIR::DIR out_dir = dydir.dir_for_slot(o,top,bottom,left,right);
-        DyDIR::DIR in_dir  = dydir.decode(b,      top,bottom,left,right);
-        in_dir = DyDIR::reverse(in_dir);
+        SbDIR::DIR out_dir = sbdir.dir_for_slot(o,top,bottom,left,right);
+        SbDIR::DIR in_dir  = sbdir.decode(b,      top,bottom,left,right);
+        in_dir = SbDIR::reverse(in_dir);
 
-        dylink* inlink  = dysw->getInLink(in_dir);
+        sblink* inlink  = sbsw->getInLink(in_dir);      //get the link object with that dir
         if(!inlink) {
-          //cout << "no in_dir:" << DyDIR::dirName(in_dir) << " bits:" << b << " (pos:" << o << ")\n";
+          //cout << "no in_dir:" << SbDIR::dirName(in_dir) << " bits:" << b << " (pos:" << o << ")\n";
           continue; //no worries, this wasn't even a valid inlink
         }
-        dylink* outlink = dysw->getOutLink(out_dir);
+
+        sblink* outlink = sbsw->getOutLink(out_dir);
         if(!outlink) {
-          //cout << "no out_dir:" << DyDIR::dirNameDBG(out_dir) << " loc:" << o << "\n";
+          //cout << "no out_dir:" << SbDIR::dirNameDBG(out_dir) << " loc:" << o << "\n";
           continue; //skip if no corresponding link
         }
 
-        //cout << DyDIR::dirName(in_dir) << "->" <<
-        //        DyDIR::dirName(out_dir) << ":";
+        //cout << SbDIR::dirName(in_dir) << "->" <<
+        //        SbDIR::dirName(out_dir) << ":";
 
         //cout << b << " @pos: " << o << "\n";
 
 
         assert(outlink->orig() == inlink->dest());
-        assign_switch(dysw,inlink,outlink);
+        assign_switch(sbsw,inlink,outlink);
         //For better or worse, reconstruct takes in a route map, yes, this is redundant
         //with assign_switch
-        routeMap[dysw][out_dir]=in_dir;
+        routeMap[sbsw][out_dir]=in_dir;
 
-        //if(dyfu* fu =dynamic_cast<dyfu*>(outlink->dest())) {
+        //if(sbfu* fu =dynamic_cast<sbfu*>(outlink->dest())) {
         //  //create corresponding PDG Node
-        //  pdg_inst = new DyPDG_Inst();
+        //  pdg_inst = new SbPDG_Inst();
         //  pdgnode_for[fu]=pdg_inst;
-        //  _dyPDG->addInst(pdg_inst);
+        //  _sbPDG->addInst(pdg_inst);
         //} else 
 
-        if(dyoutput* out = dynamic_cast<dyoutput*>(outlink->dest())) {
-          pdg_out = new DyPDG_Output();
-          pdgnode_for[out]=pdg_out;
-          _dyPDG->addOutput(pdg_out);
+        //if the swithces out is an output node
+        if(sboutput* out = dynamic_cast<sboutput*>(outlink->dest())) {
+          pdg_out = new SbPDG_Output();         
+          pdgnode_for[out]=pdg_out;             
+          _sbPDG->addOutput(pdg_out);
           pdg_out->setVPort(out->port());
         }
-        if (dyinput* in=dynamic_cast<dyinput*>(inlink->orig())) {
+       
+        //if the incoming node was from sbinput node
+        if (sbinput* in=dynamic_cast<sbinput*>(inlink->orig())) {
           //Need to check if this is actually one of the useful inputs
           if(inputs_used.count(in->port())) {
             if(pdgnode_for.count(in)==0) {
-              pdg_in = new DyPDG_Input();
+              pdg_in = new SbPDG_Input();
               pdgnode_for[in]=pdg_in;
-              _dyPDG->addInput(pdg_in);
+              _sbPDG->addInput(pdg_in);
             } else {
-              pdg_in = dynamic_cast<DyPDG_Input*>(pdgnode_for[in]);
+              pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[in]);
             }
             pdg_in->setVPort(in->port());
           }
-        }
-      }
-    }
-  }
+        }//end if
+
+      }//end for
+    
+    }//end for j
+  }//end for i
+
+
   //---------------------------------DECODE FUNC UNITS ---------------------------
   cur_slice=5;
-  for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _dyModel->subModel()->sizey(); ++j,++cur_slice) {
-      dyfu* dyfu_node = &fus[i][j];
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j,++cur_slice) {
+      sbfu* sbfu_node = &fus[i][j];
         
       //opcode
       uint64_t op=_bitslices.read_slice(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1);
       if(op!=0) { //if O
-        pdg_inst = new DyPDG_Inst();
-        pdgnode_for[dyfu_node]=pdg_inst;
-        _dyPDG->addInst(pdg_inst);
-        pdg_inst->setInst(dyfu_node->fu_def()->inst_of_encoding(op));
+        pdg_inst = new SbPDG_Inst();
+        pdgnode_for[sbfu_node]=pdg_inst;
+        _sbPDG->addInst(pdg_inst);
+        pdg_inst->setInst(sbfu_node->fu_def()->inst_of_encoding(op));
 
         //8-switch_dirs + 4bits_for_row
         unsigned cur_bit_pos=FU_DIR_LOC;
@@ -192,13 +214,13 @@ void Schedule::interpretConfigBits() {
         for(int f=0; f < NUM_IN_FU_DIRS; ++f, cur_bit_pos += BITS_PER_FU_DIR) {
           uint64_t b=_bitslices.read_slice(cur_slice,cur_bit_pos,
                                                      cur_bit_pos+BITS_PER_FU_DIR-1);
-          DyDIR::DIR dir = dydir.fu_dir_of(b);
-          assert(f!=0 || (f==0 && dir != DyDIR::END_DIR)); 
-          posMap[pdg_inst].push_back(dir);
-          if(dir == DyDIR::IM) {
+          SbDIR::DIR dir = sbdir.fu_dir_of(b);
+          assert(f!=0 || (f==0 && dir != SbDIR::END_DIR)); 
+          posMap[pdg_inst].push_back(dir);      //incoming FU dir
+          if(dir == SbDIR::IM) {
             pdg_inst->setImmSlot(i);
           }
-        }
+        }//end for input fu dirs
   
         //predictate inverse
         uint64_t p=_bitslices.read_slice(cur_slice,FU_PRED_INV_LOC,
@@ -208,25 +230,33 @@ void Schedule::interpretConfigBits() {
     }
     cur_slice+=1; // because we skipped the switch
   }
-  reconstructSchedule(routeMap,pdgnode_for,posMap);
+
+  //routemap -- for each sbnode - inlink and outlinks
+  //pdgnode_for -- sbnode to pdgnode mapping
+  //posMap -- for each pdgnode, vector of incoming dirs
+
+  reconstructSchedule(routeMap, pdgnode_for, posMap);
 
 }
 
 //Configuration
-//64: Active Input Ports (interfaces)
-//64: Active Output Ports (interfaces)
-//64: In Row 1 Delay
-//64: In Row 2 Delay
-//64: In Row 3 Delay
-//Switch Data 
+//Slice0 - 64b: Active Input Ports (interfaces)
+//Slice1 - 64b: Active Output Ports (interfaces)
+//Slice2 - 64b: In Row 1 Delay
+//Slice3 - 64b: In Row 2 Delay
+//Slice4 - 64b: In Row 3 Delay
+//Slice5 - Switch Data 
 
+
+//Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //Step 1: Place bits into fields
 
   //Active Input Ports
   for(auto& i : _assignVPort) {
     std::pair<bool,int> pn = i.first;
-    //DyPDG_Vec* pv = i.second;
+    //SbPDG_Vec* pv = i.second;
+    
     if(pn.first) { //INPUT
       _bitslices.write(IN_ACT_SLICE, pn.second,pn.second,1);
     } else { //OUTPUT
@@ -237,99 +267,112 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   xfer_link_to_switch(); // makes sure we have switch representation of link
   int cur_slice=5;
 
-  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
+  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
 
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
-  vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
-  for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
-    bool left = (i==0);
-    bool right = (i==_dyModel->subModel()->sizex());
-    for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j,++cur_slice) {
+  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
+    
+    bool left = (i==0);                 //left edge switch
+    bool right = (i==_sbModel->subModel()->sizex());    //right edge switch
+    
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j,++cur_slice) {
+      
       bool top = (j==0);
-      bool bottom = (j==_dyModel->subModel()->sizey());
+      bool bottom = (j==_sbModel->subModel()->sizey());
 
       cout << i << "," << j << "\n";
 
-      //Write the [Row]
-      _bitslices.write(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1,j);
+      //Write the [Row] -- corresponding row of the siwtch based on the j 
+      _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
 
       //---------------------------------ENCODE SWITCHES -------------------------------
-      dyswitch* dysw = &switches[i][j];
-      std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>& link_map = _assignSwitch[dysw]; 
+      sbswitch* sbsw = &switches[i][j];
+
+      //after switch respresntation
+      std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map = _assignSwitch[sbsw]; 
       if(link_map.size()!=0) {
 
         //Step 1: Encode all output switches with unused input
 
+        //get used inputs
         std::set<int> used_in_enc;
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          dylink* inlink=I->second;
-          int in_encode = dydir.encode(inlink->dir(),top,bottom,left,right);
+          sblink* inlink=I->second;
+          int in_encode = sbdir.encode(inlink->dir(),top,bottom,left,right);
           used_in_enc.insert(in_encode);
         }
+
         int unused_dir_enc=NUM_IN_DIRS; //num input dirs
         for(int i = 0; i < NUM_IN_DIRS; ++i) {
           if(used_in_enc.count(i)==0) {
-            unused_dir_enc=i;
+            unused_dir_enc=i;           //unused input dir
             break;
           }
         }
+            
         assert(unused_dir_enc!=NUM_IN_DIRS&&"no unused direction,does this ever happen?");
         //cout << "unused:" << unused_dir_enc << "\n";
 
         for(int i = 0; i < NUM_OUT_DIRS; ++i) {
-          unsigned p1 = SWITCH_LOC+i*BITS_PER_DIR;
+          unsigned p1 = SWITCH_LOC + i*BITS_PER_DIR;
           unsigned p2 = p1 + BITS_PER_DIR-1; 
-          _bitslices.write(cur_slice,p1,p2,unused_dir_enc);
+          _bitslices.write(cur_slice,p1,p2,unused_dir_enc);     //Why write unused input dir
         }
 
         //Step 2: Fill in correct switches
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          dylink* outlink=I->first;
-          dylink* inlink=I->second;
+          sblink* outlink=I->first;
+          sblink* inlink=I->second;
          
-          auto in_port  = DyDIR::reverse(inlink->dir());
-          int in_encode = dydir.encode(in_port,top,bottom,left,right);
-          int out_pos   = dydir.slot_for_dir(outlink->dir(),top,bottom,left,right);
+          auto in_port  = SbDIR::reverse(inlink->dir());
+          int in_encode = sbdir.encode(in_port,top,bottom,left,right);
+          int out_pos   = sbdir.slot_for_dir(outlink->dir(),top,bottom,left,right);
          
-//          cout << DyDIR::dirName(inlink->dir()) << "->" <<
-//                  DyDIR::dirName(outlink->dir()) << ":";
+//          cout << SbDIR::dirName(inlink->dir()) << "->" <<
+//                  SbDIR::dirName(outlink->dir()) << ":";
 //
 //          cout << in_encode << " @pos: " << out_pos << "\n";
 
-          unsigned p1 = SWITCH_LOC+out_pos*BITS_PER_DIR;
+          unsigned p1 = SWITCH_LOC + out_pos*BITS_PER_DIR;
           unsigned p2 = p1 + BITS_PER_DIR-1; 
 
           _bitslices.write(cur_slice,p1,p2,in_encode,false /*don't check*/);
         }
-      }
+
+      }//end if
 
 
       //---------------------------------ENCODE FUNC UNITS ---------------------------
-      if(i < _dyModel->subModel()->sizex() && j < _dyModel->subModel()->sizey()) {
-        dyfu* dyfu_node = &fus[i][j];
+      //
+      if(i < _sbModel->subModel()->sizex() && j < _sbModel->subModel()->sizey()) {
+        sbfu* sbfu_node = &fus[i][j];
 
-        if(_assignNode.count(make_pair(dyfu_node,0))!=0) {
-          DyPDG_Inst* pdg_node = dynamic_cast<DyPDG_Inst*>(_assignNode[make_pair(dyfu_node,0)]);
+        //get the pdg node assigned to that FU  
+        if(_assignNode.count(make_pair(sbfu_node,0))!=0) {
+          SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[make_pair(sbfu_node,0)]);
+          
           int cur_bit_pos=FU_DIR_LOC;
+
           for(int i = 0; i < NUM_IN_FU_DIRS; ++i) {
             unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*i;
             unsigned p2 = p1 + BITS_PER_FU_DIR-1;
 
             if(pdg_node->immSlot()==i) {
-              _bitslices.write(cur_slice,p1,p2,0b100);
+              _bitslices.write(cur_slice,p1,p2,0b100);  //imm slot for FU
             } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
-              DyPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
+              SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
               if(!inc_edge) {continue;}
-              DyPDG_Node* inc_pdg_node = inc_edge->def();
+              SbPDG_Node* inc_pdg_node = inc_edge->def();
               
               bool assigned=false;
-              for(auto Ie=dyfu_node->ibegin(), Ee=dyfu_node->iend(); Ie!=Ee; ++Ie) {
-                dylink* inlink=*Ie;
+              for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+                sblink* inlink=*Ie;
                 if(_assignLink.count(make_pair(inlink,0))!=0
                   &&_assignLink[make_pair(inlink,0)]==inc_pdg_node) {
-                  assert(inlink->dir() != DyDIR::END_DIR);
-                  int in_encode = dydir.encode_fu_dir(inlink->dir());
-                  _bitslices.write(cur_slice,p1,p2,in_encode);
+                  assert(inlink->dir() != SbDIR::END_DIR);
+                  int in_encode = sbdir.encode_fu_dir(inlink->dir()); //get the encoding of the dir
+                  _bitslices.write(cur_slice,p1,p2,in_encode);      //input direction for each FU in
                   assigned=true;
                   break;
                 }
@@ -338,6 +381,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             } else {
               assert(i!=0); //can't be no slot for first input
             }
+
           }
           
           //print predicate
@@ -345,24 +389,27 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             _bitslices.write(cur_slice,FU_PRED_INV_LOC,
                                        FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,1);
           } 
-          
-          unsigned op_encode = dyfu_node->fu_def()->encoding_of(pdg_node->inst());
+         
+          //opcode encdoing
+          unsigned op_encode = sbfu_node->fu_def()->encoding_of(pdg_node->inst());
           _bitslices.write(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1,op_encode);
         }
-      }
-    }
-  }
+
+      } //end if for func encode
+    
+    }//end for switch x
+  }//end for switch y 
 
 
   //Step 2: Write to output stream
-  os << "#ifndef " << cfg_name << "_H\n";
-  os << "#define " << cfg_name << "_H\n";
+  os << "#ifndef " << "__" << cfg_name << "_H__\n";
+  os << "#define " << "__" << cfg_name << "_H__\n";
 
   os << "#define " << cfg_name << "_size " << _bitslices.size() << "\n\n";
 
   for(auto& i : _assignVPort) {
     std::pair<bool,int> pn = i.first;
-    DyPDG_Vec* pv = i.second;
+    SbPDG_Vec* pv = i.second;
     os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n";    
   }
   os<< "\n";
@@ -379,39 +426,48 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   os << "#endif //" << cfg_name << "_H\n"; 
 }
 
-
+//Print to a program config file (.cfg) -- text format for gui
 void Schedule::printConfigText(ostream& os, int config) 
 {
   //print dimension
   os << "[dimension]\n";
-  os << "height = " << _dyModel->subModel()->sizey() << "\n";
-  os << "width = " << _dyModel->subModel()->sizex() << "\n";
+  os << "height = " << _sbModel->subModel()->sizey() << "\n";
+  os << "width = " << _sbModel->subModel()->sizex() << "\n";
   os << "\n";
   
   xfer_link_to_switch(); // makes sure we have switch representation of link
 
   //for each switch -- print routing if there is some
   os << "[switch]\n";
-  vector< vector<dyswitch> >& switches = _dyModel->subModel()->switches();
-  for(int i = 0; i < _dyModel->subModel()->sizex()+1; ++i) {
-    for(int j = 0; j < _dyModel->subModel()->sizey()+1; ++j) {
+  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
     
       stringstream ss;
-      dyswitch* dysw = &switches[i][j];
-     
-      std::map<SB_CONFIG::dylink*,SB_CONFIG::dylink*>& link_map = _assignSwitch[dysw]; 
+      sbswitch* sbsw = &switches[i][j];
+    
+      //get the out to in link map for each switch
+      std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map = _assignSwitch[sbsw]; 
+      
       if(link_map.size()!=0) {
         ss << i << "," << j << ":\t";
 
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          dylink* outlink=I->first;
-          dylink* inlink=I->second;
-          ss << DyDIR::dirName(inlink->dir(),true) << "->" << DyDIR::dirName(outlink->dir(),false) << "\t";
+          os << i << "," << j << ": ";
+          os << "\t";
+        
+        // print inputs and ordering 
+          //Get the sbnode for pdgnode
+          sblink* outlink=I->first;
+          sblink* inlink=I->second;
+          ss << SbDIR::dirName(inlink->dir(),true) << "->" << SbDIR::dirName(outlink->dir(),false) << "\t";
         }
 
       ss << "\n";
       os << ss.str();
       }
+
     }
   }
 
@@ -420,51 +476,57 @@ void Schedule::printConfigText(ostream& os, int config)
   os << "[funcunit]\n";
   //for each fu -- print assignment if there is some
   
-  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
-  for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _dyModel->subModel()->sizey(); ++j) {
-      dyfu* dyfu_node = &fus[i][j];
-      if(_assignNode.count(make_pair(dyfu_node,config))!=0) {
-        DyPDG_Inst* pdg_node = dynamic_cast<DyPDG_Inst*>(_assignNode[make_pair(dyfu_node,config)]);
+  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+      sbfu* sbfu_node = &fus[i][j];
+      
+      if(_assignNode.count(make_pair(sbfu_node,config))!=0) {
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[make_pair(sbfu_node,config)]);
         os << i << "," << j << ": ";
-        os << config_name_of_inst(pdg_node->inst());
+        os << config_name_of_inst(pdg_node->inst()); //returns sb_inst
         os << "\t";
         
         // print inputs and ordering 
+          //Get the sbnode for pdgnode
         
-        DyPDG_Node::const_edge_iterator I,E;
+        SbPDG_Node::const_edge_iterator I,E;        //egde iterator
         //for(I=pdg_node->ops_begin(),E=pdg_node->ops_end();I!=E;++I) {
-        //DyPDG_Node* inc_pdg_node=*I;
+        //SbPDG_Node* inc_pdg_node=*I;
+        
+        //Parse the inc-edges for each FU dir
         for(int i = 0; i < NUM_IN_FU_DIRS; ++i) {
           
           if(pdg_node->immSlot()==i) {
             os << "IM ";
           } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
             
-            DyPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
+            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
             
             if(!inc_edge) {
               os << "-  ";
               continue;
             }
             
-            DyPDG_Node* inc_pdg_node = inc_edge->def();
+            SbPDG_Node* inc_pdg_node = inc_edge->def();
             
-            dynode::const_iterator Ie,Ee;
-            for(Ie=dyfu_node->ibegin(), Ee=dyfu_node->iend(); Ie!=Ee; ++Ie) {
-              dylink* inlink=*Ie;
+            sbnode::const_iterator Ie,Ee;
+            for(Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+              sblink* inlink=*Ie;
               if(_assignLink.count(make_pair(inlink,config))!=0
                 &&_assignLink[make_pair(inlink,config)]==inc_pdg_node) {
-                os << DyDIR::dirName(inlink->dir(),true);
+                os << SbDIR::dirName(inlink->dir(),true);           //reverse the direction of inlink
                 break;
               }
             }
+
             os << " ";
           } else {
             os << "-  ";
           }
 
-        }
+        }//end for FU dir
         
         //print predicate
         if(pdg_node->predInv()) {
@@ -484,7 +546,8 @@ void Schedule::printConfigText(ostream& os, int config)
         
         //more stuff?
         os << "\n";
-      }
+      
+      }//end if to check if sbfu ias assigned to each PDG_INST
       
     }
   }
@@ -496,25 +559,22 @@ void Schedule::printConfigText(ostream& os, int config)
     for(unsigned i=0; i <_wide_ports.size(); ++i) {
       os << i << ": ";
       for(unsigned j = 0; j < _wide_ports[i].size(); ++j) {
+        
         if(_wide_ports[i][j]==0xff) {
           os << "0xff ";
         } else {
           os << _wide_ports[i][j] << " ";
         }
-      }
+
+      }//end for j loop
       os << "\n"; 
-    }
+    }//end for i loop
+
   }
   
   os << "\n";
 
-
 }
-
-
-
-
-
 
 vector<string> getCaptureList(regex& rx, string str, string::const_iterator& start, bool only_once=false) {
     vector<string> list;
@@ -524,6 +584,7 @@ vector<string> getCaptureList(regex& rx, string str, string::const_iterator& sta
     std::string::const_iterator end; 
     end = str.end(); 
     regex_constants::match_flag_type flags = regex_constants::match_default | regex_constants::match_continuous; 
+    
     while(regex_search(start, end, capturedTexts, rx,flags)) 
     {
         start+=capturedTexts[0].length();
@@ -539,7 +600,7 @@ vector<string> getCaptureList(regex& rx, string str, string::const_iterator& sta
 }
 
 
-
+//Reads Text format of the schedule
 Schedule::Schedule(string filename, bool multi_config) {
   enum loadstate{Dimension, Switch,FuncUnit, WidePort} state;
 
@@ -550,10 +611,10 @@ Schedule::Schedule(string filename, bool multi_config) {
     return;
   }
 
-  map<dynode*, map<DyDIR::DIR,DyDIR::DIR> > routeMap;
-  map<DyPDG_Node*, vector<DyDIR::DIR> > posMap;
-  map<dynode*, DyPDG_Node* > pdgnode_for;
-  _dyPDG = new DyPDG();
+  map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> > routeMap;
+  map<SbPDG_Node*, vector<SbDIR::DIR> > posMap;     //input dirs
+  map<sbnode*, SbPDG_Node* > pdgnode_for;
+  _sbPDG = new SbPDG();
   
   int newSizeX=-1;
   int newSizeY=-1;
@@ -588,18 +649,17 @@ Schedule::Schedule(string filename, bool multi_config) {
           continue;
       }
       
-      
       vector<string> lineElements;
       vector<string> caps;
       smatch captures;
       int posX,posY;
       string::const_iterator strIter;
-      DyPDG_Output* pdg_out;
-      DyPDG_Input *pdg_in;
-      DyPDG_Inst  *pdg_inst;
+      SbPDG_Output* pdg_out;
+      SbPDG_Input *pdg_in;
+      SbPDG_Inst  *pdg_inst;
       int pred;
-      dyinput* d_input;
-      dyoutput* d_output;
+      sbinput* d_input;
+      sboutput* d_output;
       int portNum;
       
       switch (state) {
@@ -619,14 +679,16 @@ Schedule::Schedule(string filename, bool multi_config) {
           } else {
               cerr << "Unrecognized param: " << lineElements[0] << "\n"; 
           }
+
           if(newSizeX>0 && newSizeY>0) {
             SubModel* subModel = new SubModel(newSizeX,newSizeY,SubModel::PortType::everysw,2,2,multi_config);
-            _dyModel = new DyModel(subModel);
+            _sbModel = new SbModel(subModel);
           }
           break;
       case Switch:
           strIter = line.begin();
           caps = getCaptureList(posRE,line,strIter);
+          
           if(caps.size()!=2) {
               return;// false;
           }
@@ -644,37 +706,41 @@ Schedule::Schedule(string filename, bool multi_config) {
               continue;
           }
 
+          //iterate over each inlink/outlinks of switch
           for(unsigned i = 0; i < caps.size(); i=i+2) {
-              DyDIR::DIR inDir = DyDIR::toDir(caps[i],false);
-              DyDIR::DIR outDir = DyDIR::toDir(caps[i+1],true);
-              if(inDir == DyDIR::END_DIR || outDir == DyDIR::END_DIR) {
+              SbDIR::DIR inDir = SbDIR::toDir(caps[i],false);
+              SbDIR::DIR outDir = SbDIR::toDir(caps[i+1],true);
+              if(inDir == SbDIR::END_DIR || outDir == SbDIR::END_DIR) {
                   cerr << "Bad Direction";
                   continue;
               }
-              if (DyDIR::isInputDir(inDir)) {
-                  //int n = outDir == DyDIR::OP0 ? 0:1;
-                  d_input=dynamic_cast<dyinput*>(_dyModel->subModel()->switchAt(posX,posY)
+
+              //Check if siwtches dir is input
+              if (SbDIR::isInputDir(inDir)) {
+                  //int n = outDir == SbDIR::OP0 ? 0:1;
+                  d_input=dynamic_cast<sbinput*>(_sbModel->subModel()->switchAt(posX,posY)
                     ->getInLink(inDir)->orig());
                   if(pdgnode_for.count(d_input)==0) {
-                    pdg_in = new DyPDG_Input();
+                    pdg_in = new SbPDG_Input();
                     pdgnode_for[d_input]=pdg_in;
-                    _dyPDG->addInput(pdg_in);
+                    _sbPDG->addInput(pdg_in);
                   } else {
-                    pdg_in = dynamic_cast<DyPDG_Input*>(pdgnode_for[d_input]);
+                    pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[d_input]);
                   }
                   pdg_in->setVPort(d_input->port());
               } 
-              if (DyDIR::isInputDir(outDir)) {
-                  //int n = outDir == DyDIR::OP0 ? 0:1;
-                  d_output=dynamic_cast<dyoutput*>(_dyModel->subModel()->switchAt(posX,posY)
+              
+              if (SbDIR::isInputDir(outDir)) {
+                  //int n = outDir == SbDIR::OP0 ? 0:1;
+                  d_output=dynamic_cast<sboutput*>(_sbModel->subModel()->switchAt(posX,posY)
                     ->getOutLink(outDir)->dest());
                     
-                  pdg_out = new DyPDG_Output();
+                  pdg_out = new SbPDG_Output();
                   pdgnode_for[d_output]=pdg_out;
-                  _dyPDG->addOutput(pdg_out);
+                  _sbPDG->addOutput(pdg_out);
                   pdg_out->setVPort(d_output->port());
               }
-              routeMap[_dyModel->subModel()->switchAt(posX,posY)][outDir]=inDir;
+              routeMap[_sbModel->subModel()->switchAt(posX,posY)][outDir]=inDir;
           }
 
           break;
@@ -691,9 +757,11 @@ Schedule::Schedule(string filename, bool multi_config) {
           posY = atoi(caps[1].c_str());
 
           //create corresponding PDG Node
-          pdg_inst = new DyPDG_Inst();
-          pdgnode_for[_dyModel->subModel()->fuAt(posX,posY)]=pdg_inst;
-          _dyPDG->addInst(pdg_inst);
+          pdg_inst = new SbPDG_Inst();
+
+          //adding the sbnode to pdgnode mapping
+          pdgnode_for[_sbModel->subModel()->fuAt(posX,posY)]=pdg_inst;
+          _sbPDG->addInst(pdg_inst);
 
           //get instruction        
           caps = getCaptureList(fuRE,line,strIter,true);
@@ -701,7 +769,8 @@ Schedule::Schedule(string filename, bool multi_config) {
               cerr << "Bad FU\n";
               break;
           }
-          
+         
+          //FU TYPE
           ModelParsing::trim(caps[0]);
           pdg_inst->setInst(inst_from_config_name(caps[0].c_str()));
 
@@ -717,20 +786,20 @@ Schedule::Schedule(string filename, bool multi_config) {
           //record ordering of inputs
           //posMap[pdg_inst].resize(3);
           for(int i = 0; i < 3; i++) {
-            DyDIR::DIR inDir =  DyDIR::toDir(caps[i],false);
+            SbDIR::DIR inDir =  SbDIR::toDir(caps[i],false);
             posMap[pdg_inst].push_back(inDir);
-            if(inDir == DyDIR::IM) {
+            if(inDir == SbDIR::IM) {
               pdg_inst->setImmSlot(i);
             }
             /*
               //cout << "caps[" << i << "]=" << caps[i] << "\n";
               
-              if(inDir == DyDIR::END_DIR) {
+              if(inDir == SbDIR::END_DIR) {
                   //empty direction
                   //cerr << "Bad Direction\n";
                   
                   continue;
-              } else if(inDir == DyDIR::IM) {
+              } else if(inDir == SbDIR::IM) {
                   //FuArray[posX][posY]->set_IM_slot(i);
                   
               } else {
@@ -749,7 +818,7 @@ Schedule::Schedule(string filename, bool multi_config) {
           pred = atoi(caps[0].c_str());
           pdg_inst->setPredInv(pred);
           
-          if(strIter>=line.end()) {
+          if(strIter >= line.end()) {
               continue;
           }
 
@@ -769,6 +838,7 @@ Schedule::Schedule(string filename, bool multi_config) {
           //FuArray[posX][posY]->setExtraText(extraText);
 
           break;
+
       case WidePort:
          strIter = line.begin();
          caps = getCaptureList(portRE,line,strIter);
@@ -785,7 +855,8 @@ Schedule::Schedule(string filename, bool multi_config) {
          _wide_ports.resize(portNum+1);
          
          caps = getCaptureList(xnumsRE,line,strIter);
-         
+        
+         //8 offset elements for each wide vector port
          assert(caps.size() >0 && caps.size() <= 8);
          
          for(unsigned i = 0; i < caps.size(); ++i) {
@@ -803,14 +874,14 @@ Schedule::Schedule(string filename, bool multi_config) {
 
 /*
 Debugging code to print out maps
-  map<dynode*, map<DyDIR::DIR,DyDIR::DIR> >::iterator II,EE;
+  map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >::iterator II,EE;
   for(II=routeMap.begin(),EE=routeMap.end();II!=EE;++II) {
-    map<DyDIR::DIR,DyDIR::DIR>::iterator I,E;
+    map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
     cout << "node: " << (*(II)).first->name() << "\n";
     for(I=(*(II)).second.begin(), E=(*(II)).second.end(); I!=E; ++I) {
-      DyDIR::DIR newOutDir = I->first;
-      DyDIR::DIR newInDir = I->second;
-      cerr << DyDIR::dirName(newOutDir) << " : " << DyDIR::dirName(newInDir) << "\n";
+      SbDIR::DIR newOutDir = I->first;
+      SbDIR::DIR newInDir = I->second;
+      cerr << SbDIR::dirName(newOutDir) << " : " << SbDIR::dirName(newInDir) << "\n";
     }
   }
 */
@@ -820,29 +891,33 @@ return;
   
 }
 
+//reconstruct the schedule
 void Schedule::reconstructSchedule(
-    map<dynode*, map<DyDIR::DIR,DyDIR::DIR> >& routeMap, 
-    map<dynode*, DyPDG_Node* >& pdgnode_for, 
-    map<DyPDG_Node*, vector<DyDIR::DIR> >& posMap) {
-  //iterate over inputs
+                                    map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
+                                    map<sbnode*, SbPDG_Node* >& pdgnode_for, 
+                                    map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap
+                                    ) {
+  //iterate over inputs (sbinputs)
   SubModel::const_input_iterator Iin,Ein;
-  for(Iin=_dyModel->subModel()->input_begin(), 
-      Ein=_dyModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
-    dyinput* dyinput_node = (dyinput*) &(*Iin);
-    if(pdgnode_for.count(dyinput_node)!=0) {
-        DyPDG_Node* pdg_node = pdgnode_for[dyinput_node];
-        tracePath(dyinput_node,pdg_node,routeMap,pdgnode_for,posMap);
+  for(Iin=_sbModel->subModel()->input_begin(), 
+      Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
+    sbinput* sbinput_node = (sbinput*) &(*Iin);
+   
+    //get the pdg node for sbinput
+    if(pdgnode_for.count(sbinput_node)!=0) {
+        SbPDG_Node* pdg_node = pdgnode_for[sbinput_node];
+        tracePath(sbinput_node, pdg_node, routeMap, pdgnode_for, posMap);
     }
   }
 
   //iterate over fus
-  vector< vector<dyfu> >& fus = _dyModel->subModel()->fus();
-  for(int i = 0; i < _dyModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _dyModel->subModel()->sizey(); ++j) {
-      dyfu* dyfu_node = &fus[i][j];
-      if(pdgnode_for.count(dyfu_node)!=0) {
-        DyPDG_Node* pdg_node = pdgnode_for[dyfu_node];
-        tracePath(dyfu_node,pdg_node,routeMap,pdgnode_for,posMap);
+  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+      sbfu* sbfu_node = &fus[i][j];
+      if(pdgnode_for.count(sbfu_node)!=0) {
+        SbPDG_Node* pdg_node = pdgnode_for[sbfu_node];
+        tracePath(sbfu_node, pdg_node, routeMap, pdgnode_for, posMap);
       }
         
     }
@@ -851,36 +926,37 @@ void Schedule::reconstructSchedule(
 
 /*
 struct edgeLinkItem{ 
-  dylink* dlink;
+  sblink* dlink;
   int config;
-  int DyPDG_Edge*
+  int SbPDG_Edge*
 }
 */
-void Schedule::calcAssignEdgeLink_single(DyPDG_Node* pdgnode) {
+void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
   //_assignEdgeLink
 
-  list<pair<pair<dylink*,int>,DyPDG_Edge*>> openset;
+  //paris of link to edge
+  list<pair<pair<sblink*,int>,SbPDG_Edge*>> openset;
   
-  pair<dynode*,int> loc = locationOf(pdgnode);
-  dynode* node = loc.first;
+  pair<sbnode*,int> loc = locationOf(pdgnode);
+  sbnode* node = loc.first;
   int config = loc.second;
   
   if(!node) {
-    cerr << "DyPDG_Node: " << pdgnode->name() << " is not scheduled\n"; 
+    cerr << "SbPDG_Node: " << pdgnode->name() << " is not scheduled\n"; 
     return;
   }
   
-  DyPDG_Node::const_edge_iterator I,E;
+  SbPDG_Node::const_edge_iterator I,E;
   for(I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
     if(*I == NULL) { continue; } //could be immediate
-    DyPDG_Edge* source_pdgegde = (*I);
-    DyPDG_Node* source_pdgnode = source_pdgegde->def();
+    SbPDG_Edge* source_pdgegde = (*I);
+    SbPDG_Node* source_pdgnode = source_pdgegde->def();
 
     //route edge if source pdgnode is scheduled
     if(isScheduled(source_pdgnode)) {
-      dynode::const_iterator Il,El;
+      sbnode::const_iterator Il,El;
       for(Il = node->ibegin(), El = node->iend(); Il!=El; ++Il) {
-         dylink* link = *Il;
+         sblink* link = *Il;
          if(pdgNodeOf(link,config)==source_pdgnode) {
            openset.push_back(make_pair(make_pair(link,config),source_pdgegde));
          }
@@ -890,35 +966,35 @@ void Schedule::calcAssignEdgeLink_single(DyPDG_Node* pdgnode) {
   /*
 
   
-  dynode::const_iterator Il,El;
+  sbnode::const_iterator Il,El;
   for(Il = node->ibegin(), El = node->iend(); Il!=El; ++Il) {
-      dylink* link = *Il;
+      sblink* link = *Il;
       if(pdgNodeOf(link,config)!=NULL) {
-        set<DyPDG_Edge*>& edgelist = _assignEdgeLink[make_pair(link,config)];
-        set<DyPDG_Edge*>::iterator Ie,Ee;
+        set<SbPDG_Edge*>& edgelist = _assignEdgeLink[make_pair(link,config)];
+        set<SbPDG_Edge*>::iterator Ie,Ee;
         for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; Ie++) {
-          DyPDG_Edge* pdgedge = *Ie;
+          SbPDG_Edge* pdgedge = *Ie;
           openset.push_back(make_pair(make_pair(link,config),source_pdgedge));
         }
       }
   }*/
   
   while(!openset.empty()) {
-    dylink* cur_link = openset.front().first.first;
-    dynode* cur_node = cur_link->orig();
+    sblink* cur_link = openset.front().first.first;
+    sbnode* cur_node = cur_link->orig();
     int cur_config = openset.front().first.second; 
-    DyPDG_Edge* cur_edge = openset.front().second;
-    DyPDG_Node* cur_pdgnode = cur_edge->def();
+    SbPDG_Edge* cur_edge = openset.front().second;
+    SbPDG_Node* cur_pdgnode = cur_edge->def();
     openset.pop_front();
     
     _assignEdgeLink[make_pair(cur_link,cur_config)].insert(cur_edge);
     
-    dynode::const_iterator Il,El;
+    sbnode::const_iterator Il,El;
     for(Il = cur_node->ibegin(), El = cur_node->iend(); Il!=El; ++Il) {
-        dylink* from_link = *Il;
+        sblink* from_link = *Il;
         
-        if(from_link->orig()==_dyModel->subModel()->cross_switch()) continue;
-        if(from_link->orig()==_dyModel->subModel()->load_slice()  ) continue;
+        if(from_link->orig()==_sbModel->subModel()->cross_switch()) continue;
+        if(from_link->orig()==_sbModel->subModel()->load_slice()  ) continue;
         
         if(pdgNodeOf(from_link,cur_config)==cur_pdgnode) {
           openset.push_back(make_pair(make_pair(from_link,cur_config),cur_edge));
@@ -935,53 +1011,53 @@ void Schedule::calcAssignEdgeLink() {
   _assignEdgeLink.clear();
   
   
-  DyPDG::const_inst_iterator Ii,Ei;
-  for(Ii=_dyPDG->inst_begin(), Ei=_dyPDG->inst_end(); Ii!=Ei; ++Ii) {
-    DyPDG_Inst* pdginst = *Ii; 
+  SbPDG::const_inst_iterator Ii,Ei;
+  for(Ii=_sbPDG->inst_begin(), Ei=_sbPDG->inst_end(); Ii!=Ei; ++Ii) {
+    SbPDG_Inst* pdginst = *Ii; 
     calcAssignEdgeLink_single(pdginst);
   }
   
-  DyPDG::const_output_iterator Io,Eo;
-  for(Io=_dyPDG->output_begin(),Eo=_dyPDG->output_end();Io!=Eo;++Io) {
-    DyPDG_Output* pdgout = *Io;
+  SbPDG::const_output_iterator Io,Eo;
+  for(Io=_sbPDG->output_begin(),Eo=_sbPDG->output_end();Io!=Eo;++Io) {
+    SbPDG_Output* pdgout = *Io;
     calcAssignEdgeLink_single(pdgout);
   }
   
-  if(_dyModel->subModel()->multi_config()) {
+  if(_sbModel->subModel()->multi_config()) {
     for(int config = 0; config < nConfigs();++config) {
       SubModel::const_input_iterator I,E;
-      for(I=_dyModel->subModel()->input_begin(),
-          E=_dyModel->subModel()->input_end(); I!=E; ++I) {
-        dyinput* cand_input = const_cast<dyinput*>(&(*I));
-        dylink* in_link = cand_input->getFirstInLink();
-        dylink* out_link = cand_input->getFirstOutLink();  //links to loadslice
+      for(I=_sbModel->subModel()->input_begin(),
+          E=_sbModel->subModel()->input_end(); I!=E; ++I) {
+        sbinput* cand_input = const_cast<sbinput*>(&(*I));
+        sblink* in_link = cand_input->getFirstInLink();
+        sblink* out_link = cand_input->getFirstOutLink();  //links to loadslice
       
-        if(DyPDG_Node* pdgnode = pdgNodeOf(out_link,config)) {
+        if(SbPDG_Node* pdgnode = pdgNodeOf(out_link,config)) {
           assign_link(pdgnode,in_link,config);
           
-          set<DyPDG_Edge*>::const_iterator Ie,Ee;
-          set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(out_link,config)];
+          set<SbPDG_Edge*>::const_iterator Ie,Ee;
+          set<SbPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(out_link,config)];
           for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-            DyPDG_Edge* pdgedge = *Ie;
+            SbPDG_Edge* pdgedge = *Ie;
             _assignEdgeLink[make_pair(in_link,config)].insert(pdgedge);
           }
         }
       }
     
       {SubModel::const_output_iterator I,E;
-      for(I=_dyModel->subModel()->output_begin(),
-          E=_dyModel->subModel()->output_end(); I!=E; ++I) {
-        dyoutput* cand_output = const_cast<dyoutput*>(&(*I));
-        dylink* in_link = cand_output->getFirstInLink();
-        dylink* out_link = cand_output->getFirstOutLink();  //links to loadslice
+      for(I=_sbModel->subModel()->output_begin(),
+          E=_sbModel->subModel()->output_end(); I!=E; ++I) {
+        sboutput* cand_output = const_cast<sboutput*>(&(*I));
+        sblink* in_link = cand_output->getFirstInLink();
+        sblink* out_link = cand_output->getFirstOutLink();  //links to loadslice
       
-        if(DyPDG_Node* pdgnode = pdgNodeOf(in_link,config)) {
+        if(SbPDG_Node* pdgnode = pdgNodeOf(in_link,config)) {
           assign_link(pdgnode,out_link,config);
           
-          set<DyPDG_Edge*>::const_iterator Ie,Ee;
-          set<DyPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(in_link,config)];
+          set<SbPDG_Edge*>::const_iterator Ie,Ee;
+          set<SbPDG_Edge*>& edgelist= _assignEdgeLink[make_pair(in_link,config)];
           for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-            DyPDG_Edge* pdgedge = *Ie;
+            SbPDG_Edge* pdgedge = *Ie;
             _assignEdgeLink[make_pair(out_link,config)].insert(pdgedge);
           }
         }
@@ -992,12 +1068,12 @@ void Schedule::calcAssignEdgeLink() {
   /*
   
   SubModel::const_input_iterator I,E;
-  for(I=_dyModel->subModel()->input_begin(),
-      E=_dyModel->subModel()->input_end(); I!=E; ++I) {
-     dyinput* cand_input = const_cast<dyinput*>(&(*I));
+  for(I=_sbModel->subModel()->input_begin(),
+      E=_sbModel->subModel()->input_end(); I!=E; ++I) {
+     sbinput* cand_input = const_cast<sbinput*>(&(*I));
     
     if(pdgNodeOf(cand_input,config)!=NULL) {
-       dylink* firstOutLink = cand_input->getFirstOutLink();
+       sblink* firstOutLink = cand_input->getFirstOutLink();
        openset.push_back(firstOutLink);
        lat_edge[firstOutLink]=0;
     }
@@ -1006,26 +1082,26 @@ void Schedule::calcAssignEdgeLink() {
     
   
   while(!openset.empty()) {
-    dylink* inc_link = openset.front(); 
+    sblink* inc_link = openset.front(); 
     openset.pop_front();
     
-    dynode* node = inc_link->dest();
-    dynode::const_iterator I,E,II,EE;
+    sbnode* node = inc_link->dest();
+    sbnode::const_iterator I,E,II,EE;
     
-    DyPDG_Node* cur_pdgnode = pdgNodeOf(inc_link,config);
+    SbPDG_Node* cur_pdgnode = pdgNodeOf(inc_link,config);
     assert(cur_pdgnode);
     
-    if(dyfu* next_fu = dynamic_cast<dyfu*>(node)) {
-      DyPDG_Node* next_pdgnode = pdgNodeOf(node,config);
+    if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
+      SbPDG_Node* next_pdgnode = pdgNodeOf(node,config);
       //cout << next_fu->name() << "\n"; 
       assert(next_pdgnode);
-      DyPDG_Inst* next_pdginst = dynamic_cast<DyPDG_Inst*>(next_pdgnode); 
+      SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
       assert(next_pdginst);
     
       bool everyone_is_here = true;
       int latency=0;
       for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
-        dylink* inlink = *II;
+        sblink* inlink = *II;
         if(pdgNodeOf(inlink,config) != NULL) {
           if(lat_edge.count(inlink)==1) {
             if(lat_edge[inlink]>latency) {
@@ -1038,18 +1114,18 @@ void Schedule::calcAssignEdgeLink() {
         }
       }
       if(everyone_is_here) {
-        dylink* new_link = next_fu->getFirstOutLink();
+        sblink* new_link = next_fu->getFirstOutLink();
         lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());;
         openset.push_back(new_link);
       }
-    } else if (dynamic_cast<dyoutput*>(node)) {
+    } else if (dynamic_cast<sboutput*>(node)) {
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }
     } else {
     
       for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
-        dylink* link = *I;
+        sblink* link = *I;
         
         if(pdgNodeOf(link,config) == pdgNodeOf(inc_link,config)) {
           lat_edge[link] = lat_edge[inc_link] + 1;
@@ -1067,9 +1143,9 @@ void Schedule::calcAssignEdgeLink() {
 
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
-  list<dylink*> openset;
-  //map<dynode*,dylink*> came_from;
-  map<dylink*,int> lat_edge;
+  list<sblink*> openset;
+  //map<sbnode*,sblink*> came_from;
+  map<sblink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
@@ -1077,31 +1153,32 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
   int config = 0;
   
   SubModel::const_input_iterator I,E;
-  for(I=_dyModel->subModel()->input_begin(),
-      E=_dyModel->subModel()->input_end(); I!=E; ++I) {
-     dyinput* cand_input = const_cast<dyinput*>(&(*I));
+  for(I=_sbModel->subModel()->input_begin(),
+      E=_sbModel->subModel()->input_end(); I!=E; ++I) {
+     sbinput* cand_input = const_cast<sbinput*>(&(*I));
     
     if(pdgNodeOf(cand_input,config)!=NULL) {
-       dylink* firstOutLink = cand_input->getFirstOutLink();
+       sblink* firstOutLink = cand_input->getFirstOutLink();
        openset.push_back(firstOutLink);
        lat_edge[firstOutLink]=0;
     }
   }
     
     
-  
+ //Oytlinks of all the inputs 
   while(!openset.empty()) {
-    dylink* inc_link = openset.front(); 
+    sblink* inc_link = openset.front(); 
     openset.pop_front();
+   
+    //dest node
+    sbnode* node = inc_link->dest();
+    sbnode::const_iterator I,E,II,EE;
     
-    dynode* node = inc_link->dest();
-    dynode::const_iterator I,E,II,EE;
-    
-    DyPDG_Node* cur_pdgnode = pdgNodeOf(inc_link,config);
+    SbPDG_Node* cur_pdgnode = pdgNodeOf(inc_link,config);
     assert(cur_pdgnode);
     
-    if(dyfu* next_fu = dynamic_cast<dyfu*>(node)) {
-      DyPDG_Node* next_pdgnode = pdgNodeOf(node,config);
+    if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
+      SbPDG_Node* next_pdgnode = pdgNodeOf(node,config);
       //cout << next_fu->name() << "\n"; 
       //
       if(!next_pdgnode) {
@@ -1112,7 +1189,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
         return;
       }
 
-      DyPDG_Inst* next_pdginst = dynamic_cast<DyPDG_Inst*>(next_pdgnode); 
+      SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
       assert(next_pdginst);
     
       bool everyone_is_here = true;
@@ -1120,7 +1197,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
       int latency=0;
       int low_latency=100000000;  //magic number, forgive me
       for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
-        dylink* inlink = *II;
+        sblink* inlink = *II;
         if(pdgNodeOf(inlink,config) != NULL) {
           if(lat_edge.count(inlink)==1) {
             if(lat_edge[inlink]>latency) {
@@ -1138,7 +1215,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
       
 
       if(everyone_is_here) {
-        dylink* new_link = next_fu->getFirstOutLink();
+        sblink* new_link = next_fu->getFirstOutLink();
         lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());;
         openset.push_back(new_link);
         
@@ -1147,14 +1224,14 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
           max_lat_mis=diff;
         }
       }
-    } else if (dynamic_cast<dyoutput*>(node)) {
+    } else if (dynamic_cast<sboutput*>(node)) {
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }
     } else {
     
       for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
-        dylink* link = *I;
+        sblink* link = *I;
         
         if(pdgNodeOf(link,config) == pdgNodeOf(inc_link,config)) {
           lat_edge[link] = lat_edge[inc_link] + 1;
@@ -1165,82 +1242,83 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
   }
 }
 
-void Schedule::tracePath(dynode* dyspot, DyPDG_Node* pdgnode, 
-    map<dynode*, map<DyDIR::DIR,DyDIR::DIR> >& routeMap, 
-    map<dynode*, DyPDG_Node* >& pdgnode_for, 
-    map<DyPDG_Node*, vector<DyDIR::DIR> >& posMap) {
+void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 
+    map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
+    map<sbnode*, SbPDG_Node* >& pdgnode_for, 
+    map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap) {
   
-  //_assignNode[make_pair(dyspot,0)]=pdgnode;  //perform the assignment
-  //_dynodeOf[pdgnode]=make_pair(dyspot,0);
+  //_assignNode[make_pair(sbspot,0)]=pdgnode;  //perform the assignment
+  //_sbnodeOf[pdgnode]=make_pair(sbspot,0);
   
-  assign_node(pdgnode,dyspot,0);
+  assign_node(pdgnode,sbspot,0);
   
-  vector<pair<dynode*, DyDIR::DIR> > worklist;
+  vector<pair<sbnode*, SbDIR::DIR> > worklist;
 
-  dylink* firstLink = dyspot->getFirstOutLink();
+  sblink* firstLink = sbspot->getFirstOutLink();
   assign_link(pdgnode,firstLink,0);
   
-  dynode* startItem = firstLink->dest();
-  DyDIR::DIR initialDir = firstLink->dir();
+  sbnode* startItem = firstLink->dest();
+  SbDIR::DIR initialDir = firstLink->dir();
   worklist.push_back(make_pair(startItem,initialDir));
 
-  //cerr << "---   tracing " << dyspot->name() << "   ---\n"; 
+  //cerr << "---   tracing " << sbspot->name() << "   ---\n"; 
   
   while(!worklist.empty()) {
     
     //cerr << "worklist: ";
     //for(unsigned i = 0; i < worklist.size(); ++i) {
-    //  dynode* item = worklist[i].first;
-    //  DyDIR::DIR dir = worklist[i].second;
-    //  cerr << DyDIR::dirName(dir) << ", " << item->name() << "";
+    //  sbnode* item = worklist[i].first;
+    //  SbDIR::DIR dir = worklist[i].second;
+    //  cerr << SbDIR::dirName(dir) << ", " << item->name() << "";
     //  cerr << " | ";
     //}
     //cerr << "\n";
     
-    dynode* curItem = worklist.back().first;
-    DyDIR::DIR inDir = worklist.back().second;
+    sbnode* curItem = worklist.back().first;
+    SbDIR::DIR inDir = worklist.back().second;
     worklist.pop_back();
     
-    map<DyDIR::DIR,DyDIR::DIR>::iterator I,E;
+    map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
     for(I=routeMap[curItem].begin(), E=routeMap[curItem].end(); I!=E; ++I) {
-      DyDIR::DIR newOutDir = I->first;
-      DyDIR::DIR newInDir = I->second;
+      SbDIR::DIR newOutDir = I->first;
+      SbDIR::DIR newInDir = I->second;
       
       if(inDir == newInDir) { //match!
        
-        //dylink* inLink = curItem->getInLink(newInDir);
+        //sblink* inLink = curItem->getInLink(newInDir);
         
         //_assignLink[inLink]=pdgnode;
         
          
-        dylink* outLink = curItem->getOutLink(newOutDir);
+        sblink* outLink = curItem->getOutLink(newOutDir);
         assign_link(pdgnode,outLink,0);
         
         if(outLink==NULL) {
           //cerr << "outlink is null: ";
-          //cerr << curItem->name() << " (dir:" << DyDIR::dirName(newOutDir) << "\n";
+          //cerr << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) << "\n";
         }
 
-        dynode* nextItem = outLink->dest();
+        sbnode* nextItem = outLink->dest();
 
-        
-        if(dynode* dyout = dynamic_cast<dyoutput*>(nextItem)) {
- //         cerr << DyDIR::dirName(newInDir) << " -> " << DyDIR::dirName(newOutDir) 
+       //Output node 
+        if(sbnode* sbout = dynamic_cast<sboutput*>(nextItem)) {
+ //         cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
 //               << "    (out)\n";
 
-          DyPDG_Node* dest_pdgnode = pdgnode_for[dyout];
+          SbPDG_Node* dest_pdgnode = pdgnode_for[sbout];
           assert(dest_pdgnode);
           
-          _assignNode[make_pair(dyout,0)]=dest_pdgnode;  //perform the assignment
-          _dynodeOf[dest_pdgnode]=make_pair(dyout,0);
+          _assignNode[make_pair(sbout,0)]=dest_pdgnode;  //perform the assignment
+          _sbnodeOf[dest_pdgnode]=make_pair(sbout,0);
 
-          _dyPDG->connect(pdgnode,dest_pdgnode,0, DyPDG_Edge::data); 
+          _sbPDG->connect(pdgnode,dest_pdgnode,0, SbPDG_Edge::data); 
 
-        } else if(dyfu* fu_node = dynamic_cast<dyfu*>(nextItem)) {
-//          cerr << DyDIR::dirName(newInDir) << " -> " << DyDIR::dirName(newOutDir) 
+        } else if(sbfu* fu_node = dynamic_cast<sbfu*>(nextItem)) {
+
+//          cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
 //               << "    (" << fu_node->x() << " " << fu_node->y() << " .. FU)" << "\n";
 
-          DyPDG_Inst* dest_pdgnode = dynamic_cast<DyPDG_Inst*>(pdgnode_for[fu_node]);
+          SbPDG_Inst* dest_pdgnode = dynamic_cast<SbPDG_Inst*>(pdgnode_for[fu_node]);
           assert(dest_pdgnode);
           
           int slot=0;
@@ -1253,17 +1331,17 @@ void Schedule::tracePath(dynode* dyspot, DyPDG_Node* pdgnode,
           assert(slot>=0 && slot <NUM_IN_FU_DIRS);
 
           if(slot==2 && !dest_pdgnode->predInv()) {
-            _dyPDG->connect(pdgnode,dest_pdgnode,slot, DyPDG_Edge::ctrl_true);
+            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::ctrl_true);
           } else if(slot==2 && dest_pdgnode->predInv()) {
-            _dyPDG->connect(pdgnode,dest_pdgnode,slot, DyPDG_Edge::ctrl_false);
+            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::ctrl_false);
           } else {
-            _dyPDG->connect(pdgnode,dest_pdgnode,slot, DyPDG_Edge::data); 
+            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::data); 
           }
         
-        } else if(dyswitch* dysw = dynamic_cast<dyswitch*>(nextItem)){ //must be switch
-//          cerr << DyDIR::dirName(newInDir) << " -> " << DyDIR::dirName(newOutDir) 
-//               << "    (" << dysw->x() << " " << dysw->y() << ")" << "\n";
-          dysw=dysw;
+        } else if(sbswitch* sbsw = dynamic_cast<sbswitch*>(nextItem)){ //must be switch
+//          cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
+//               << "    (" << sbsw->x() << " " << sbsw->y() << ")" << "\n";
+          sbsw=sbsw;
           worklist.push_back(make_pair(nextItem,newOutDir));
         } else {
           assert(0);

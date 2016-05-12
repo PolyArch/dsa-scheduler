@@ -4,9 +4,10 @@
 #include <fstream>
 
 #include "scheduler.h"
-#include "dypdg.h"
+#include "sbpdg.h"
 #include <cstdlib>
 #include <string>
+
 using namespace std;
 using namespace SB_CONFIG;
 
@@ -35,13 +36,15 @@ int main(int argc, char* argv[])
 {
   
   if(argc<3) {
-    cerr <<  "Usage: sb_sched config.dymodel compute.sbdp\n";
+    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg\n";
     exit(1);
   }
-  DyModel dymodel(argv[1]);
 
-  cout << "DySER Size:" << dymodel.subModel()->sizex() << "x"
-                        << dymodel.subModel()->sizey() <<"\n";
+  //Sbmodel object based on the hw config
+  SbModel sbmodel(argv[1]);
+
+  cout << "Softbrain CGRA Size:" << sbmodel.subModel()->sizex() << "x"
+                        << sbmodel.subModel()->sizey() <<"\n";
 
   std::string pdg_filename=argv[2];
   int lastindex = pdg_filename.find_last_of("."); 
@@ -50,22 +53,25 @@ int main(int argc, char* argv[])
   system("mkdir -p gams/");
   system("mkdir -p dots/");
 
-  DyPDG dypdg(pdg_filename);
+  //sbpdg object based on the dfg
+  SbPDG sbpdg(pdg_filename);
 
   //cout << "file: " << filename << "\n";
 
   ofstream ofs("dots/"+basename(pdg_filename)+".dot", ios::out);
   assert(ofs.good());
-  dypdg.printGraphviz(ofs);
+  sbpdg.printGraphviz(ofs);
   ofs.close();
 
   Schedule* sched;
-  Scheduler scheduler(&dymodel);
-  scheduler.scheduleGAMS(&dypdg,sched);
+  Scheduler scheduler(&sbmodel);
+  scheduler.scheduleGAMS(&sbpdg,sched);
 
   int lat,latmis;
+
+  //calculate latency
   sched->calcLatency(lat,latmis);
-  sched->printAllConfigs(pdg_rawname.c_str());
+  sched->printAllConfigs(pdg_rawname.c_str());      //text form of config fed to gui
 
   std::string config_header=pdg_rawname+string(".h");
   std::ofstream osh(config_header);     
@@ -73,9 +79,9 @@ int main(int argc, char* argv[])
   sched->printConfigBits(osh,basename(pdg_filename));
 
 //  int num_pdgnodes=
-//  (sched->dypdg()->inst_end()-  sched->dypdg()->inst_begin())+
-//  (sched->dypdg()->input_end()- sched->dypdg()->input_begin())+
-//  (sched->dypdg()->output_end()-sched->dypdg()->output_begin());
+//  (sched->sbpdg()->inst_end()-  sched->sbpdg()->inst_begin())+
+//  (sched->sbpdg()->input_end()- sched->sbpdg()->input_begin())+
+//  (sched->sbpdg()->output_end()-sched->sbpdg()->output_begin());
 
   cout << "latency: " << lat << "\n";  
   cout << "latency mismatch: " << latmis << "\n";  

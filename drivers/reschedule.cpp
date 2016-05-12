@@ -163,7 +163,7 @@ int main(int argc, char* argv[])
   
   ofstream ofs("dots/pdgout.dot", ios::out);
   assert(ofs.good());
-  sched.dypdg()->printGraphviz(ofs);
+  sched.sbpdg()->printGraphviz(ofs);
   ofs.close();
   
   cout << "Ports for Original Schedule:\n";
@@ -177,25 +177,28 @@ int main(int argc, char* argv[])
   }
   
 
-  DyModel* dymodel;
+  SbModel* sbmodel;
   
   if(model_file) {
-    cout << "Using file for dymodel: " << model_file << "\n";
-    dymodel = new DyModel(model_file,multi_config);
+    cout << "Using file for sbmodel: " << model_file << "\n";
+    sbmodel = new SbModel(model_file,multi_config);
   } else {
-    cout << "Using dymodel from schedule\n";
-    dymodel = sched.dyModel();
+    cout << "Using sbmodel from schedule\n";
+    sbmodel = sched.sbModel();
   }
   
-  Scheduler scheduler(dymodel);
+  Scheduler scheduler(sbmodel);
   scheduler.setGap(relative_gap,absolute_gap);
   scheduler.setTimeout(timeout);
   
-  Schedule* new_sched;
+  Schedule* new_sched;              //scheduled object
   if(stype==SCHED_GREEDY) {
-    new_sched = scheduler.scheduleGreedyBFS(sched.dypdg());
+    //Greedy BFS
+    new_sched = scheduler.scheduleGreedyBFS(sched.sbpdg());
   } else {
-    scheduler.scheduleGAMS(sched.dypdg(),new_sched);
+
+    //GAMS scheduler -- internally calls greedy bfs
+    scheduler.scheduleGAMS(sched.sbpdg(),new_sched);
   }
   
 
@@ -213,9 +216,11 @@ int main(int argc, char* argv[])
   inPortMapping[0xff]=0xff;
   outPortMapping[0xff]=0xff;
   
-  DyPDG::const_input_iterator I,E;
-  for(I=new_sched->dypdg()->input_begin(),E=new_sched->dypdg()->input_end();I!=E;++I) {
-     DyPDG_Input* in = *I;
+  SbPDG::const_input_iterator I,E;
+
+  //old and new mappings of input nodes
+  for(I=new_sched->sbpdg()->input_begin(),E=new_sched->sbpdg()->input_end();I!=E;++I) {
+     SbPDG_Input* in = *I;
      pair<int,int> oldp = sched.getConfigAndPort(in);
      pair<int,int> p = new_sched->getConfigAndPort(in);
      cout << in->name() << " old " << " " << oldp.first << "," << oldp.second;
@@ -223,9 +228,11 @@ int main(int argc, char* argv[])
      inPortMapping[oldp.second]=p.second;
   }
   
-  DyPDG::const_output_iterator Io,Eo;
-  for(Io=new_sched->dypdg()->output_begin(),Eo=new_sched->dypdg()->output_end();Io!=Eo;++Io) {
-     DyPDG_Output* out = *Io;
+  SbPDG::const_output_iterator Io,Eo;
+
+  //old and new mappings of output nodes
+  for(Io=new_sched->sbpdg()->output_begin(),Eo=new_sched->sbpdg()->output_end();Io!=Eo;++Io) {
+     SbPDG_Output* out = *Io;
      pair<int,int> oldp = sched.getConfigAndPort(out);
      pair<int,int> p = new_sched->getConfigAndPort(out);
      cout << out->name() << " old " << " " << oldp.first << "," << oldp.second;
@@ -266,7 +273,8 @@ int main(int argc, char* argv[])
     
     new_sched->addWidePort(newWidePort);
   }
-  
+ 
+
   stringstream ss;
   ss << argv[optind];
   ss << ".resched";  
