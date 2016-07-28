@@ -34,7 +34,7 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-void SbPDG::compute() {
+void SbPDG::compute(bool print) {
 
   if(_orderedInsts.size()==0) {
     std::set<SbPDG_Inst*> done_nodes;
@@ -47,7 +47,7 @@ void SbPDG::compute() {
   }
 
   for(SbPDG_Inst* inst : _orderedInsts) {
-    inst->compute();
+    inst->compute(print);
   }
 
 }

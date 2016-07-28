@@ -161,19 +161,26 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-     void compute() {
+     void compute(bool print) {
        if(_input_vals.size()==0) {
          _input_vals.resize(_ops.size());
        }
-       std::cout << name() << " (" << _ID << "): ";
-      
+       if(print) {
+         std::cout << name() << " (" << _ID << "): ";
+       }
+        
        for(unsigned i = 0; i < _ops.size(); ++i) {
          _input_vals[i]=_ops[i]->def()->get_value();
-         std::cout << std::hex << _input_vals[i] << " ";
+         if(print) {
+           std::cout << std::hex << _input_vals[i] << " ";
+         }
        }
+       
        _val=SB_CONFIG::execute(_sbinst,_input_vals);
-       std::cout << " = " << _val << "\n";
-      
+       
+       if(print) {
+         std::cout << " = " << _val << "\n";
+       }
      }
 
   private:
@@ -443,7 +450,7 @@ class SbPDG {
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
 
-    void compute();
+    void compute(bool print);
 
   private:
     std::vector<SbPDG_Node*> _nodes;

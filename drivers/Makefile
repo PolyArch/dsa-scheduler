@@ -32,7 +32,7 @@ stat-config : stat-config.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler
 
 sb_sched : sb_sched.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${prefix}/lib
 
 
 clean:
