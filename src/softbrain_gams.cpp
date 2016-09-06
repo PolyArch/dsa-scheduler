@@ -25,10 +25,19 @@ loop(v,
     );
     put /
 );
-put "[extra-lat]" /
-loop(e$(extra.l(e)<>0),
-    put e.tl ":" extra.l(e) / 
+*put "[extra-lat]" /
+*loop(e$(extra.l(e)<>0),
+*    put e.tl ":" extra.l(e) / 
+*);
+put "[timing]" /
+loop(v,
+    put v.tl ":" Tv.l(v) / 
 );
+put "[passthrough]" /
+loop(n$(PT.l(n) and sum((e,l)$(Hnl(n,l)), Mel.l(e,l))),
+    put n.tl 
+);
+put /
 put "[port-port-map]" /
 loop(pv,
     put pv.tl ":";

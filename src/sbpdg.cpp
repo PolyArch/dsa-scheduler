@@ -42,7 +42,9 @@ void SbPDG::compute(bool print) {
     //for each output node traverse 
     //the incoming node
     for(SbPDG_Output* out : _outputs) {
-      order_insts(out->out_inst(), done_nodes, _orderedInsts);
+      if(SbPDG_Inst* producing_node = out->out_inst()) {
+        order_insts(producing_node, done_nodes, _orderedInsts);
+      }
     } 
   }
 
@@ -118,6 +120,8 @@ SbPDG::SbPDG(string filename) {
   regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep   -- 3 ip
   regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep -- 2 ip
   regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*\\)");//id dep dep -- 1 ip
+  regex re_rename("(\\w+)\\s*=\\s*(\\w+)\\s*");//rename
+
   smatch m;
 
   int cur_line=0;
@@ -145,6 +149,11 @@ SbPDG::SbPDG(string filename) {
       string vec = m[2];
       parse_and_add_vec(name, line, syms, true /*input*/);
 
+    } else if (regex_search(line,m,re_output_vec)) {
+      string name = m[1];
+      string vec = m[2];
+      parse_and_add_vec(name, line, syms, false /*output*/);   
+    
     } else if (regex_search(line,m,re_Op1)) {
       //cout << "o1:" << m[1] << " " << m[2] << " " << m[3] << "\n";
       string var_out = m[1];
@@ -229,6 +238,18 @@ SbPDG::SbPDG(string filename) {
       //cout << "out:" << m[1] << "\n";    
       string var_out = m[1];
       addScalarOutput(var_out,syms);
+    } else if (regex_search(line,m,re_rename)) {
+      string var_out = m[1];
+      string var_in  = m[2];
+      SbPDG_Node* inc_node = syms[var_in];
+
+      if(inc_node==NULL) {
+        cerr << "Could not find \"" + var_in + "\" (rename) \n";
+        assert("0");
+      } 
+
+      syms[var_out] = inc_node;
+
     } else {
       cout << "Line: \"" << line << "\"\n";
       assert(0&&"I don't know what this line is for\n");
@@ -240,6 +261,11 @@ SbPDG::SbPDG(string filename) {
 }
 
 
+std::string SbPDG_Edge::name() {
+  std::stringstream ss;
+  ss << _def->name() << "->" << _use->name();
+  return ss.str();
+}
 
 // -- Gams names --
 std::string SbPDG_Edge::gamsName() {
@@ -265,6 +291,34 @@ std::string SbPDG_Inst::gamsName() {
   ss << "FV" << _ID;
   return ss.str();
 }
+
+//compute:
+void SbPDG_Inst::compute(bool print) {
+  assert(_ops.size() <=3);
+
+  if(_input_vals.size()==0) {
+    _input_vals.resize(_ops.size());
+  }
+  assert(_input_vals.size() <= _ops.size());
+
+  if(print) {
+    std::cout << name() << " (" << _ID << "): ";
+  }
+   
+  for(unsigned i = 0; i < _ops.size(); ++i) {
+    _input_vals[i]=_ops[i]->def()->get_value();
+    if(print) {
+      std::cout << std::hex << _input_vals[i] << " ";
+    }
+  }
+  
+  _val=SB_CONFIG::execute(_sbinst,_input_vals);
+  
+  if(print) {
+    std::cout << " = " << _val << "\n";
+  }
+}
+
 
 
 void SbPDG_Node::printGraphviz(ostream& os) {

@@ -469,6 +469,8 @@ int Scheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* sou
 #include "timing_model.cpp"
 #include "hw_model.cpp"
 
+//MIP START IS DEFUNCT NOW THAT THE SCHEDULER CAN'T KEEP UP WITH REQs OF PROBLEM
+#define USE_MIP_START 0 
 
 bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   //mkfifo("/tmp/gams_fifo",S_IRWXU);
@@ -481,10 +483,14 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   string gams_file_name = ss.str();
   
   
-  //schedule = new Schedule(_sbModel,sbPDG);
+  #if USE_MIP_START 
   schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
   schedule->calcAssignEdgeLink();
-  
+  #else
+  schedule = new Schedule(_sbModel,sbPDG);
+  #endif
+
+ 
   //bool use_hw=true;
   bool use_hw=false;
 
@@ -529,7 +535,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_mipstart(_gams_work_dir+"/mip_start.gams", ios::out);
   assert(ofs_mipstart.good());
 
-  
+  #if USE_MIP_START
   //print mipstart
   Schedule::assign_node_iterator I,E;
   for(I = schedule->assign_node_begin(), E= schedule->assign_node_end();I!=E;++I) {
@@ -621,7 +627,8 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   ofs_mipstart << "display length.l;\n";
   ofs_mipstart << "display cost.l;\n";
   ofs_mipstart.close();
-  
+#endif
+
   schedule->clearAll();
 
   cout << "numNodes in scheduler: " << sbPDG->num_nodes() << "\n";
@@ -634,6 +641,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
 
   cout << "Softbrain Scheduler -- Using: " << n_configs << " Configs\n";
   
+
   // Print the softbrain model   
   ofstream ofs_sb_model(_gams_work_dir + "/softbrain_model.gams", ios::out);
   assert(ofs_sb_model.good());
@@ -688,7 +696,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links;
   ifstream gamsout(gams_out_file.c_str());
-  enum  { VtoN,VtoL,LtoL,EL,PPL, Parse_None } parse_stage;
+  enum  { VtoN,VtoL,LtoL,EL,PPL, PASSTHROUGH, Parse_None } parse_stage;
   parse_stage=Parse_None;
   while(gamsout.good()) {  
     getline(gamsout,line);
@@ -708,6 +716,8 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
         parse_stage = LtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
         parse_stage = EL; continue;
+      } else if(ModelParsing::StartsWith(line,"[passthrough]")) {
+        parse_stage = PASSTHROUGH; continue;
       } else if(ModelParsing::StartsWith(line,"[port-port-map]")) {
         parse_stage = PPL; continue;
       } else {
@@ -732,7 +742,24 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
 
       schedule->assign_vport(pv,pn);
 
+    } else if(parse_stage==PASSTHROUGH) {
+      stringstream ss(line);
+      
+      while(ss.good()) {
+        getline(ss,sbnode_name, ' ');
+        ModelParsing::trim(sbnode_name);
+        if(sbnode_name.empty()) continue;
+        
+        sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
+        if(sbnode==NULL) {
+          cerr << "null sbnode:\"" << sbnode_name << "\"\n";
+        }
+        schedule->add_passthrough_node(sbnode);
+
+      }
+
     } else if(parse_stage==EL) {
+
 
       stringstream ss(line);
       getline(ss, edge_name, ':');

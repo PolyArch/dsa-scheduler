@@ -32,6 +32,8 @@ class SbPDG_Edge {
     SbPDG_Node* use() const {return _use;}
     
     std::string gamsName();
+    std::string name();
+
     
   private:
     int _ID;
@@ -53,24 +55,28 @@ class SbPDG_Node {
     typedef std::vector<SbPDG_Edge*>::const_iterator const_edge_iterator;
      
     void addIncEdge(unsigned pos, SbPDG_Edge *edge) { 
+      assert(pos <=4);
       if(_ops.size()<=pos) { 
          _ops.resize(pos+1,NULL); 
        }
 
        if(_ops[pos]) {
-         std::cout << "overwrite" << _ops[pos]->def()->name() << "\n";
+         std::cerr << "ERROR: overwriting op at pos" << pos 
+                   << " name:" << _ops[pos]->def()->name() << "\n";
          assert(0);
        }
        _ops[pos]=edge;
     }
     
     void addOutEdge(unsigned pos, SbPDG_Edge *edge) {
+      assert(pos <= 64 && "more than 64 users, check this! (may be okay if really large grid\n"); 
        if(_uses.size()<=pos) { 
          _uses.resize(pos+1,NULL); 
        }
 
        if(_uses[pos]) {
-         std::cout << "overwrite" << _uses[pos]->use()->name() << "\n";
+         std::cerr << "ERROR: overwriting use at pos" << pos 
+                   << " name: " << _uses[pos]->use()->name() << "\n";
          assert(0);
        }
        
@@ -146,6 +152,7 @@ class SbPDG_Inst : public SbPDG_Node {
 
     std::string name() {
         std::stringstream ss;
+        ss << _name << ":";
         ss << SB_CONFIG::name_of_inst(_sbinst);
         if(_imm_slot!=-1) {
           ss<<" Imm:"<<_imm;
@@ -161,28 +168,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-     void compute(bool print) {
-       if(_input_vals.size()==0) {
-         _input_vals.resize(_ops.size());
-       }
-       if(print) {
-         std::cout << name() << " (" << _ID << "): ";
-       }
-        
-       for(unsigned i = 0; i < _ops.size(); ++i) {
-         _input_vals[i]=_ops[i]->def()->get_value();
-         if(print) {
-           std::cout << std::hex << _input_vals[i] << " ";
-         }
-       }
-       
-       _val=SB_CONFIG::execute(_sbinst,_input_vals);
-       
-       if(print) {
-         std::cout << " = " << _val << "\n";
-       }
-     }
-
+     void compute(bool print); 
   private:
     std::vector<uint64_t> _input_vals;
     bool _predInv;
@@ -198,6 +184,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     
     std::string name() {
         std::stringstream ss;
+        ss << _name << ":";
         ss << "I" << _vport;
         return ss.str();
     }
@@ -211,6 +198,7 @@ class SbPDG_Output : public SbPDG_IO {
     
     std::string name() {
         std::stringstream ss;
+        ss << _name << ":";
         ss << "O" << _vport;
         return ss.str();
     }
@@ -218,8 +206,9 @@ class SbPDG_Output : public SbPDG_IO {
 
     //returns the instruction producing the
     //value to this output node
+    //Returns NULL if the producing instruction is an input!
     SbPDG_Inst* out_inst() {
-      return static_cast<SbPDG_Inst*>(_ops[0]->def());
+      return dynamic_cast<SbPDG_Inst*>(_ops[0]->def());
     }
 
     //retrieve the value of the def
@@ -387,14 +376,26 @@ class SbPDG {
         std::stringstream ss;
         ss << name << i;
         std::cout << "name: " << name << "\n";
+        std::string dep_name = ss.str();
+
+        SbPDG_Node* out_node = syms[dep_name];
+        if(out_node==NULL) {
+          std::cerr << "Could not find \"" + dep_name + "\"\n";
+          assert(0);
+        }
+
         SbPDG_Output* pdg_out = new SbPDG_Output();
-        std::string name = ss.str();
-        syms[name]=pdg_out;
-        pdg_out->setName(name);
+        std::string out_name = dep_name + "_out";
+        syms[out_name]=pdg_out;
+        pdg_out->setName(out_name);
         pdg_out->setVPort(_vecOutputs.size());
         addOutput(pdg_out);
         vec_output->addOutput(pdg_out);
+
+        connect(out_node, pdg_out,0,SbPDG_Edge::data);
       } 
+
+
       //assert(0 && "addVecOutput not implemented");
     }
 

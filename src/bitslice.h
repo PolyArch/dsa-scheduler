@@ -8,8 +8,6 @@
 template <class T> 
 class bitslices {
 public:
-  static const int asdf=1;
-  
   void write(unsigned slice, unsigned p1, unsigned p2, T val, bool check0=true) {
 //    std::cout << slice << " " << p1 << " " << p2 << "\n";
 
@@ -36,16 +34,24 @@ public:
 
 
   void clear_slice(unsigned slice) {
+    check_size(slice);
+
     _slices[slice]=0;
   }
 
   T read_slice(unsigned slice, unsigned p1, unsigned p2) {
+    check_size(slice);
+
      T mask = gen_mask(p1,p2);
      T masked_val = _slices[slice] & mask;
      return masked_val >> p1;
   }
 
-  T read_slice(unsigned slice) {return _slices[slice];}
+  T read_slice(unsigned slice) {
+    check_size(slice);
+
+    return _slices[slice];
+  }
 
   unsigned size() {return _slices.size();}
 

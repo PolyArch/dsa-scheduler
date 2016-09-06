@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
   sbpdg.printGraphviz(ofs);
   ofs.close();
 
-  Schedule* sched;
+  Schedule* sched=NULL;
   Scheduler scheduler(&sbmodel);
   scheduler.scheduleGAMS(&sbpdg,sched);
 

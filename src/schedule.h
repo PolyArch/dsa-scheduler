@@ -240,6 +240,10 @@ class Schedule {
 
   bitslices<uint64_t>& slices() {return _bitslices;}
 
+  void add_passthrough_node(SB_CONFIG::sbnode* passthrough) {
+    _passthrough_nodes.insert(passthrough);
+  }
+
   private:
     static const int IN_ACT_SLICE=0;
     static const int OUT_ACT_SLICE=1;
@@ -259,7 +263,7 @@ class Schedule {
     static const int SWITCH_BITS = BITS_PER_DIR * NUM_OUT_DIRS;
 
     static const int FU_DIR_LOC = SWITCH_LOC + SWITCH_BITS;
-    static const int FU_DIR_BITS = BITS_PER_FU_DIR + NUM_IN_FU_DIRS;
+    static const int FU_DIR_BITS = BITS_PER_FU_DIR * NUM_IN_FU_DIRS;
 
     static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
     static const int FU_PRED_INV_BITS = 1;
@@ -273,7 +277,9 @@ class Schedule {
     int _n_configs;   
     SB_CONFIG::SbModel* _sbModel;
     SbPDG*   _sbPDG;
-    
+
+    std::set<SB_CONFIG::sbnode*> _passthrough_nodes;
+
     std::map<std::pair<SB_CONFIG::sbnode*, int>, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::map<SbPDG_Node*, std::pair<SB_CONFIG::sbnode*,int> > _sbnodeOf;    //pdgnode to sbnode
     std::map<SbPDG_Node*, int> _latOf; 

@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <regex>
 #include <list>
+#include  <iomanip>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -281,10 +282,13 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       bool top = (j==0);
       bool bottom = (j==_sbModel->subModel()->sizey());
 
-      cout << i << "," << j << "\n";
-
       //Write the [Row] -- corresponding row of the siwtch based on the j 
       _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
+
+//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+0*BITS_PER_FU_DIR,FU_DIR_LOC+1*BITS_PER_FU_DIR-1));
+//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+1*BITS_PER_FU_DIR,FU_DIR_LOC+2*BITS_PER_FU_DIR-1));
+//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+2*BITS_PER_FU_DIR,FU_DIR_LOC+3*BITS_PER_FU_DIR-1));
+
 
       //---------------------------------ENCODE SWITCHES -------------------------------
       sbswitch* sbsw = &switches[i][j];
@@ -320,6 +324,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           _bitslices.write(cur_slice,p1,p2,unused_dir_enc);     //Why write unused input dir
         }
 
+
         //Step 2: Fill in correct switches
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
           sblink* outlink=I->first;
@@ -347,6 +352,28 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       //
       if(i < _sbModel->subModel()->sizex() && j < _sbModel->subModel()->sizey()) {
         sbfu* sbfu_node = &fus[i][j];
+
+        if(_passthrough_nodes.count(sbfu_node)) {
+          int cur_bit_pos=FU_DIR_LOC;
+          int i = 0; //only one dir allowed
+          unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*i;
+          unsigned p2 = p1 + BITS_PER_FU_DIR-1;
+
+
+          for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+            sblink* inlink=*Ie;
+            if(_assignLink.count(make_pair(inlink,0))!=0) {
+              int in_encode = sbdir.encode_fu_dir(inlink->dir()); //get encoding of dir
+              _bitslices.write(cur_slice,p1,p2,in_encode);   //input dir for each FU in
+              break;
+            }
+          }
+
+          //opcode encdoing
+          unsigned op_encode = sbfu_node->fu_def()->encoding_of(SB_CONFIG::SB_Copy);
+          _bitslices.write(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1,op_encode);
+        }
+       
 
         //get the pdg node assigned to that FU  
         if(_assignNode.count(make_pair(sbfu_node,0))!=0) {
@@ -418,7 +445,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   for(unsigned i = 0; i < _bitslices.size(); ++i) {
     if(i!=0) {os <<", ";}
     if(i%8==0) {os <<"\n";}
-    os << "0x" << std::hex << _bitslices.read_slice(i);
+    os << "0x" << std::setfill('0') << std::setw(2) << std::hex << _bitslices.read_slice(i);
   }
   os << "};\n";
   os << std::dec;
@@ -454,8 +481,8 @@ void Schedule::printConfigText(ostream& os, int config)
         ss << i << "," << j << ":\t";
 
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          os << i << "," << j << ": ";
-          os << "\t";
+          //os << i << "," << j << ": ";
+          //os << "\t";
         
         // print inputs and ordering 
           //Get the sbnode for pdgnode
@@ -481,19 +508,26 @@ void Schedule::printConfigText(ostream& os, int config)
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* sbfu_node = &fus[i][j];
-      
+
+      if(_passthrough_nodes.count(sbfu_node)) {
+         os << i << "," << j << ": ";
+         os << "Copy ";
+
+         //Where did it come from?
+         for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+           sblink* inlink=*Ie;
+           if(_assignLink.count(make_pair(inlink,config))!=0) {
+              os << SbDIR::dirName(inlink->dir(),true);   //reverse
+              os << " -  -  \n";
+           }
+         }
+      }
+
       if(_assignNode.count(make_pair(sbfu_node,config))!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[make_pair(sbfu_node,config)]);
         os << i << "," << j << ": ";
         os << config_name_of_inst(pdg_node->inst()); //returns sb_inst
         os << "\t";
-        
-        // print inputs and ordering 
-          //Get the sbnode for pdgnode
-        
-        SbPDG_Node::const_edge_iterator I,E;        //egde iterator
-        //for(I=pdg_node->ops_begin(),E=pdg_node->ops_end();I!=E;++I) {
-        //SbPDG_Node* inc_pdg_node=*I;
         
         //Parse the inc-edges for each FU dir
         for(int i = 0; i < NUM_IN_FU_DIRS; ++i) {
@@ -511,8 +545,7 @@ void Schedule::printConfigText(ostream& os, int config)
             
             SbPDG_Node* inc_pdg_node = inc_edge->def();
             
-            sbnode::const_iterator Ie,Ee;
-            for(Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+            for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
               sblink* inlink=*Ie;
               if(_assignLink.count(make_pair(inlink,config))!=0
                 &&_assignLink[make_pair(inlink,config)]==inc_pdg_node) {
@@ -987,6 +1020,8 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     SbPDG_Node* cur_pdgnode = cur_edge->def();
     openset.pop_front();
     
+    cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
+
     _assignEdgeLink[make_pair(cur_link,cur_config)].insert(cur_edge);
     
     sbnode::const_iterator Il,El;
@@ -1284,12 +1319,9 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
       SbDIR::DIR newInDir = I->second;
       
       if(inDir == newInDir) { //match!
-       
         //sblink* inLink = curItem->getInLink(newInDir);
-        
         //_assignLink[inLink]=pdgnode;
         
-         
         sblink* outLink = curItem->getOutLink(newOutDir);
         assign_link(pdgnode,outLink,0);
         
