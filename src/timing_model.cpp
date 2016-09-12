@@ -49,7 +49,7 @@ loop(v1$(not sum(v2$Gvv(v1,v2), kindV('Output',v2))),
 PT.fx(n)$(not FU(n))=0;
 
 * Set input latencies  (max start latency is 16)
-Tv.up(v)$kindV('Input',v)=16;
+Tv.up(v)$kindV('Input',v)=15;
 
 Equations
     assignVertex(K,v)

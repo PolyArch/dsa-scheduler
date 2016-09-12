@@ -631,15 +631,15 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
 
   schedule->clearAll();
 
-  cout << "numNodes in scheduler: " << sbPDG->num_nodes() << "\n";
+  cout << "Total Nodes: " << sbPDG->num_nodes() << "\n";
   
   int numInsts = sbPDG->inst_end()-sbPDG->inst_begin();
   int configSize = _sbModel->subModel()->sizex() * _sbModel->subModel()->sizey();
   int n_configs = numInsts / configSize + (numInsts % configSize>0);
-  cout << "NumInsts in SbPDG: " <<  numInsts << "\n";
+  cout << "Total Insts: " <<  numInsts << "\n";
   assert(numInsts > 0);
 
-  cout << "Softbrain Scheduler -- Using: " << n_configs << " Configs\n";
+  //cout << "Softbrain Scheduler -- Using: " << n_configs << " Configs\n";
   
 
   // Print the softbrain model   
@@ -694,9 +694,9 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
 
   schedule->setNConfigs(n_configs); //update this if need less schedules?
   
-  string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links;
+  string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
-  enum  { VtoN,VtoL,LtoL,EL,PPL, PASSTHROUGH, Parse_None } parse_stage;
+  enum  { VtoN,VtoL,LtoL,EL,TIMING,PPL, PASSTHROUGH, Parse_None } parse_stage;
   parse_stage=Parse_None;
   while(gamsout.good()) {  
     getline(gamsout,line);
@@ -716,6 +716,8 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
         parse_stage = LtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
         parse_stage = EL; continue;
+      } else if(ModelParsing::StartsWith(line,"[timing]")) {
+        parse_stage = TIMING; continue;
       } else if(ModelParsing::StartsWith(line,"[passthrough]")) {
         parse_stage = PASSTHROUGH; continue;
       } else if(ModelParsing::StartsWith(line,"[port-port-map]")) {
@@ -735,10 +737,13 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
       ModelParsing::trim(vertex_name);
       ModelParsing::trim(sbnode_name);
 
+      if(sbnode_name.empty()) {
+        return false;
+      }
+
       SbPDG_Vec* pv = gamsToPortV[vertex_name];
       assert(pv);
       std::pair<bool,int> pn = gamsToPortN[sbnode_name];  
-
 
       schedule->assign_vport(pv,pn);
 
@@ -758,9 +763,18 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
 
       }
 
+    } else if(parse_stage==TIMING) {
+      stringstream ss(line);
+      getline(ss, vertex_name, ':');
+      getline(ss, latency_str, '.');
+      ModelParsing::trim(vertex_name);
+      ModelParsing::trim(latency_str);
+      SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
+
+      int lat = stoi(latency_str);
+      schedule->assign_lat(pdgnode,lat);
+
     } else if(parse_stage==EL) {
-
-
       stringstream ss(line);
       getline(ss, edge_name, ':');
       getline(ss, sbnode_name);
@@ -773,7 +787,10 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
       ModelParsing::trim(vertex_name);
       ModelParsing::trim(sbnode_name);
       
-      
+      if(sbnode_name.empty()) {
+        return false;
+      }
+
       SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
       sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
       int config = gamsToSbnode[sbnode_name].second; 

@@ -1,7 +1,3 @@
-ifndef prefix
-$(error Install directory "prefix" is undefined)
-endif
-
 level=./
 include make.config
 
@@ -13,7 +9,11 @@ program:
 	+make -C src
 	+make -C drivers
 
+
 install: program
+ifndef prefix
+$(error Install directory "prefix" is undefined)
+endif
 	${MKDIR_P} ${prefix}/lib
 	cp ${build}/lib/* ${prefix}/lib
 	${MKDIR_P} ${prefix}/include/softbrain-scheduler

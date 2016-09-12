@@ -9,6 +9,7 @@
 #include <fstream>
 #include "bitslice.h"
 
+using namespace SB_CONFIG;
 
 //How do you choose which switch in each row and FU to pass ??
 struct sw_config {
@@ -33,8 +34,8 @@ class Schedule {
   public:
     Schedule(std::string filename, bool multi_config=false); //Read in schedule (both sbmodel, sbpdg, and schedule from file)
 
-    Schedule(SB_CONFIG::SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {}
-    Schedule(SB_CONFIG::SbModel* model) : _sbModel(model), _sbPDG(NULL) {}
+    Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {}
+    Schedule(SbModel* model) : _sbModel(model), _sbPDG(NULL) {}
 
 
     //Scheduling Interface:
@@ -63,44 +64,75 @@ class Schedule {
     SbPDG* sbpdg() const {return _sbPDG;}
 
     //For a switch, assign the outlink to inlink
-    void assign_switch(SB_CONFIG::sbswitch* sbsw, 
-                       SB_CONFIG::sblink* slink,
-                       SB_CONFIG::sblink* slink_out) {
+    void assign_switch(sbswitch* sbsw, 
+                       sblink* slink,
+                       sblink* slink_out) {
       _assignSwitch[sbsw][slink_out]=slink;                           //out to in for a sw      
     }
 
+    void assign_lat(SbPDG_Node* pdgnode, int lat=0) {
+      _latOf[pdgnode]=lat;
+    }
+ 
+    int latOf(SbPDG_Node* pdgnode) {
+      return _latOf[pdgnode];
+    }
 
     //Assign the sbnode, config pair to pdgnode and vice verse 
-    void assign_node(SbPDG_Node* pdgnode, SB_CONFIG::sbnode* snode, int config=0) {
+    void assign_node(SbPDG_Node* pdgnode, sbnode* snode, int config=0) {
       _assignNode[std::make_pair(snode,config)] = pdgnode;
       _sbnodeOf[pdgnode]=std::make_pair(snode,config);
     }
 
+    void calc_out_lat() {
+      for(int i = 0; i < _sbPDG->num_vec_output(); ++i) {
+        calc_out_vport_lat(_sbPDG->vec_out(i));
+      }
+    }
+
+    void calc_out_vport_lat(SbPDG_VecOutput* pdgvec_out) {
+      int max_lat=0;
+      for(auto Io=pdgvec_out->output_begin(),Eo=pdgvec_out->output_end();Io!=Eo;++Io) {
+        SbPDG_Output* pdgout = *Io;
+        //sbnode* out_sbnode = locationOf(pdgout).first;
+        int lat_of_out_sbnode = _latOf[pdgout];
+        std::cout << pdgvec_out->gamsName() << " lat:" << lat_of_out_sbnode << "\n";
+        max_lat=std::max(max_lat,lat_of_out_sbnode);
+      }
+      std::cout << "max lat: " << max_lat<< "\n";
+      _latOfVPort[pdgvec_out]=max_lat;
+    }
+
     //vector to port num
     void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn) {
+      //std::cout << " -- Assigning vport " << pdgvec->gamsName() << " " << pn.first << "\n";
       _assignVPort[pn]=pdgvec;
       _vportOf[pdgvec]=pn;
+
+      //if(pn.first == false) { //false is output
+      //  calc_out_vport_lat(pdgvec);
+      //}
     }
 
     //sblink to pdgnode
-    void assign_link(SbPDG_Node* pdgnode, SB_CONFIG::sblink* slink, int config=0) {
+    void assign_link(SbPDG_Node* pdgnode, sblink* slink, int config=0) {
       assert(slink);
-      std::pair<SB_CONFIG::sblink*,int> new_pair = std::make_pair(slink,config);
+      std::pair<sblink*,int> new_pair = std::make_pair(slink,config);
       _assignLink[new_pair]=pdgnode;
       _linksOf[pdgnode].push_back(new_pair);
     }
 
    //pdf edge to sblink 
-    void assign_edgelink(SbPDG_Edge* pdgedge,SB_CONFIG::sblink* slink, int config=0) {
+    void assign_edgelink(SbPDG_Edge* pdgedge,sblink* slink, int config=0) {
       assert(slink);
       assert(pdgedge);
-      std::pair<SB_CONFIG::sblink*,int> new_pair = std::make_pair(slink,config);
+      std::pair<sblink*,int> new_pair = std::make_pair(slink,config);
       _assignEdgeLink[new_pair].insert(pdgedge);
     }
     
-    SbPDG_Node* pdgNodeOf(SB_CONFIG::sblink* link, int config) {
+    SbPDG_Node* pdgNodeOf(sblink* link, int config) {
       assert(link);
-      std::pair<SB_CONFIG::sblink*,int> thing = std::make_pair(link,config);
+      std::pair<sblink*,int> thing = std::make_pair(link,config);
       if(_assignLink.count(thing)==0) {
         return NULL;
       } else {
@@ -108,13 +140,13 @@ class Schedule {
       }
     }
 
-    SbPDG_Node* pdgNodeOf(SB_CONFIG::sbnode* node) {
+    SbPDG_Node* pdgNodeOf(sbnode* node) {
       return pdgNodeOf(node,0);
     }
 
     //sbnode to pdgnode
-    SbPDG_Node* pdgNodeOf(SB_CONFIG::sbnode* node, int config) {
-      std::pair<SB_CONFIG::sbnode*,int> thing = std::make_pair(node,config);
+    SbPDG_Node* pdgNodeOf(sbnode* node, int config) {
+      std::pair<sbnode*,int> thing = std::make_pair(node,config);
       if(_assignNode.count(thing)==0) {
         return NULL;
       } else {
@@ -122,9 +154,9 @@ class Schedule {
       }
     }
     
-    std::pair<SB_CONFIG::sbnode*,int> locationOf(SbPDG_Node* pdgnode) {
+    std::pair<sbnode*,int> locationOf(SbPDG_Node* pdgnode) {
       if(_sbnodeOf.count(pdgnode)==0) {
-        return std::make_pair((SB_CONFIG::sbnode*)0,-1);
+        return std::make_pair((sbnode*)0,-1);
       } else {
         return _sbnodeOf[pdgnode]; 
       }
@@ -135,13 +167,13 @@ class Schedule {
     }
     
     
-    typedef std::vector<std::pair<SB_CONFIG::sblink*,int>>::const_iterator link_iterator;
+    typedef std::vector<std::pair<sblink*,int>>::const_iterator link_iterator;
     
     link_iterator links_begin(SbPDG_Node* n) {return _linksOf[n].begin();}
     link_iterator links_end(SbPDG_Node* n)   {return _linksOf[n].end();}
     
     /*
-    bool isNodeScheduled(SB_CONFIG::sbnode* dnode, int config=0) {
+    bool isNodeScheduled(sbnode* dnode, int config=0) {
       return  
     }*/
     
@@ -160,16 +192,16 @@ class Schedule {
     forward_iterator fbegin() {return _forwardMap.begin();} 
     forward_iterator fend() {return _forwardMap.end();}
     
-    SB_CONFIG::SbModel* sbModel() {return _sbModel;}
+    SbModel* sbModel() {return _sbModel;}
     
     void calcLatency(int& lat, int& latmis);
     
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
     
-    typedef std::map<std::pair<SB_CONFIG::sbnode*,int>,SbPDG_Node*>::iterator assign_node_iterator;
-    typedef std::map<std::pair<SB_CONFIG::sblink*,int>,SbPDG_Node*>::iterator assign_link_iterator;
-    typedef std::map<std::pair<SB_CONFIG::sblink*,int>,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
+    typedef std::map<std::pair<sbnode*,int>,SbPDG_Node*>::iterator assign_node_iterator;
+    typedef std::map<std::pair<sblink*,int>,SbPDG_Node*>::iterator assign_link_iterator;
+    typedef std::map<std::pair<sblink*,int>,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
     
     assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
     assign_node_iterator assign_node_end() { return _assignNode.end(); }
@@ -186,6 +218,7 @@ class Schedule {
       _assignNode.clear();
       _sbnodeOf.clear();
       _latOf.clear();
+      _latOfVPort.clear();
       _assignLink.clear();
       _linksOf.clear();
       _assignEdgeLink.clear();
@@ -240,13 +273,17 @@ class Schedule {
 
   bitslices<uint64_t>& slices() {return _bitslices;}
 
-  void add_passthrough_node(SB_CONFIG::sbnode* passthrough) {
+  void add_passthrough_node(sbnode* passthrough) {
     _passthrough_nodes.insert(passthrough);
   }
 
   private:
     static const int IN_ACT_SLICE=0;
     static const int OUT_ACT_SLICE=1;
+    static const int DELAY_SLICE_1=2;
+    static const int DELAY_SLICE_2=3;
+    static const int DELAY_SLICE_3=4;
+    static const int BITS_PER_DELAY=4;
     static const int SWITCH_SLICE=5;        //the starting slice position in bitslice
 
     static const int NUM_IN_DIRS=8;
@@ -271,41 +308,42 @@ class Schedule {
     static const int OPCODE_LOC = FU_PRED_INV_LOC + FU_PRED_INV_BITS;
     static const int OPCODE_BITS = 5;
 
-    SB_CONFIG::SbDIR sbdir;
+    SbDIR sbdir;
 
     bitslices<uint64_t> _bitslices;
     int _n_configs;   
-    SB_CONFIG::SbModel* _sbModel;
+    SbModel* _sbModel;
     SbPDG*   _sbPDG;
 
-    std::set<SB_CONFIG::sbnode*> _passthrough_nodes;
+    std::set<sbnode*> _passthrough_nodes;
 
-    std::map<std::pair<SB_CONFIG::sbnode*, int>, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
-    std::map<SbPDG_Node*, std::pair<SB_CONFIG::sbnode*,int> > _sbnodeOf;    //pdgnode to sbnode
+    std::map<std::pair<sbnode*, int>, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
+    std::map<SbPDG_Node*, std::pair<sbnode*,int> > _sbnodeOf;    //pdgnode to sbnode
     std::map<SbPDG_Node*, int> _latOf; 
-    std::map<std::pair<SB_CONFIG::sblink*,int>, SbPDG_Node*> _assignLink;   //sblink to pdgnode
-    std::map<SbPDG_Node*, std::vector<std::pair<SB_CONFIG::sblink*, int>> > _linksOf; //pdgnode to sblink 
-    std::map<std::pair<SB_CONFIG::sblink*,int>, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
+    std::map<SbPDG_Vec*, int> _latOfVPort; 
+    std::map<std::pair<sblink*,int>, SbPDG_Node*> _assignLink;   //sblink to pdgnode
+    std::map<SbPDG_Node*, std::vector<std::pair<sblink*, int>> > _linksOf; //pdgnode to sblink 
+    std::map<std::pair<sblink*,int>, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
     std::map< std::pair<int,int>,std::pair<int,int> > _forwardMap;      //forward maps of ports
     std::vector< std::vector<int> > _wide_ports;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
     std::map<SbPDG_Vec*, std::pair<bool,int> > _vportOf;
 
-    std::map<SB_CONFIG::sbswitch*,
-             std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>> _assignSwitch; //out to in
+    std::map<sbswitch*,
+             std::map<sblink*,sblink*>> _assignSwitch; //out to in
    
     //called by reconstructSchedule to trace link assignment
-    void tracePath(SB_CONFIG::sbnode* ,SbPDG_Node* , 
-                   std::map<SB_CONFIG::sbnode*, std::map<SB_CONFIG::SbDIR::DIR,SB_CONFIG::SbDIR::DIR>>&,
-                   std::map<SB_CONFIG::sbnode*, SbPDG_Node* >&,
-                   std::map<SbPDG_Node*, std::vector<SB_CONFIG::SbDIR::DIR> >&);
+    void tracePath(sbnode* ,SbPDG_Node* , 
+                   std::map<sbnode*, std::map<SbDIR::DIR,SbDIR::DIR>>&,
+                   std::map<sbnode*, SbPDG_Node* >&,
+                   std::map<SbPDG_Node*, std::vector<SbDIR::DIR> >&);
 
     //helper for reconstructing Schedule
     void reconstructSchedule(
-      std::map<SB_CONFIG::sbnode*,std::map<SB_CONFIG::SbDIR::DIR,SB_CONFIG::SbDIR::DIR>>&,
-      std::map<SB_CONFIG::sbnode*, SbPDG_Node* >&,
-      std::map<SbPDG_Node*, std::vector<SB_CONFIG::SbDIR::DIR> >&);
+      std::map<sbnode*,std::map<SbDIR::DIR,SbDIR::DIR>>&,
+      std::map<sbnode*, SbPDG_Node* >&,
+      std::map<SbPDG_Node*, std::vector<SbDIR::DIR> >&);
 
 };
 

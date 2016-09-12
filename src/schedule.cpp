@@ -104,7 +104,6 @@ void Schedule::interpretConfigBits() {
     }
   }
 
-
   int cur_slice=SWITCH_SLICE;       //5th slice in bitslice
 
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
@@ -238,6 +237,39 @@ void Schedule::interpretConfigBits() {
 
   reconstructSchedule(routeMap, pdgnode_for, posMap);
 
+  // -------------------------------- DECODE DELAY ------------------------------
+
+  for(auto Iin=_sbModel->subModel()->input_begin(), 
+     Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
+    sbinput* sbinput_node = (sbinput*) &(*Iin);
+    SbPDG_Node* input_pdgnode = pdgnode_for[sbinput_node];
+    if(!input_pdgnode) {
+      continue;
+    }
+    int input_port_num = sbinput_node->port();
+    int delay_slot,offset;
+
+    if(input_port_num < 16) {
+      delay_slot=DELAY_SLICE_1;
+      offset=0;
+    } else if(input_port_num < 32) {
+      delay_slot=DELAY_SLICE_2;
+      offset=16;
+    } else { //if(input_port_num < 48) {
+      delay_slot=DELAY_SLICE_3;
+      offset=32;
+    }
+
+    int start = BITS_PER_DELAY*(input_port_num - offset);
+    uint64_t lat = _bitslices.read_slice(delay_slot, start,start+3);
+
+    assign_lat(input_pdgnode,lat);
+    //cout << "input node " << input_port_num <<  " got lat " << lat << "\n";
+  }
+
+  int max_lat, max_lat_mis;
+  calcLatency(max_lat,max_lat_mis);
+  calc_out_lat();
 }
 
 //Configuration
@@ -264,7 +296,34 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(OUT_ACT_SLICE,pn.second,pn.second,1);
     }
   }
+ 
+  // --------------------------- ENCODE DELAY ------------------------------
 
+   for(auto Iin=_sbModel->subModel()->input_begin(), 
+      Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
+     sbinput* sbinput_node = (sbinput*) &(*Iin);
+     SbPDG_Node* input_pdgnode = pdgNodeOf(sbinput_node,0);
+     int lat = _latOf[input_pdgnode];
+     assert(lat<16 && "max delay supported by 4 bits is 15");
+ 
+     int input_port_num = sbinput_node->port();
+     int delay_slot,offset;
+
+     if(input_port_num < 16) {
+       delay_slot=DELAY_SLICE_1;
+       offset=0;
+     } else if(input_port_num < 32) {
+       delay_slot=DELAY_SLICE_2;
+       offset=16;
+     } else { //if(input_port_num < 48) {
+       delay_slot=DELAY_SLICE_3;
+       offset=32;
+     }
+
+     int start = BITS_PER_DELAY*(input_port_num - offset);
+     _bitslices.write(delay_slot, start,start+3,lat);
+   }
+ 
   xfer_link_to_switch(); // makes sure we have switch representation of link
   int cur_slice=5;
 
@@ -1191,16 +1250,17 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
   for(I=_sbModel->subModel()->input_begin(),
       E=_sbModel->subModel()->input_end(); I!=E; ++I) {
      sbinput* cand_input = const_cast<sbinput*>(&(*I));
-    
-    if(pdgNodeOf(cand_input,config)!=NULL) {
+   
+    SbPDG_Node* pdgnode = pdgNodeOf(cand_input,config);
+    if(pdgnode!=NULL) {
        sblink* firstOutLink = cand_input->getFirstOutLink();
        openset.push_back(firstOutLink);
-       lat_edge[firstOutLink]=0;
+       lat_edge[firstOutLink]=_latOf[pdgnode];
     }
   }
     
     
- //Oytlinks of all the inputs 
+ //Outlinks of all the inputs 
   while(!openset.empty()) {
     sblink* inc_link = openset.front(); 
     openset.pop_front();
@@ -1260,6 +1320,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
         }
       }
     } else if (dynamic_cast<sboutput*>(node)) {
+      sboutput* sb_out = dynamic_cast<sboutput*>(node);
+      SbPDG_Node* pdgnode = pdgNodeOf(sb_out,config);
+      //TODO: check we aren't over-riding something
+      _latOf[pdgnode]=lat_edge[inc_link];
+
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }

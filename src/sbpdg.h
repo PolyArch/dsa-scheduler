@@ -370,12 +370,12 @@ class SbPDG {
       _vecOutputs.push_back(vec_output); 
        
       int entries = pm.size();
-      std::cout << "entries: " << entries << "\n";
+      //std::cout << "entries: " << entries << "\n";
 
       for(int i = 0; i < entries; ++i) {
         std::stringstream ss;
         ss << name << i;
-        std::cout << "name: " << name << "\n";
+        //std::cout << "name: " << name << "\n";
         std::string dep_name = ss.str();
 
         SbPDG_Node* out_node = syms[dep_name];
@@ -409,12 +409,12 @@ class SbPDG {
 
       //number of vector entries -- each vector element is a input node
       int entries = pm.size();
-      std::cout << "entries: " << entries << "\n";
+      //std::cout << "entries: " << entries << "\n";
 
       for(int i = 0; i < entries; ++i) {
         std::stringstream ss;
         ss << name << i;                //Vector input names: A0, A1
-        std::cout << "name: " << name << "\n";
+        //std::cout << "name: " << name << "\n";
         SbPDG_Input* pdg_in = new SbPDG_Input();
         std::string name = ss.str();
         syms[name]=pdg_in;
@@ -447,6 +447,8 @@ class SbPDG {
     const_output_iterator output_end() {return _outputs.end();}
 
     int num_nodes() {return _nodes.size();}
+
+    int num_vec_output() {return _vecOutputs.size();}
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}

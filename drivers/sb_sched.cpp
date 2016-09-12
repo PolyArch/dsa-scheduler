@@ -65,7 +65,12 @@ int main(int argc, char* argv[])
 
   Schedule* sched=NULL;
   Scheduler scheduler(&sbmodel);
-  scheduler.scheduleGAMS(&sbpdg,sched);
+  bool succeed_sched = scheduler.scheduleGAMS(&sbpdg,sched);
+
+  if(!succeed_sched) {
+    cout << "ERROR: GAMS SCHEDULE FAILED -- EXITING\n";
+    return 1;
+  }
 
   int lat,latmis;
 
