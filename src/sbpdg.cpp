@@ -113,8 +113,8 @@ SbPDG::SbPDG(string filename) {
     assert(0);
   }
 
-  regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
-  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
+  regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
+  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
   regex re_input("Input:\\s*(\\w+)\\s*"); //bits id  
   regex re_output("Output:\\s*(\\w+)\\s*");                          //out
   regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep   -- 3 ip
