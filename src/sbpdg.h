@@ -168,8 +168,12 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-     void compute(bool print); 
+    void compute(bool print, bool verif); 
+
+    void set_verif_id(std::string s) {_verif_id = s;}
   private:
+    std::ofstream _verif_stream;
+    std::string _verif_id;
     std::vector<uint64_t> _input_vals;
     bool _predInv;
     int _imm_slot;
@@ -453,7 +457,7 @@ class SbPDG {
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
 
-    void compute(bool print);
+    void compute(bool print, bool verif);
 
   private:
     std::vector<SbPDG_Node*> _nodes;

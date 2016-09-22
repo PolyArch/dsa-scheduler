@@ -204,6 +204,10 @@ void Schedule::interpretConfigBits() {
       uint64_t op=_bitslices.read_slice(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1);
       if(op!=0) { //if O
         pdg_inst = new SbPDG_Inst();
+        stringstream verif_name;
+        verif_name << i << "-" << j;
+        pdg_inst->set_verif_id(verif_name.str());
+
         pdgnode_for[sbfu_node]=pdg_inst;
         _sbPDG->addInst(pdg_inst);
         pdg_inst->setInst(sbfu_node->fu_def()->inst_of_encoding(op));

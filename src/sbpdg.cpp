@@ -3,6 +3,7 @@
 #include <vector>
 #include <regex>
 #include <set>
+#include <iomanip>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -34,7 +35,7 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-void SbPDG::compute(bool print) {
+void SbPDG::compute(bool print, bool verif) {
 
   if(_orderedInsts.size()==0) {
     std::set<SbPDG_Inst*> done_nodes;
@@ -49,7 +50,7 @@ void SbPDG::compute(bool print) {
   }
 
   for(SbPDG_Inst* inst : _orderedInsts) {
-    inst->compute(print);
+    inst->compute(print,verif);
   }
 
 }
@@ -293,7 +294,7 @@ std::string SbPDG_Inst::gamsName() {
 }
 
 //compute:
-void SbPDG_Inst::compute(bool print) {
+void SbPDG_Inst::compute(bool print, bool verif) {
   assert(_ops.size() <=3);
 
   if(_input_vals.size()==0) {
@@ -304,7 +305,7 @@ void SbPDG_Inst::compute(bool print) {
   if(print) {
     std::cout << name() << " (" << _ID << "): ";
   }
-   
+  
   for(unsigned i = 0; i < _ops.size(); ++i) {
     _input_vals[i]=_ops[i]->def()->get_value();
     if(print) {
@@ -317,6 +318,18 @@ void SbPDG_Inst::compute(bool print) {
   if(print) {
     std::cout << " = " << _val << "\n";
   }
+
+  if(verif) {
+    if (_verif_stream.is_open()) {
+      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+      _verif_stream.flush();
+    } else {
+      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
+      assert(_verif_stream.is_open());
+    }
+  }
+
+
 }
 
 
@@ -403,7 +416,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
 
 void SbPDG::printGraphviz(ostream& os)
 {
-  os << "Digraph G { \n" ;
+  os << "Digraph G { \nnewrank=true;\n " ;
   const_inst_iterator Ii,Ei;
 
   //Insts
@@ -418,6 +431,29 @@ void SbPDG::printGraphviz(ostream& os)
 
   //Outputs
   for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { (*Iout)->printGraphviz(os); }
+
+  int cluster_num=0;
+
+  os << "\n";
+  for(auto& i : _vecInputs) {
+    os << "subgraph cluster_" << cluster_num++ << " {" ;
+    for(auto I=i->input_begin(),E=i->input_end();I!=E;++I) {
+      SbPDG_Input* sbin = *I;
+      os << "N" << sbin->id() << " ";
+    }
+    os << "}\n";
+  }
+
+  for(auto& i : _vecOutputs) {
+    os << "subgraph cluster_" << cluster_num++ << " {" ;
+    for(auto I=i->output_begin(),E=i->output_end();I!=E;++I) {
+      SbPDG_Output* sbout = *I;
+      os << "N" << sbout->id() << " ";
+    }
+    os << "}\n";
+  }
+  os << "\n";
+
 
   os << "\t{ rank = same; ";
   for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)   { os << "N" << (*Iin)->id() << " ";  }
