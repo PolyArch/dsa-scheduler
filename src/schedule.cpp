@@ -71,22 +71,102 @@ void Schedule::interpretConfigBits() {
   
   SbDIR sbdir;
   vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
-  SbPDG_Output* pdg_out;
-  SbPDG_Input *pdg_in;
   SbPDG_Inst  *pdg_inst;
 
   map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> > routeMap;
   map<SbPDG_Node*, vector<SbDIR::DIR> > posMap;
-  map<sbnode*, SbPDG_Node* > pdgnode_for;
+  map<sbnode*, SbPDG_Node*> pdgnode_for;
   _sbPDG = new SbPDG();
 
-  std::set<uint64_t> inputs_used;       //vector ports used
+  std::set<uint64_t> inputs_used;   //vector ports used
   std::set<uint64_t> outputs_used;
 
-  //Read input nodes?
+
+   //Associating the PDG Nodes from the configuration bits, with the vector ports defined by the hardware
+  int start_bits_vp_mask=0;
+  int total_bits_vp_mask=0;
+  int slice=VP_MAP_SLICE_1;
+  for(auto& port_pair : _sbModel->subModel()->io_interf().in_vports) {
+    int i = port_pair.first; //index of port
+    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+
+    //port mapping of 1 vector port - cgra_port_num: vector offset elements
+    total_bits_vp_mask+=port_m.size();
+  
+    if(start_bits_vp_mask < 64 && total_bits_vp_mask >64) {
+      start_bits_vp_mask=port_m.size();
+      total_bits_vp_mask=port_m.size();
+      slice=VP_MAP_SLICE_2;
+    }
+
+    if(slices().read_slice(IN_ACT_SLICE,i,i)) {
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input()); 
+      //vec_input->setLocMap(pm);
+      _sbPDG->insert_vec_in(vec_input);
+
+      //cout << "vp" << i << "  ";
+
+      vector<bool> mask;
+      mask.resize(port_m.size());
+      for(unsigned mi = 0; mi < port_m.size(); ++mi) {
+        mask[mi]=slices().read_slice(slice, 
+                                     start_bits_vp_mask+mi,start_bits_vp_mask+mi);
+        if(mask[mi]) {
+          int sb_in_port = port_m[mi].first;
+          sbinput* in = _sbModel->subModel()->get_input(sb_in_port);
+          SbPDG_Input* pdg_in = new SbPDG_Input();
+          pdg_in->setVPort(_sbPDG->num_vec_input());
+          pdgnode_for[in]=pdg_in;
+          _sbPDG->addInput(pdg_in);
+
+          //cout << mi << " (" << in->port() << ")";
+        }
+      }
+      //cout << "\n";
+      assign_vport(vec_input,make_pair(true/*input*/,i),mask);
+    }
+    
+    start_bits_vp_mask=total_bits_vp_mask; //next
+  }
+
+
+  start_bits_vp_mask=0;
+  total_bits_vp_mask=0;
+
+  for(auto& port_pair : _sbModel->subModel()->io_interf().out_vports) {
+    int i = port_pair.first; //index of port
+    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+
+    total_bits_vp_mask+=port_m.size();
+
+    if(slices().read_slice(OUT_ACT_SLICE,i,i)) { //activate output port
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput("O",_sbPDG->num_vec_output()); 
+      _sbPDG->insert_vec_out(vec_output);
+
+      vector<bool> mask;
+      mask.resize(port_m.size());
+      for(unsigned mi = 0; mi < port_m.size(); ++mi) {
+        mask[mi]=slices().read_slice(VP_MAP_SLICE_OUT, 
+                                     start_bits_vp_mask+mi,start_bits_vp_mask+mi);
+        if(mask[mi]) {
+          sboutput* out = _sbModel->subModel()->get_output(port_m[mi].first);
+          SbPDG_Output* pdg_out = new SbPDG_Output();
+          pdg_out->setVPort(_sbPDG->num_vec_output());
+          pdgnode_for[out]=pdg_out;
+          _sbPDG->addOutput(pdg_out);
+        }
+      }
+      assign_vport(vec_output,make_pair(false/*input*/,i),mask);
+    }
+
+    start_bits_vp_mask=total_bits_vp_mask; //next
+  }
+
+
+  //TODO: NOT NEEDED
+  //Read input nodes
   for(int i = 0; i < 64; ++i) {  //64 ports ? 
     uint64_t inact = _bitslices.read_slice(IN_ACT_SLICE ,i,i);
-    uint64_t outact= _bitslices.read_slice(OUT_ACT_SLICE,i,i);
     
     if(inact) {
       auto& vp = _sbModel->subModel()->io_interf().in_vports[i];
@@ -94,6 +174,11 @@ void Schedule::interpretConfigBits() {
         inputs_used.insert(p.first);        //cgra port
       }
     }
+  }
+
+  //Read output nodes
+  for(int i = 0; i < 64; ++i) {
+   uint64_t outact= _bitslices.read_slice(OUT_ACT_SLICE,i,i);
 
     //If the outport !=0
     if(outact) {
@@ -165,28 +250,30 @@ void Schedule::interpretConfigBits() {
         //  _sbPDG->addInst(pdg_inst);
         //} else 
 
-        //if the swithces out is an output node
-        if(sboutput* out = dynamic_cast<sboutput*>(outlink->dest())) {
-          pdg_out = new SbPDG_Output();         
-          pdgnode_for[out]=pdg_out;             
-          _sbPDG->addOutput(pdg_out);
-          pdg_out->setVPort(out->port());
-        }
+        ////if the swithces out is an output node
+        //if(sboutput* out = dynamic_cast<sboutput*>(outlink->dest())) {
+        //  SbPDG_Output* pdg_out = new SbPDG_Output();         
+        //  pdgnode_for[out]=pdg_out;             
+        //  _sbPDG->addOutput(pdg_out);
+        //  pdg_out->setVPort(out->port());
+        //}
        
-        //if the incoming node was from sbinput node
-        if (sbinput* in=dynamic_cast<sbinput*>(inlink->orig())) {
-          //Need to check if this is actually one of the useful inputs
-          if(inputs_used.count(in->port())) {
-            if(pdgnode_for.count(in)==0) {
-              pdg_in = new SbPDG_Input();
-              pdgnode_for[in]=pdg_in;
-              _sbPDG->addInput(pdg_in);
-            } else {
-              pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[in]);
-            }
-            pdg_in->setVPort(in->port());
-          }
-        }//end if
+        ////if the incoming node was from sbinput node
+        //if (sbinput* in=dynamic_cast<sbinput*>(inlink->orig())) {
+        //  SbPDG_Input* pdg_in;
+        //  //Need to check if this is actually one of the useful inputs
+        //  if(inputs_used.count(in->port())) {
+        //    if(pdgnode_for.count(in)==0) {
+        //      cout << "Creating node for port " << in->port() << "\n";
+        //      pdg_in = new SbPDG_Input();
+        //      pdgnode_for[in]=pdg_in;
+        //      _sbPDG->addInput(pdg_in);
+        //    } else {
+        //      pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[in]);
+        //    }
+        //    pdg_in->setVPort(in->port());
+        //  }
+        //}//end if
 
       }//end for
     
@@ -227,9 +314,11 @@ void Schedule::interpretConfigBits() {
         }//end for input fu dirs
   
         //predictate inverse
-        uint64_t p=_bitslices.read_slice(cur_slice,FU_PRED_INV_LOC,
-                                                   FU_PRED_INV_LOC+FU_PRED_INV_BITS-1);
-        pdg_inst->setPredInv(p);
+        //uint64_t p=_bitslices.read_slice(cur_slice,FU_PRED_INV_LOC,
+        //                                           FU_PRED_INV_LOC+FU_PRED_INV_BITS-1);
+        //pdg_inst->setPredInv(p);
+      } else {
+        //cout << i << " " << j << " not mapped\n";
       }
     }
     cur_slice+=1; // because we skipped the switch
@@ -241,8 +330,8 @@ void Schedule::interpretConfigBits() {
 
   reconstructSchedule(routeMap, pdgnode_for, posMap);
 
+#if 0
   // -------------------------------- DECODE DELAY ------------------------------
-
   for(auto Iin=_sbModel->subModel()->input_begin(), 
      Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
     sbinput* sbinput_node = (sbinput*) &(*Iin);
@@ -270,6 +359,7 @@ void Schedule::interpretConfigBits() {
     assign_lat(input_pdgnode,lat);
     //cout << "input node " << input_port_num <<  " got lat " << lat << "\n";
   }
+#endif
 
   int max_lat, max_lat_mis;
   calcLatency(max_lat,max_lat_mis);
@@ -287,6 +377,8 @@ void Schedule::interpretConfigBits() {
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
+  print_bit_loc();
+
   //Step 1: Place bits into fields
 
   //Active Input Ports
@@ -300,9 +392,56 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(OUT_ACT_SLICE,pn.second,pn.second,1);
     }
   }
- 
-  // --------------------------- ENCODE DELAY ------------------------------
 
+  // --------------------------- ENCODE VP MASK ------------------------------
+  int start_bits_vp_mask=0;
+  int total_bits_vp_mask=0;
+  int slice=VP_MAP_SLICE_1;
+  for(auto& port_pair : _sbModel->subModel()->io_interf().in_vports) {
+    // pair<cgra_port_location, vector<indicies_into_vec>>
+    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+    total_bits_vp_mask+=port_m.size();
+ 
+    if(start_bits_vp_mask < 64 && total_bits_vp_mask >64) {
+      start_bits_vp_mask=port_m.size();
+      total_bits_vp_mask=port_m.size();
+      slice=VP_MAP_SLICE_2;
+    }
+
+    //Is this port assigned?  if not can skip 
+    if(SbPDG_Vec* pdg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
+      vector<bool> mask = maskOf(pdg_vec_in);
+
+      for(unsigned i = 0; i < port_m.size(); ++i) {
+        _bitslices.write(slice, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+      }
+    }
+  
+    start_bits_vp_mask=total_bits_vp_mask; //next
+  }
+
+  start_bits_vp_mask=0;
+  total_bits_vp_mask=0;
+  for(auto& port_pair : _sbModel->subModel()->io_interf().out_vports) {
+    // pair<cgra_port_location, vector<indicies_into_vec>>
+    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+    total_bits_vp_mask+=port_m.size();
+ 
+    //Is this port assigned?  if not can skip 
+    if(SbPDG_Vec* pdg_vec_out = vportOf(make_pair(false/*output*/,port_pair.first))) {
+      vector<bool> mask = maskOf(pdg_vec_out);
+
+      for(unsigned i = 0; i < port_m.size(); ++i) {
+        _bitslices.write(VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+      }
+    }
+  
+    start_bits_vp_mask=total_bits_vp_mask; //next
+  }
+
+
+#if 0
+  // --------------------------- ENCODE DELAY ------------------------------
    for(auto Iin=_sbModel->subModel()->input_begin(), 
       Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
      sbinput* sbinput_node = (sbinput*) &(*Iin);
@@ -319,7 +458,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
      } else if(input_port_num < 32) {
        delay_slot=DELAY_SLICE_2;
        offset=16;
-     } else { //if(input_port_num < 48) {
+     } else { //if(input_port_num < 48)
        delay_slot=DELAY_SLICE_3;
        offset=32;
      }
@@ -327,6 +466,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
      int start = BITS_PER_DELAY*(input_port_num - offset);
      _bitslices.write(delay_slot, start,start+3,lat);
    }
+#endif
  
   xfer_link_to_switch(); // makes sure we have switch representation of link
   int cur_slice=5;
@@ -468,17 +608,23 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
                 }
               }
               assert(assigned);
+
+              //delay for each input
+              int d1=IN_DELAY_LOC+BITS_PER_DELAY*i;
+              int d2=d1+BITS_PER_DELAY-1;
+              _bitslices.write(cur_slice,d1,d2,inc_edge->delay());
+
             } else {
-              assert(i!=0); //can't be no slot for first input
+              assert(i!=0 && "can't be no slot for first input");
             }
 
           }
           
           //print predicate
-          if(pdg_node->predInv()) {
-            _bitslices.write(cur_slice,FU_PRED_INV_LOC,
-                                       FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,1);
-          } 
+          //if(pdg_node->predInv()) {
+          //  _bitslices.write(cur_slice,FU_PRED_INV_LOC,
+          //                             FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,1);
+          //} 
          
           //opcode encdoing
           unsigned op_encode = sbfu_node->fu_def()->encoding_of(pdg_node->inst());
@@ -1001,6 +1147,7 @@ void Schedule::reconstructSchedule(
    
     //get the pdg node for sbinput
     if(pdgnode_for.count(sbinput_node)!=0) {
+        //cout << "reconstruction from input" << sbinput_node->name() << " " << sbinput_node->port() << "\n";
         SbPDG_Node* pdg_node = pdgnode_for[sbinput_node];
         tracePath(sbinput_node, pdg_node, routeMap, pdgnode_for, posMap);
     }
@@ -1012,6 +1159,7 @@ void Schedule::reconstructSchedule(
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* sbfu_node = &fus[i][j];
       if(pdgnode_for.count(sbfu_node)!=0) {
+        //cout << "reconstruct from fu " << i << " " << j << "\n";
         SbPDG_Node* pdg_node = pdgnode_for[sbfu_node];
         tracePath(sbfu_node, pdg_node, routeMap, pdgnode_for, posMap);
       }
@@ -1388,6 +1536,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
       SbDIR::DIR newInDir = I->second;
       
       if(inDir == newInDir) { //match!
+
         //sblink* inLink = curItem->getInLink(newInDir);
         //_assignLink[inLink]=pdgnode;
         
@@ -1395,16 +1544,21 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
         assign_link(pdgnode,outLink,0);
         
         if(outLink==NULL) {
-          //cerr << "outlink is null: ";
-          //cerr << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) << "\n";
+          cerr << "outlink is null: ";
+          cerr << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) << "\n";
+          assert(0);
         }
 
         sbnode* nextItem = outLink->dest();
 
+        //cerr << "match" << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) 
+        //     << " " << nextItem->name() << "\n";
+
+
        //Output node 
-        if(sbnode* sbout = dynamic_cast<sboutput*>(nextItem)) {
- //         cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
-//               << "    (out)\n";
+        if(sboutput* sbout = dynamic_cast<sboutput*>(nextItem)) {
+          //cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
+          //     << "    out port" << sbout->port() << "\n";
 
           SbPDG_Node* dest_pdgnode = pdgnode_for[sbout];
           assert(dest_pdgnode);
@@ -1416,8 +1570,12 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
 
         } else if(sbfu* fu_node = dynamic_cast<sbfu*>(nextItem)) {
 
-//          cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
-//               << "    (" << fu_node->x() << " " << fu_node->y() << " .. FU)" << "\n";
+          //cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
+          //     << "    (" << fu_node->x() << " " << fu_node->y() << " .. FU)" << "\n";
+
+
+          //auto* pdgnode = pdgnode_for[fu_node];
+          //cout << pdgnode->name() << "\n";
 
           SbPDG_Inst* dest_pdgnode = dynamic_cast<SbPDG_Inst*>(pdgnode_for[fu_node]);
           assert(dest_pdgnode);

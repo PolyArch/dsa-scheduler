@@ -99,15 +99,29 @@ class Schedule {
         std::cout << pdgvec_out->gamsName() << " lat:" << lat_of_out_sbnode << "\n";
         max_lat=std::max(max_lat,lat_of_out_sbnode);
       }
-      std::cout << "max lat: " << max_lat<< "\n";
+      //std::cout << "max lat: " << max_lat<< "\n";
       _latOfVPort[pdgvec_out]=max_lat;
+    }
+    
+    std::vector<bool> maskOf(SbPDG_Vec* pdgvec) {
+      assert(_maskOf.count(pdgvec));
+      return _maskOf[pdgvec];
+    }
+
+    SbPDG_Vec* vportOf(std::pair<bool,int> pn) {
+      if(_assignVPort.count(pn)) {
+        return _assignVPort[pn];
+      } else {
+        return NULL;
+      }
     }
 
     //vector to port num
-    void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn) {
+    void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn, std::vector<bool>mask) {
       //std::cout << " -- Assigning vport " << pdgvec->gamsName() << " " << pn.first << "\n";
       _assignVPort[pn]=pdgvec;
       _vportOf[pdgvec]=pn;
+      _maskOf[pdgvec]=mask;
 
       //if(pn.first == false) { //false is output
       //  calc_out_vport_lat(pdgvec);
@@ -277,36 +291,55 @@ class Schedule {
     _passthrough_nodes.insert(passthrough);
   }
 
+  static const int IN_ACT_SLICE=0;
+  static const int OUT_ACT_SLICE=1;
+  //static const int DELAY_SLICE_1=2;
+  //static const int DELAY_SLICE_2=3;
+  //static const int DELAY_SLICE_3=4;
+  //static const int BITS_PER_DELAY=4;
+  static const int VP_MAP_SLICE_1=2;
+  static const int VP_MAP_SLICE_2=3;
+  static const int VP_MAP_SLICE_OUT=4;
+
+  static const int SWITCH_SLICE=5;        //the starting slice position in bitslice
+
+  static const int NUM_IN_DIRS=8;
+
+  static const int NUM_OUT_DIRS=8;
+  static const int NUM_IN_FU_DIRS=3;
+  static const int BITS_PER_DIR=3;
+  static const int BITS_PER_FU_DIR=3;
+
+  static const int ROW_LOC=0;
+  static const int ROW_BITS=4;
+
+  static const int SWITCH_LOC = ROW_LOC + ROW_BITS;
+  static const int SWITCH_BITS = BITS_PER_DIR * NUM_OUT_DIRS;
+
+  static const int FU_DIR_LOC = SWITCH_LOC + SWITCH_BITS;
+  static const int FU_DIR_BITS = BITS_PER_FU_DIR * NUM_IN_FU_DIRS;
+
+  //static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
+  //static const int FU_PRED_INV_BITS = 1;
+
+  static const int OPCODE_LOC = FU_DIR_LOC + FU_DIR_BITS;
+  static const int OPCODE_BITS = 5;
+
+  static const int IN_DELAY_LOC = OPCODE_LOC + OPCODE_BITS;
+  static const int BITS_PER_DELAY = 4;
+  static const int NUM_DELAY = 3;
+  static const int IN_DELAY_BITS = BITS_PER_DELAY*NUM_DELAY;
+
+
+  void print_bit_loc() {
+    std::cout << "Row: " << ROW_LOC << ":" << ROW_LOC+ROW_BITS-1 << "\n";
+    std::cout << "Switches: " << SWITCH_LOC  << ":" << SWITCH_LOC + SWITCH_BITS-1 << "\n";
+    std::cout << "FU Dir: " << FU_DIR_LOC << ":" << FU_DIR_LOC + FU_DIR_BITS-1 << "\n";
+    std::cout << "Opcode: " << OPCODE_LOC << ":" << OPCODE_LOC + OPCODE_BITS-1 << "\n";
+    std::cout << "In Del.: "<< IN_DELAY_LOC<<":"<< IN_DELAY_LOC + IN_DELAY_BITS-1 << "\n";
+  }
+
   private:
-    static const int IN_ACT_SLICE=0;
-    static const int OUT_ACT_SLICE=1;
-    static const int DELAY_SLICE_1=2;
-    static const int DELAY_SLICE_2=3;
-    static const int DELAY_SLICE_3=4;
-    static const int BITS_PER_DELAY=4;
-    static const int SWITCH_SLICE=5;        //the starting slice position in bitslice
-
-    static const int NUM_IN_DIRS=8;
-
-    static const int NUM_OUT_DIRS=8;
-    static const int NUM_IN_FU_DIRS=3;
-    static const int BITS_PER_DIR=3;
-    static const int BITS_PER_FU_DIR=3;
-
-    static const int ROW_LOC=0;
-    static const int ROW_BITS=4;
-
-    static const int SWITCH_LOC = ROW_LOC + ROW_BITS;
-    static const int SWITCH_BITS = BITS_PER_DIR * NUM_OUT_DIRS;
-
-    static const int FU_DIR_LOC = SWITCH_LOC + SWITCH_BITS;
-    static const int FU_DIR_BITS = BITS_PER_FU_DIR * NUM_IN_FU_DIRS;
-
-    static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
-    static const int FU_PRED_INV_BITS = 1;
-
-    static const int OPCODE_LOC = FU_PRED_INV_LOC + FU_PRED_INV_BITS;
-    static const int OPCODE_BITS = 5;
 
     SbDIR sbdir;
 
@@ -329,6 +362,8 @@ class Schedule {
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
     std::map<SbPDG_Vec*, std::pair<bool,int> > _vportOf;
+    std::map<SbPDG_Vec*, std::vector<bool> > _maskOf;
+
 
     std::map<sbswitch*,
              std::map<sblink*,sblink*>> _assignSwitch; //out to in

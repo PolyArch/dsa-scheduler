@@ -34,11 +34,16 @@ class SbPDG_Edge {
     std::string gamsName();
     std::string name();
 
-    
+    void set_delay(int d) {_delay=d;}
+    int delay() {return _delay;}
+   
   private:
     int _ID;
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
+
+    int _delay =0;
+
   private:
     static int ID_SOURCE;
 };
@@ -171,6 +176,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void compute(bool print, bool verif); 
 
     void set_verif_id(std::string s) {_verif_id = s;}
+
   private:
     std::ofstream _verif_stream;
     std::string _verif_id;
@@ -225,7 +231,6 @@ class SbPDG_Output : public SbPDG_IO {
 //vector class
 class SbPDG_Vec {
   public:
-
   SbPDG_Vec(std::string name, int id) : _name(name), _ID(id) {
     _locMap.resize(1); //set up default loc map
     _locMap[0].push_back(0);
@@ -329,7 +334,7 @@ class SbPDG {
 
     void addScalarInput(std::string name, std::map<std::string, SbPDG_Node*>& syms) {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
-      _vecInputs.push_back(vec_input);
+      insert_vec_in(vec_input);
  
       SbPDG_Input* pdg_in = new SbPDG_Input();  //new input nodes
       syms[name]=pdg_in;
@@ -350,7 +355,7 @@ class SbPDG {
 
       //new vector output
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
-      _vecOutputs.push_back(vec_output);
+      insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output();
       std::string out_name=name+"_out";
@@ -371,7 +376,7 @@ class SbPDG {
         
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       vec_output->setLocMap(pm);
-      _vecOutputs.push_back(vec_output); 
+      insert_vec_out(vec_output); 
        
       int entries = pm.size();
       //std::cout << "entries: " << entries << "\n";
@@ -409,7 +414,7 @@ class SbPDG {
 
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name,_vecInputs.size()); 
       vec_input->setLocMap(pm);
-      _vecInputs.push_back(vec_input);
+      insert_vec_in(vec_input);
 
       //number of vector entries -- each vector element is a input node
       int entries = pm.size();
@@ -452,7 +457,11 @@ class SbPDG {
 
     int num_nodes() {return _nodes.size();}
 
+    int num_vec_input() {return _vecInputs.size();}
     int num_vec_output() {return _vecOutputs.size();}
+
+    void insert_vec_in(SbPDG_VecInput*    in) {_vecInputs.push_back(in);}
+    void insert_vec_out(SbPDG_VecOutput* out) {_vecOutputs.push_back(out);}
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}

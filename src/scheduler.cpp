@@ -696,7 +696,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
-  enum  { VtoN,VtoL,LtoL,EL,TIMING,PPL, PASSTHROUGH, Parse_None } parse_stage;
+  enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
   while(gamsout.good()) {  
     getline(gamsout,line);
@@ -716,21 +716,24 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
         parse_stage = LtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
         parse_stage = EL; continue;
+      } else if(ModelParsing::StartsWith(line,"[edge-delay]")) {
+        parse_stage = EDGE_DELAY; continue;
       } else if(ModelParsing::StartsWith(line,"[timing]")) {
         parse_stage = TIMING; continue;
       } else if(ModelParsing::StartsWith(line,"[passthrough]")) {
         parse_stage = PASSTHROUGH; continue;
       } else if(ModelParsing::StartsWith(line,"[port-port-map]")) {
-        parse_stage = PPL; continue;
+        parse_stage = PortMap; continue;
       } else {
         parse_stage = Parse_None;
       }
     }
 
-    if(parse_stage==PPL) {
+    if(parse_stage==PortMap) {
       stringstream ss(line);
       getline(ss, vertex_name, ':');
-      getline(ss, sbnode_name);
+      ss >> std::ws;
+      getline(ss, sbnode_name, ' ');
 
       //cout << "PORT MAP: " << vertex_name << " " <<sbnode_name << "\n";
 
@@ -738,14 +741,41 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
       ModelParsing::trim(sbnode_name);
 
       if(sbnode_name.empty()) {
-        return false;
+        cout << "failed to parse line: \"" << line << "\"\n";
+        assert(0);
       }
 
       SbPDG_Vec* pv = gamsToPortV[vertex_name];
       assert(pv);
       std::pair<bool,int> pn = gamsToPortN[sbnode_name];  
 
-      schedule->assign_vport(pv,pn);
+      unsigned size_of_vp;
+      if(pn.first) {
+       size_of_vp = _sbModel->subModel()->io_interf().in_vports[pn.second].size();
+      } else {
+       size_of_vp = _sbModel->subModel()->io_interf().out_vports[pn.second].size();
+      }
+
+      std::vector<bool> mask;
+      //mask.resize(pv->locMap().size());
+      mask.resize(size_of_vp);
+      
+      while(ss.good()) {
+        string ind_str;
+        getline(ss, ind_str, ' ');
+        ModelParsing::trim(ind_str);
+        if(ind_str.empty()) continue;
+        unsigned ind = (int)(stof(ind_str))-1;
+        
+        //cout << vertex_name << " " << sbnode_name << " " << ind << " " << size_of_vp << "\n";
+        assert(ind < size_of_vp && "went off end of vec");
+        assert(mask[ind]==false && "I already assigned this place in the vec!");
+
+        mask[ind]=true;
+      }
+      //cout << "\n";
+
+      schedule->assign_vport(pv,pn,mask);
 
     } else if(parse_stage==PASSTHROUGH) {
       stringstream ss(line);
@@ -779,6 +809,22 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
       getline(ss, edge_name, ':');
       getline(ss, sbnode_name);
       //TODO: FINISH THIS IF EVER NEED EDGE -> LINK MAPPING
+
+    } else if(parse_stage==EDGE_DELAY) {
+      stringstream ss(line);
+      getline(ss, edge_name, ':');
+
+      ModelParsing::trim(edge_name);
+      SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
+      assert(pdgedge);
+
+      string delay_str;
+      getline(ss, delay_str);
+      ModelParsing::trim(delay_str);
+      if(delay_str.empty()) continue;
+      unsigned delay = (unsigned)(stof(delay_str));
+
+      pdgedge->set_delay(delay);
 
     } else if(parse_stage==VtoN) {
       stringstream ss(line);

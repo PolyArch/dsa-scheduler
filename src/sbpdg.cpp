@@ -381,6 +381,8 @@ void SbPDG_Input::printGraphviz(ostream& os) {
 //Connect two nodes in PDG
 SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype) {
   
+  assert(orig != dest && "we only allow acyclic pdgs");
+
   SbPDG_Edge* new_edge = new SbPDG_Edge(orig,dest,etype);
 
   SbPDG_Inst* inst = 0;
