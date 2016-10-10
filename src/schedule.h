@@ -58,7 +58,9 @@ class Schedule {
     }
    
     void printConfigBits(std::ostream& os, std::string cfg_name );
-    
+    void printConfigVerif(std::ostream& os);
+      
+
     
     //Rest of Stuff
     SbPDG* sbpdg() const {return _sbPDG;}

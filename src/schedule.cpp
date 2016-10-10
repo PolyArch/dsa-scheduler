@@ -662,6 +662,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   os << "#endif //" << cfg_name << "_H\n"; 
 }
 
+void Schedule::printConfigVerif(ostream& os) {
+  for(unsigned i = 0; i < _bitslices.size(); ++i) {
+    os << std::setfill('0') << std::setw(16) 
+       << std::hex << _bitslices.read_slice(i) << "\n";
+  }
+}
+
+
 //Print to a program config file (.cfg) -- text format for gui
 void Schedule::printConfigText(ostream& os, int config) 
 {

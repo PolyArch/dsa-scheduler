@@ -52,6 +52,7 @@ int main(int argc, char* argv[])
 
   system("mkdir -p gams/");
   system("mkdir -p dots/");
+  system("mkdir -p verif/");
 
   //sbpdg object based on the dfg
   SbPDG sbpdg(pdg_filename);
@@ -82,6 +83,11 @@ int main(int argc, char* argv[])
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigBits(osh,basename(pdg_filename));
+
+  std::string verif_header=string("verif/")+pdg_rawname+string(".configbits");
+  std::ofstream vsh(verif_header);     
+  assert(vsh.good()); 
+  sched->printConfigVerif(vsh);
 
 //  int num_pdgnodes=
 //  (sched->sbpdg()->inst_end()-  sched->sbpdg()->inst_begin())+
