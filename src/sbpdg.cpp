@@ -411,17 +411,17 @@ void SbPDG_Node::printEmuDFG(ostream& os) {
 }
 
 void SbPDG_Inst::printEmuDFG(ostream& os) {
-  os << "#define Inst_" << name() << endl
+  os << "#define Inst_" << name() << endl;
   SbPDG_Node::printEmuDFG(os);
 }
 
 void SbPDG_Output::printEmuDFG(ostream& os) {
-  os << "#define Output_" << name() << endl
+  os << "#define Output_" << name() << endl;
   SbPDG_Node::printEmuDFG(os);
 }
 
 void SbPDG_Input::printEmuDFG(ostream& os) {
-  os << "#define Input_" << name() << endl
+  os << "#define Input_" << name() << endl;
   SbPDG_Node::printEmuDFG(os);
 }
 

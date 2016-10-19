@@ -50,7 +50,7 @@ class SbPDG_Edge {
 
 //PDG Node -- abstract base class
 class SbPDG_Node {
- public
+ public:
     virtual void printGraphviz(std::ostream& os);
     virtual void printEmuDFG(std::ostream& os);
     
