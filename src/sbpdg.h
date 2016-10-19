@@ -50,8 +50,9 @@ class SbPDG_Edge {
 
 //PDG Node -- abstract base class
 class SbPDG_Node {
- public:
+ public
     virtual void printGraphviz(std::ostream& os);
+    virtual void printEmuDFG(std::ostream& os);
     
     SbPDG_Node() {
         _ID=ID_SOURCE++;
@@ -142,6 +143,7 @@ class SbPDG_Inst : public SbPDG_Node {
     }
 
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os);
 
     void setImm( uint32_t val ) { _imm=val; }
 //    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
@@ -191,6 +193,7 @@ class SbPDG_Inst : public SbPDG_Node {
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os);
     
     std::string name() {
         std::stringstream ss;
@@ -205,6 +208,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
 class SbPDG_Output : public SbPDG_IO {
   public:
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os);
     
     std::string name() {
         std::stringstream ss;

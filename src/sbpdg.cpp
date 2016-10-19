@@ -378,6 +378,53 @@ void SbPDG_Input::printGraphviz(ostream& os) {
   SbPDG_Node::printGraphviz(os);
 }
 
+void SbPDG_Node::printEmuDFG(ostream& os) {
+  
+  string ncolor = "black";
+  os << "N" << _ID << " [ label = \"" << name();
+        
+  os  << "\", color= \"" << ncolor << "\"]; ";
+
+  os << "\n";
+  
+  //print edges
+  SbPDG_Node::const_edge_iterator I,E;
+  for(I=uses_begin(),E=uses_end();I!=E;++I) {
+    SbPDG_Edge* e = (*I);
+    
+    if(e->etype()==SbPDG_Edge::data) {
+       ncolor="black";
+    } else if(e->etype()==SbPDG_Edge::ctrl_true) {
+       ncolor="blue";
+    } else if(e->etype()==SbPDG_Edge::ctrl_false) {
+       ncolor="red";
+    }
+    
+    SbPDG_Node* n = e->use();
+    os << "N" << _ID << " -> N" << n->_ID << "[ color=";
+    os << ncolor;
+    os << "];\n";
+  }
+ 
+  os << "\n";
+
+}
+
+void SbPDG_Inst::printEmuDFG(ostream& os) {
+  os << "#define Inst_" << name() << endl
+  SbPDG_Node::printEmuDFG(os);
+}
+
+void SbPDG_Output::printEmuDFG(ostream& os) {
+  os << "#define Output_" << name() << endl
+  SbPDG_Node::printEmuDFG(os);
+}
+
+void SbPDG_Input::printEmuDFG(ostream& os) {
+  os << "#define Input_" << name() << endl
+  SbPDG_Node::printEmuDFG(os);
+}
+
 //Connect two nodes in PDG
 SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype) {
   
