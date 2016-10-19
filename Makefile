@@ -1,16 +1,25 @@
 level=./
 include make.config
 
-.PHONY:  directories program
+.PHONY:  directories program make_drivers
 
-all: directories program
+all: directories program make_drivers
 
 program:
 	+make -C src
+
+make_drivers: install
 	+make -C drivers
 
+install: install_program install_drivers 
+	
 
-install: program
+install_drivers: make_drivers
+	${MKDIR_P} ${prefix}/bin
+	cp drivers/sb_sched ${prefix}/bin
+
+
+install_program: program
 ifndef prefix
 $(error Install directory "prefix" is undefined)
 endif
@@ -18,8 +27,6 @@ endif
 	cp ${build}/lib/* ${prefix}/lib
 	${MKDIR_P} ${prefix}/include/softbrain-scheduler
 	cp src/*.h ${prefix}/include/softbrain-scheduler/
-	${MKDIR_P} ${prefix}/bin
-	cp drivers/sb_sched ${prefix}/bin
 
 clean:
 	make -C src clean
