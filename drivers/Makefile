@@ -7,7 +7,7 @@ CXX = /s/gcc-5.1.0/@sys/bin/g++
 
 CXXFLAGS :=  -Wall -g -std=c++11
 
-LIB_SBMODEL_PATH=$(sb_config)softbrain-config/lib
+LIB_SBMODEL_PATH=$(sb_config)softbrain-config/build/lib
 LIB_SBSCHED_PATH=$(level)build/lib
 INC_SBMODEL_PATH=$(sb_config)softbrain-config/src
 INC_SBSCHED_PATH=$(level)src
