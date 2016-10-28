@@ -1,4 +1,5 @@
 level=../
+sb_config=../../
 include ../make.config
 
 
@@ -17,7 +18,7 @@ OBJ_DEST=${build}/obj
 PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
 
-INC_SBMODEL_PATH=/scratch/galliher/softbrain-stack/softbrain-config/src 
+INC_SBMODEL_PATH=$(sb_config)/softbrain-config/src 
 
 all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 

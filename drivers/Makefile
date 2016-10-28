@@ -1,4 +1,5 @@
 level=../
+sb_config=../../
 include ../make.config
 
 SYS = $(shell sys)
@@ -6,10 +7,10 @@ CXX = /s/gcc-5.1.0/@sys/bin/g++
 
 CXXFLAGS :=  -Wall -g -std=c++11
 
-LIB_SBMODEL_PATH=/scratch/galliher/softbrain-stack/softbrain-config/lib
-LIB_SBSCHED_PATH=/scratch/galliher/softbrain-stack/softbrain-scheduler/build/lib
-INC_SBMODEL_PATH=/scratch/galliher/softbrain-stack/softbrain-config/src
-INC_SBSCHED_PATH=/scratch/galliher/softbrain-stack/softbrain-scheduler/src
+LIB_SBMODEL_PATH=$(sb_config)softbrain-config/lib
+LIB_SBSCHED_PATH=$(level)build/lib
+INC_SBMODEL_PATH=$(sb_config)softbrain-config/src
+INC_SBSCHED_PATH=$(level)src
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_SBSCHED_PATH)
 
