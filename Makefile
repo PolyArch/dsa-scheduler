@@ -8,7 +8,7 @@ all: directories program make_drivers
 program:
 	+make -C src
 
-make_drivers: install
+make_drivers:
 	+make -C drivers
 
 install: install_program install_drivers 

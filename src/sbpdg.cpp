@@ -378,51 +378,130 @@ void SbPDG_Input::printGraphviz(ostream& os) {
   SbPDG_Node::printGraphviz(os);
 }
 
-void SbPDG_Node::printEmuDFG(ostream& os) {
+void SbPDG_Node::printEmuDFG(ostream& os, string dfg_name) {
   
-  string ncolor = "black";
-  os << "N" << _ID << " [ label = \"" << name();
-        
-  os  << "\", color= \"" << ncolor << "\"]; ";
-
-  os << "\n";
-  
-  //print edges
-  SbPDG_Node::const_edge_iterator I,E;
-  for(I=uses_begin(),E=uses_end();I!=E;++I) {
-    SbPDG_Edge* e = (*I);
-    
-    if(e->etype()==SbPDG_Edge::data) {
-       ncolor="black";
-    } else if(e->etype()==SbPDG_Edge::ctrl_true) {
-       ncolor="blue";
-    } else if(e->etype()==SbPDG_Edge::ctrl_false) {
-       ncolor="red";
-    }
-    
-    SbPDG_Node* n = e->use();
-    os << "N" << _ID << " -> N" << n->_ID << "[ color=";
-    os << ncolor;
-    os << "];\n";
+  os << "The ID for this node is " << _ID << endl;
+  os << "The name for this node is " << _name << endl;
+  for(auto iter = _ops.begin(); iter != _ops.end(); iter++) {
+    os << "Name for the ops " << (*iter)->name() << endl;  
   }
- 
+  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    os << "Name for the uses " << (*iter)->name() << endl;  
+  }
+  os << "The gams name is " << gamsName() << endl; 
   os << "\n";
-
 }
 
-void SbPDG_Inst::printEmuDFG(ostream& os) {
-  os << "#define Inst_" << name() << endl;
-  SbPDG_Node::printEmuDFG(os);
+void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
+  //os << "INSTRUCTION " << dfg_name << "_" << _name << endl;
+  auto name_iter = _uses.begin();
+  if((*name_iter)->use()->output) {
+    os << "   outputs[" << (*name_iter)->use()->_iter << "]";
+    string outputArray = (*name_iter)->use()->name();
+    if((*name_iter)->use()->getScalar()) {
+      outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
+      if(outputArray.find_first_of("0123456789") < outputArray.length()) {
+	outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+	//Get subIter
+	os << "[" << outputArray << "]  = ";
+      } else {
+	os << "[0] = ";
+      }
+    } else {
+      os << "[0] = ";
+    }
+  } else {
+    string outputArray = (*name_iter)->def()->name();
+    outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
+    os << "   uint64_t " << outputArray << " = ";
+  } 
+  string instName = (*name_iter)->def()->name();
+  instName = instName.substr(instName.find_first_of(":")+1, instName.length());
+  os << instName << "(std::array<uint64_t,2>{";
+  uint ops_amt = 1;
+  for(auto ops_iter = _ops.begin(); ops_iter != _ops.end(); ops_iter++) {
+    if((*ops_iter)->def()->input) {
+      os << "inputs[" << (*ops_iter)->def()->_iter << "]";
+      string inputArray = (*ops_iter)->def()->name();
+      if(!(*ops_iter)->def()->getScalar()) {
+	inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
+	if(inputArray.find_first_of("0123456789") < inputArray.length()) {
+	  inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
+	  //Get subIter
+	  os << "[" << inputArray << "]";
+	} else {
+	  os << "[0]";
+	}
+      } else {
+	os << "[0]";
+      }
+    } else {
+      string inputArray = (*ops_iter)->def()->name();
+      inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
+      os << inputArray;
+    }
+    if(ops_amt != _ops.size()) {
+      os << ",";
+    } else {
+      os << "});" << endl;
+    }
+    ops_amt++;
+  }
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
 }
 
-void SbPDG_Output::printEmuDFG(ostream& os) {
-  os << "#define Output_" << name() << endl;
-  SbPDG_Node::printEmuDFG(os);
+void SbPDG_Output::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* output_sizes) {
+  output = true;
+  //First, split name into realName and subIter
+  if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
+    _realName = _name.substr(0, _name.find_first_of("0123456789"));
+    _realName = _realName.substr(0, _realName.find_last_of("_"));
+    //Get subIter
+    _subIter = atoi(_name.substr(_name.find_first_of("0123456789"), _name.length()).c_str());
+  } else {
+    _realName = _name;
+    _realName = _realName.substr(0, _realName.find_last_of("_"));
+    _subIter = 0;
+  }
+  if((realName->compare(_realName) == 0) && !_scalar) {
+    //same input or output as last time, don't do anything
+    _iter = *iter - 1;
+    output_sizes->back() = output_sizes->back()+1;
+  } else {
+    _iter = *iter;
+    _size = 1;
+    *iter = (*iter) + 1;
+    os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
+    output_sizes->push_back(_size);
+  }
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
+  *realName = _realName;
 }
 
-void SbPDG_Input::printEmuDFG(ostream& os) {
-  os << "#define Input_" << name() << endl;
-  SbPDG_Node::printEmuDFG(os);
+void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* input_sizes) {
+  //First, split name into realName and subIter
+  input = true;
+  if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
+    _realName = _name.substr(0, _name.find_first_of("0123456789"));
+    //Get subIter
+    _subIter = atoi(_name.substr(_name.find_first_of("0123456789"), _name.length()).c_str());
+  } else {
+    _realName = _name;
+    _subIter = 0;
+  }
+  if(realName->compare(_realName) == 0) {
+    //same input or output as last time, don't do anything
+    _iter = *iter - 1;
+    input_sizes->back() = input_sizes->back()+1;
+  } else {
+    _iter = *iter;
+    _size = 1;
+    *iter = (*iter) + 1;
+    os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
+    input_sizes->push_back(_size);
+  }
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
+  *realName = _realName;
 }
 
 //Connect two nodes in PDG
@@ -513,7 +592,56 @@ void SbPDG::printGraphviz(ostream& os)
   os << "}\n";
 
   os << "}\n";
+}
+
+void SbPDG::printEmuDFG(ostream& os, string dfg_name)
+{
+  string realName = "";
+  vector<int> input_sizes;
+  int input_iter = 0;
+  const_input_iterator Iin,Ein;
+  os << "#include \"sb_emu.h\"" << endl;
+  os << "#include \"sb_c_insts.h\" "<< endl << endl;
+
+  os << "#define " << dfg_name << "_size 64" << endl;
+
+  //Inputs
+  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { (*Iin)->printEmuDFG(os, dfg_name, &realName, &input_iter, &input_sizes); }
+  int output_iter = 0;
+  const_output_iterator Iout,Eout;
+
+  //Outputs
+  vector<int> output_sizes;  
+  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { (*Iout)->printEmuDFG(os, dfg_name, &realName, &output_iter, &output_sizes); }
+
+  const_inst_iterator Ii,Ei;
+
+  int iter = 0;
+  //Insts
+  os << endl << "void dfg_func_" << dfg_name << "(uint64_t** inputs, uint64_t** outputs) {" << endl;
+  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { (*Ii)->printEmuDFG(os, dfg_name); }
+  os << "}" << endl << endl << endl;
+  os << "sb_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
+  iter = 1;
+  for(auto viter = input_sizes.begin(); viter != input_sizes.end(); viter++) {
+    os << *viter;
+    if(iter != input_iter) {
+      os << ",";
+    }
+    iter++;
+  }
+  os << "}, " << output_iter << ", new int[" << output_iter << "]{"; 
+  iter = 1;
+  for(auto viter = output_sizes.begin(); viter != output_sizes.end(); viter++) {
+    os << *viter;
+    if(iter != output_iter) {
+      os << ",";
+    }
+    iter++;
+  }
+  os << "}};" << endl;
 } 
+ 
 
 
 bool is_compatible(vector<vector<int>>& vec_m, vector<pair<int, vector<int>>>& port_m) {
