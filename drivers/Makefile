@@ -3,7 +3,7 @@ sb_config=../../
 include ../make.config
 
 SYS = $(shell sys)
-CXX = /s/gcc-5.1.0/@sys/bin/g++
+CXX = g++
 
 CXXFLAGS :=  -Wall -g -std=c++11
 
@@ -20,10 +20,10 @@ all: sb_sched sb_dfg_emu reschedule stat-config
 
 
 reschedule : reschedule.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${level}/lib
 
 stat-config : stat-config.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${level}/lib
 
 sb_sched : sb_sched.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_SBMODEL_PATH) -L$(LIB_SBSCHED_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${level}/lib

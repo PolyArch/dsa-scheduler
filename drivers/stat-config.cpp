@@ -4,6 +4,11 @@
 #include <fstream>
 
 #include "scheduler.h"
+#include "sbpdg.h"
+#include <cstdlib>
+#include <string>
+#include "model_parsing.h"
+
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -30,6 +35,10 @@ int main(int argc, char* argv[])
   cout << "latency: " << lat << "\n";  
   cout << "latency mismatch: " << latmis << "\n";  
   cout << "num nodes: " << num_pdgnodes << "\n";  
+
+  std::string g(argv[1]);
+  ModelParsing::trim_comments(g);
+
   
 }
 

@@ -34,6 +34,8 @@ std::string basedir(std::string& filename) {
 
 int main(int argc, char* argv[])
 {
+
+  Schedule sched_test(argv[1],false);
   
   if(argc<3) {
     cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg\n";
