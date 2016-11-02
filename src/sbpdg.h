@@ -36,13 +36,14 @@ class SbPDG_Edge {
 
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
-   
   private:
     int _ID;
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
 
     int _delay =0;
+
+    
 
   private:
     static int ID_SOURCE;
@@ -52,7 +53,10 @@ class SbPDG_Edge {
 class SbPDG_Node {
  public:
     virtual void printGraphviz(std::ostream& os);
-    
+    virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
+    void setScalar() {_scalar = true;};
+    bool getScalar() {return _scalar;};
+
     SbPDG_Node() {
         _ID=ID_SOURCE++;
     }
@@ -113,6 +117,9 @@ class SbPDG_Node {
     
     void     set_value(uint64_t v) {_val=v;}
     uint64_t get_value()           {return _val;}
+    bool input = false;
+    bool output = false;
+    int _iter;
 
   protected:    
     uint64_t _val;
@@ -120,6 +127,7 @@ class SbPDG_Node {
     std::string _name;
     std::vector<SbPDG_Edge *> _ops;     //in edges 
     std::vector<SbPDG_Edge *> _uses;   //out edges  
+    bool _scalar = false;
 
   private:
     static int ID_SOURCE;
@@ -142,6 +150,7 @@ class SbPDG_Inst : public SbPDG_Node {
     }
 
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     void setImm( uint32_t val ) { _imm=val; }
 //    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
@@ -191,6 +200,7 @@ class SbPDG_Inst : public SbPDG_Node {
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
     std::string name() {
         std::stringstream ss;
@@ -199,12 +209,16 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     }
     std::string gamsName();
     
+    std::string _realName;
+    int _subIter;
+    int _size;
 };
 
 class SbPDG_Output : public SbPDG_IO {
   public:
     void printGraphviz(std::ostream& os);
-    
+    void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
+
     std::string name() {
         std::stringstream ss;
         ss << _name;
@@ -224,6 +238,10 @@ class SbPDG_Output : public SbPDG_IO {
       assert(_ops.size()==1);
       return _ops[0]->def()->get_value();
     }
+
+    std::string _realName;
+    int _subIter;
+    int _size;
 };
 
 //vector class
@@ -297,6 +315,7 @@ class SbPDG {
     }
 
     void printGraphviz(std::ostream& os);
+    void printEmuDFG(std::ostream& os, std::string dfg_name);
     void printGraphviz(const char *fname) {
       std::ofstream os(fname);
       assert(os.good());
@@ -338,6 +357,7 @@ class SbPDG {
       syms[name]=pdg_in;
       pdg_in->setName(name);
       pdg_in->setVPort(_vecInputs.size());
+      pdg_in->setScalar();
       addInput(pdg_in);
       vec_input->addInput(pdg_in);
     } 
@@ -360,6 +380,7 @@ class SbPDG {
       syms[out_name]=pdg_out;
       pdg_out->setName(out_name);
       pdg_out->setVPort(_vecOutputs.size());
+      pdg_out->setScalar();
       addOutput(pdg_out);
       vec_output->addOutput(pdg_out);       //its own vector of out nodes
 
