@@ -30,11 +30,8 @@ std::string basedir(std::string& filename) {
   return filename.substr(0, lastindex);  
 }
 
-
-
 int main(int argc, char* argv[])
 {
-  
   if(argc<3) {
     cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg\n";
     exit(1);
@@ -51,7 +48,7 @@ int main(int argc, char* argv[])
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
 
   system("mkdir -p gams/");
-  system("mkdir -p dots/");
+  system("mkdir -p viz/");
   system("mkdir -p verif/");
 
   //sbpdg object based on the dfg
@@ -59,7 +56,7 @@ int main(int argc, char* argv[])
 
   //cout << "file: " << filename << "\n";
 
-  ofstream ofs("dots/"+basename(pdg_filename)+".dot", ios::out);
+  ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);
   assert(ofs.good());
   sbpdg.printGraphviz(ofs);
   ofs.close();
@@ -77,7 +74,7 @@ int main(int argc, char* argv[])
 
   //calculate latency
   sched->calcLatency(lat,latmis);
-  sched->printAllConfigs(pdg_rawname.c_str());      //text form of config fed to gui
+  sched->printAllConfigs(("viz/"+pdg_rawname).c_str());      //text form of config fed to gui
 
   std::string config_header=pdg_rawname+string(".h");
   std::ofstream osh(config_header);     
