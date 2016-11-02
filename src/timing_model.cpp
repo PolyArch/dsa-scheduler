@@ -78,7 +78,7 @@ orderVectorPorts(pv,pn,v1,n1,v2,n2)$(cp(pv,pn) and VI(pv,v1)<>0 and PI(pn,n1)<>0
 
 
 assignVertex(K,v)$kindV(K,v)..     sum(n$(kindN(K,n)), Mn(v, n)) =e= 1;
-oneVperN(n)$(FU(n))..  sum(v,Mn(v,n)) =l= 1;
+oneVperN(n)..  sum(v,Mn(v,n)) =l= 1;
 *oneVperN(n)$(FU(n))..  sum(v,Mn(v,n)) + PT(n) =e= 1;
 
 

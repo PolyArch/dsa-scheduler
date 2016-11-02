@@ -194,8 +194,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     
     std::string name() {
         std::stringstream ss;
-        ss << _name << ":";
-        ss << "I" << _vport;
+        ss << _name;
         return ss.str();
     }
     std::string gamsName();
@@ -208,8 +207,7 @@ class SbPDG_Output : public SbPDG_IO {
     
     std::string name() {
         std::stringstream ss;
-        ss << _name << ":";
-        ss << "O" << _vport;
+        ss << _name;
         return ss.str();
     }
     std::string gamsName();
@@ -358,7 +356,7 @@ class SbPDG {
       insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output();
-      std::string out_name=name+"_out";
+      std::string out_name=name;
       syms[out_name]=pdg_out;
       pdg_out->setName(out_name);
       pdg_out->setVPort(_vecOutputs.size());

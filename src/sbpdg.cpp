@@ -469,13 +469,13 @@ void SbPDG::printGraphviz(ostream& os)
 } 
 
 
+//TODO: Fix this for more complex patterns
 bool is_compatible(vector<vector<int>>& vec_m, vector<pair<int, vector<int>>>& port_m) {
-  
-  if(vec_m.size() != port_m.size()) {
+  if(vec_m.size() > port_m.size()) {
     return false;
   }
   
-  for(unsigned i = 0; i < vec_m.size(); ++i) {
+/*  for(unsigned i = 0; i < vec_m.size(); ++i) {
     if(vec_m[i].size() != port_m[i].second.size()) {
       return false;
     }
@@ -485,7 +485,7 @@ bool is_compatible(vector<vector<int>>& vec_m, vector<pair<int, vector<int>>>& p
         return false;
       }
     }
-  }
+  }*/
   return true;
 }
 
