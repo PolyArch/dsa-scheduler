@@ -728,6 +728,7 @@ void SbPDG::printGams(std::ostream& os,
   for (Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
     if(Ii!=_nodes.begin()) os << ", ";
     os << (*Ii)->gamsName();
+    assert(*Ii);
     node_map[(*Ii)->gamsName()]=*Ii;
   }
   os << "/;\n";
@@ -736,6 +737,7 @@ void SbPDG::printGams(std::ostream& os,
   const_input_iterator Iin,Ein;
   for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
     if(Iin!=_inputs.begin()) os << ", ";
+    assert(*Iin);
     os << (*Iin)->gamsName();
   }
   os << "/;\n";
@@ -745,6 +747,7 @@ void SbPDG::printGams(std::ostream& os,
   for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
     if(Iout!=_outputs.begin()) os << ", ";
     os << (*Iout)->gamsName();
+    assert(*Iout);
   }
   os << "/;\n";
   

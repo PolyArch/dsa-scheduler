@@ -2,7 +2,6 @@ string softbrain_gams = R"(
 $batinclude softbrain_kind.gams
 $batinclude softbrain_model.gams
 $batinclude softbrain_pdg.gams
-$batinclude constraints.gams
 
 file outfile / "softbrain.out" /;
 outfile.pc=8;
@@ -10,6 +9,12 @@ outfile.pw=4096;
 put outfile;
 
 scalar i;
+
+* first do the resource restriction checks
+
+
+* This is the actual solve
+$batinclude constraints.gams
 
 put "[vertex-node-map]" /
 loop((iv),
