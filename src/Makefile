@@ -1,12 +1,11 @@
 level=../
-sb_config=../../
 include ../make.config
 
 
 SYS = $(shell sys)
 CXX = /s/gcc-5.1.0/@sys/bin/g++
 
-CXXFLAGS :=  -Wall -g -std=c++11 -O3 -lm $(FLAGS)
+CXXFLAGS :=  -Wall -g -std=c++11 -O0 -lm $(FLAGS)
 SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp
 
 EXTRA_GAMS=softbrain_gams.cpp timing_model.cpp multi_model.cpp spill_model.cpp 
@@ -18,7 +17,7 @@ OBJ_DEST=${build}/obj
 PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
 
-INC_SBMODEL_PATH=$(sb_config)/softbrain-config/src 
+INC_SBMODEL_PATH=${prefix}/include/softbrain-config/
 
 all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
