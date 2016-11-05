@@ -30,8 +30,7 @@ OutputL(l)$(sum(n$kindN('Output',n),Hln(l,n)))=Yes;
 set FU(n);
 FU(n)$(not KindN('Input',n) and not KindN('Output',n))=Yes;
 
-positive variable   O(l),extra(e),Ev(v);
-*maxExtra
+positive variable   O(l),extra(e),maxExtra,Ev(v);
 
 $batinclude mip_start.gams
 
@@ -149,7 +148,12 @@ max_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. maxTpv(pv) =g= Tv(v);
 *constant defines maximum distance
 dist_pv(pv).. minTpv(pv) + 4 =g= maxTpv(pv); 
 
+
+
 add(pv)..                length =g= maxTpv(pv);
+
+
+
 
 
 *cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));
@@ -174,11 +178,6 @@ O.up(l)=CARD(L);
 
 
 option threads=8;
-
-
-
-
-
 
 Model   schedule  / all /;
 
