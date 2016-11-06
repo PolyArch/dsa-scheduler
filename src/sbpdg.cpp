@@ -402,6 +402,10 @@ void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
       outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
       if(outputArray.find_first_of("0123456789") < outputArray.length()) {
 	outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+	//this absolutely, should NOT have an _
+	if(outputArray.find_first_of("_") < outputArray.length()) {
+	  outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
+	}
 	//Get subIter
 	os << "[" << outputArray << "]  = ";
       } else {
