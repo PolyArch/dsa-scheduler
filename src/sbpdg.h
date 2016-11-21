@@ -219,6 +219,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
 class SbPDG_Output : public SbPDG_IO {
   public:
     void printGraphviz(std::ostream& os);
+    void printDirectAssignments(std::ostream& os, std::string dfg_name);
     void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
     std::string name() {
@@ -507,6 +508,8 @@ class SbPDG {
 
     std::vector<SbPDG_Edge*> _edges;
     
+    int span;
+    int work;
 };
 
 #endif
