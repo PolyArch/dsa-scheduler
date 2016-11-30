@@ -8,6 +8,7 @@
 #include "sbinst.h"
 #include <unordered_map>
 #include <map>
+#include <vector>
 #include <assert.h>
 #include <sstream>
 
@@ -152,7 +153,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void printGraphviz(std::ostream& os);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
 
-    void setImm( uint32_t val ) { _imm=val; }
+    void setImm( uint64_t val ) { _imm=val; }
 //    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
 
 //    float getImmFloat() { return *reinterpret_cast<float*>(&_imm); } 
@@ -187,13 +188,14 @@ class SbPDG_Inst : public SbPDG_Node {
     void set_verif_id(std::string s) {_verif_id = s;}
 
   private:
+    uint64_t accum;
     std::ofstream _verif_stream;
     std::string _verif_id;
     std::vector<uint64_t> _input_vals;
     bool _predInv;
     int _imm_slot;
     int _subFunc;
-    uint32_t _imm;
+    uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };
 
@@ -457,11 +459,14 @@ class SbPDG {
       }
     }
 
-    void parse_and_add_vec(std::string name,
-                           std::string line,
-                           std::map<std::string,SbPDG_Node*>& syms,bool input);
+    void parse_and_add_vec(std::string name, std::string line,
+                           std::map<std::string,SbPDG_Node*>& syms ,bool input);
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
+
+    void parse_and_add_inst(std::string var_out, std::string opcode, 
+                            std::map<std::string,SbPDG_Node*>& syms,
+                            std::vector<std::string> inc_nodes);
     
     typedef std::vector<SbPDG_Node*>::const_iterator   const_node_iterator;
     typedef std::vector<SbPDG_Inst*>::const_iterator   const_inst_iterator;

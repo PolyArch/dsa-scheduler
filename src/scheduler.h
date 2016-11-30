@@ -28,6 +28,7 @@ class Scheduler {
     _gams_work_dir("gams"), _sbModel(sbModel),
     _optcr(0.1f), _optca(0.0f), _reslim(100000.0f), _showGams(true) { }
 
+  bool check_res(SbPDG* sbPDG,    SbModel* sbmodel);
   bool scheduleGAMS(SbPDG* sbPDG, Schedule*& schedule);         //GAMs sepcific scheduler (sbpdg and scheulde object)
   
   Schedule* scheduleGreedyBFS(SbPDG* sbPDG);

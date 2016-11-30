@@ -63,6 +63,9 @@ int main(int argc, char* argv[])
 
   Schedule* sched=NULL;
   Scheduler scheduler(&sbmodel);
+
+  scheduler.check_res(&sbpdg,&sbmodel);
+
   bool succeed_sched = scheduler.scheduleGAMS(&sbpdg,sched);
 
   if(!succeed_sched) {

@@ -1,5 +1,12 @@
 string timing_model = R"(
 
+file outfile / "softbrain.out" /;
+outfile.pc=8;
+outfile.pw=4096;
+put outfile;
+put "[status_message_begin_scheduling]" /
+
+
 Variable            cost,length;
 binary variable     Mn(v,n), Mel(e,l), Mp(pv,pn);
 binary variable     PT(n);
@@ -30,7 +37,8 @@ OutputL(l)$(sum(n$kindN('Output',n),Hln(l,n)))=Yes;
 set FU(n);
 FU(n)$(not KindN('Input',n) and not KindN('Output',n))=Yes;
 
-positive variable   O(l),extra(e),maxExtra,Ev(v);
+positive variable   O(l),extra(e),Ev(v);
+*maxExtra
 
 $batinclude mip_start.gams
 
@@ -53,7 +61,7 @@ loop(v1$(not sum(v2$Gvv(v1,v2), kindV('Output',v2))),
 
 PT.fx(n)$(not FU(n))=0;
 
-* Set input latencies  (max start latency is 16)
+* Set input latencies
 Tv.up(v)$kindV('Input',v)=0;
 
 Equations
@@ -126,15 +134,15 @@ limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 equation latency(v,e,v);
 latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) + Ev(v1);
 
-Ev.up(v)=16;
+Ev.up(v)=15;
 Ev.fx(v)$(not kindV('DelayFU',v))=0;
 *extra.fx(e)=0;
 
-extra.up(e)=16;
+extra.up(e)=15;
 
 
 *equation restrict_extra(e);
-*restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*16;
+*restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*15;
 
 *restrict_extra(e)..     extra(e) =l= sum(l,Mel(e,l));
 
@@ -148,12 +156,7 @@ max_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. maxTpv(pv) =g= Tv(v);
 *constant defines maximum distance
 dist_pv(pv).. minTpv(pv) + 4 =g= maxTpv(pv); 
 
-
-
 add(pv)..                length =g= maxTpv(pv);
-
-
-
 
 
 *cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));
@@ -179,17 +182,35 @@ O.up(l)=CARD(L);
 
 option threads=8;
 
+Model fus_ok / assignVertex, oneVperN, obj /;
+solve   fus_ok    using mip minimizing length;
+
+*If(fus_ok.Modelstat gt %ModelStat.Locally Optimal%,
+*Display '**** Model did not terminate with normal solution',
+*fus_ok.Modelstat)
+
+put "[status_message_fus_ok]" /
+
+Model ports_ok / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, obj  /;
+solve ports_ok    using mip minimizing length;
+
+put "[status_message_ports_ok]" /
+
+
+equation orderVectorPorts
+
+
+
 Model   schedule  / all /;
 
-*schedule.optfile=1;
 schedule.prioropt=1;
 schedule.threads=8;
 *schedule.reslim=100;
 schedule.holdFixed=1;
 
-file optfile /cplex.opt/;      
-
-put optfile;
+*schedule.optfile=1;
+*file optfile /cplex.opt/;      
+*put optfile;
 *put 'mipemphasis 2'/;
 *put 'parallelmode -1'/;
 *put 'probe 2'/;
@@ -210,7 +231,7 @@ put optfile;
 *put 'nodesel 3'/;
 *put 'subalg 2'/;
 *put 'mipordtype 3'/;
-putclose;
+*putclose;
 
 display Mel.l;
 display Mvl.l;

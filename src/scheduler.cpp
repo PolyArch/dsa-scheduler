@@ -459,6 +459,53 @@ int Scheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* sou
   return score;
 }
 
+bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
+  int ninsts = sbPDG->inst_end() - sbPDG->inst_begin();
+
+  int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
+
+  if(ninsts > nfus) {
+    cerr << "\n\nError: Too many instructions in SbPDG for given SBCONIG\n\n";
+    exit(1);
+  }
+
+  bool failed_count_check=false;
+
+  std::map<sb_inst_t,int> count_types;
+  for(auto Ii=sbPDG->inst_begin(), Ei=sbPDG->inst_end(); Ii!=Ei; ++Ii) {
+    count_types[(*Ii)->inst()]++;
+  }
+
+  for(auto& pair : count_types) {
+    sb_inst_t sb_inst = pair.first;
+    int pdg_count = pair.second;
+
+    int fu_count =0;
+    for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+      for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+        sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
+        if(cand_fu->fu_def()->is_cap(sb_inst)) {
+          fu_count++;
+        }
+      }
+    }
+    if(fu_count < pdg_count) {
+      failed_count_check=true;
+      cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst) 
+           << " insts, but only " << fu_count << " fus to support them\n";
+    }
+  }
+
+  if(failed_count_check) {
+    cerr << "\n\nError: FAILED Basic FU Count Check\n\n";
+    exit(1);
+  }
+  //TODO: add code from printPortcompatibility here
+  
+  return true;
+}
+
+
 //GAMS Specific
 
 #include "spill_model.cpp"
@@ -482,6 +529,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   ss << "softbrain.gams";
   string gams_file_name = ss.str();
   
+  system(("rm -f " + gams_out_file).c_str());
   
   #if USE_MIP_START 
   schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
@@ -635,9 +683,9 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   
   int numInsts = sbPDG->inst_end()-sbPDG->inst_begin();
   int configSize = _sbModel->subModel()->sizex() * _sbModel->subModel()->sizey();
-  int n_configs = numInsts / configSize + (numInsts % configSize>0);
+  int n_configs = max(numInsts / configSize + (numInsts % configSize>0),1);
   cout << "Total Insts: " <<  numInsts << "\n";
-  assert(numInsts > 0);
+  //assert(numInsts > 0);
 
   //cout << "Softbrain Scheduler -- Using: " << n_configs << " Configs\n";
   
@@ -698,6 +746,8 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
   ifstream gamsout(gams_out_file.c_str());
   enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
+  bool message_start=false, message_fus_ok=false, message_ports_ok=false;
+
   while(gamsout.good()) {  
     getline(gamsout,line);
     ModelParsing::trim_comments(line);
@@ -708,6 +758,7 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
     }
     //if(ModelParsing::StartsWith(line,"#")) continue;
     if(line[0]=='[') {
+      parse_stage = Parse_None; 
       if(ModelParsing::StartsWith(line,"[vertex-node-map]")) {
         parse_stage = VtoN; continue;
       } else if(ModelParsing::StartsWith(line,"[vertex-link-map]")) {
@@ -724,9 +775,13 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
         parse_stage = PASSTHROUGH; continue;
       } else if(ModelParsing::StartsWith(line,"[port-port-map]")) {
         parse_stage = PortMap; continue;
-      } else {
-        parse_stage = Parse_None;
-      }
+      } else if(ModelParsing::StartsWith(line,"[status_message_begin_scheduling]")) {
+        message_start=true; continue;
+      } else if(ModelParsing::StartsWith(line,"[status_message_fus_ok]")) {
+        message_fus_ok=true; continue;
+      } else if(ModelParsing::StartsWith(line,"[status_message_ports_ok]")) {
+        message_ports_ok=true; continue;
+      } 
     }
 
     if(parse_stage==PortMap) {
@@ -852,7 +907,6 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
       }
       */
       
-      
       schedule->assign_node(pdgnode,sbnode,config);
       
         /*if(sboutput* sbout = dynamic_cast<sboutput*>(sbnode) ) {
@@ -967,7 +1021,18 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
     }
     
   }
-  
+ 
+  if(!message_start) {
+    cerr << "\n\nError: Scheduling Not Started -- Likely Error in Gams Code Gen\n\n";
+    exit(1);
+  } else if (!message_fus_ok) {
+    cerr << "\n\nError: Combination of FUs requested are NOT satisfiable with given SBCONFIG.\n\n";
+    exit(1);
+  } else if (!message_ports_ok) {
+    cerr << "\n\nError: Port specifications are NOT satisfiable with given SBCONFIG.\n\n";
+    exit(1);
+  }
+
   //populate the forwardMap
   for(int config = 0; config < n_configs-1; ++config) {
     sbswitch* cross_switch = _sbModel->subModel()->cross_switch();

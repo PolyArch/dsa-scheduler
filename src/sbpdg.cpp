@@ -28,7 +28,8 @@ void order_insts(SbPDG_Inst* inst,
    
     //if there is a defintion node
     if(SbPDG_Inst* op_inst = dynamic_cast<SbPDG_Inst*>(edge->def()) ) {
-      order_insts(op_inst, done_nodes, ordered_insts);                  //recursive call until the top inst with the last incoming edge 
+      order_insts(op_inst, done_nodes, ordered_insts);                  
+      //recursive call until the top inst with the last incoming edge 
     }
   }
 
@@ -104,6 +105,52 @@ void SbPDG::parse_and_add_vec(string name, string line, map<string,SbPDG_Node*>&
    }
 }
 
+bool conv_to_int(std::string s, uint64_t& ival){ 
+  try {
+     ival = stol(s,0,0);
+     return true;
+  } catch(...){}
+  return false;
+}
+
+void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_Node*>& syms,
+                               vector<string> inc_strings) {
+
+  uint64_t ival;
+  bool is_int = conv_to_int(var_out,ival);
+
+  if(is_int) {
+    assert(0 && "variable name cannot be a valid integer");
+  }
+
+  SbPDG_Inst* pdg_inst = new SbPDG_Inst();
+  pdg_inst->setName(var_out);
+  syms[var_out]=pdg_inst;
+  pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
+
+  int imm_offset=0;
+  for(unsigned i = 0; i < inc_strings.size(); ++i) {
+    string var_in = inc_strings[i];
+
+    bool is_int = conv_to_int(var_in,ival);
+    if(is_int) {
+      assert(imm_offset==0 && "only one immediate per instr. is allowed");
+      pdg_inst->setImm(ival);
+      pdg_inst->setImmSlot(i); 
+      imm_offset=1;
+    } else {
+      SbPDG_Node* inc_node = syms[var_in];
+      if(inc_node==NULL) {
+        cerr << "Could not find variable \"" + var_in + "\" \n";
+        assert("0");
+      } 
+      connect(inc_node, pdg_inst,i,SbPDG_Edge::data);
+    }
+  }
+
+  addInst(pdg_inst);
+} 
+
 SbPDG::SbPDG(string filename) {
 
   string line;
@@ -118,9 +165,9 @@ SbPDG::SbPDG(string filename) {
   regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
   regex re_input("Input:\\s*(\\w+)\\s*"); //bits id  
   regex re_output("Output:\\s*(\\w+)\\s*");                          //out
-  regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep   -- 3 ip
-  regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*,\\s*(\\w+)\\s*\\)");//id dep dep -- 2 ip
-  regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+)\\s*\\)");//id dep dep -- 1 ip
+  regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep   -- 3 ip
+  regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep -- 2 ip
+  regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep -- 1 ip
   regex re_rename("(\\w+)\\s*=\\s*(\\w+)\\s*");//rename
 
   smatch m;
@@ -161,18 +208,7 @@ SbPDG::SbPDG(string filename) {
       string opcode  = m[2];
       string var_in  = m[3];
 
-      SbPDG_Node* inc_node = syms[var_in];
-      if(inc_node==NULL) {
-        cerr << "Could not find \"" + var_in + "\" \n (op1)";
-        assert("0");
-      }
-
-      SbPDG_Inst* pdg_inst = new SbPDG_Inst();
-      pdg_inst->setName(var_out);
-      syms[var_out]=pdg_inst;
-      pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
-      connect(inc_node, pdg_inst,0,SbPDG_Edge::data);
-      addInst(pdg_inst);
+      parse_and_add_inst(var_out,opcode,syms,{var_in});
 
     } else if (regex_search(line,m,re_Op2)) {     
       //cout << "o2:" << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << "\n";
@@ -182,58 +218,17 @@ SbPDG::SbPDG(string filename) {
       string var_in1 = m[3];
       string var_in2 = m[4];
 
-      SbPDG_Node* inc_node1 = syms[var_in1];
-      SbPDG_Node* inc_node2 = syms[var_in2];
-      
-      if(inc_node1==NULL) {
-        cerr << "Could not find \"" + var_in1 + "\" (in1,op2) \n";
-        cerr << "in line: " << line << "\n";
-        assert("0");
-      } else if(inc_node2==NULL) {
-        cerr << "Could not find \"" + var_in2 + "\"\n (in2,op2) ";
-        assert("0");
-      }
-
-      SbPDG_Inst* pdg_inst = new SbPDG_Inst();
-      pdg_inst->setName(var_out);
-      syms[var_out]=pdg_inst;
-      pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
-      connect(inc_node1, pdg_inst,0,SbPDG_Edge::data);
-      connect(inc_node2, pdg_inst,1,SbPDG_Edge::data);
-      addInst(pdg_inst);
+      parse_and_add_inst(var_out,opcode,syms,{var_in1,var_in2});
 
      } else if (regex_search(line,m,re_Op3)) {
       //cout << "o2:" << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << "\n";
-
       string var_out = m[1];
       string opcode  = m[2];
       string var_in1 = m[3];
       string var_in2 = m[4];
       string var_in3 = m[5];
+      parse_and_add_inst(var_out,opcode,syms,{var_in1,var_in2,var_in3});
 
-      SbPDG_Node* inc_node1 = syms[var_in1];
-      SbPDG_Node* inc_node2 = syms[var_in2];
-      SbPDG_Node* inc_node3 = syms[var_in3];
-
-      if(inc_node1==NULL) {
-        cerr << "Could not find \"" + var_in1 + "\" (in1,op3) \n";
-        assert("0");
-      } else if(inc_node2==NULL) {
-        cerr << "Could not find \"" + var_in2 + "\"\n (in2,op3) ";
-        assert("0");
-      } else if(inc_node3==NULL) {
-        cerr << "Could not find \"" + var_in3 + "\"\n (in3,op3) ";
-        assert("0");
-      }
-
-      SbPDG_Inst* pdg_inst = new SbPDG_Inst();
-      pdg_inst->setName(var_out);
-      syms[var_out]=pdg_inst;
-      pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
-      connect(inc_node1, pdg_inst,0,SbPDG_Edge::data);
-      connect(inc_node2, pdg_inst,1,SbPDG_Edge::data);
-      connect(inc_node3, pdg_inst,2,SbPDG_Edge::ctrl_true);
-      addInst(pdg_inst);
 
     } else if (regex_search(line,m,re_output)) {  //SCALAR OUTPUT ONLY
       //cout << "out:" << m[1] << "\n";    
@@ -313,7 +308,7 @@ void SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   
-  _val=SB_CONFIG::execute(_sbinst,_input_vals);
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,accum);
   
   if(print) {
     std::cout << " = " << _val << "\n";
@@ -530,8 +525,8 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
     }
   } else if (etype==SbPDG_Edge::data) {
       //std::cout << "data edge" << orig->name() << "->" << dest->name() << "\n";
-      assert(slot >=0);
-      assert(slot <=1);
+      //assert(slot >=0);
+      //assert(slot <=1);
   }
   
   dest->addIncEdge(slot,new_edge);
@@ -540,7 +535,6 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   
   return new_edge;
 }
-
 
 void SbPDG::printGraphviz(ostream& os)
 {

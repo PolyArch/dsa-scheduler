@@ -4,13 +4,13 @@ $batinclude softbrain_model.gams
 $batinclude softbrain_pdg.gams
 $batinclude constraints.gams
 
-file outfile / "softbrain.out" /;
-outfile.pc=8;
-outfile.pw=4096;
+*file outfile / "softbrain.out" /;
+*outfile.pc=8;
+*outfile.pw=4096;
+*outfile.ap=1;
 put outfile;
 
 scalar i;
-
 
 
 put "[vertex-node-map]" /

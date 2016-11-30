@@ -285,7 +285,7 @@ class Schedule {
 
     }
 
-  void interpretConfigBits();
+  std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBits();
 
   bitslices<uint64_t>& slices() {return _bitslices;}
 

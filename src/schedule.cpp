@@ -67,8 +67,9 @@ int Schedule::getPortFor(SbPDG_Node* sbpdg_in)
   return -1; 
 }
 
-void Schedule::interpretConfigBits() {
-  
+std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
+  std::map<SB_CONFIG::sb_inst_t,int> inst_histo;
+
   SbDIR sbdir;
   vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
   SbPDG_Inst  *pdg_inst;
@@ -80,7 +81,6 @@ void Schedule::interpretConfigBits() {
 
   std::set<uint64_t> inputs_used;   //vector ports used
   std::set<uint64_t> outputs_used;
-
 
    //Associating the PDG Nodes from the configuration bits, with the vector ports defined by the hardware
   int start_bits_vp_mask=0;
@@ -236,6 +236,7 @@ void Schedule::interpretConfigBits() {
 
         //cout << b << " @pos: " << o << "\n";
 
+        inst_histo[SB_CONFIG::SB_Switch]+=1;
 
         assert(outlink->orig() == inlink->dest());
         assign_switch(sbsw,inlink,outlink);
@@ -297,7 +298,11 @@ void Schedule::interpretConfigBits() {
 
         pdgnode_for[sbfu_node]=pdg_inst;
         _sbPDG->addInst(pdg_inst);
-        pdg_inst->setInst(sbfu_node->fu_def()->inst_of_encoding(op));
+
+        auto inst=sbfu_node->fu_def()->inst_of_encoding(op);
+        pdg_inst->setInst(inst);
+
+        inst_histo[inst]+=1;
 
         //8-switch_dirs + 4bits_for_row
         unsigned cur_bit_pos=FU_DIR_LOC;
@@ -364,6 +369,8 @@ void Schedule::interpretConfigBits() {
   int max_lat, max_lat_mis;
   calcLatency(max_lat,max_lat_mis);
   calc_out_lat();
+
+  return inst_histo;
 }
 
 //Configuration
@@ -577,7 +584,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           _bitslices.write(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1,op_encode);
         }
        
-
         //get the pdg node assigned to that FU  
         if(_assignNode.count(make_pair(sbfu_node,0))!=0) {
           SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[make_pair(sbfu_node,0)]);
@@ -590,7 +596,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
             if(pdg_node->immSlot()==i) {
               _bitslices.write(cur_slice,p1,p2,0b100);  //imm slot for FU
-            } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
+            } else if(i  < (pdg_node->ops_end()-pdg_node->ops_begin())) {
               SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
               if(!inc_edge) {continue;}
               SbPDG_Node* inc_pdg_node = inc_edge->def();
@@ -852,7 +858,7 @@ vector<string> getCaptureList(regex& rx, string str, string::const_iterator& sta
 
 //Reads Text format of the schedule
 Schedule::Schedule(string filename, bool multi_config) {
-  enum loadstate{Dimension, Switch,FuncUnit, WidePort} state;
+  enum loadstate{NoSchedState, Dimension, Switch,FuncUnit, WidePort} state;
 
   ifstream ifs(filename.c_str(), ios::in);
   
@@ -878,7 +884,8 @@ Schedule::Schedule(string filename, bool multi_config) {
   regex portRE("\\s*(\\d+):");
   regex xnumsRE("\\s*(\\w+)\\s*");
   string line;
-  
+
+  state = NoSchedState;
   while (ifs.good()) {
       getline(ifs, line);
       ModelParsing::trim(line);
