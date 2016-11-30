@@ -36,12 +36,14 @@ int main(int argc, char* argv[])
 {
   
   if(argc<2) {
-    cerr <<  "Usage: sb_dfg_emu <dfg file>\n";
+    cerr <<  "Usage: sb_dfg_emu <config> <dfg file>\n";
     exit(1);
   }
 
 
-  std::string pdg_filename=argv[1];
+  std::string pdg_filename=argv[2];
+  cout << "args:" << argv[0] << " " << argv[1] << " " << argv[2] << "\n";
+
   int lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
   string dfg_rawname = pdg_rawname;
@@ -52,7 +54,7 @@ int main(int argc, char* argv[])
   SbPDG sbpdg(pdg_filename);
 
 
-  std::string dfg_emu_header=pdg_rawname+string("_emu.h");
+  std::string dfg_emu_header=pdg_rawname+string(".h");
   std::ofstream out_file(dfg_emu_header);     
   assert(out_file.good()); 
   sbpdg.printEmuDFG(out_file, dfg_rawname);

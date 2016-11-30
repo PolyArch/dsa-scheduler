@@ -397,6 +397,10 @@ void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
       outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
       if(outputArray.find_first_of("0123456789") < outputArray.length()) {
 	outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+	//this absolutely, should NOT have an _
+	if(outputArray.find_first_of("_") < outputArray.length()) {
+	  outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
+	}
 	//Get subIter
 	os << "[" << outputArray << "]  = ";
       } else {
@@ -443,6 +447,47 @@ void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
     ops_amt++;
   }
   //SbPDG_Node::printEmuDFG(os, dfg_name);
+}
+
+void SbPDG_Output::printDirectAssignments(ostream& os, string dfg_name) {
+  for(auto ops_iter = _ops.begin(); ops_iter != _ops.end(); ops_iter++) {
+    if((*ops_iter)->def()->input) {
+      //Print our formatted name and such
+      os << "   outputs[" << _iter << "]";
+      string outputArray = name();
+      if(getScalar()) {
+	outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
+	if(outputArray.find_first_of("0123456789") < outputArray.length()) {
+	  outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+	  //this absolutely, should NOT have an _
+	  if(outputArray.find_first_of("_") < outputArray.length()) {
+	    outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
+	  }
+	  //Get subIter
+	  os << "[" << outputArray << "]  = ";
+	} else {
+	  os << "[0] = ";
+	}
+      } else {
+	os << "[0] = ";
+      }
+      os << "inputs[" << (*ops_iter)->def()->_iter << "]";
+      string inputArray = (*ops_iter)->def()->name();
+      if(!(*ops_iter)->def()->getScalar()) {
+	inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
+	if(inputArray.find_first_of("0123456789") < inputArray.length()) {
+	  inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
+	  //Get subIter
+	  os << "[" << inputArray << "]";
+	} else {
+	  os << "[0]";
+	}
+      } else {
+	os << "[0]";
+      }
+      os << ";\n";
+    }
+  }
 }
 
 void SbPDG_Output::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* output_sizes) {
@@ -611,14 +656,22 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
   const_inst_iterator Ii,Ei;
 
   int iter = 0;
+  int ionodes = 0;
   //Insts
   os << endl << "void dfg_func_" << dfg_name << "(uint64_t** inputs, uint64_t** outputs) {" << endl;
-  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { (*Ii)->printEmuDFG(os, dfg_name); }
-  os << "}" << endl << endl << endl;
+  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { 
+    (*Ii)->printEmuDFG(os, dfg_name); 
+  }
+  //Next, we need to assure no outputs are just direct assignments of an input;
+   for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
+     (*Iout)->printDirectAssignments(os, dfg_name);
+   }
+   os << "}" << endl << endl << endl;
   os << "sb_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
   iter = 1;
   for(auto viter = input_sizes.begin(); viter != input_sizes.end(); viter++) {
     os << *viter;
+    ionodes += *viter;
     if(iter != input_iter) {
       os << ",";
     }
@@ -628,12 +681,13 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
   iter = 1;
   for(auto viter = output_sizes.begin(); viter != output_sizes.end(); viter++) {
     os << *viter;
+    ionodes += *viter;
     if(iter != output_iter) {
       os << ",";
     }
     iter++;
   }
-  os << "}};" << endl;
+  os << "}, " << num_nodes()-ionodes << ", 2" << " };" << endl;
 } 
  
 
