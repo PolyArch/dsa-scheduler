@@ -42,7 +42,6 @@ int main(int argc, char* argv[])
 
 
   std::string pdg_filename=argv[2];
-  cout << "args:" << argv[0] << " " << argv[1] << " " << argv[2] << "\n";
 
   int lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 

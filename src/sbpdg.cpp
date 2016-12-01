@@ -387,13 +387,28 @@ void SbPDG_Node::printEmuDFG(ostream& os, string dfg_name) {
   os << "\n";
 }
 
+int SbPDG_Node::findDepth(ostream& os, string dfg_name, int level) {
+  int returned_level = level;
+  for(auto name_iter = _uses.begin(); name_iter != _uses.end(); name_iter++) {
+    if((*name_iter)->use()->output) {
+      //Don't do anything
+    } else {
+      int candidate_level = (*name_iter)->use()->findDepth(os, dfg_name, level+1);
+      if(candidate_level > returned_level) {
+	returned_level = candidate_level;
+      }
+    }
+  }
+  return returned_level;
+}
+
 void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
   //os << "INSTRUCTION " << dfg_name << "_" << _name << endl;
   auto name_iter = _uses.begin();
   if((*name_iter)->use()->output) {
     os << "   outputs[" << (*name_iter)->use()->_iter << "]";
     string outputArray = (*name_iter)->use()->name();
-    if((*name_iter)->use()->getScalar()) {
+    if(!(*name_iter)->use()->getScalar()) {
       outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
       if(outputArray.find_first_of("0123456789") < outputArray.length()) {
 	outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
@@ -455,7 +470,7 @@ void SbPDG_Output::printDirectAssignments(ostream& os, string dfg_name) {
       //Print our formatted name and such
       os << "   outputs[" << _iter << "]";
       string outputArray = name();
-      if(getScalar()) {
+      if(!getScalar()) {
 	outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
 	if(outputArray.find_first_of("0123456789") < outputArray.length()) {
 	  outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
@@ -645,13 +660,23 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
   os << "#define " << dfg_name << "_size 64" << endl;
 
   //Inputs
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { (*Iin)->printEmuDFG(os, dfg_name, &realName, &input_iter, &input_sizes); }
+  int level = 1;
+  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
+    (*Iin)->printEmuDFG(os, dfg_name, &realName, &input_iter, &input_sizes); 
+  }
   int output_iter = 0;
   const_output_iterator Iout,Eout;
 
   //Outputs
   vector<int> output_sizes;  
   for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { (*Iout)->printEmuDFG(os, dfg_name, &realName, &output_iter, &output_sizes); }
+
+  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
+    int new_level = (*Iin)->findDepth(os, dfg_name, 0);
+    if(new_level > level) {
+      level = new_level;
+    }
+  }
 
   const_inst_iterator Ii,Ei;
 
@@ -687,7 +712,7 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
     }
     iter++;
   }
-  os << "}, " << num_nodes()-ionodes << ", 2" << " };" << endl;
+  os << "}, " << num_nodes()-ionodes << ", "  << level << " };" << endl;
 } 
  
 
