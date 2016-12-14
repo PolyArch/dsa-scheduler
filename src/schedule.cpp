@@ -20,6 +20,13 @@ using namespace SB_CONFIG;
 
 extern "C" void libsbscheduler_is_present() {}
 
+void Schedule::clear_sbpdg() {
+  if(_sbPDG) {
+    delete _sbPDG;
+    _sbPDG=NULL;
+  } 
+}
+
 void Schedule::printAllConfigs(const char *base) {
   
   for(int i = 0; i < _n_configs; ++i) {
@@ -283,7 +290,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
 
   //---------------------------------DECODE FUNC UNITS ---------------------------
-  cur_slice=5;
+  cur_slice=SWITCH_SLICE;
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j,++cur_slice) {
       sbfu* sbfu_node = &fus[i][j];
@@ -314,7 +321,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
           assert(f!=0 || (f==0 && dir != SbDIR::END_DIR)); 
           posMap[pdg_inst].push_back(dir);      //incoming FU dir
           if(dir == SbDIR::IM) {
-            pdg_inst->setImmSlot(i);
+            pdg_inst->setImmSlot(f);
           }
         }//end for input fu dirs
   
@@ -327,6 +334,28 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
       }
     }
     cur_slice+=1; // because we skipped the switch
+  }
+
+  cur_slice=SWITCH_SLICE +
+       (_sbModel->subModel()->sizex()+1) * (_sbModel->subModel()->sizey()+1);
+
+  //--------------------------------------- DECODE CONSTANTS ------------------------
+  while((unsigned)cur_slice < _bitslices.size()) {
+    int row = _bitslices.read_slice(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1);
+    int col = _bitslices.read_slice(cur_slice,COL_LOC,COL_LOC+COL_BITS-1);
+    ++cur_slice;
+    uint64_t imm = _bitslices.read_slice(cur_slice,0,63);
+    ++cur_slice;
+    assert(row <  _sbModel->subModel()->sizey());
+    assert(col <  _sbModel->subModel()->sizex());
+    sbfu* sbfu_node = &fus[col][row];
+    assert(sbfu_node);
+    //cout << "row,col" << row << " " << col << "\n";
+    SbPDG_Node* node = pdgnode_for[sbfu_node];
+    assert(node);
+    SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(node);
+    assert(inst->immSlot() != -1);
+    inst->setImm(imm);
   }
 
   //routemap -- for each sbnode - inlink and outlinks
@@ -595,7 +624,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             unsigned p2 = p1 + BITS_PER_FU_DIR-1;
 
             if(pdg_node->immSlot()==i) {
-              _bitslices.write(cur_slice,p1,p2,0b100);  //imm slot for FU
+              _bitslices.write(cur_slice,p1,p2,sbdir.encode_fu_dir(SbDIR::IM));  //imm slot for FU
             } else if(i  < (pdg_node->ops_end()-pdg_node->ops_begin())) {
               SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
               if(!inc_edge) {continue;}
@@ -642,6 +671,25 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }//end for switch x
   }//end for switch y 
 
+  cout << "cur slice: " << cur_slice << "\n";
+  //--------------------------------------- ENCODE CONSTANTS ------------------------
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {    
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
+      sbfu* sbfu_node = &fus[i][j];
+      if(_assignNode.count(make_pair(sbfu_node,0))!=0) {
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[make_pair(sbfu_node,0)]);
+        if(pdg_node->immSlot()!=-1) {
+           cout << i << " " << j << " " << pdg_node->immSlot() << "\n";
+           _bitslices.write(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1,j);
+           _bitslices.write(cur_slice,COL_LOC,COL_LOC+COL_BITS-1,i);
+           ++cur_slice;
+           _bitslices.write(cur_slice,0,63,pdg_node->imm());
+           ++cur_slice;
+        }
+      }
+    }
+  } 
+  cout << "cur slice: " << cur_slice << "\n";
 
   //Step 2: Write to output stream
   os << "#ifndef " << "__" << cfg_name << "_H__\n";

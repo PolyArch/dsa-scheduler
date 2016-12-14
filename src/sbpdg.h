@@ -147,7 +147,7 @@ class SbPDG_IO : public SbPDG_Node {
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
-    SbPDG_Inst() : SbPDG_Node(), _predInv(false), _imm_slot(-1), _subFunc(0) {
+    SbPDG_Inst() : SbPDG_Node(), _predInv(false), _imm_slot(-1), _subFunc(0),_accum(0){
     }
 
     void printGraphviz(std::ostream& os);
@@ -158,6 +158,8 @@ class SbPDG_Inst : public SbPDG_Node {
 
 //    float getImmFloat() { return *reinterpret_cast<float*>(&_imm); } 
     int   getImmInt() { return _imm; }
+
+    uint64_t   imm() { return _imm; }
 
     void setPredInv(bool predInv) { _predInv=predInv;}
     bool predInv() {return _predInv;}
@@ -177,7 +179,7 @@ class SbPDG_Inst : public SbPDG_Node {
 
     std::string gamsName();
 
-    void setImmSlot(int i) {_imm_slot=i;}
+    void setImmSlot(int i);
     int immSlot() const { return _imm_slot; }
 
     void setSubFunc(int i) {_subFunc=i;}
@@ -188,13 +190,13 @@ class SbPDG_Inst : public SbPDG_Node {
     void set_verif_id(std::string s) {_verif_id = s;}
 
   private:
-    uint64_t accum;
     std::ofstream _verif_stream;
     std::string _verif_id;
     std::vector<uint64_t> _input_vals;
     bool _predInv;
     int _imm_slot;
     int _subFunc;
+    uint64_t _accum;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };

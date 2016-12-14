@@ -4,6 +4,7 @@
 #include <regex>
 #include <set>
 #include <iomanip>
+#include <string>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -23,8 +24,13 @@ void order_insts(SbPDG_Inst* inst,
   done_nodes.insert(inst);
  
   //incoming edges to a node
-  for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+  int index=0;
+  for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i,++index) {
     SbPDG_Edge* edge=*i;
+    if(!edge) {
+      assert(inst->immSlot()==index);
+      continue;
+    }
    
     //if there is a defintion node
     if(SbPDG_Inst* op_inst = dynamic_cast<SbPDG_Inst*>(edge->def()) ) {
@@ -113,10 +119,19 @@ bool conv_to_int(std::string s, uint64_t& ival){
   return false;
 }
 
+bool conv_to_double(std::string s, double& dval){ 
+  try {
+     dval = stod(s);
+     return true;
+  } catch(...){}
+  return false;
+}
+
 void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_Node*>& syms,
                                vector<string> inc_strings) {
 
   uint64_t ival;
+  double dval;
   bool is_int = conv_to_int(var_out,ival);
 
   if(is_int) {
@@ -132,11 +147,18 @@ void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_N
   for(unsigned i = 0; i < inc_strings.size(); ++i) {
     string var_in = inc_strings[i];
 
-    bool is_int = conv_to_int(var_in,ival);
-    if(is_int) {
+    bool is_int    = conv_to_int(var_in,ival);
+    bool is_double = conv_to_double(var_in,dval);
+
+    if(is_int && (ival!=0 || dval==0) ) { //some tricky logic here, tread lightly
       assert(imm_offset==0 && "only one immediate per instr. is allowed");
       pdg_inst->setImm(ival);
       pdg_inst->setImmSlot(i); 
+      imm_offset=1;
+    } else if (is_double) {
+      assert(imm_offset==0 && "only one immediate per instr. is allowed");
+      pdg_inst->setImm(SB_CONFIG::as_uint64(dval));
+      pdg_inst->setImmSlot(i);
       imm_offset=1;
     } else {
       SbPDG_Node* inc_node = syms[var_in];
@@ -287,6 +309,15 @@ std::string SbPDG_Inst::gamsName() {
   ss << "FV" << _ID;
   return ss.str();
 }
+void SbPDG_Inst::setImmSlot(int i) {
+  assert(i <4);
+  if((int)_ops.size()<=i) { 
+     _ops.resize(i+1,NULL); 
+   }
+
+  _imm_slot=i;
+}
+
 
 //compute:
 void SbPDG_Inst::compute(bool print, bool verif) {
@@ -302,13 +333,18 @@ void SbPDG_Inst::compute(bool print, bool verif) {
   }
   
   for(unsigned i = 0; i < _ops.size(); ++i) {
-    _input_vals[i]=_ops[i]->def()->get_value();
+    if(immSlot() == (int)i) {
+      _input_vals[i]=imm();
+    } else {
+       assert(_ops[i]->def());
+      _input_vals[i]=_ops[i]->def()->get_value();
+    }
     if(print) {
       std::cout << std::hex << _input_vals[i] << " ";
     }
   }
   
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,accum);
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum);
   
   if(print) {
     std::cout << " = " << _val << "\n";
@@ -323,8 +359,6 @@ void SbPDG_Inst::compute(bool print, bool verif) {
       assert(_verif_stream.is_open());
     }
   }
-
-
 }
 
 

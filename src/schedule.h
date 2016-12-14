@@ -285,7 +285,10 @@ class Schedule {
 
     }
 
+  //NOTE/WARN: If you call interpretConfigBits, this will create an
+  //sbPDG that you need to delete later
   std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBits();
+  void clear_sbpdg();
 
   bitslices<uint64_t>& slices() {return _bitslices;}
 
@@ -325,13 +328,18 @@ class Schedule {
   //static const int FU_PRED_INV_BITS = 1;
 
   static const int OPCODE_LOC = FU_DIR_LOC + FU_DIR_BITS;
-  static const int OPCODE_BITS = 5;
+  static const int OPCODE_BITS = 6;
 
   static const int IN_DELAY_LOC = OPCODE_LOC + OPCODE_BITS;
   static const int BITS_PER_DELAY = 4;
   static const int NUM_DELAY = 3;
   static const int IN_DELAY_BITS = BITS_PER_DELAY*NUM_DELAY;
 
+  //Config Message uses same row loc:
+  //static const int ROW_LOC=0;
+  //static const int ROW_BITS=4;
+  static const int COL_LOC=ROW_LOC+ROW_BITS;
+  static const int COL_BITS=4;
 
   void print_bit_loc() {
     std::cout << "Row: " << ROW_LOC << ":" << ROW_LOC+ROW_BITS-1 << "\n";
@@ -383,5 +391,6 @@ class Schedule {
       std::map<SbPDG_Node*, std::vector<SbDIR::DIR> >&);
 
 };
+
 
 #endif
