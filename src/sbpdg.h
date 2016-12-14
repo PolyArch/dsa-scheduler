@@ -57,7 +57,7 @@ class SbPDG_Node {
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
     void setScalar() {_scalar = true;};
     bool getScalar() {return _scalar;};
-
+    int findDepth(std::ostream& os, std::string dfg_name, int level);
     SbPDG_Node() {
         _ID=ID_SOURCE++;
     }
