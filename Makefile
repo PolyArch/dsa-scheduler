@@ -1,9 +1,11 @@
 level=./
 include make.config
+include make.rules
 
 .PHONY:  directories program make_drivers
 
 all: directories program make_drivers
+
 
 program:
 	+make -C src
@@ -11,13 +13,13 @@ program:
 make_drivers: program
 	+make -C drivers
 
-install: install_program install_drivers 
+install: directories install_program install_drivers 
 	
 
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
 	cp drivers/sb_sched ${prefix}/bin
-
+	cp drivers/sb_dfg_emu ${prefix}/bin
 
 install_program: program
 ifndef prefix
@@ -32,5 +34,4 @@ clean:
 	make -C src clean
 	make -C drivers clean
 
-include make.rules
 
