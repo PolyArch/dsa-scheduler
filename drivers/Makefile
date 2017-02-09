@@ -27,7 +27,7 @@ sb_sched : sb_sched.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${prefix}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${level}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${prefix}/lib
 
 
 clean:
