@@ -18,13 +18,13 @@ all: sb_sched reschedule stat-config sb_dfg_emu
 
 
 reschedule : reschedule.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
 
 stat-config : stat-config.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
 
 sb_sched : sb_sched.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbconfig -lsbscheduler -Wl,-rpath,${prefix}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${prefix}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${prefix}/lib
