@@ -47,16 +47,25 @@ int main(int argc, char* argv[])
   int lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
 
-  system("mkdir -p gams/");
-  system("mkdir -p viz/");
-  system("mkdir -p verif/");
+
+  string dfg_base = basename(pdg_filename); // the name without preceeding dirs or file extension
+  string pdg_dir = basedir(pdg_filename);   // preceeding directories only
+  if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
+    pdg_dir += "/";
+  }
+  string viz_dir = pdg_dir + "viz/";
+  string verif_dir = pdg_dir + "verif/";
+  system(("mkdir -p " + viz_dir).c_str());
+  system(("mkdir -p " + verif_dir).c_str());
+  system("mkdir -p gams/"); // gams will remain at top level
 
   //sbpdg object based on the dfg
   SbPDG sbpdg(pdg_filename);
 
   //cout << "file: " << filename << "\n";
 
-  ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);
+  // ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);
+  ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
   assert(ofs.good());
   sbpdg.printGraphviz(ofs);
   ofs.close();
@@ -77,15 +86,14 @@ int main(int argc, char* argv[])
 
   //calculate latency
   sched->calcLatency(lat,latmis);
-  sched->printAllConfigs(("viz/"+pdg_rawname).c_str());      //text form of config fed to gui
+  sched->printAllConfigs((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
-  std::string config_header=pdg_rawname+string(".h");
+  std::string config_header = pdg_rawname + ".h";
   std::ofstream osh(config_header);     
   assert(osh.good()); 
-  sched->printConfigBits(osh,basename(pdg_filename));
-
-  std::string verif_header=string("verif/")+pdg_rawname+string(".configbits");
-  std::ofstream vsh(verif_header);     
+  sched->printConfigBits(osh, dfg_base);
+  std::string verif_header = verif_dir + dfg_base + ".configbits";
+  std::ofstream vsh(verif_header);
   assert(vsh.good()); 
   sched->printConfigVerif(vsh);
 
