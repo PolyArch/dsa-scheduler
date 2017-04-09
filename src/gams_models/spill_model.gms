@@ -1,6 +1,3 @@
-string spill_model = R"(
-
-
 Variable            cost,length;
 binary variable     Mn(v,n), Ml(e,l), Mvl(v,l)
 positive variable    Tv(v), Te(e);
@@ -100,5 +97,3 @@ put 'probe 2'/;
 putclose;
 
 solve   schedule    using mip minimizing cost;
-
-)";    

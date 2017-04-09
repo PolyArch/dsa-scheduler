@@ -1,5 +1,3 @@
-string timing_model = R"(
-
 file outfile / "softbrain.out" /;
 outfile.pc=8;
 outfile.pw=4096;
@@ -7,22 +5,30 @@ put outfile;
 put "[status_message_begin_scheduling]" /
 
 
-Variable            cost,length;
+Variable            cost;
+positive variable   length;
 binary variable     Mn(v,n), Mel(e,l), Mp(pv,pn);
-binary variable     PT(n);
 positive variable   Mvl(v,l);
-*Mvl.prior(v,l)=100;
-Mn.prior(v,n)=0;
-Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
-Mel.prior(e,l)=10;
+positive variable   O(l),extra(e);
+*maxExtra
 
-integer variable   Tv(v);
+* Not using these variables
+positive variable Ev(v);
+binary variable     PT(n);
+
+*Mvl.prior(v,l)=100;
+*Mn.prior(v,n)=0;
+*Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
+*Mel.prior(e,l)=10;
+
+integer variable Tv(v);
 integer variable minTpv(pv);
 integer variable maxTpv(pv);
 
+* Setup aliases and useful notational shortcuts
 alias(v1,v2,v);
-alias (l1,l2,l);
-alias (n,n1,n2);
+alias(l1,l2,l);
+alias(n,n1,n2);
 set Gvv(v,v);
 Gvv(v1,v2)=YES$(sum(e,Gve(v1,e) and Gev(e,v2))); 
 set Hll(l,l);
@@ -37,13 +43,10 @@ OutputL(l)$(sum(n$kindN('Output',n),Hln(l,n)))=Yes;
 set FU(n);
 FU(n)$(not KindN('Input',n) and not KindN('Output',n))=Yes;
 
-positive variable   O(l),extra(e),Ev(v);
-*maxExtra
-
-$batinclude mip_start.gams
-
 *flexiVectorPorts are always compatible with anything
 cp(pv,pn)=1; 
+
+$batinclude mip_start.gams
 
 * Set not-possible variables to 0
 loop(K,
@@ -61,16 +64,14 @@ loop(v1$(not sum(v2$Gvv(v1,v2), kindV('Output',v2))),
 
 PT.fx(n)$(not FU(n))=0;
 
-* Set input latencies
+* Set input latencies to 0
 Tv.up(v)$kindV('Input',v)=0;
 
 Equations
     assignVertex(K,v)
     oneVperN(n)
-    oneEperL(l)
     incoming_links(e,r)
-    outgoing_links(e,r)
-    obj;
+    outgoing_links(e,r);
 
 equation assignPort(pv), onePVperPN(pn);
 assignPort(pv)..                               sum(pn$cp(pv,pn),Mp(pv,pn)) =e= 1;
@@ -99,7 +100,18 @@ opposite_calc_l_used(v,l)..  sum(e$(Gve(v,e)),Mel(e,l)) =g= Mvl(v,l);
 equation calc_l_used2(v,e,l);
 calc_l_used2(v,e,l)$(Gve(v,e))..   Mel(e,l) =l= Mvl(v,l);
 
+equation    oneEperL(l);
 oneEperL(l)..                  sum(v,Mvl(v,l)) =l= 1;
+
+*integer variable NL(L);
+*integer variable ML;
+*NL.up(l)=4;
+*ML.up=4;
+*equation    oneEperL(l);
+*oneEperL(l)..                  sum(v,Mvl(v,l)) =l= NL(l);
+*
+*equation    maxL(l);
+*maxL(l)..  NL(l) =l= ML;
 
 equation    source_mapping(e,n,v), dest_mapping(e,n,v);
 source_mapping(e,n,v)$(Gve(v,e))..  sum(l$Hnl(n,l),Mel(e,l)) =e= Mn(v,n);
@@ -112,15 +124,12 @@ dest_mapping(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =e= Mn(v,n);
 *dest_mapping1(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =l= Mn(v,n) + PT(n);
 *dest_mapping2(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =g= Mn(v,n);
 
-
 incoming_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =e= sum(l$Hrl(r,l), Mel(e,l));
 outgoing_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =l= 1;
 
 * must not reconverge edges!
-*experimental
 equation limit_inc_v(v,r);
 limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
-
 
 *pass through
 *equation pass_through1(e,n), pass_through2(e,n);
@@ -134,36 +143,29 @@ limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 equation latency(v,e,v);
 latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) + Ev(v1);
 
-Ev.up(v)=15;
+*Turn off Ev
+Ev.up(v)=0;
 Ev.fx(v)$(not kindV('DelayFU',v))=0;
-*extra.fx(e)=0;
 
 extra.up(e)=15;
 
-
-*equation restrict_extra(e);
-*restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*15;
-
-*restrict_extra(e)..     extra(e) =l= sum(l,Mel(e,l));
-
-*restrict_extra(e)..     extra(e) =l= sum(v$Gve(v,e),KindV('Input',v))*1;
-
-Equations min_pv(pv,v), max_pv(pv,v), dist_pv(pv), add(pv);
+*Define minimum and maximum times for vector ports
+Equations min_pv(pv,v),dist_pv(pv);
+Equations max_pv(pv,v), add(pv);
 
 min_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. minTpv(pv) =l= Tv(v);
 max_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. maxTpv(pv) =g= Tv(v);
 
-*constant defines maximum distance
-dist_pv(pv).. minTpv(pv) + 4 =g= maxTpv(pv); 
-
-add(pv)..                length =g= maxTpv(pv);
-
+* All elements of vector port arrive simultaneously
+dist_pv(pv).. minTpv(pv) + 0 =g= maxTpv(pv); 
+add(pv)..     length =g= maxTpv(pv);
 
 *cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));
 
+Equation obj;
 obj.. cost =e= length;
 
-
+* Code for determining an ordering for removing cycles
 *O.l(l)=0;
 *
 *loop(l,
@@ -179,26 +181,30 @@ O.up(l)=CARD(L);
 *equation block_cycles2(l,l);
 *block_cycles2(l1,l2)$(sum(n,Hnl(n,l2) and Hln(l1,n))).. O(l1) + 1 =l= O(l2)
 
-
 option threads=8;
 
+
 Model fus_ok / assignVertex, oneVperN, obj /;
-solve   fus_ok    using mip minimizing length;
+solve fus_ok    using mip minimizing cost;
 
-*If(fus_ok.Modelstat gt %ModelStat.Locally Optimal%,
-*Display '**** Model did not terminate with normal solution',
-*fus_ok.Modelstat)
 
-put "[status_message_fus_ok]" /
+put "[status_message_fus_ok]" /;
 
 Model ports_ok / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, obj  /;
-solve ports_ok    using mip minimizing length;
+solve ports_ok    using mip minimizing cost;
 
-put "[status_message_ports_ok]" /
+put "[status_message_ports_ok]" /;
 
+extra.up(e)=100;
+Model schedule_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, incoming_links, outgoing_links, source_mapping, dest_mapping, opposite_calc_l_used, calc_l_used2, oneEperL, limit_inc_v, latency, max_pv, add, obj /;
+solve schedule_MR using mip minimizing cost;
 
-equation orderVectorPorts
+put "[status_message_mapping_routing_ok]" /;
 
+*fix the positions of the functional units
+Mp.fx(pv,pn) = Mp.l(pv,pn);
+Mn.fx(v,n) = Mn.l(v,n);
+extra.up(e)=15;
 
 
 Model   schedule  / all /;
@@ -233,17 +239,20 @@ schedule.holdFixed=1;
 *put 'mipordtype 3'/;
 *putclose;
 
-display Mel.l;
+*display Mel.l;
 display Mvl.l;
 
 option mip=gurobi;
 
-solve   schedule    using mip minimizing length;
+solve   schedule    using mip minimizing cost;
+
+*put schedule.Modelstat /;
+
+*If(schedule.Modelstat gt %ModelStat.Locally Optimal%,
+*put "[SCHEDULE FAILED]" /;
+*)
+
 
 display schedule.numEqu;
 display schedule.etSolve;
 display schedule.numVar;
-
-
-)";
-

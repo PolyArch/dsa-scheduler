@@ -508,18 +508,25 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
 
 //GAMS Specific
 
-#include "spill_model.cpp"
-#include "multi_model.cpp"
-#include "single_fixed_general.cpp"
-#include "softbrain_gams.cpp"
-#include "softbrain_gams_hw.cpp"
-#include "timing_model.cpp"
-#include "hw_model.cpp"
+#include "gams_models/softbrain_gams.h"
+#include "gams_models/softbrain_gams_hw.h"
+#include "gams_models/spill_model.h"
+#include "gams_models/multi_model.h"
+#include "gams_models/single_fixed_general.h"
+#include "gams_models/timing_model.h"
+#include "gams_models/hw_model.h"
+#include "gams_models/stage_model.h"
 
 //MIP START IS DEFUNCT NOW THAT THE SCHEDULER CAN'T KEEP UP WITH REQs OF PROBLEM
 #define USE_MIP_START 0 
 
 bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
+  string hw_model          = string((const char*)gams_models_hw_model_gms);
+  string timing_model      = string((const char*)gams_models_timing_model_gms);
+  string stage_model       = string((const char*)gams_models_stage_model_gms);
+  string softbrain_gams    = string((const char*)gams_models_softbrain_gams_gms);
+  string softbrain_gams_hw = string((const char*)gams_models_softbrain_gams_hw_gms);
+
   //mkfifo("/tmp/gams_fifo",S_IRWXU);
   stringstream ss;
   ss << _gams_work_dir << "/softbrain.out";
@@ -552,7 +559,8 @@ bool Scheduler::scheduleGAMS(SbPDG* sbPDG,Schedule*& schedule) {
     if(use_hw) {
       ofs_constraints << hw_model;
     } else {
-      ofs_constraints << timing_model;
+      //ofs_constraints << timing_model;
+      ofs_constraints << stage_model;
     }
 
     ofs_constraints.close();

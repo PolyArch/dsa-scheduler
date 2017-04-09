@@ -1,11 +1,3 @@
-string hw_model = R"(
-
-
-
-
-
-
-
 Variable            cost;
 binary variable     Mn(v,n), Sll(l,l), NOl(l), Mp(pv,pn);
 integer variable    Tl(l), Tn(n);
@@ -219,5 +211,3 @@ display schedule.numEqu;
 display schedule.etSolve;
 display schedule.numVar;
    
-)";
-
