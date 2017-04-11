@@ -717,7 +717,7 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
   int iter = 0;
   int ionodes = 0;
   //Insts
-  os << endl << "void dfg_func_" << dfg_name << "(uint64_t** inputs, uint64_t** outputs) {" << endl;
+  os << endl << "inline void dfg_func_" << dfg_name << "(uint64_t** inputs, uint64_t** outputs) {" << endl;
   for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { 
     (*Ii)->printEmuDFG(os, dfg_name); 
   }
@@ -726,7 +726,7 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
      (*Iout)->printDirectAssignments(os, dfg_name);
    }
    os << "}" << endl << endl << endl;
-  os << "sb_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
+  os << "static sb_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
   iter = 1;
   for(auto viter = input_sizes.begin(); viter != input_sizes.end(); viter++) {
     os << *viter;
