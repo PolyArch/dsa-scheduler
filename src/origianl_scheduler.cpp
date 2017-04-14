@@ -20,7 +20,6 @@ using namespace std;
 #include <netdb.h>
 #include <unistd.h>
 #include <list>
-
 /*
 class proposedPaths {
   public:
@@ -28,175 +27,18 @@ class proposedPaths {
   //vector<pair<int,vector<int> > path;
   std::map<int,int>;
 }*/
-bool Scheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
-  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
 
-  int n = sbPDG->num_vec_input();
-
-  for(int i = 0; i < n; ++i) {
-    SbPDG_VecInput* vec_in = sbPDG->vec_in(i);
-    cout << "Assigning Vector Port:" << vec_in->gamsName() <<"\n";
-    
-    bool found_vector_port = false;
-
-    for(auto& i : subModel->io_interf().in_vports) {
-      int vport_num = i.first;
-      auto vport_id = std::make_pair(true/*input*/,vport_num);
-      vector<pair<int, vector<int>>>& vport_desc = i.second;
-
-      //Check if the vetcor port is 1. big enough & 2. unassigned
-      if(vec_in->num_inputs() <= vport_desc.size() && 
-         sched->vportOf(vport_id) == NULL) {
-        std::vector<bool> mask; 
-        mask.resize(vport_desc.size());
-
-        bool ports_okay_to_use=true;
-
-        //Check if it's okay to assign to these ports
-        for(unsigned m=0; m < vec_in->num_inputs(); ++m) {
-          //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sbinput* cgra_in_port = subModel->get_input(cgra_port_num);
-
-          if(sched->pdgNodeOf(cgra_in_port) != NULL) {
-            ports_okay_to_use=false;
-            break;
-          } 
-        }
-        if(!ports_okay_to_use) {
-          cout << "skipping this port assignment\n";
-          continue; //don't assign these ports
-        }
-        // Assign Individual Elements
-        for(unsigned m=0; m < vec_in->num_inputs(); ++m) {
-          mask[m]=true;
-         
-          //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sbinput* cgra_in_port = subModel->get_input(cgra_port_num);
-
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node* sbpdg_input = vec_in->getInput(m);
-          sched->assign_node(sbpdg_input,cgra_in_port,0/*config*/);
-        }
-        //Perform the vector assignment
-        sched->assign_vport(vec_in,vport_id,mask);
-        found_vector_port=true;
-      }
-      if(found_vector_port) {
-        break;
-      }
-    }
-    if(!found_vector_port) {
-      cout << "Could not find hardware vector port\n";
-      return false;
-    }
-  }
-  return true;
-}
-
-
-bool Scheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
-  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
-  CandidateRouting candRouting;  
-
-  int n = sbPDG->num_vec_output();
-
-  for(int i = 0; i < n; ++i) {
-    SbPDG_VecOutput* vec_out = sbPDG->vec_out(i);
-    cout << "Assigning Vector Port:" << vec_out->gamsName() <<"\n";
-    
-    bool found_vector_port = false;
-
-    for(auto& i : subModel->io_interf().out_vports) {
-      int vport_num = i.first;
-      auto vport_id = std::make_pair(false/*output*/,vport_num);
-      vector<pair<int, vector<int>>>& vport_desc = i.second;
-
-      //Check if the vetcor port is 1. big enough & 2. unassigned
-      if(vec_out->num_outputs() <= vport_desc.size() && 
-         sched->vportOf(vport_id) == NULL) {
-        std::vector<bool> mask; 
-        mask.resize(vport_desc.size());
-
-        candRouting.clear();
-        bool ports_okay_to_use=true;
-
-        //Check if it's okay to assign to these ports
-        for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-          //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sboutput* cgra_out_port = subModel->get_output(cgra_port_num);
-
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node* sbpdg_output = vec_out->getOutput(m);
-
-          if(sched->pdgNodeOf(cgra_out_port) != NULL) {
-            ports_okay_to_use=false;
-            break;
-          } 
-
-					std::pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-          std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, 
-                                      0/*config*/,candRouting,fscore); ///?????
-          if(curScore>=fscore) { //?????
-            ports_okay_to_use=false;
-            break;
-          }
-        }
-        if(!ports_okay_to_use) {
-          cout << "skipping this port assignment\n";
-          continue; //don't assign these ports
-        }
-
-        applyRouting(sched, 0/*config*/, &candRouting); //Commit the routing
-
-        // Assign Individual Elements
-        for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-          mask[m]=true;
-         
-          //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sboutput* cgra_out_port = subModel->get_output(cgra_port_num);
-
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node* sbpdg_output = vec_out->getOutput(m);
-          
-          sched->assign_node(sbpdg_output,cgra_out_port,0/*config*/);
-        }
-        //Perform the vector assignment
-        sched->assign_vport(vec_out,vport_id,mask);
-        found_vector_port=true;
-      }
-      if(found_vector_port) {
-        break;
-      }
-    }
-    if(!found_vector_port) {
-      cout << "Could not find hardware vector port\n";
-      return false;
-    }
-
-  }
-  return true;
-}
-
-bool Scheduler::scheduleGreedyBFS(SbPDG* sbPDG, Schedule*& sched) {
-  sched = new Schedule(_sbModel,sbPDG);
+Schedule* Scheduler::scheduleGreedyBFS(SbPDG* sbPDG) {
+  Schedule* sched = new Schedule(_sbModel,sbPDG);
   sched->setNConfigs(1);
- 
-	bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
-  if(!vec_in_assigned) {
-    return false;
-  }
-
+  bool schedule_okay=true;
+  
   map<SbPDG_Inst*,bool> seen;
-	bool schedule_okay=true;
   
-	list<SbPDG_Inst* > openset;
+  list<SbPDG_Inst* > openset;
   SbPDG::const_input_iterator I,E;
-  
-	//pdg input nodes
+ 
+  //pdg input nodes
   for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
     SbPDG_Input* n = *I;
     
@@ -215,7 +57,7 @@ bool Scheduler::scheduleGreedyBFS(SbPDG* sbPDG, Schedule*& sched) {
     openset.pop_front();
     
     if(!seen[n]) {
-			schedule_okay &= scheduleNode(sched,n);
+      schedule_okay&=scheduleNode(sched,n);
     }
     seen[n]=true;
     
@@ -229,11 +71,33 @@ bool Scheduler::scheduleGreedyBFS(SbPDG* sbPDG, Schedule*& sched) {
 
   }
   
-  bool vec_out_assigned = assignVectorOutputs(sbPDG,sched);
-  if(!vec_out_assigned) {
-    return false;
+  
+  /*
+  SbPDG::const_inst_iterator Ii,Ei;
+  for(Ii=sbPDG->inst_begin(), Ei=sbPDG->inst_end(); Ii!=Ei; ++Ii) {
+    SbPDG_Inst* pdginst = *Ii; 
+    scheduleNode(sched,pdginst);
+  }*/
+  
+  
+  
+  
+  //Scheduling the inputs 
+  for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
+    SbPDG_Input* pdgin = *I;
+    schedule_okay&=scheduleNode(sched,pdgin);
   }
-  return schedule_okay;
+   
+  //schedule the outputs
+  SbPDG::const_output_iterator Io,Eo;
+  for(Io=sbPDG->output_begin(),Eo=sbPDG->output_end();Io!=Eo;++Io) {
+    SbPDG_Output* pdgout = *Io;
+    schedule_okay&=scheduleNode(sched,pdgout);
+  }
+  if(!schedule_okay) {
+    assert(0 && "Could not schedule");
+  }
+  return sched;
 }
 
 void Scheduler::applyRouting(Schedule* sched, int config,
@@ -242,7 +106,6 @@ void Scheduler::applyRouting(Schedule* sched, int config,
   std::map< std::pair<SB_CONFIG::sblink*,int>,SbPDG_Edge* >::iterator I,E;
   for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
     sched->assign_link(I->second->def(),I->first.first, I->first.second);
-		sched->updateLinkCount(I->first.first);
     //sched->assign_edgelink(I->second,I->first.first, I->first.second);
     /*if(candRouting->routing.size() > 10) {
       cout << I->first.first->name() << "\n";
@@ -319,8 +182,7 @@ void Scheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
 
 bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
   
-  pair<int,int> bestScore = make_pair(MAX_ROUTE,MAX_ROUTE); //a big number
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
+  int bestScore=MAX_ROUTE; //a big number
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot;
   int bestconfig;
@@ -346,7 +208,7 @@ bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
       curRouting->routing.clear();
       curRouting->forwarding.clear();
       
-      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, config,*curRouting,bestScore);
+      int curScore = scheduleHere(sched, pdgnode, cand_spot, config,*curRouting,bestScore);
                   
       if(curScore < bestScore) {
         bestScore=curScore;
@@ -355,7 +217,7 @@ bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
         std::swap(bestRouting,curRouting);
       }
       
-      if(bestScore <= make_pair(0,1))  { //????
+      if(bestScore<=1)  {
         applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
         return true;
       }//apply routing step
@@ -366,21 +228,44 @@ bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
   
   //TODO: If not scheduled, then increase the numConfigs, and try again
   
-  if (bestScore < fscore) {
+  if(bestScore < MAX_ROUTE) {
     applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
   } else {
-    cout << "WARNING!!!! No route found for pdgnode: " << pdgnode->name() << "\n";
+    cout << "no route found for pdgnode: " << pdgnode->name() << "\n";
     return false; 
+    /*
+    SbPDG_Node::const_edge_iterator I,E;
+    for(I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
+      if(*I == NULL) { continue; } //could be immediate
+      SbPDG_Edge* source_pdgegde = (*I);
+      SbPDG_Node* source_pdgnode = source_pdgegde->def();
+
+      //route edge if source pdgnode is scheduled
+      if(sched->isScheduled(source_pdgnode)) {
+        pair<sbnode*,int> source_loc = sched->locationOf(source_pdgnode);
+       
+        curRouting->routing.clear();
+        curRouting->forwarding.clear();
+        int score = route_to_output(sched, source_pdgegde, source_loc.first,source_loc.second,*curRouting,0);
+        if(score < MAX_ROUTE) {
+          applyRouting(sched,source_pdgnode,NULL,source_loc.second,curRouting);
+        } else {
+          cout << "could not patch from " << source_pdgnode->name() << "\n";
+        }
+      }
+    }
+    */
+    
+    
   }
   return true;
 }
 
-pair<int,int> Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n, 
+int Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n, 
                                 sbnode* here, int config, 
                                 CandidateRouting& candRouting,
-                                pair<int,int> bestScore) {
-  pair<int,int> score=make_pair(0,0);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
+                                int bestScore) {
+  int score=0;
   
   SbPDG_Node::const_edge_iterator I,E;
   
@@ -394,11 +279,11 @@ pair<int,int> Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n,
       pair<sbnode*,int> source_loc = sched->locationOf(source_pdgnode); //scheduled location
      
       //route using source node, sbnode
-      pair<int,int> tempScore = route(sched, source_pdgegde, source_loc.first, here,config,candRouting,bestScore-score);
-			score = score + tempScore;
+      score += route(sched, source_pdgegde, source_loc.first, here,config,candRouting,bestScore-score);
       //cout << n->name() << " " << here->name() << " " << score << "\n";
-      if(score>bestScore) return fscore;
+      if(score>bestScore) return MAX_ROUTE;
     }
+  
   }
   
   SbPDG_Node::const_edge_iterator Iu,Eu;
@@ -410,29 +295,19 @@ pair<int,int> Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n,
      if(sched->isScheduled(use_pdgnode)) {
        pair<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
        
-       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
-			 score = score + tempScore;
+       score += route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
        //cout << n->name() << " " << here->name() << " " << score << "\n";
-       if(score>bestScore) return score;
+       if(score>bestScore) return MAX_ROUTE;
      }
   }
   
   return score;
 }
 
-pair<int,int> Scheduler::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-	if (score == fscore) {
-		score = route_minimizeOverlapping(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
-	}
-	return score;
-}
 //routes only inside a configuration
-//return value <numOverlappedLinks, Distance>
-pair<int,int> Scheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+int Scheduler::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
+                     int config, CandidateRouting& candRouting, int scoreLeft) {
   
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
   map<sbnode*,int> node_dist;
   map<sbnode*,sblink*> came_from;
@@ -472,6 +347,7 @@ pair<int,int> Scheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdg
                                   candRouting.routing[p]->def();
       if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
       
+      
       sbnode* next = link->dest();
       
       if(next==_sbModel->subModel()->cross_switch()) continue;
@@ -492,100 +368,11 @@ pair<int,int> Scheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdg
     if(found_dest) break;
   }
     
-  if(!found_dest) return fscore;  //routing failed, no routes exist!
+  if(!found_dest) return MAX_ROUTE;  //routing failed, no routes exist!
   
-  pair<int,int> score;
-  score = make_pair(0,node_dist[dest]);
+  int score;
+  score = node_dist[dest];
   
-  sbnode* x = dest;
-  while(came_from.count(x)!=0) {
-    sblink* link = came_from[x];
-    candRouting.routing[make_pair(link,config)]=pdgedge;
-    x=link->orig();
-  }
-  
-  return score;
-}
-
-//routes only inside a configuration
-pair<int,int> Scheduler::route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
-                     int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-  
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-  list<sbnode*> openset;
-  map<sbnode*,int> node_dist;
-  map<sbnode*,int> node_overlap;
-  map<sbnode*,sblink*> came_from;
-  bool found_dest = false;
-  
-  openset.push_back(source);
-  
-  SbPDG_Node* pdgnode = pdgedge->def();
-  
-  //fill up worklist with nodes reachable 
-  Schedule::link_iterator I,E;
-  for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    if(I->second==config) {
-      openset.push_back(I->first->dest());
-    }
-  }
-  
-  while(!openset.empty()) {
-    sbnode* node = openset.front(); 
-    openset.pop_front();
-    
-    //don't search this node if it's too much anyways
-    //if(x->links+1>=cost_allotted) continue; 
-    
-    //check neighboring nodes
-    sbnode::const_iterator I,E;
-    for(I = node->obegin(), E = node->oend(); I!=E; ++I)
-    {
-      sblink* link = *I;
-      
-      //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link,config);
-      //if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
-      
-      std::pair<sblink*,int> p = make_pair(link,config);
-      SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
-                                  candRouting.routing[p]->def();
-      //if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
-      
-      sbnode* next = link->dest();
-      
-   //   if(next==_sbModel->subModel()->cross_switch()) continue;
-    //  if(next==_sbModel->subModel()->load_slice()  ) continue;
-      if(node_dist.count(next)!=0) continue; //it has been looked at, or will be looked at
-      
-      found_dest=(next==dest);
-
-      if(dynamic_cast<sbfu*>(next) && !found_dest) continue;  //don't route through fu
-
-      came_from[next] = link;
-      node_dist[next] = node_dist[node]+1;
-      if ((sched_exist_pdg != NULL && sched_exist_pdg != pdgnode) 
-				|| (cand_exist_pdg != NULL && cand_exist_pdg != pdgnode)) {
-				node_overlap[next]=node_overlap[node]+1;
-		  }
- 
-      if(found_dest) break; 
-      
-      openset.push_back(next);
-    }
-    if(found_dest) break;
-  }
-    
-  if(!found_dest) return fscore;  //routing failed, no routes exist!
-  
-  int distScore;
-  distScore = node_dist[dest];
-
-	int overlapScore;
-	overlapScore = node_overlap[dest];
- 
-	std::pair<int,int> score = make_pair(overlapScore,distScore);
-	 
   sbnode* x = dest;
   while(came_from.count(x)!=0) {
     sblink* link = came_from[x];

@@ -40,6 +40,15 @@ void Schedule::printAllConfigs(const char *base) {
   }
 }
 
+void Schedule::stat_printLinkCount(){
+	cout<<"============="<<endl;
+	 cout<<"Link . . . . . Freq." << endl;
+   for (auto& i: linkCount) {
+     cout << (i.first)->name() << " . . . . . " << i.second << endl;
+   }
+	cout<<"============="<<endl;
+}
+
 //For a given pdgnode
 //return the input or ouput port num if the pdfgnode is a
 //sbinput ot sboutput
@@ -413,7 +422,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
-  print_bit_loc();
+  //print_bit_loc();
 
   //Step 1: Place bits into fields
 
@@ -671,7 +680,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }//end for switch x
   }//end for switch y 
 
-  cout << "cur slice: " << cur_slice << "\n";
+  //cout << "cur slice: " << cur_slice << "\n";
   //--------------------------------------- ENCODE CONSTANTS ------------------------
   for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {    
     for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
@@ -689,7 +698,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       }
     }
   } 
-  cout << "cur slice: " << cur_slice << "\n";
+  //cout << "cur slice: " << cur_slice << "\n";
 
   //Step 2: Write to output stream
   os << "#ifndef " << "__" << cfg_name << "_H__\n";

@@ -12,22 +12,22 @@
 using namespace SB_CONFIG;
 
 //How do you choose which switch in each row and FU to pass ??
-struct sw_config {
-  unsigned pred:2;
-  unsigned opcode:5;
-  unsigned fu_in1:2;    //cfg for 1st input of FU
-  unsigned fu_in2:2;    //cfg for 2nd input of FU
-  unsigned fu_out:2;    //cfg for 3rd input of FU
-  unsigned  sw_s:3;     //select lien for output muxes
-  unsigned sw_se:3;
-  unsigned  sw_e:3;
-  unsigned sw_ne:3;
-  unsigned  sw_n:3;
-  unsigned sw_nw:3;
-  unsigned  sw_w:3;
-  unsigned sw_sw:3;
-  unsigned   row:2;  //can address only 4 rows -- need to update it
-};
+//struct sw_config {
+//  unsigned pred:2;
+//  unsigned opcode:5;
+//  unsigned fu_in1:2;    //cfg for 1st input of FU
+//  unsigned fu_in2:2;    //cfg for 2nd input of FU
+//  unsigned fu_out:2;    //cfg for 3rd input of FU
+//  unsigned  sw_s:3;     //select lien for output muxes
+//  unsigned sw_se:3;
+//  unsigned  sw_e:3;
+//  unsigned sw_ne:3;
+//  unsigned  sw_n:3;
+//  unsigned sw_nw:3;
+//  unsigned  sw_w:3;
+//  unsigned sw_sw:3;
+//  unsigned   row:2;  //can address only 4 rows -- need to update it
+//};
 
 
 class Schedule {
@@ -82,6 +82,8 @@ class Schedule {
 
     //Assign the sbnode, config pair to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode, int config=0) {
+      std::cout << snode->name() << " assigned to " 
+                << pdgnode->gamsName() << "\n";
       _assignNode[std::make_pair(snode,config)] = pdgnode;
       _sbnodeOf[pdgnode]=std::make_pair(snode,config);
     }
@@ -104,12 +106,14 @@ class Schedule {
       //std::cout << "max lat: " << max_lat<< "\n";
       _latOfVPort[pdgvec_out]=max_lat;
     }
-    
+   
+    //Get the mask for a software vector 
     std::vector<bool> maskOf(SbPDG_Vec* pdgvec) {
       assert(_maskOf.count(pdgvec));
       return _maskOf[pdgvec];
     }
 
+    //Get the software vector for a hardware vector port identifier
     SbPDG_Vec* vportOf(std::pair<bool,int> pn) {
       if(_assignVPort.count(pn)) {
         return _assignVPort[pn];
@@ -119,15 +123,14 @@ class Schedule {
     }
 
     //vector to port num
-    void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn, std::vector<bool>mask) {
-      //std::cout << " -- Assigning vport " << pdgvec->gamsName() << " " << pn.first << "\n";
+    void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn, 
+                                         std::vector<bool>mask) {
+      std::cout << (pn.first ? "input" : "output" )
+                << " vector port" << pn.second
+                << " assigned to " << pdgvec->gamsName() << "\n";
       _assignVPort[pn]=pdgvec;
       _vportOf[pdgvec]=pn;
       _maskOf[pdgvec]=mask;
-
-      //if(pn.first == false) { //false is output
-      //  calc_out_vport_lat(pdgvec);
-      //}
     }
 
     //sblink to pdgnode
@@ -181,8 +184,13 @@ class Schedule {
     bool isScheduled(SbPDG_Node* pdgnode) {
       return _sbnodeOf.count(pdgnode)!=0;
     }
-    
-    
+   
+		void updateLinkCount(sblink* link){
+			linkCount[link]++;
+		} 
+
+		void stat_printLinkCount();
+
     typedef std::vector<std::pair<sblink*,int>>::const_iterator link_iterator;
     
     link_iterator links_begin(SbPDG_Node* n) {return _linksOf[n].begin();}
@@ -349,6 +357,7 @@ class Schedule {
     std::cout << "In Del.: "<< IN_DELAY_LOC<<":"<< IN_DELAY_LOC + IN_DELAY_BITS-1 << "\n";
   }
 
+
   private:
 
     SbDIR sbdir;
@@ -357,9 +366,11 @@ class Schedule {
     int _n_configs;   
     SbModel* _sbModel;
     SbPDG*   _sbPDG;
+		
 
-    std::set<sbnode*> _passthrough_nodes;
+    std::set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
+		std::map<sblink*, int> linkCount;
     std::map<std::pair<sbnode*, int>, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::map<SbPDG_Node*, std::pair<sbnode*,int> > _sbnodeOf;    //pdgnode to sbnode
     std::map<SbPDG_Node*, int> _latOf; 

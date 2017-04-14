@@ -289,6 +289,9 @@ class SbPDG_VecInput : public SbPDG_Vec {
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
   std::vector<SbPDG_Input*>::iterator input_end() {return _inputs.end();}
+  unsigned num_inputs() {return _inputs.size();}
+
+  SbPDG_Input* getInput(int i) {return _inputs[i];}
 
   private:
     std::vector<SbPDG_Input*> _inputs;
@@ -309,6 +312,9 @@ class SbPDG_VecOutput : public SbPDG_Vec {
   void addOutput(SbPDG_Output* out) { _outputs.push_back(out); }
   std::vector<SbPDG_Output*>::iterator output_begin() {return _outputs.begin();}
   std::vector<SbPDG_Output*>::iterator output_end() {return _outputs.end();}
+  unsigned num_outputs() {return _outputs.size();}
+
+  SbPDG_Output* getOutput(int i) {return _outputs[i];}
 
   private:
     std::vector<SbPDG_Output*> _outputs;

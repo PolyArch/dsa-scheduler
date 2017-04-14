@@ -16,21 +16,6 @@
 #define MAX_ROUTE 100000000
 
 
-
-template <typename T,typename U>                           
-std::pair<T,U> operator+(const std::pair<T,U> & l,
-                         const std::pair<T,U> & r) {   
-    return {l.first+r.first,l.second+r.second};
-}        
-
-template <typename T,typename U>                           
-std::pair<T,U> operator-(const std::pair<T,U> & l,
-                         const std::pair<T,U> & r) {   
-    return {l.first-r.first,l.second-r.second};
-}        
-
-
-
 class CandidateRouting {
 public:
   std::map< std::pair<SB_CONFIG::sblink*,int>, SbPDG_Edge* > routing;
@@ -44,6 +29,7 @@ public:
 
 class Scheduler {
   public:
+
   Scheduler(SB_CONFIG::SbModel* sbModel) :
   _gams_files_setup(false), _use_server(false),
     _gams_work_dir("gams"), _sbModel(sbModel),
@@ -52,10 +38,10 @@ class Scheduler {
   bool check_res(SbPDG* sbPDG,    SbModel* sbmodel);
   bool scheduleGAMS(SbPDG* sbPDG, Schedule*& schedule);         //GAMs sepcific scheduler (sbpdg and scheulde object)
   
-  bool scheduleGreedyBFS(SbPDG* sbPDG, Schedule*& schedule);
+  Schedule* scheduleGreedyBFS(SbPDG* sbPDG);
   
 
-  bool scheduleBacktracking(SbPDG* sbPDG, Schedule*& schedule);
+   bool scheduleBacktracking(SbPDG* sbPDG, Schedule*& schedule);
  
 
   void use_server() { _use_server = true; }
@@ -88,19 +74,12 @@ class Scheduler {
                     std::vector<SB_CONFIG::sbnode*>& spots);
   void fillInstSpots(Schedule*,SbPDG_Inst*, int config, 
                      std::vector<SB_CONFIG::sbnode*>& spots);
-  bool scheduleNode(Schedule*, SbPDG_Node*);
- std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
-               int config, CandidateRouting&,std::pair<int,int> bestScore);
-
- std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
+  bool scheduleNode(Schedule*, SbPDG_Node* );
+  int scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
+               int config, CandidateRouting&, int bestScore);
+  int route(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
+            CandidateRouting&, int scoreLeft);
    int route_to_output(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, int config, 
             CandidateRouting&, int scoreLeft);

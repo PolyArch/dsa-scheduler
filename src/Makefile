@@ -5,9 +5,8 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS :=  -Wall -g -std=c++11 -O3 -lm $(FLAGS)
-SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp
-
+CXXFLAGS :=  -Wall -g -std=c++11 -O0 -ggdb -gdwarf-3 -lm $(FLAGS)
+SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bk.cpp 
 EXTRA_GAMS=softbrain_gams.cpp timing_model.cpp multi_model.cpp spill_model.cpp 
 
 INCLUDE_DEST=../src

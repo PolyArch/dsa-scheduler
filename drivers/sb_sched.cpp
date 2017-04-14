@@ -30,12 +30,32 @@ std::string basedir(std::string& filename) {
   return filename.substr(0, lastindex);  
 }
 
+
 int main(int argc, char* argv[])
 {
-  if(argc<3) {
-    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg\n";
+
+  enum SchedType {GAMS,GREEDY,BKT};
+  SchedType schedType = GAMS;
+  bool bad_parsing = false;
+
+  if(argc==4) {
+    string str_schedType = string(argv[3]);
+    if(str_schedType == "gams") {
+      schedType = GAMS;
+    } else if(str_schedType == "greedy") {
+      schedType = GREEDY;
+    } else if(str_schedType == "bkt") {
+      schedType = BKT;
+    } else {
+      bad_parsing = true;
+    }
+  }
+
+  if(argc<3 || argc >4 || bad_parsing) {
+    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt]\n";
     exit(1);
   }
+
 
   //Sbmodel object based on the hw config
   SbModel sbmodel(argv[1]);
@@ -75,11 +95,25 @@ int main(int argc, char* argv[])
 
   scheduler.check_res(&sbpdg,&sbmodel);
 
-  bool succeed_sched = scheduler.scheduleGAMS(&sbpdg,sched);
+  bool succeed_sched = false;
+
+  if(schedType == GAMS) {
+    succeed_sched = scheduler.scheduleGAMS(&sbpdg,sched);
+  } else if(schedType == BKT) {
+    succeed_sched = scheduler.scheduleBacktracking(&sbpdg,sched); 
+  } else if(schedType == GREEDY) {
+    succeed_sched = scheduler.scheduleGreedyBFS(&sbpdg,sched); 
+  } else {
+    cout << "NO SCHEDULER FOUND\n";
+    return 1;
+  }
 
   if(!succeed_sched) {
-    cout << "ERROR: GAMS SCHEDULE FAILED -- EXITING\n";
+    cout << "ERROR: SCHEDULING FAILED -- EXITING\n";
     return 1;
+  } else {
+  	sched->stat_printLinkCount(); 
+    cout << "Scheduling Successful!\n";
   }
 
   int lat,latmis;

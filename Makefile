@@ -1,10 +1,9 @@
 level=./
 include make.config
-include make.rules
-
-.PHONY:  directories program make_drivers
 
 all: directories program make_drivers
+
+include make.rules
 
 
 program:

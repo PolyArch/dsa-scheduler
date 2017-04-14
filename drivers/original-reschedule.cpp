@@ -194,7 +194,7 @@ int main(int argc, char* argv[])
   Schedule* new_sched;              //scheduled object
   if(stype==SCHED_GREEDY) {
     //Greedy BFS
-    scheduler.scheduleGreedyBFS(sched.sbpdg(),new_sched);
+    new_sched = scheduler.scheduleGreedyBFS(sched.sbpdg());
   } else {
 
     //GAMS scheduler -- internally calls greedy bfs
