@@ -4,6 +4,12 @@
 #include <fstream>
 
 #include "scheduler.h"
+#include "scheduler_greedy.h"
+#include "scheduler_bkt.h"
+#include "scheduler_mlg.h"
+#include "scheduler_gams.h"
+#include "scheduler_sg.h"
+#include "scheduler_sa.h"
 #include "sbpdg.h"
 #include <cstdlib>
 #include <string>
@@ -34,25 +40,12 @@ std::string basedir(std::string& filename) {
 int main(int argc, char* argv[])
 {
 
-  enum SchedType {GAMS,GREEDY,BKT};
-  SchedType schedType = GAMS;
-  bool bad_parsing = false;
+  //enum SchedType {GAMS, GREEDY, MLG, BKT, SG, SA};
+  //SchedType schedType = GAMS;
 
-  if(argc==4) {
-    string str_schedType = string(argv[3]);
-    if(str_schedType == "gams") {
-      schedType = GAMS;
-    } else if(str_schedType == "greedy") {
-      schedType = GREEDY;
-    } else if(str_schedType == "bkt") {
-      schedType = BKT;
-    } else {
-      bad_parsing = true;
-    }
-  }
-
-  if(argc<3 || argc >4 || bad_parsing) {
-    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt]\n";
+    
+  if(argc != 4) {
+  	cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
     exit(1);
   }
 
@@ -91,25 +84,43 @@ int main(int argc, char* argv[])
   ofs.close();
 
   Schedule* sched=NULL;
-  Scheduler scheduler(&sbmodel);
 
-  scheduler.check_res(&sbpdg,&sbmodel);
+	string str_schedType = string(argv[3]);
+  //Scheduler scheduler(&sbmodel);
+  Scheduler* scheduler;
+  if(str_schedType == "gams") {
+    //schedType = GAMS;
+		scheduler = new SchedulerGAMS(&sbmodel);
+  } else if(str_schedType == "greedy") { /*original*/
+    //schedType = GREEDY;
+		scheduler = new SchedulerGreedy(&sbmodel);
+  } else if(str_schedType == "mlg") { /*multiple-link greedy*/
+		//schedType = MLG;
+		scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
+  } else if(str_schedType == "sg") { /*stochastic greedy*/
+		//schedType = SG;
+		scheduler = new SchedulerStochasticGreedy(&sbmodel);
+  } else if(str_schedType == "sa") { /*simulated annealing*/
+		//schedType = SA;
+		scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
+  } else if(str_schedType == "bkt") {
+    //schedType = BKT;
+		scheduler = new SchedulerBacktracking(&sbmodel);
+	} else {
+  	cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
+  	exit(1);
+  }
+
+
+
+  scheduler->check_res(&sbpdg,&sbmodel);
 
   bool succeed_sched = false;
 
-  if(schedType == GAMS) {
-    succeed_sched = scheduler.scheduleGAMS(&sbpdg,sched);
-  } else if(schedType == BKT) {
-    succeed_sched = scheduler.scheduleBacktracking(&sbpdg,sched); 
-  } else if(schedType == GREEDY) {
-    succeed_sched = scheduler.scheduleGreedyBFS(&sbpdg,sched); 
-  } else {
-    cout << "NO SCHEDULER FOUND\n";
-    return 1;
-  }
+  succeed_sched = scheduler->schedule(&sbpdg,sched);
 
   if(!succeed_sched) {
-    cout << "ERROR: SCHEDULING FAILED -- EXITING\n";
+    cout << "Scheduling Failed!\n";
     return 1;
   } else {
   	sched->stat_printLinkCount(); 

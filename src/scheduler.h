@@ -32,7 +32,7 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 
 class CandidateRouting {
-public:
+	public:
   std::map< std::pair<SB_CONFIG::sblink*,int>, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
@@ -43,38 +43,44 @@ public:
 };
 
 class Scheduler {
-  public:
-  Scheduler(SB_CONFIG::SbModel* sbModel) :
-  _gams_files_setup(false), _use_server(false),
-    _gams_work_dir("gams"), _sbModel(sbModel),
-    _optcr(0.1f), _optca(0.0f), _reslim(100000.0f), _showGams(true) { }
+	public:
+  Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel) {}
 
   bool check_res(SbPDG* sbPDG,    SbModel* sbmodel);
-  bool scheduleGAMS(SbPDG* sbPDG, Schedule*& schedule);         //GAMs sepcific scheduler (sbpdg and scheulde object)
-  
-  bool scheduleGreedyBFS(SbPDG* sbPDG, Schedule*& schedule);
-  
 
-  bool scheduleBacktracking(SbPDG* sbPDG, Schedule*& schedule);
- 
+  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
 
-  void use_server() { _use_server = true; }
-  static bool requestGams(const char *filename);
+	void error(const char *msg){
+  	perror(msg);
+  	exit(0);
+	}
+	protected:
+	SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
+  SB_CONFIG::SbModel* _sbModel;
   
-  void setGap(float relative, float absolute=1.0f) {
-    _optcr=relative;
-    _optca=absolute;
-  }
+};
 
-  void setTimeout(float timeout) {
-    _reslim=timeout;
-  }
-  
-  void showGams(bool show) {
-    _showGams=show; 
-  }
-  
-  private:
+class HeuristicScheduler : public Scheduler {
+
+	public:
+
+	HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel) {}
+  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
+  virtual bool scheduleNode(Schedule*, SbPDG_Node*) = 0;
+  virtual std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
+               int config, CandidateRouting&,std::pair<int,int> bestScore) = 0;
+  virtual std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
+
+ std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            CandidateRouting&,std::pair<int,int> scoreLeft);
+ std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            CandidateRouting&,std::pair<int,int> scoreLeft);
+
+	protected:
 
   bool assignVectorInputs(SbPDG*, Schedule*);
   bool assignVectorOutputs(SbPDG*, Schedule*);
@@ -88,39 +94,46 @@ class Scheduler {
                     std::vector<SB_CONFIG::sbnode*>& spots);
   void fillInstSpots(Schedule*,SbPDG_Inst*, int config, 
                      std::vector<SB_CONFIG::sbnode*>& spots);
-  bool scheduleNode(Schedule*, SbPDG_Node*);
- std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
-               int config, CandidateRouting&,std::pair<int,int> bestScore);
 
- std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
    int route_to_output(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, int config, 
             CandidateRouting&, int scoreLeft);
  
-  bool scheduleNodeBacktracking(Schedule*, SbPDG_Node* );
+};
 
- 
+class GamsScheduler : public Scheduler {
+	public:
+	GamsScheduler(SB_CONFIG::SbModel* sbModel) :
+	Scheduler(sbModel),
+  _gams_files_setup(false), _use_server(false),
+  _gams_work_dir("gams"),
+  _optcr(0.1f), _optca(0.0f), _reslim(100000.0f), _showGams(true) { }
+
+  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
+  bool requestGams(const char *filename);
+
+  void showGams(bool show) {
+    _showGams=show; 
+  }
+  void use_server() { _use_server = true; }
+	void setGap(float relative, float absolute=1.0f) {
+    _optcr=relative;
+    _optca=absolute;
+  }
+
+  void setTimeout(float timeout) {
+    _reslim=timeout;
+  }
+
+  protected:
+
   bool _gams_files_setup;
   bool _use_server;
   std::string _gams_work_dir;
-  SB_CONFIG::SbModel* _sbModel;
   float _optcr,_optca,_reslim;
   bool _showGams;
-  
-  //std::unordered_map<std::string,SB_CONFIG::sbnode*> gamsToSbnode;  
-  //std::unordered_map<std::string,SbPDG_Node*> gamsToPdgnode;
-  
-  //typedef SchedulerMap std::unordered_map;
 
-  std::unordered_map<std::string, std::pair<SB_CONFIG::sbnode*,int> >  gamsToSbnode;  
+	std::unordered_map<std::string, std::pair<SB_CONFIG::sbnode*,int> >  gamsToSbnode;  
   std::unordered_map<std::string, std::pair<SB_CONFIG::sblink*,int> > gamsToSblink;
   std::unordered_map<std::string, std::pair<SB_CONFIG::sbswitch*,int>>  gamsToSbswitch;
 
@@ -131,7 +144,4 @@ class Scheduler {
   std::unordered_map<std::string, SbPDG_Vec*>  gamsToPortV;  
 
 };
-
-
-
 #endif
