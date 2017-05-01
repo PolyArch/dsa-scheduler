@@ -14,7 +14,8 @@ CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH)
 
 #all: reschedule stat-config
 
-all: sb_sched reschedule stat-config sb_dfg_emu
+all: sb_sched stat-config sb_dfg_emu 
+#reschedule
 
 
 reschedule : reschedule.cpp

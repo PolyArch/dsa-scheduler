@@ -187,19 +187,22 @@ int main(int argc, char* argv[])
     sbmodel = sched.sbModel();
   }
   
-  Scheduler scheduler(sbmodel);
+  Scheduler* scheduler;
+  if(stype==SCHED_GREEDY) {
+	 scheduler = new (sbmodel);
   scheduler.setGap(relative_gap,absolute_gap);
   scheduler.setTimeout(timeout);
   
   Schedule* new_sched;              //scheduled object
   if(stype==SCHED_GREEDY) {
     //Greedy BFS
-    scheduler.scheduleGreedyBFS(sched.sbpdg(),new_sched);
+    scheduler.schedule(sched.sbpdg(),new_sched);
   } else {
 
     //GAMS scheduler -- internally calls greedy bfs
     scheduler.scheduleGAMS(sched.sbpdg(),new_sched);
   }
+  scheduler.schedule(sched.sbpdg(),new_sched);
   
 
   

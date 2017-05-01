@@ -82,8 +82,8 @@ class Schedule {
 
     //Assign the sbnode, config pair to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode, int config=0) {
-      std::cout << snode->name() << " assigned to " 
-                << pdgnode->gamsName() << "\n";
+      //std::cout << snode->name() << " assigned to " 
+      //          << pdgnode->gamsName() << "\n";
       _assignNode[std::make_pair(snode,config)] = pdgnode;
       _sbnodeOf[pdgnode]=std::make_pair(snode,config);
     }
@@ -125,9 +125,9 @@ class Schedule {
     //vector to port num
     void assign_vport(SbPDG_Vec* pdgvec, std::pair<bool,int> pn, 
                                          std::vector<bool>mask) {
-      std::cout << (pn.first ? "input" : "output" )
+      /*std::cout << (pn.first ? "input" : "output" )
                 << " vector port" << pn.second
-                << " assigned to " << pdgvec->gamsName() << "\n";
+                << " assigned to " << pdgvec->gamsName() << "\n";*/
       _assignVPort[pn]=pdgvec;
       _vportOf[pdgvec]=pn;
       _maskOf[pdgvec]=mask;

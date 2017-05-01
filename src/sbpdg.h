@@ -11,6 +11,7 @@
 #include <vector>
 #include <assert.h>
 #include <sstream>
+#include <algorithm>
 
 #include "model.h"
 
@@ -289,9 +290,14 @@ class SbPDG_VecInput : public SbPDG_Vec {
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
   std::vector<SbPDG_Input*>::iterator input_end() {return _inputs.end();}
-  unsigned num_inputs() {return _inputs.size();}
+  unsigned num_inputs() const {return _inputs.size();}
 
   SbPDG_Input* getInput(int i) {return _inputs[i];}
+
+	/*bool operator < (const SbPDG_VecInput& s) const
+  {
+     return (this->num_inputs() > s.num_inputs());
+  }*/
 
   private:
     std::vector<SbPDG_Input*> _inputs;
@@ -312,9 +318,14 @@ class SbPDG_VecOutput : public SbPDG_Vec {
   void addOutput(SbPDG_Output* out) { _outputs.push_back(out); }
   std::vector<SbPDG_Output*>::iterator output_begin() {return _outputs.begin();}
   std::vector<SbPDG_Output*>::iterator output_end() {return _outputs.end();}
-  unsigned num_outputs() {return _outputs.size();}
+  unsigned num_outputs() const {return _outputs.size();}
 
   SbPDG_Output* getOutput(int i) {return _outputs[i];}
+
+	/*bool operator < (const SbPDG_VecOutput& s) const
+  {
+     return (this->num_outputs() > s.num_outputs());
+  }*/
 
   private:
     std::vector<SbPDG_Output*> _outputs;
@@ -502,7 +513,17 @@ class SbPDG {
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
+		void sort_vec_in() {
+			sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
+				return left->num_inputs() > right->num_inputs();
+			});
+		}
 
+		void sort_vec_out() {
+			sort(_vecOutputs.begin(), _vecOutputs.end(),[](SbPDG_VecOutput*& left, SbPDG_VecOutput*& right){	
+				return left->num_outputs() > right->num_outputs();
+			});
+		}
     void compute(bool print, bool verif);
 
   private:

@@ -42,6 +42,15 @@ class CandidateRouting {
   }
 };
 
+class Triplet {
+	public: 
+	Triplet(int x, int y, int z) : _x(x), _y(y), _z(z) {}
+		
+
+	private:
+	int _x, _y, _z;
+};
+
 class Scheduler {
 	public:
   Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel) {}
@@ -54,6 +63,117 @@ class Scheduler {
   	perror(msg);
   	exit(0);
 	}
+
+	int numFASched;
+	int numInputSched;
+	int numOutputSched;
+
+	int bestFASched;
+	int bestInputSched;
+	int bestOutputSched;
+
+	enum StatType {FA, Input, Output};
+
+	void progress_updateCurNum(StatType s, int init = 0){
+		if (s == FA) {
+			numFASched = init;
+		} else if (s == Input) {
+			numInputSched = init;
+		} else if (s == Output) {
+			numOutputSched = init;
+		} else {
+			std::cout<<"Bad Stat Type\n";
+			exit(0);
+		}
+	}
+
+	
+	void progress_updateBestNum(StatType s, int init = 0){
+		if (s == FA) {
+			bestFASched = init;
+		} else if (s == Input) {
+			bestInputSched = init;
+		} else if (s == Output) {
+			bestOutputSched = init;
+		} else {
+			std::cout<<"Bad Stat Type\n";
+			exit(0);
+		}
+	}
+
+	void progress_saveBestNum(StatType s) {
+		int progress_cur = progress_getCurNum(s);
+		int progress_best =  progress_getBestNum(s);
+		if ( progress_cur > progress_best) {
+			progress_updateBestNum(s, progress_cur);
+		}
+	}
+
+	void progress_incCurNum(StatType s) {
+		if (s == FA) {
+			numFASched++;
+		} else if (s == Input) {
+			numInputSched++;
+		} else if (s == Output) {
+			numOutputSched++;
+		} else {
+			std::cout<<"Bad Stat Type\n";
+			exit(0);
+		}
+	}
+
+	int progress_getCurNum(StatType s) {
+		int ret = 0;
+		if (s == FA) {
+			ret = numFASched;
+		} else if (s == Input) {
+			ret = numInputSched;
+		} else if (s == Output) {
+			ret = numOutputSched;
+		} else {
+			std::cout<<"Bad Stat Type\n";
+			exit(0);
+		}
+		return ret;
+	}
+
+	int progress_getBestNum(StatType s) {
+		int ret = 0;
+		if (s == FA) {
+			ret = bestFASched;
+		} else if (s == Input) {
+			ret = bestInputSched;
+		} else if (s == Output) {
+			ret = bestOutputSched;
+		} else {
+			std::cout<<"Bad Stat Type\n";
+			exit(0);
+		}
+		return ret;
+	}
+
+
+	void progress_initCurNums(){
+		progress_updateCurNum(FA,0);
+		progress_updateCurNum(Input,0);
+		progress_updateCurNum(Output,0);
+	}
+
+	void progress_initBestNums(){
+		progress_updateBestNum(FA,-1);
+		progress_updateBestNum(Input,-1);
+		progress_updateBestNum(Output,-1);
+	}
+
+
+	std::string AUX(int x) {
+		return (x==-1 ? "-" : std::to_string(x));
+	}	
+
+	void progress_printBests(){
+		std::cout<<"Progress: ("<<AUX(bestInputSched)<<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
+	}
+
 	protected:
 	SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
@@ -124,6 +244,7 @@ class GamsScheduler : public Scheduler {
   void setTimeout(float timeout) {
     _reslim=timeout;
   }
+
 
   protected:
 

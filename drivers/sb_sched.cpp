@@ -117,7 +117,20 @@ int main(int argc, char* argv[])
 
   bool succeed_sched = false;
 
-  succeed_sched = scheduler->schedule(&sbpdg,sched);
+	int attempts = 0;
+	int upperbound;
+  upperbound = (str_schedType == "sg" ? 1000 : 1);
+	srand(2);
+	scheduler->progress_initBestNums();
+	while (!succeed_sched && attempts < upperbound) {
+		scheduler->progress_initCurNums();
+  	succeed_sched = scheduler->schedule(&sbpdg,sched);
+		attempts++;
+	}
+
+	if (str_schedType == "sg" || str_schedType == "greedy") {
+		scheduler->progress_printBests();
+	}
 
   if(!succeed_sched) {
     cout << "Scheduling Failed!\n";

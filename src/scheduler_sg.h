@@ -14,6 +14,10 @@ class SchedulerStochasticGreedy : public HeuristicScheduler {
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config,
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
+	void findFirstIndex(std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int numIO, unsigned int& index, StatType s);
+	void genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, StatType s);
+	bool assignVectorOutputs(SbPDG* sbPDG, Schedule* sched);
+	bool assignVectorInputs(SbPDG* sbPDG, Schedule* sched);
 };
 
 #endif

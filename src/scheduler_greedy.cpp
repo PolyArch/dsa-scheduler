@@ -13,10 +13,8 @@ using namespace std;
 #include <string.h>
 #include <sys/types.h>
 
-
 bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
-
-  sched = new Schedule(Scheduler::getSBModel(),sbPDG);
+  sched = new Schedule(getSBModel(),sbPDG);
   sched->setNConfigs(1);
 
   bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
@@ -24,7 +22,7 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     return false;
   }
 
-  map<SbPDG_Inst*,bool> seen;
+  unordered_map<SbPDG_Inst*,bool> seen;
   bool schedule_okay=true; 
  
   list<SbPDG_Inst* > openset;
@@ -37,7 +35,8 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     SbPDG_Node::const_edge_iterator I,E;
     for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
+      if(use_pdginst && seen.count(use_pdginst)==0) {
+        seen[use_pdginst]=true;
         openset.push_back(use_pdginst);
       }
     }
@@ -48,20 +47,24 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     SbPDG_Inst* n = openset.front(); 
     openset.pop_front();
     
-    if(!seen[n]) {
-      schedule_okay&=scheduleNode(sched,n);
-    }
-    seen[n]=true;
-    
+    schedule_okay&=scheduleNode(sched,n);
+		if (schedule_okay) {
+			progress_incCurNum(FA);
+		} else {
+			progress_saveBestNum(FA);
+			return false;
+		}
     SbPDG_Node::const_edge_iterator I,E;
     for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
+      if(use_pdginst && seen.count(use_pdginst)==0) {
+        seen[use_pdginst]=true;
         openset.push_back(use_pdginst);
       }
     }
-
   }
+
+	progress_saveBestNum(FA);
 
   bool vec_out_assigned = assignVectorOutputs(sbPDG,sched);
   if(!vec_out_assigned) {
@@ -130,9 +133,7 @@ bool SchedulerGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
   return true;
 }
 
-
-
-pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
+std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
                                 sbnode* here, int config,
                                 CandidateRouting& candRouting,
                                 pair<int,int> bestScore) {
@@ -177,7 +178,8 @@ pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
   return score;
 }
 
-pair<int,int> SchedulerGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+pair<int,int> SchedulerGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge,
+				sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
 	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
 	return score;
 }
