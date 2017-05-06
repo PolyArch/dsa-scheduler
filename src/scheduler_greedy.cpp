@@ -180,6 +180,10 @@ std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
 
 pair<int,int> SchedulerGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge,
 				sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+        //cout << source->name() << " ==> " << dest->name() << "\n";
+        //cout << pdgedge->def()->name() << " ==> " << pdgedge->use()->name() << "\n";
+
 	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
 	return score;
 }
