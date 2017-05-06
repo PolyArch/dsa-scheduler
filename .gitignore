@@ -1,0 +1,6 @@
+*.d
+src/gams_models/*.h
+build/
+*.swo
+*.swp
+*.swn
