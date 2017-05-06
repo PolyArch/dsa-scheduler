@@ -206,7 +206,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
 void HeuristicScheduler::applyRouting(Schedule* sched, 
                              CandidateRouting* candRouting) {
 
-  std::map<SB_CONFIG::sblink*,SbPDG_Edge* >::iterator I,E;
+  std::unordered_map<SB_CONFIG::sblink*,SbPDG_Edge* >::iterator I,E;
   for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
     
     sched->assign_link(I->second->def(),I->first);

@@ -33,7 +33,7 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 class CandidateRouting {
   public:
-  std::map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
+  std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
   void clear() {

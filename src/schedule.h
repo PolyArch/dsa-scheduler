@@ -194,9 +194,9 @@ class Schedule {
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
     
-    typedef std::map<sbnode*,SbPDG_Node*>::iterator assign_node_iterator;
-    typedef std::map<sblink*,SbPDG_Node*>::iterator assign_link_iterator;
-    typedef std::map<sblink*,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
+    typedef std::unordered_map<sbnode*,SbPDG_Node*>::iterator assign_node_iterator;
+    typedef std::unordered_map<sblink*,SbPDG_Node*>::iterator assign_link_iterator;
+    typedef std::unordered_map<sblink*,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
     
     assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
     assign_node_iterator assign_node_end() { return _assignNode.end(); }
@@ -338,14 +338,14 @@ class Schedule {
 
     std::set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
-    std::map<sblink*, int> linkCount;
-    std::map<sbnode*, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
-    std::map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
-    std::map<SbPDG_Node*, int> _latOf; 
-    std::map<SbPDG_Vec*, int> _latOfVPort; 
-    std::map<sblink*, SbPDG_Node*> _assignLink;   //sblink to pdgnode
-    std::map<SbPDG_Node*, std::vector<sblink*> > _linksOf; //pdgnode to sblink 
-    std::map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
+    std::unordered_map<sblink*, int> linkCount;
+    std::unordered_map<sbnode*, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
+    std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
+    std::unordered_map<SbPDG_Node*, int> _latOf; 
+    std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
+    std::unordered_map<sblink*, SbPDG_Node*> _assignLink;   //sblink to pdgnode
+    std::unordered_map<SbPDG_Node*, std::vector<sblink*> > _linksOf; //pdgnode to sblink 
+    std::unordered_map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
     std::vector< std::vector<int> > _wide_ports;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
