@@ -11,7 +11,7 @@ program:
 	+make -C src
 
 make_drivers: program
-	+make -C drivers
+	make -C drivers
 
 install: directories install_program install_drivers 
 	
