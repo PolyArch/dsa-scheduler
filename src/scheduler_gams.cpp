@@ -560,36 +560,6 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     exit(1);
   }
 
-  //populate the forwardMap
-  for(int config = 0; config < n_configs-1; ++config) {
-    sbswitch* cross_switch = _sbModel->subModel()->cross_switch();
-    
-    sbnode::const_iterator I = cross_switch->ibegin(), E = cross_switch->iend();
-    for(;I!=E;++I) {
-      sblink* inlink = *I;
-      sboutput* output = dynamic_cast<sboutput*>(inlink->orig());
-      assert(output);
-      if(SbPDG_Node* node = schedule->pdgNodeOf(inlink,config)) {
-         
-         for(int to_config = config +1; to_config < n_configs; ++to_config) {
-           sbnode::const_iterator Io = cross_switch->obegin(), Eo = cross_switch->oend(); 
-           for(;Io!=Eo;++Io) {
-              sblink* outlink = *Io;
-              if(schedule->pdgNodeOf(outlink,to_config-1)==node) {
-                  sbinput* input = dynamic_cast<sbinput*>(outlink->dest());
-                  if(input==0) {
-                    cout << outlink->dest()->name(); 
-                  }
-                  assert(input);
-                  schedule->addForward(config, output->port(),to_config,input->port());
-              }
-            }
-         }
-         
-      }
-    }
-  }
-  
   if(_showGams) {
     //Print the I/Os
     std::cout << "in/out mapping:";

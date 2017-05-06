@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
 
   int attempts = 0;
   int upperbound;
-  upperbound = (str_schedType == "sg" ? 1000 : 1);
+  upperbound = (str_schedType == "sg" ? 100000 : 1);
   srand(2);
   scheduler->progress_initBestNums();
   while (!succeed_sched && attempts < upperbound) {

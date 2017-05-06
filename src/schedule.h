@@ -185,11 +185,11 @@ class Schedule {
       return _sbnodeOf.count(pdgnode)!=0;
     }
    
-		void updateLinkCount(sblink* link){
-			linkCount[link]++;
-		} 
+    void updateLinkCount(sblink* link){
+      linkCount[link]++;
+    } 
 
-		void stat_printLinkCount();
+    void stat_printLinkCount();
 
     typedef std::vector<std::pair<sblink*,int>>::const_iterator link_iterator;
     
@@ -203,18 +203,11 @@ class Schedule {
     
     void setNConfigs(int n) {_n_configs=n;}
 
-    void addForward(int config1, int port1, int config2, int port2) {
-       _forwardMap[std::make_pair(config1,port1)]=std::make_pair(config2,port2); 
-    }
-   
     //wide vector ports
     int numWidePorts() { return _wide_ports.size(); }
     std::vector<int>& widePort(int i) {return _wide_ports[i];}
     void addWidePort(std::vector<int>& port) {_wide_ports.push_back(port);}
     
-    typedef std::map< std::pair<int,int>,std::pair<int,int> >::iterator forward_iterator;
-    forward_iterator fbegin() {return _forwardMap.begin();} 
-    forward_iterator fend() {return _forwardMap.end();}
     
     SbModel* sbModel() {return _sbModel;}
     
@@ -246,7 +239,6 @@ class Schedule {
       _assignLink.clear();
       _linksOf.clear();
       _assignEdgeLink.clear();
-      _forwardMap.clear();
     }
 
     //assign outlink to inlink for a switch
@@ -366,11 +358,11 @@ class Schedule {
     int _n_configs;   
     SbModel* _sbModel;
     SbPDG*   _sbPDG;
-		
+    
 
     std::set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
-		std::map<sblink*, int> linkCount;
+    std::map<sblink*, int> linkCount;
     std::map<std::pair<sbnode*, int>, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::map<SbPDG_Node*, std::pair<sbnode*,int> > _sbnodeOf;    //pdgnode to sbnode
     std::map<SbPDG_Node*, int> _latOf; 
@@ -378,7 +370,6 @@ class Schedule {
     std::map<std::pair<sblink*,int>, SbPDG_Node*> _assignLink;   //sblink to pdgnode
     std::map<SbPDG_Node*, std::vector<std::pair<sblink*, int>> > _linksOf; //pdgnode to sblink 
     std::map<std::pair<sblink*,int>, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
-    std::map< std::pair<int,int>,std::pair<int,int> > _forwardMap;      //forward maps of ports
     std::vector< std::vector<int> > _wide_ports;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
