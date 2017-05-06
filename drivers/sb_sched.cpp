@@ -132,7 +132,7 @@ int main(int argc, char* argv[])
     scheduler->progress_printBests();
   }
 
-  sched->printAllConfigs((viz_dir + dfg_base).c_str()); // text form of config fed to gui
+  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(!succeed_sched) {
     cout << "Scheduling Failed!\n";

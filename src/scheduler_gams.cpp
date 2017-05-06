@@ -111,11 +111,11 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   assert(ofs_mipstart.good());
 
   #if USE_MIP_START
+  int config=0;
   //print mipstart
   Schedule::assign_node_iterator I,E;
   for(I = schedule->assign_node_begin(), E= schedule->assign_node_end();I!=E;++I) {
-    sbnode* spot = I->first.first;
-    int config = I->first.second;
+    sbnode* spot = I->first;
     SbPDG_Node* pdgnode = I->second;
     ofs_mipstart << "Mn.l('" << pdgnode->gamsName() 
                  << "','" << spot->gams_name(config) << "')=1;\n";
@@ -125,11 +125,8 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   Schedule::assign_link_iterator Il,El;
   for(Il = schedule->assign_link_begin(), 
       El= schedule->assign_link_end();Il!=El;++Il) {
-    sblink* link = Il->first.first;
-    int config = Il->first.second;
+    sblink* link = Il->first;
     SbPDG_Node* pdgnode = Il->second;
-    //SbPDG_Edge* pdgedge = pdgnode->getLinkTowards(
-    //ofs_sb_gams << "Mvl.l(" << pdgnode->gamsName() << "," << link->gamsName(config) << ")=1;\n";
     ofs_mipstart << "Mvl.l('" << pdgnode->gamsName() 
                  << "','" << link->gams_name(config) << "')=1;\n";
   }
@@ -138,8 +135,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   for(Ile = schedule->assign_edgelink_begin(), 
       Ele= schedule->assign_edgelink_end();Ile!=Ele;++Ile) {
     
-    sblink* link = Ile->first.first;
-    int config = Ile->first.second;
+    sblink* link = Ile->first;
     set<SbPDG_Edge*>& edgelist= Ile->second;
     
     set<SbPDG_Edge*>::const_iterator Ie,Ee;
@@ -209,20 +205,15 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   cout << "Total Nodes: " << sbPDG->num_nodes() << "\n";
   
   int numInsts = sbPDG->inst_end()-sbPDG->inst_begin();
-  int configSize = _sbModel->subModel()->sizex() * _sbModel->subModel()->sizey();
-  int n_configs = max(numInsts / configSize + (numInsts % configSize>0),1);
   cout << "Total Insts: " <<  numInsts << "\n";
   //assert(numInsts > 0);
-
-  //cout << "Softbrain Scheduler -- Using: " << n_configs << " Configs\n";
-  
 
   // Print the softbrain model   
   ofstream ofs_sb_model(_gams_work_dir + "/softbrain_model.gams", ios::out);
   assert(ofs_sb_model.good());
   gamsToSbnode.clear(); gamsToSblink.clear();
   _sbModel->subModel()->PrintGamsModel(ofs_sb_model,gamsToSbnode,gamsToSblink,
-                                       gamsToSbswitch,gamsToPortN,n_configs);
+                                       gamsToSbswitch,gamsToPortN,0/*nconfigs*/);
 
   cout << gamsToSbnode.size() << " " << gamsToSblink.size() << " " << gamsToSbswitch.size() << "\n";
 
@@ -267,8 +258,6 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   // ----------------- parse output -----------------------------------------
 
 
-  schedule->setNConfigs(n_configs); //update this if need less schedules?
-  
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
   enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
@@ -421,20 +410,11 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
 
       SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
       sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
-      int config = gamsToSbnode[sbnode_name].second; 
       
       if(vertex_name.empty()) continue;
       
-      /*
-      if(pdgnode==NULL) {
-        cerr << "null pdgnode:" << vertex_name << "|" << sbnode_name << "\"\n";
-      }
-      if(sbnode==NULL) {
-        cerr << "null sbnode: \"" << vertex_name << "|" << sbnode_name << "\"\n";
-      }
-      */
-      
-      schedule->assign_node(pdgnode,sbnode,config);
+     
+      schedule->assign_node(pdgnode,sbnode);
       
         /*if(sboutput* sbout = dynamic_cast<sboutput*>(sbnode) ) {
            cout << pdgnode->name() << " new=" << schedule->getPortFor(pdgnode) << "\n";
@@ -491,58 +471,24 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
         ModelParsing::trim(link_name);
         if(link_name.empty()) continue;
         sblink* slink = gamsToSblink[link_name].first;
-        int config = gamsToSblink[link_name].second; 
         
         if(slink==NULL) {
           cerr << "null slink:\"" << link_name << "\"\n";
         }
         
-        schedule->assign_link(pdgnode,slink,config);
+        schedule->assign_link(pdgnode,slink);
         
-        if(_sbModel->subModel()->multi_config()) {
-          if(slink->dest()==_sbModel->subModel()->load_slice()) {
-            sboutput* sbout = dynamic_cast<sboutput*>(slink->orig());
-            assert(sbout);
-            
-            //find output for this output edge
-            SbPDG_Node::const_edge_iterator I,E;
-            for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
-              if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>((*I)->use())) {
-                schedule->assign_node(pdg_out,sbout,config);
-              }
-            }
-            
-            //if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>((*(pdgnode->uses_begin()))->use())) {
-              //schedule->assign_node(pdg_out,sbout,config);
-            //}
-          }
-          if(slink->orig()==_sbModel->subModel()->load_slice()) {
-            sbinput* sbin = dynamic_cast<sbinput*>(slink->dest());
-            assert(sbin);
-            schedule->assign_node(pdgnode,sbin,config); 
-          }
-        } else {
-          if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
-            schedule->assign_node(pdgnode,sbin,config); 
-          } else if(sboutput* sbout = dynamic_cast<sboutput*>(slink->dest())) {
-            //find output for this output edge
-            SbPDG_Node::const_edge_iterator I,E;
-            for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
-              if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>((*I)->use())) {
-                schedule->assign_node(pdg_out,sbout,config);
-              }
+        if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
+          schedule->assign_node(pdgnode,sbin); 
+        } else if(sboutput* sbout = dynamic_cast<sboutput*>(slink->dest())) {
+          //find output for this output edge
+          SbPDG_Node::const_edge_iterator I,E;
+          for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
+            if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>((*I)->use())) {
+              schedule->assign_node(pdg_out,sbout);
             }
           }
         }
-        
-        /*
-        if(sboutput* sbout = dynamic_cast<sboutput*>() ) {
-           //cout << (*(pdgnode->uses_begin()))->use()->name() << " old=" << schedule->getPortFor(pdgnode);
-           schedule->assign_node((*(pdgnode->uses_begin()))->use(),sbout);
-           //cout << " , new=" << schedule->getPortFor(pdgnode) << "\n";
-        }
-        */
-        
         
       }
     }
@@ -567,15 +513,15 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     SbPDG::const_input_iterator Ii,Ei;
     for(Ii=schedule->sbpdg()->input_begin(),Ei=schedule->sbpdg()->input_end();Ii!=Ei;++Ii) {
       SbPDG_Input* in = *Ii;
-      pair<int,int> p = schedule->getConfigAndPort(in);
-      cout << in->name() << " " << p.second << ", ";
+      int p = schedule->getPortFor(in);
+      cout << in->name() << " " << p << ", ";
     }
 
     SbPDG::const_output_iterator Io,Eo;
     for(Io=schedule->sbpdg()->output_begin(),Eo=schedule->sbpdg()->output_end();Io!=Eo;++Io) {
       SbPDG_Output* out = *Io;
-      pair<int,int> p = schedule->getConfigAndPort(out);
-      cout << out->name() << " " << p.second << ", ";
+      int p = schedule->getPortFor(out);
+      cout << out->name() << " " << p << ", ";
     }
     std::cout << "\n";
   }
@@ -638,344 +584,3 @@ bool GamsScheduler::requestGams(const char *filename)
   return false;
 }
 
-
-/*
-bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
-  
-  pair<int,int> bestScore = make_pair(MAX_ROUTE,MAX_ROUTE); //a big number
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-  CandidateRouting* bestRouting = new CandidateRouting();
-  sbnode* bestspot;
-  int bestconfig;
-  
-  CandidateRouting* curRouting = new CandidateRouting();
-  
-  std::vector<sbnode*> spots;
-  
-  //for each configuration
-  for(int config = 0; config < sched->nConfigs(); ++config) {
-    if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
-      fillInstSpots(sched, pdginst, config, spots);             //all possible candidates based on FU capability 
-    } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
-      fillInputSpots(sched,pdg_in,config,spots); 
-    } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
-      fillOutputSpots(sched,pdg_out,config,spots); 
-    }
-   
-    //populate a scheduling score for each of canidate sbspot
-    for(unsigned i=0; i < spots.size(); i++) {
-      sbnode* cand_spot = spots[i];
-      
-      curRouting->routing.clear();
-      curRouting->forwarding.clear();
-      
-      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, config,*curRouting,bestScore);
-                  
-      if(curScore < bestScore) {
-        bestScore=curScore;
-        bestspot=cand_spot;
-        bestconfig=config;
-        std::swap(bestRouting,curRouting);
-      }
-      
-      if(bestScore <= make_pair(0,1))  { //????
-        applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
-        return true;
-      }//apply routing step
-    
-    }//for loop -- check for all sbnode spots
-  }
-  
-  
-  //TODO: If not scheduled, then increase the numConfigs, and try again
-  
-  if (bestScore < fscore) {
-    applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
-  } else {
-    cout << "WARNING!!!! No route found for pdgnode: " << pdgnode->name() << "\n";
-    return false; 
-  }
-  return true;
-}
-
-pair<int,int> Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n, 
-                                sbnode* here, int config, 
-                                CandidateRouting& candRouting,
-                                pair<int,int> bestScore) {
-  pair<int,int> score=make_pair(0,0);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-  
-  SbPDG_Node::const_edge_iterator I,E;
-  
-  for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
-    if(*I == NULL) { continue; } //could be immediate
-    SbPDG_Edge* source_pdgegde = (*I);
-    SbPDG_Node* source_pdgnode = source_pdgegde->def();     //could be input node also
-
-    //route edge if source pdgnode is scheduled
-    if(sched->isScheduled(source_pdgnode)) {
-      pair<sbnode*,int> source_loc = sched->locationOf(source_pdgnode); //scheduled location
-     
-      //route using source node, sbnode
-      pair<int,int> tempScore = route(sched, source_pdgegde, source_loc.first, here,config,candRouting,bestScore-score);
-			score = score + tempScore;
-      //cout << n->name() << " " << here->name() << " " << score << "\n";
-      if(score>bestScore) return fscore;
-    }
-  }
-  
-  SbPDG_Node::const_edge_iterator Iu,Eu;
-  for(Iu=n->uses_begin(), Eu=n->uses_end();Iu!=Eu;++Iu) {
-    SbPDG_Edge* use_pdgedge = (*Iu); 
-    SbPDG_Node* use_pdgnode = use_pdgedge->use();
-     
-     //riir<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
-     //       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);   |
-     //              score = score + tempScore;                                                                                     |       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
-     //                     //cout << n->name() << " " << here->name() << " " << score << "\n";                                            |       score = score + tempScore;
-     //                            if(score>bestScore) return score;                                                                  oute edge if source pdgnode is scheduled
-     if(sched->isScheduled(use_pdgnode)) {
-       pair<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
-       
-       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
-			 score = score + tempScore;
-       //cout << n->name() << " " << here->name() << " " << score << "\n";
-       if(score>bestScore) return score;
-     }
-  }
-  
-  return score;
-}
-
-pair<int,int> Scheduler::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-	if (score == fscore) {
-		score = route_minimizeOverlapping(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
-	}
-	return score;
-}
-*/
-//routes only inside a configuration
-//return value <numOverlappedLinks, Distance>
-/*bool Scheduler::schedule(SbPDG* sbPDG, Schedule*& sched) {
-
-  sched = new Schedule(_sbModel,sbPDG);
-  sched->setNConfigs(1);
- 
-	bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
-  if(!vec_in_assigned) {
-    return false;
-  }
-
-  map<SbPDG_Inst*,bool> seen;
-	bool schedule_okay=true;
-  
-	list<SbPDG_Inst* > openset;
-  SbPDG::const_input_iterator I,E;
-  
-	//pdg input nodes
-  for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
-    SbPDG_Input* n = *I;
-    
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
-      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
-        openset.push_back(use_pdginst);
-      }
-    }
-  }
- 
-  //populate the schedule object
-  while(!openset.empty()) {
-    SbPDG_Inst* n = openset.front(); 
-    openset.pop_front();
-    
-    if(!seen[n]) {
-			schedule_okay &= scheduleNode(sched,n);
-    }
-    seen[n]=true;
-    
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
-      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
-        openset.push_back(use_pdginst);
-      }
-    }
-
-  }
-  
-  bool vec_out_assigned = assignVectorOutputs(sbPDG,sched);
-  if(!vec_out_assigned) {
-    return false;
-  }
-  return schedule_okay;
-}
-*/
-
-
-
-
-/*
-    ofstream sbpdg_ofs("softbrain_pdg.gams", ios::out);
-    if(ofs_kinds.fail()) {
-      cerr << "could not open pdgout.dot";
-    }
-    */
-    
-    
-    
-    
-    
-    
-    
-    
-#if 0
-//old code:
-
-// Scrapped Equations
-
-
-      
-      *equation enforceHetero(K,v);
-      *enforceHetero(K,v)$kindV(K,v)..     sum(n$(notKindN(K,n)), Mn(v, n)) =e= 0;
-      
-      
-
-//debugging edges->links stuff
-    option Mn:0:0:1;
-    display Mn.l;
-    option Ml:0:0:1;
-    display Ml.l;
-
-put "# Edge -> Links" /
-loop((e),
-    put e.tl ":"
-    loop((l)$(Ml.l(e,l)<>0),
-        put l.tl
-    );
-    put /
-);
-put "# Links -> Edges" /
-loop((l),
-    put l.tl ":"
-    loop((e)$(Ml.l(e,l)<>0),
-        put e.tl
-    );
-    put /
-);
-
-// non-literal string stuff
-/*
-    ofs_sb_gams << "$batinclude softbrain_kind.gams\n"
-                   << "$batinclude softbrain_model.gams\n"
-                   << "$batinclude softbrain_pdg.gams\n"
-                   << "$batinclude constraints.gams\n";
-
-    ofs_sb_gams <<  "option Mn:0:0:1;\n"
-                   <<     "display Mn.l;\n"
-                   <<     "option Ml:0:0:1;\n"
-                   <<     "display Ml.l;\n";
-
-    //ofs_sb_gams <<     "file outfile / \"/dev/tty\" /;\n"
-    //ofs_sb_gams <<     "file outfile / \"/tmp/gams_fifo\" /;\n"
-    ofs_sb_gams <<     "file outfile / \"" << gams_out_file << "\" /;\n"
-                   <<     "outfile.pc=8;\n"
-                   <<     "outfile.pw=4096\n"
-                   <<     "put outfile;\n";
-
-                  
-    ofs_sb_gams <<     "put \"# Nodes -> Vertecies\" /\n"
-                   <<     "loop((n),\n"
-                   <<     "    put n.tl \":\";\n"
-                   <<     "    loop((v)$(Mn.l(v,n)<>0),\n"
-                   <<     "        put v.tl \n"
-                   <<     "    );\n"
-                   <<     "    put /\n"
-                   <<     ");\n";
-                   
-    ofs_sb_gams <<   "put \"# Edge -> Links\" /\n"
-                        "loop((e), \n"
-                        "    put e.tl \":\"\n"
-                        "    loop((l)$(Ml.l(e,l)<>0),\n"
-                        "        put l.tl\n"
-                        "    );\n"
-              block of text          "    put /\n"
-                        ");\n"
-                        "put \"# Links -> Edges\" /\n"
-                        "loop((l), \n"
-                        "    put l.tl \":\"\n"
-                        "    loop((e)$(Ml.l(e,l)<>0),\n"
-                        "        put e.tl\n"
-                        "    );\n"
-                        "    put /\n"
-                        ");\n";
-
-                   
-    ofs_sb_gams <<     "put \"[vertex-node-map]\" /\n"
-                   <<     "loop((v),\n"
-                   <<     "    put v.tl \":\";\n"
-                   <<     "    loop((n)$(Mn.l(v,n)<>0),\n"
-                   <<     "        put n.tl \n"
-                   <<     "    );\n"
-                   <<     "    put /\n"
-                   <<     ");\n";                   
-                   
-    ofs_sb_gams <<     "put \"[vertex-link-map]\" /\n"
-                   <<     "loop((v), \n"
-                   <<     "    put v.tl \":\"\n"
-                   <<     "    loop((l)$(Mvl.l(v,l)<>0),\n"
-                   <<     "        put l.tl\n"
-                   <<     "    );\n"
-                   <<     "    put /\n"
-                   <<     ");\n";
-*/
-
-
-
-
-
-
-
-
-
-
-
-//FIFO STUFF
-
-
-      FILE *in;
-  char buff[512];
-
-  if(!(in = popen("gams softbrain.gams", "r"))) {
-    return 1;
-  }
-
-  while(fgets(buff, sizeof(buff), in)!=NULL) {
-    cout << "----------------------------xxx------------------------------";
-    cout << buff;
-    cout << "----------------------------xxx------------------------------";
-  }
-  pclose(in);
-
-  gams_dump.txt
-  
-  
-  FILE * gams_fifo;
-  char line [4096];
-
-  gams_fifo = fopen ("/tmp/gams_fifo" , "r");
-  if (gams_fifo == NULL) perror ("Error opening file");
-  else {
-    while ( fgets ( line, sizeof line, gams_fifo ) != NULL ) {
-      cout << "***" << line << "***\n";
-      /*if(strcmp("[vertex-node-map]")==0) {
-        
-      }*/
-    }
-
-    fclose (gams_fifo);
-  }
-#endif

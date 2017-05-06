@@ -15,7 +15,6 @@ using namespace std;
 
 bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG);
-  sched->setNConfigs(1);
 
   bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
   if(!vec_in_assigned) {
@@ -80,52 +79,45 @@ bool SchedulerGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 	std::pair<int,int> bestScore = make_pair(0,MAX_ROUTE);
 	std::pair<int,int> fscore = make_pair(0,MAX_ROUTE);
   CandidateRouting* bestRouting = new CandidateRouting();
-  sbnode* bestspot;
-  int bestconfig;
+  sbnode* bestspot=NULL;
   
   CandidateRouting* curRouting = new CandidateRouting();  
 
   std::vector<sbnode*> spots;
   
-  //for each configuration
-  for(int config = 0; config < sched->nConfigs(); ++config) {
-    if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
-      fillInstSpots(sched, pdginst, config, spots);             //all possible candidates based on FU capability 
-    } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
-      fillInputSpots(sched,pdg_in,config,spots); 
-    } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
-      fillOutputSpots(sched,pdg_out,config,spots); 
-    }
-   
-    //populate a scheduling score for each of canidate sbspot
-    for(unsigned i=0; i < spots.size(); i++) {
-      sbnode* cand_spot = spots[i];
-      
-      curRouting->routing.clear();
-      curRouting->forwarding.clear();
-      
-      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, config,*curRouting,bestScore);
-                  
-      if(curScore < bestScore) {
-        bestScore=curScore;
-        bestspot=cand_spot;
-        bestconfig=config;
-        std::swap(bestRouting,curRouting);
-      }
-      
-      if(bestScore<=make_pair(0,1))  {
-        applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
-        return true;
-      }//apply routing step
-    
-    }//for loop -- check for all sbnode spots
+  if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
+    fillInstSpots(sched, pdginst, spots);             //all possible candidates based on FU capability 
+  } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
+    fillInputSpots(sched,pdg_in,spots); 
+  } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
+    fillOutputSpots(sched,pdg_out,spots); 
   }
   
+  //populate a scheduling score for each of canidate sbspot
+  for(unsigned i=0; i < spots.size(); i++) {
+    sbnode* cand_spot = spots[i];
+    
+    curRouting->routing.clear();
+    curRouting->forwarding.clear();
+    
+    pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, *curRouting,bestScore);
+                
+    if(curScore < bestScore) {
+      bestScore=curScore;
+      bestspot=cand_spot;
+      std::swap(bestRouting,curRouting);
+    }
+    
+    if(bestScore<=make_pair(0,1))  {
+      applyRouting(sched,pdgnode,bestspot,bestRouting);
+      return true;
+    }//apply routing step
   
-  //TODO: If not scheduled, then increase the numConfigs, and try again
+  }//for loop -- check for all sbnode spots
+  
   
   if(bestScore < fscore) {
-    applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
+    applyRouting(sched,pdgnode,bestspot,bestRouting);
   } else {
     cout << "no route found for pdgnode: " << pdgnode->name() << "\n";
     return false; 
@@ -134,7 +126,7 @@ bool SchedulerGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 }
 
 std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
-                                sbnode* here, int config,
+                                sbnode* here,
                                 CandidateRouting& candRouting,
                                 pair<int,int> bestScore) {
   pair<int,int> score=make_pair(0,0);
@@ -149,10 +141,10 @@ std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
 
     //route edge if source pdgnode is scheduled
     if(sched->isScheduled(source_pdgnode)) {
-      pair<sbnode*,int> source_loc = sched->locationOf(source_pdgnode); //scheduled location
+      sbnode* source_loc = sched->locationOf(source_pdgnode); //scheduled location
 
       //route using source node, sbnode
-      pair<int,int> tempScore = route(sched, source_pdgegde, source_loc.first, here,config,candRouting,bestScore-score);
+      pair<int,int> tempScore = route(sched, source_pdgegde, source_loc, here,candRouting,bestScore-score);
       score = score + tempScore;
       //cout << n->name() << " " << here->name() << " " << score << "\n";
       if(score>bestScore) return fscore;
@@ -166,9 +158,9 @@ std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
 
      //route edge if source pdgnode is scheduled
      if(sched->isScheduled(use_pdgnode)) {
-       pair<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
+       sbnode* use_loc = sched->locationOf(use_pdgnode);
 
-       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
+       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc, candRouting,bestScore-score);
        score = score + tempScore;
        //cout << n->name() << " " << here->name() << " " << score << "\n";
        if(score>bestScore) return score;
@@ -179,12 +171,12 @@ std::pair<int,int> SchedulerGreedy::scheduleHere(Schedule* sched, SbPDG_Node* n,
 }
 
 pair<int,int> SchedulerGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge,
-				sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+				sbnode* source, sbnode* dest,  CandidateRouting& candRouting, pair<int,int> scoreLeft) {
 
         //cout << source->name() << " ==> " << dest->name() << "\n";
         //cout << pdgedge->def()->name() << " ==> " << pdgedge->use()->name() << "\n";
 
-	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
+	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
 	return score;
 }
 
