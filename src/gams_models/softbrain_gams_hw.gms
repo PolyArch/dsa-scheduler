@@ -1,4 +1,3 @@
-string softbrain_gams_hw = R"(
 $batinclude softbrain_kind.gams
 $batinclude softbrain_model.gams
 $batinclude softbrain_pdg.gams
@@ -52,4 +51,3 @@ loop(e$(extra.l(e)<>0),
 *    );
 *    put /
 *);
-)";

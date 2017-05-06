@@ -1,10 +1,3 @@
-string hw_model = R"(
-
-
-
-
-
-
 * THE GOAL OF THIS VERSION IS TO REPLACE MVN WITH MEL, TO ADD ROBUST TIMING HINTS
 
 
@@ -219,6 +212,3 @@ putclose;
 display schedule.numEqu;
 display schedule.etSolve;
 display schedule.numVar;
-   
-)";
-

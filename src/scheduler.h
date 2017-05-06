@@ -32,7 +32,7 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 
 class CandidateRouting {
-	public:
+  public:
   std::map< std::pair<SB_CONFIG::sblink*,int>, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
@@ -43,148 +43,143 @@ class CandidateRouting {
 };
 
 class Triplet {
-	public: 
-	Triplet(int x, int y, int z) : _x(x), _y(y), _z(z) {}
-		
+  public: 
+  Triplet(int x, int y, int z) : _x(x), _y(y), _z(z) {}
+    
 
-	private:
-	int _x, _y, _z;
+  private:
+  int _x, _y, _z;
 };
 
 class Scheduler {
-	public:
+  public:
   Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel) {}
 
   bool check_res(SbPDG* sbPDG,    SbModel* sbmodel);
 
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
 
-	void error(const char *msg){
-  	perror(msg);
-  	exit(0);
-	}
+  int numFASched;
+  int numInputSched;
+  int numOutputSched;
 
-	int numFASched;
-	int numInputSched;
-	int numOutputSched;
+  int bestFASched;
+  int bestInputSched;
+  int bestOutputSched;
 
-	int bestFASched;
-	int bestInputSched;
-	int bestOutputSched;
+  enum StatType {FA, Input, Output};
 
-	enum StatType {FA, Input, Output};
+  void progress_updateCurNum(StatType s, int init = 0){
+    if (s == FA) {
+      numFASched = init;
+    } else if (s == Input) {
+      numInputSched = init;
+    } else if (s == Output) {
+      numOutputSched = init;
+    } else {
+      std::cout<<"Bad Stat Type\n";
+      exit(0);
+    }
+  }
 
-	void progress_updateCurNum(StatType s, int init = 0){
-		if (s == FA) {
-			numFASched = init;
-		} else if (s == Input) {
-			numInputSched = init;
-		} else if (s == Output) {
-			numOutputSched = init;
-		} else {
-			std::cout<<"Bad Stat Type\n";
-			exit(0);
-		}
-	}
+  
+  void progress_updateBestNum(StatType s, int init = 0){
+    if (s == FA) {
+      bestFASched = init;
+    } else if (s == Input) {
+      bestInputSched = init;
+    } else if (s == Output) {
+      bestOutputSched = init;
+    } else {
+      std::cout<<"Bad Stat Type\n";
+      exit(0);
+    }
+  }
 
-	
-	void progress_updateBestNum(StatType s, int init = 0){
-		if (s == FA) {
-			bestFASched = init;
-		} else if (s == Input) {
-			bestInputSched = init;
-		} else if (s == Output) {
-			bestOutputSched = init;
-		} else {
-			std::cout<<"Bad Stat Type\n";
-			exit(0);
-		}
-	}
+  void progress_saveBestNum(StatType s) {
+    int progress_cur = progress_getCurNum(s);
+    int progress_best =  progress_getBestNum(s);
+    if ( progress_cur > progress_best) {
+      progress_updateBestNum(s, progress_cur);
+    }
+  }
 
-	void progress_saveBestNum(StatType s) {
-		int progress_cur = progress_getCurNum(s);
-		int progress_best =  progress_getBestNum(s);
-		if ( progress_cur > progress_best) {
-			progress_updateBestNum(s, progress_cur);
-		}
-	}
+  void progress_incCurNum(StatType s) {
+    if (s == FA) {
+      numFASched++;
+    } else if (s == Input) {
+      numInputSched++;
+    } else if (s == Output) {
+      numOutputSched++;
+    } else {
+      std::cout<<"Bad Stat Type\n";
+      exit(0);
+    }
+  }
 
-	void progress_incCurNum(StatType s) {
-		if (s == FA) {
-			numFASched++;
-		} else if (s == Input) {
-			numInputSched++;
-		} else if (s == Output) {
-			numOutputSched++;
-		} else {
-			std::cout<<"Bad Stat Type\n";
-			exit(0);
-		}
-	}
+  int progress_getCurNum(StatType s) {
+    int ret = 0;
+    if (s == FA) {
+      ret = numFASched;
+    } else if (s == Input) {
+      ret = numInputSched;
+    } else if (s == Output) {
+      ret = numOutputSched;
+    } else {
+      std::cout<<"Bad Stat Type\n";
+      exit(0);
+    }
+    return ret;
+  }
 
-	int progress_getCurNum(StatType s) {
-		int ret = 0;
-		if (s == FA) {
-			ret = numFASched;
-		} else if (s == Input) {
-			ret = numInputSched;
-		} else if (s == Output) {
-			ret = numOutputSched;
-		} else {
-			std::cout<<"Bad Stat Type\n";
-			exit(0);
-		}
-		return ret;
-	}
-
-	int progress_getBestNum(StatType s) {
-		int ret = 0;
-		if (s == FA) {
-			ret = bestFASched;
-		} else if (s == Input) {
-			ret = bestInputSched;
-		} else if (s == Output) {
-			ret = bestOutputSched;
-		} else {
-			std::cout<<"Bad Stat Type\n";
-			exit(0);
-		}
-		return ret;
-	}
+  int progress_getBestNum(StatType s) {
+    int ret = 0;
+    if (s == FA) {
+      ret = bestFASched;
+    } else if (s == Input) {
+      ret = bestInputSched;
+    } else if (s == Output) {
+      ret = bestOutputSched;
+    } else {
+      std::cout<<"Bad Stat Type\n";
+      exit(0);
+    }
+    return ret;
+  }
 
 
-	void progress_initCurNums(){
-		progress_updateCurNum(FA,0);
-		progress_updateCurNum(Input,0);
-		progress_updateCurNum(Output,0);
-	}
+  void progress_initCurNums(){
+    progress_updateCurNum(FA,0);
+    progress_updateCurNum(Input,0);
+    progress_updateCurNum(Output,0);
+  }
 
-	void progress_initBestNums(){
-		progress_updateBestNum(FA,-1);
-		progress_updateBestNum(Input,-1);
-		progress_updateBestNum(Output,-1);
-	}
+  void progress_initBestNums(){
+    progress_updateBestNum(FA,-1);
+    progress_updateBestNum(Input,-1);
+    progress_updateBestNum(Output,-1);
+  }
 
 
-	std::string AUX(int x) {
-		return (x==-1 ? "-" : std::to_string(x));
-	}	
+  std::string AUX(int x) {
+    return (x==-1 ? "-" : std::to_string(x));
+  }  
 
-	void progress_printBests(){
-		std::cout<<"Progress: ("<<AUX(bestInputSched)<<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
-	}
+  void progress_printBests(){
+    std::cout<<"Progress: ("<<AUX(bestInputSched)<<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
+  }
 
-	protected:
-	SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
+  protected:
+  SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
   
 };
 
 class HeuristicScheduler : public Scheduler {
 
-	public:
+public:
 
-	HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel) {}
+  HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel) {}
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
   virtual bool scheduleNode(Schedule*, SbPDG_Node*) = 0;
   virtual std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
@@ -200,7 +195,7 @@ class HeuristicScheduler : public Scheduler {
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
-	protected:
+protected:
 
   bool assignVectorInputs(SbPDG*, Schedule*);
   bool assignVectorOutputs(SbPDG*, Schedule*);
@@ -221,48 +216,4 @@ class HeuristicScheduler : public Scheduler {
  
 };
 
-class GamsScheduler : public Scheduler {
-	public:
-	GamsScheduler(SB_CONFIG::SbModel* sbModel) :
-	Scheduler(sbModel),
-  _gams_files_setup(false), _use_server(false),
-  _gams_work_dir("gams"),
-  _optcr(0.1f), _optca(0.0f), _reslim(100000.0f), _showGams(true) { }
-
-  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
-  bool requestGams(const char *filename);
-
-  void showGams(bool show) {
-    _showGams=show; 
-  }
-  void use_server() { _use_server = true; }
-	void setGap(float relative, float absolute=1.0f) {
-    _optcr=relative;
-    _optca=absolute;
-  }
-
-  void setTimeout(float timeout) {
-    _reslim=timeout;
-  }
-
-
-  protected:
-
-  bool _gams_files_setup;
-  bool _use_server;
-  std::string _gams_work_dir;
-  float _optcr,_optca,_reslim;
-  bool _showGams;
-
-	std::unordered_map<std::string, std::pair<SB_CONFIG::sbnode*,int> >  gamsToSbnode;  
-  std::unordered_map<std::string, std::pair<SB_CONFIG::sblink*,int> > gamsToSblink;
-  std::unordered_map<std::string, std::pair<SB_CONFIG::sbswitch*,int>>  gamsToSbswitch;
-
-
-  std::unordered_map<std::string, SbPDG_Node*> gamsToPdgnode;
-  std::unordered_map<std::string, SbPDG_Edge*> gamsToPdgedge;
-  std::unordered_map<std::string, std::pair<bool,int> >  gamsToPortN;  
-  std::unordered_map<std::string, SbPDG_Vec*>  gamsToPortV;  
-
-};
 #endif

@@ -12,20 +12,40 @@ using namespace std;
 #include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
+
 
 #include "model_parsing.h"
-#include "spill_model.cpp"
-#include "multi_model.cpp"
-#include "single_fixed_general.cpp"
-#include "softbrain_gams.cpp"
-#include "softbrain_gams_hw.cpp"
-#include "timing_model.cpp"
-#include "hw_model.cpp"
+
+#include "gams_models/softbrain_gams.h"
+#include "gams_models/softbrain_gams_hw.h"
+#include "gams_models/spill_model.h"
+#include "gams_models/multi_model.h"
+#include "gams_models/single_fixed_general.h"
+#include "gams_models/timing_model.h"
+#include "gams_models/hw_model.h"
+#include "gams_models/stage_model.h"
+
+
 
 //MIP START IS DEFUNCT NOW THAT THE SCHEDULER CAN'T KEEP UP WITH REQs OF PROBLEM
 #define USE_MIP_START 0 
 
-bool SchedulerGAMS::schedule(SbPDG* sbPDG,Schedule*& schedule) {
+bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
+  string hw_model          = string((const char*)gams_models_hw_model_gms);
+  string timing_model      = string((const char*)gams_models_timing_model_gms);
+  char* transfer_model = (char*) malloc(gams_models_stage_model_gms_len+1);
+  memcpy((void*) transfer_model, (void*) gams_models_stage_model_gms, gams_models_stage_model_gms_len);
+  transfer_model[gams_models_stage_model_gms_len] = '\0';
+  string stage_model       = string((char*) transfer_model);
+  stage_model = stage_model.substr(0, stage_model.length()-2);
+  cout << stage_model << endl;
+  string softbrain_gams    = string((const char*)gams_models_softbrain_gams_gms);
+  string softbrain_gams_hw = string((const char*)gams_models_softbrain_gams_hw_gms);
+
   //mkfifo("/tmp/gams_fifo",S_IRWXU);
   stringstream ss;
   ss << _gams_work_dir << "/softbrain.out";
@@ -37,12 +57,12 @@ bool SchedulerGAMS::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   
   system(("rm -f " + gams_out_file).c_str());
   
-  //#if USE_MIP_START 
-  //schedule = scheduleGreedy::schedule(sbPDG); // Get the scheduled pdg object
-  //schedule->calcAssignEdgeLink();
-  //#else
+  #if USE_MIP_START 
+  schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
+  schedule->calcAssignEdgeLink();
+  #else
   schedule = new Schedule(_sbModel,sbPDG);
-  //#endif
+  #endif
 
  
   //bool use_hw=true;
@@ -58,11 +78,12 @@ bool SchedulerGAMS::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     if(use_hw) {
       ofs_constraints << hw_model;
     } else {
-      ofs_constraints << timing_model;
+      //ofs_constraints << timing_model;
+      ofs_constraints << stage_model;
     }
 
     ofs_constraints.close();
-
+    free(transfer_model);
      // Print the kinds of instructions
     ofstream ofs_kinds(_gams_work_dir+"/softbrain_kind.gams", ios::out);
     assert(ofs_kinds.good());
@@ -593,6 +614,236 @@ bool SchedulerGAMS::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   return true;
 }
 
+
+void error(const char *msg)
+{
+  perror(msg);
+  exit(0);
+}
+
+
+
+bool GamsScheduler::requestGams(const char *filename)
+{
+  int sockfd, portno, n;
+  struct sockaddr_in serv_addr;
+  struct hostent *server;
+
+  char cmd_buf[256];
+  char buffer[1024];
+
+  portno = 20202;
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (sockfd < 0)
+    error("ERROR opening socket");
+  server = gethostbyname("arcturus.cs.wisc.edu");
+  if (server == NULL) {
+    fprintf(stderr,"ERROR, no such host\n");
+    exit(0);
+  }
+  bzero((char *) &serv_addr, sizeof(serv_addr));
+  serv_addr.sin_family = AF_INET;
+  bcopy((char *)server->h_addr,
+        (char *)&serv_addr.sin_addr.s_addr,
+        server->h_length);
+  serv_addr.sin_port = htons(portno);
+  if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
+    error("ERROR connecting");
+
+  strcpy(cmd_buf, "run-gams");
+  n = write(sockfd, cmd_buf, strlen(cmd_buf));
+  if (n < 0)
+    error("ERROR writing to socket");
+
+  n = write(sockfd, filename,strlen(filename));
+  if (n < 0)
+    error("ERROR writing to socket");
+  bzero(buffer,256);
+  n = read(sockfd,buffer,255);
+  if (n < 0)
+    error("ERROR reading from socket");
+  if (strcmp(buffer, "__DONE__") == 0)
+    return true;
+  error("Error running gams");
+  return false;
+}
+
+
+/*
+bool Scheduler::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
+  
+  pair<int,int> bestScore = make_pair(MAX_ROUTE,MAX_ROUTE); //a big number
+	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
+  CandidateRouting* bestRouting = new CandidateRouting();
+  sbnode* bestspot;
+  int bestconfig;
+  
+  CandidateRouting* curRouting = new CandidateRouting();
+  
+  std::vector<sbnode*> spots;
+  
+  //for each configuration
+  for(int config = 0; config < sched->nConfigs(); ++config) {
+    if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
+      fillInstSpots(sched, pdginst, config, spots);             //all possible candidates based on FU capability 
+    } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
+      fillInputSpots(sched,pdg_in,config,spots); 
+    } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
+      fillOutputSpots(sched,pdg_out,config,spots); 
+    }
+   
+    //populate a scheduling score for each of canidate sbspot
+    for(unsigned i=0; i < spots.size(); i++) {
+      sbnode* cand_spot = spots[i];
+      
+      curRouting->routing.clear();
+      curRouting->forwarding.clear();
+      
+      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, config,*curRouting,bestScore);
+                  
+      if(curScore < bestScore) {
+        bestScore=curScore;
+        bestspot=cand_spot;
+        bestconfig=config;
+        std::swap(bestRouting,curRouting);
+      }
+      
+      if(bestScore <= make_pair(0,1))  { //????
+        applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
+        return true;
+      }//apply routing step
+    
+    }//for loop -- check for all sbnode spots
+  }
+  
+  
+  //TODO: If not scheduled, then increase the numConfigs, and try again
+  
+  if (bestScore < fscore) {
+    applyRouting(sched,pdgnode,bestspot,bestconfig,bestRouting);
+  } else {
+    cout << "WARNING!!!! No route found for pdgnode: " << pdgnode->name() << "\n";
+    return false; 
+  }
+  return true;
+}
+
+pair<int,int> Scheduler::scheduleHere(Schedule* sched, SbPDG_Node* n, 
+                                sbnode* here, int config, 
+                                CandidateRouting& candRouting,
+                                pair<int,int> bestScore) {
+  pair<int,int> score=make_pair(0,0);
+	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
+  
+  SbPDG_Node::const_edge_iterator I,E;
+  
+  for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
+    if(*I == NULL) { continue; } //could be immediate
+    SbPDG_Edge* source_pdgegde = (*I);
+    SbPDG_Node* source_pdgnode = source_pdgegde->def();     //could be input node also
+
+    //route edge if source pdgnode is scheduled
+    if(sched->isScheduled(source_pdgnode)) {
+      pair<sbnode*,int> source_loc = sched->locationOf(source_pdgnode); //scheduled location
+     
+      //route using source node, sbnode
+      pair<int,int> tempScore = route(sched, source_pdgegde, source_loc.first, here,config,candRouting,bestScore-score);
+			score = score + tempScore;
+      //cout << n->name() << " " << here->name() << " " << score << "\n";
+      if(score>bestScore) return fscore;
+    }
+  }
+  
+  SbPDG_Node::const_edge_iterator Iu,Eu;
+  for(Iu=n->uses_begin(), Eu=n->uses_end();Iu!=Eu;++Iu) {
+    SbPDG_Edge* use_pdgedge = (*Iu); 
+    SbPDG_Node* use_pdgnode = use_pdgedge->use();
+     
+     //riir<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
+     //       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);   |
+     //              score = score + tempScore;                                                                                     |       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
+     //                     //cout << n->name() << " " << here->name() << " " << score << "\n";                                            |       score = score + tempScore;
+     //                            if(score>bestScore) return score;                                                                  oute edge if source pdgnode is scheduled
+     if(sched->isScheduled(use_pdgnode)) {
+       pair<sbnode*,int> use_loc = sched->locationOf(use_pdgnode);
+       
+       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc.first,config,candRouting,bestScore-score);
+			 score = score + tempScore;
+       //cout << n->name() << " " << here->name() << " " << score << "\n";
+       if(score>bestScore) return score;
+     }
+  }
+  
+  return score;
+}
+
+pair<int,int> Scheduler::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
+	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
+	if (score == fscore) {
+		score = route_minimizeOverlapping(sched, pdgedge, source, dest, config, candRouting, scoreLeft);
+	}
+	return score;
+}
+*/
+//routes only inside a configuration
+//return value <numOverlappedLinks, Distance>
+/*bool Scheduler::schedule(SbPDG* sbPDG, Schedule*& sched) {
+
+  sched = new Schedule(_sbModel,sbPDG);
+  sched->setNConfigs(1);
+ 
+	bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
+  if(!vec_in_assigned) {
+    return false;
+  }
+
+  map<SbPDG_Inst*,bool> seen;
+	bool schedule_okay=true;
+  
+	list<SbPDG_Inst* > openset;
+  SbPDG::const_input_iterator I,E;
+  
+	//pdg input nodes
+  for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
+    SbPDG_Input* n = *I;
+    
+    SbPDG_Node::const_edge_iterator I,E;
+    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
+      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
+      if(use_pdginst) {
+        openset.push_back(use_pdginst);
+      }
+    }
+  }
+ 
+  //populate the schedule object
+  while(!openset.empty()) {
+    SbPDG_Inst* n = openset.front(); 
+    openset.pop_front();
+    
+    if(!seen[n]) {
+			schedule_okay &= scheduleNode(sched,n);
+    }
+    seen[n]=true;
+    
+    SbPDG_Node::const_edge_iterator I,E;
+    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
+      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
+      if(use_pdginst) {
+        openset.push_back(use_pdginst);
+      }
+    }
+
+  }
+  
+  bool vec_out_assigned = assignVectorOutputs(sbPDG,sched);
+  if(!vec_out_assigned) {
+    return false;
+  }
+  return schedule_okay;
+}
+*/
 
 
 

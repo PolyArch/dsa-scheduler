@@ -5,13 +5,17 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS :=  -Wall -g -std=c++11 -O0 -ggdb -gdwarf-3 -lm $(FLAGS)
+CXXFLAGS :=  -Wall -g -std=c++11 -O3 -ggdb -gdwarf-3 -lm $(FLAGS)
 SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bkt.cpp scheduler_greedy.cpp scheduler_mlg.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
-EXTRA_GAMS=softbrain_gams.cpp timing_model.cpp multi_model.cpp spill_model.cpp 
+
+GAMS_DIR=gams_models
+GAMS_FILES=$(wildcard gams_models/*.gms)
+GAMS_INC=$(GAMS_FILES:.gms=.h)
 
 INCLUDE_DEST=../src
 LIB_DEST=${build}/lib
 OBJ_DEST=${build}/obj
+
 
 PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
@@ -31,17 +35,21 @@ $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 $(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^     
 
-$(OBJ_DEST)/scheduler.o: scheduler.cpp $(EXTRA_GAMS)
+$(OBJ_DEST)/scheduler.o: scheduler.cpp $(GAMS_INC)
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 
     
 $(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 
+$(GAMS_DIR)/%.h: $(GAMS_DIR)/%.gms
+	xxd -i $< > $@
+
+
 .phony: clean
 
 clean:
-	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o  *.d  $(OBJ_DEST)/*.d
+	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o  *.d  $(OBJ_DEST)/*.d  $(GAMS_INC)
 
 include ../make.rules
 

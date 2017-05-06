@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
 
     
   if(argc != 4) {
-  	cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
+    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
     exit(1);
   }
 
@@ -85,30 +85,30 @@ int main(int argc, char* argv[])
 
   Schedule* sched=NULL;
 
-	string str_schedType = string(argv[3]);
+  string str_schedType = string(argv[3]);
   //Scheduler scheduler(&sbmodel);
   Scheduler* scheduler;
   if(str_schedType == "gams") {
     //schedType = GAMS;
-		scheduler = new SchedulerGAMS(&sbmodel);
+    scheduler = new GamsScheduler(&sbmodel);
   } else if(str_schedType == "greedy") { /*original*/
     //schedType = GREEDY;
-		scheduler = new SchedulerGreedy(&sbmodel);
+    scheduler = new SchedulerGreedy(&sbmodel);
   } else if(str_schedType == "mlg") { /*multiple-link greedy*/
-		//schedType = MLG;
-		scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
+    //schedType = MLG;
+    scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
-		//schedType = SG;
-		scheduler = new SchedulerStochasticGreedy(&sbmodel);
+    //schedType = SG;
+    scheduler = new SchedulerStochasticGreedy(&sbmodel);
   } else if(str_schedType == "sa") { /*simulated annealing*/
-		//schedType = SA;
-		scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
+    //schedType = SA;
+    scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
   } else if(str_schedType == "bkt") {
     //schedType = BKT;
-		scheduler = new SchedulerBacktracking(&sbmodel);
-	} else {
-  	cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
-  	exit(1);
+    scheduler = new SchedulerBacktracking(&sbmodel);
+  } else {
+    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
+    exit(1);
   }
 
 
@@ -117,26 +117,28 @@ int main(int argc, char* argv[])
 
   bool succeed_sched = false;
 
-	int attempts = 0;
-	int upperbound;
+  int attempts = 0;
+  int upperbound;
   upperbound = (str_schedType == "sg" ? 1000 : 1);
-	srand(2);
-	scheduler->progress_initBestNums();
-	while (!succeed_sched && attempts < upperbound) {
-		scheduler->progress_initCurNums();
-  	succeed_sched = scheduler->schedule(&sbpdg,sched);
-		attempts++;
-	}
+  srand(2);
+  scheduler->progress_initBestNums();
+  while (!succeed_sched && attempts < upperbound) {
+    scheduler->progress_initCurNums();
+    succeed_sched = scheduler->schedule(&sbpdg,sched);
+    attempts++;
+  }
 
-	if (str_schedType == "sg" || str_schedType == "greedy") {
-		scheduler->progress_printBests();
-	}
+  if (str_schedType == "sg" || str_schedType == "greedy") {
+    scheduler->progress_printBests();
+  }
+
+  sched->printAllConfigs((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(!succeed_sched) {
     cout << "Scheduling Failed!\n";
     return 1;
   } else {
-  	sched->stat_printLinkCount(); 
+    sched->stat_printLinkCount(); 
     cout << "Scheduling Successful!\n";
   }
 
@@ -144,7 +146,6 @@ int main(int argc, char* argv[])
 
   //calculate latency
   sched->calcLatency(lat,latmis);
-  sched->printAllConfigs((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   std::string config_header = pdg_rawname + ".h";
   std::ofstream osh(config_header);     

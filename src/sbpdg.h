@@ -496,6 +496,7 @@ class SbPDG {
     
     const_inst_iterator inst_begin() {return _insts.begin();}
     const_inst_iterator inst_end() {return _insts.end();}
+    int num_insts() {return _insts.size();}
     
     const_input_iterator input_begin() {return _inputs.begin();}
     const_input_iterator input_end() {return _inputs.end();}
