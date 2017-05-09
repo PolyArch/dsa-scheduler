@@ -165,10 +165,10 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
               }
               progress_saveBestNum(Output);
               if(!ports_okay_to_use) {
-                cout << "skipping this port assignment\n";
+                //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
               }
-              cout<<"Succeeded!"<<endl;
+              //cout<<"Succeeded!"<<endl;
               applyRouting(sched, 0/*config*/, &candRouting); //Commit the routing
               // Assign Individual Elements
               for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
@@ -208,7 +208,13 @@ void HeuristicScheduler::applyRouting(Schedule* sched, int config,
 
   std::map< std::pair<SB_CONFIG::sblink*,int>,SbPDG_Edge* >::iterator I,E;
   for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
-    
+    sblink* link = I->first.first;
+    sbnode* dest = link->dest();
+    if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
+      SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
+      assert(dest_pdgnode);
+      
+    }
     sched->assign_link(I->second->def(),I->first.first, I->first.second);
     sched->updateLinkCount(I->first.first);
   }
@@ -221,6 +227,7 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
   
   //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here->name() 
   //<< " nlinks: " << candRouting->routing.size() << "\n";  
+  assert(pdgnode);
   sched->assign_node(pdgnode,here,config);
   applyRouting(sched,config,candRouting);
 }
@@ -299,6 +306,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     if(I->second==config) {
       sbnode* dest = I->first->dest();
       if(!dynamic_cast<sbfu*>(dest)) {//don't route through fu
+        node_dist[dest]=0;
         openset.push_back(dest);
       }
     }

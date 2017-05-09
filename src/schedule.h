@@ -84,6 +84,7 @@ class Schedule {
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode, int config=0) {
       //std::cout << snode->name() << " assigned to " 
       //          << pdgnode->gamsName() << "\n";
+      assert(_assignNode.count(std::make_pair(snode,config))==0);
       _assignNode[std::make_pair(snode,config)] = pdgnode;
       _sbnodeOf[pdgnode]=std::make_pair(snode,config);
     }
@@ -135,6 +136,13 @@ class Schedule {
 
     //sblink to pdgnode
     void assign_link(SbPDG_Node* pdgnode, sblink* slink, int config=0) {
+      sbnode* src = slink->orig();
+      for(auto I = src->ibegin(), E = src->iend(); I!=E; ++I) {
+         sblink* opp_link = *I;
+         if(opp_link->orig() == slink->dest()) {
+           assert(pdgNodeOf(opp_link,0) != pdgnode);
+         }
+      }
       assert(slink);
       std::pair<sblink*,int> new_pair = std::make_pair(slink,config);
       _assignLink[new_pair]=pdgnode;
