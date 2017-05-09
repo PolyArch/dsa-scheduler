@@ -44,10 +44,18 @@ int main(int argc, char* argv[])
   //SchedType schedType = GAMS;
 
     
-  if(argc != 4) {
+  if(argc != 4 and argc!=3) {
     cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
     exit(1);
   }
+
+  string str_schedType; 
+  if(argc==3) {
+    str_schedType = string("sg");
+  } else {
+    str_schedType = string(argv[3]);
+  }
+  
 
 
   //Sbmodel object based on the hw config
@@ -85,7 +93,6 @@ int main(int argc, char* argv[])
 
   Schedule* sched=NULL;
 
-  string str_schedType = string(argv[3]);
   //Scheduler scheduler(&sbmodel);
   Scheduler* scheduler;
   if(str_schedType == "gams") {
@@ -107,7 +114,7 @@ int main(int argc, char* argv[])
     //schedType = BKT;
     scheduler = new SchedulerBacktracking(&sbmodel);
   } else {
-    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
+    cerr <<  "Something Went Wrong with Default Scheduler String";
     exit(1);
   }
 
