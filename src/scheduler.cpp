@@ -88,7 +88,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 
                 //Get the input pdgnode corresponding to m
                 SbPDG_Node* sbpdg_input = vec_in->getInput(m);
-                sched->assign_node(sbpdg_input,cgra_in_port,0/*config*/);
+                sched->assign_node(sbpdg_input,cgra_in_port);
               }
               //Perform the vector assignment
               sched->assign_vport(vec_in,vport_id,mask);
@@ -156,7 +156,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
                   break;
                 } 
                 std::pair<int,int> fscore = make_pair(0, MAX_ROUTE); /*BUG: 0 should change to MAX_ROUTE for MLG, a better way to fix this is to define fscore for each subclass of HeursisticScheduler*/
-                std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, 0, candRouting, fscore); 
+                std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, candRouting, fscore); 
                 if(curScore>=fscore) { //?????
                   ports_okay_to_use=false;
                   break;
@@ -168,8 +168,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
                 //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
               }
-              //cout<<"Succeeded!"<<endl;
-              applyRouting(sched, 0/*config*/, &candRouting); //Commit the routing
+              applyRouting(sched, &candRouting); //Commit the routing
               // Assign Individual Elements
               for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
                 mask[m]=true;
@@ -180,7 +179,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
 
                 //Get the input pdgnode corresponding to m
                 SbPDG_Node* sbpdg_output = vec_out->getOutput(m);
-                sched->assign_node(sbpdg_output,cgra_out_port,0/*config*/);
+                sched->assign_node(sbpdg_output,cgra_out_port);
               }
               //Perform the vector assignment
               sched->assign_vport(vec_out,vport_id,mask);
@@ -203,37 +202,38 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
   return true;
 }
 
-void HeuristicScheduler::applyRouting(Schedule* sched, int config,
+void HeuristicScheduler::applyRouting(Schedule* sched, 
                              CandidateRouting* candRouting) {
 
-  std::map< std::pair<SB_CONFIG::sblink*,int>,SbPDG_Edge* >::iterator I,E;
+  std::unordered_map<SB_CONFIG::sblink*,SbPDG_Edge* >::iterator I,E;
   for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
-    sblink* link = I->first.first;
+    sblink* link = I->first;
     sbnode* dest = link->dest();
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
       assert(dest_pdgnode);
       
     }
-    sched->assign_link(I->second->def(),I->first.first, I->first.second);
-    sched->updateLinkCount(I->first.first);
+    
+    sched->assign_link(I->second->def(),I->first);
+    sched->updateLinkCount(I->first);
   }
   //TODO: Apply forwarding
 
 }
 
 void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
-                             sbnode* here, int config, CandidateRouting* candRouting){
+                             sbnode* here, CandidateRouting* candRouting){
   
   //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here->name() 
   //<< " nlinks: " << candRouting->routing.size() << "\n";  
   assert(pdgnode);
-  sched->assign_node(pdgnode,here,config);
-  applyRouting(sched,config,candRouting);
+  sched->assign_node(pdgnode,here);
+  applyRouting(sched,candRouting);
 }
 
 void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
-                              int config, vector<sbnode*>& spots) {
+                              vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_input_iterator I,E;
@@ -241,14 +241,14 @@ void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
       E=_sbModel->subModel()->input_end(); I!=E; ++I) {
      sbinput* cand_input = const_cast<sbinput*>(&(*I));
     
-    if(sched->pdgNodeOf(cand_input,config)==NULL) {
+    if(sched->pdgNodeOf(cand_input)==NULL) {
        spots.push_back(cand_input);
     }
   }
 }
 
 void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
-                              int config, vector<sbnode*>& spots) {
+                              vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_output_iterator I,E;
@@ -256,7 +256,7 @@ void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
       E=_sbModel->subModel()->output_end(); I!=E; ++I) {
      sboutput* cand_output = const_cast<sboutput*>(&(*I));
     
-    if(sched->pdgNodeOf(cand_output,config)==NULL) {
+    if(sched->pdgNodeOf(cand_output)==NULL) {
        spots.push_back(cand_output);
     }
 
@@ -264,14 +264,14 @@ void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
 }
 
 void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
-                              int config, vector<sbnode*>& spots) {
+                              vector<sbnode*>& spots) {
   spots.clear();
   
   for(int i = 2; i < _sbModel->subModel()->sizex(); ++i) {
     sbfu* cand_fu = _sbModel->subModel()->fuAt(i,0);
     
     if((cand_fu->fu_def()==NULL || cand_fu->fu_def()->is_cap(pdginst->inst()))
-       && sched->pdgNodeOf(cand_fu,config)==NULL) {
+       && sched->pdgNodeOf(cand_fu)==NULL) {
        spots.push_back(cand_fu);
     }
   }
@@ -281,14 +281,14 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
       sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
       
       if((cand_fu->fu_def()==NULL||cand_fu->fu_def()->is_cap(pdginst->inst()))
-         && sched->pdgNodeOf(cand_fu,config)==NULL) {
+         && sched->pdgNodeOf(cand_fu)==NULL) {
          spots.push_back(cand_fu);
       }
     }
   }
 }
 
-pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
   pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
@@ -303,12 +303,10 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   //fill up worklist with nodes reachable 
   Schedule::link_iterator I,E;
   for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    if(I->second==config) {
-      sbnode* dest = I->first->dest();
-      if(!dynamic_cast<sbfu*>(dest)) {//don't route through fu
-        node_dist[dest]=0;
-        openset.push_back(dest);
-      }
+    sbnode* dest = (*I)->dest();
+    if(!dynamic_cast<sbfu*>(dest)) {//don't route through fu
+      node_dist[dest]=0;
+      openset.push_back(dest);
     }
   }
   
@@ -326,10 +324,10 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
       sblink* link = *I;
       
       //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link,config);
+      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
       if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
       
-      pair<sblink*,int> p = make_pair(link,config);
+      sblink* p = link;
       SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
                                   candRouting.routing[p]->def();
       if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
@@ -361,7 +359,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   sbnode* x = dest;
   while(came_from.count(x)!=0) {
     sblink* link = came_from[x];
-    candRouting.routing[make_pair(link,config)]=pdgedge;
+    candRouting.routing[link]=pdgedge;
     x=link->orig();
   }
   
@@ -370,7 +368,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
 
 //routes only inside a configuration
 pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
-                     int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+                     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
   pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
@@ -386,9 +384,7 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
   //fill up worklist with nodes reachable 
   Schedule::link_iterator I,E;
   for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    if(I->second==config) {
-      openset.push_back(I->first->dest());
-    }
+    openset.push_back((*I)->dest());
   }
   
   while(!openset.empty()) {
@@ -405,10 +401,10 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
       sblink* link = *I;
       
       //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link,config);
+      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
       //if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
       
-      std::pair<sblink*,int> p = make_pair(link,config);
+      sblink* p = link;
       SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
                                   candRouting.routing[p]->def();
       //if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
@@ -450,7 +446,7 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
   sbnode* x = dest;
   while(came_from.count(x)!=0) {
     sblink* link = came_from[x];
-    candRouting.routing[make_pair(link,config)]=pdgedge;
+    candRouting.routing[link]=pdgedge;
     x=link->orig();
   }
   
@@ -459,7 +455,7 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
 
 //routes only inside a configuration
 int HeuristicScheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source,
-                     int config, CandidateRouting& candRouting, int scoreLeft) {
+                     CandidateRouting& candRouting, int scoreLeft) {
   
   list<sbnode*> openset;
   map<sbnode*,int> node_dist;
@@ -473,9 +469,7 @@ int HeuristicScheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sb
   //fill up worklist with nodes reachable 
   Schedule::link_iterator I,E;
   for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    if(I->second==config) {
-      openset.push_back(I->first->dest());
-    }
+    openset.push_back((*I)->dest());
   }
   
   sboutput* the_output = NULL;
@@ -494,10 +488,10 @@ int HeuristicScheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sb
       sblink* link = *I;
       
       //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link,config);
+      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
       if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
       
-      pair<sblink*,int> p = make_pair(link,config);
+      sblink* p = link;
       SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
                                   candRouting.routing[p]->def();
       if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
@@ -533,7 +527,7 @@ int HeuristicScheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sb
   sbnode* x = the_output;
   while(came_from.count(x)!=0) {
     sblink* link = came_from[x];
-    candRouting.routing[make_pair(link,config)]=pdgedge;
+    candRouting.routing[link]=pdgedge;
     x=link->orig();
   }
   

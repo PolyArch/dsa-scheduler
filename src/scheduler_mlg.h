@@ -9,9 +9,9 @@ class SchedulerMultipleLinkGreedy : public HeuristicScheduler {
 	bool schedule(SbPDG*, Schedule*&);
 	bool scheduleNode(Schedule* sched, SbPDG_Node* pdgnode);
 	std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*,
-               int config, CandidateRouting&,std::pair<int,int> bestScore);
+               CandidateRouting&,std::pair<int,int> bestScore);
 	 std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config,
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest,
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
 };

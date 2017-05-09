@@ -33,7 +33,7 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 class CandidateRouting {
   public:
-  std::map< std::pair<SB_CONFIG::sblink*,int>, SbPDG_Edge* > routing;
+  std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
   void clear() {
@@ -183,16 +183,16 @@ public:
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
   virtual bool scheduleNode(Schedule*, SbPDG_Node*) = 0;
   virtual std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
-               int config, CandidateRouting&,std::pair<int,int> bestScore) = 0;
+               CandidateRouting&,std::pair<int,int> bestScore) = 0;
   virtual std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
 
  std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
  std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, int config, 
+            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
 protected:
@@ -200,18 +200,18 @@ protected:
   bool assignVectorInputs(SbPDG*, Schedule*);
   bool assignVectorOutputs(SbPDG*, Schedule*);
 
-  void applyRouting(Schedule*, int, CandidateRouting*);
-  void applyRouting(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, int, CandidateRouting*);
+  void applyRouting(Schedule*, CandidateRouting*);
+  void applyRouting(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, CandidateRouting*);
   
-  void fillInputSpots(Schedule*,SbPDG_Input*, int config, 
+  void fillInputSpots(Schedule*,SbPDG_Input*,
                     std::vector<SB_CONFIG::sbnode*>& spots);
-  void fillOutputSpots(Schedule*,SbPDG_Output*, int config, 
+  void fillOutputSpots(Schedule*,SbPDG_Output*, 
                     std::vector<SB_CONFIG::sbnode*>& spots);
-  void fillInstSpots(Schedule*,SbPDG_Inst*, int config, 
+  void fillInstSpots(Schedule*,SbPDG_Inst*,
                      std::vector<SB_CONFIG::sbnode*>& spots);
 
    int route_to_output(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, int config, 
+            SB_CONFIG::sbnode* source,
             CandidateRouting&, int scoreLeft);
  
 };

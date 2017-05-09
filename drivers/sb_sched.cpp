@@ -118,12 +118,11 @@ int main(int argc, char* argv[])
   bool succeed_sched = false;
 
   succeed_sched = scheduler->schedule(&sbpdg,sched);
-
   if (str_schedType == "sg" || str_schedType == "greedy") {
     scheduler->progress_printBests();
   }
 
-  sched->printAllConfigs((viz_dir + dfg_base).c_str()); // text form of config fed to gui
+  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(!succeed_sched) {
     cout << "Scheduling Failed!\n";
