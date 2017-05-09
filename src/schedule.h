@@ -46,7 +46,7 @@ class Schedule {
     
     void printConfigText(std::ostream& os);
     void printConfigText(const char *fname) {
-      std::ofstream os(fname);
+      std::ofstream os((std::string(fname)+".cfg").c_str());
       assert(os.good()); 
       printConfigText(os);
     }
@@ -132,7 +132,11 @@ class Schedule {
       for(auto I = src->ibegin(), E = src->iend(); I!=E; ++I) {
          sblink* opp_link = *I;
          if(opp_link->orig() == slink->dest()) {
-           assert(pdgNodeOf(opp_link) != pdgnode);
+           if(pdgNodeOf(opp_link) == pdgnode) {
+             std::cout << pdgnode->name() << " " 
+                  << slink->name() << " " << opp_link->name() << "\n";
+             assert(0);
+           }
          }
       }
       assert(slink);

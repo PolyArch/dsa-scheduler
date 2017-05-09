@@ -211,8 +211,9 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
     sbnode* dest = link->dest();
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
-      assert(dest_pdgnode);
-      
+      if(!dest_pdgnode) {
+         sched->add_passthrough_node(dest);
+      }
     }
     
     sched->assign_link(I->second->def(),I->first);
@@ -288,10 +289,14 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
   }
 }
 
+//I was too lazy to implement dijkstra's algorithm (also i don't like priority queues),
+//so instead i made one fast list (openset) and one slow list (openset_long)
 pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
   pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
+  list<sbnode*> openset_long;
+
   unordered_map<sbnode*,int> node_dist;
   unordered_map<sbnode*,sblink*> came_from;
   bool found_dest = false;
@@ -304,15 +309,22 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   Schedule::link_iterator I,E;
   for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
     sbnode* dest = (*I)->dest();
-    if(!dynamic_cast<sbfu*>(dest)) {//don't route through fu
+    if(!dynamic_cast<sbfu*>(dest)) { // don't start at some other instruction's fu
       node_dist[dest]=0;
       openset.push_back(dest);
     }
   }
   
-  while(!openset.empty()) {
-    sbnode* node = openset.front(); 
-    openset.pop_front();
+  while(!openset.empty() || !openset_long.empty()) {
+
+    sbnode* node=NULL;
+    if(!openset.empty()) {
+      node = openset.front();
+      openset.pop_front();
+    } else {
+      node = openset_long.front();
+      openset_long.pop_front();
+    }
     
     //don't search this node if it's too much anyways
     //if(x->links+1>=cost_allotted) continue; 
@@ -340,14 +352,25 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
       
       found_dest=(next==dest);
 
-      if(dynamic_cast<sbfu*>(next) && !found_dest) continue;  //don't route through fu
+      //if(dynamic_cast<sbfu*>(next) && !found_dest) continue;  //don't route through fu
 
-      came_from[next] = link;
-      node_dist[next] = node_dist[node]+1;
+      bool passthrough = (dynamic_cast<sbfu*>(next) && !found_dest);
+      int new_dist = node_dist[node]+1+passthrough*1000;
 
-      if(found_dest) break; 
+      //Latency should be less than 2 passthroughs so we don't get a weird case
+      if(node_dist.count(next)==0 || (new_dist < node_dist[next] && new_dist < 2000)) {
+        came_from[next] = link;
+        node_dist[next] = new_dist;
+
+        if(found_dest) break; 
       
-      openset.push_back(next);
+        if(passthrough) {
+          openset_long.push_back(next);
+        } else {
+          openset.push_back(next);
+        }
+      }
+
     }
     if(found_dest) break;
   } 

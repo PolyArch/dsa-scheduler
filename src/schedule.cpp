@@ -1421,10 +1421,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
     SbPDG_Node* cur_pdgnode = pdgNodeOf(inc_link);
     assert(cur_pdgnode);
     
+
     if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
       SbPDG_Node* next_pdgnode = pdgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
-      if(!next_pdgnode) {
+      if(!next_pdgnode && !_passthrough_nodes.count(node)) {
         //assert(next_pdgnode);
         cout << "problem with latency calculation!\n";
         max_lat=-1;
@@ -1433,7 +1434,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
       }
 
       SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
-      assert(next_pdginst);
+      assert(next_pdginst || _passthrough_nodes.count(node));
     
       bool everyone_is_here = true;
 
@@ -1459,7 +1460,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
 
       if(everyone_is_here) {
         sblink* new_link = next_fu->getFirstOutLink();
-        lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());;
+        if(_passthrough_nodes.count(node)) {
+          lat_edge[new_link] = latency + 1; //TODO: Check this
+        } else { //regular inst
+          lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());
+        }
         openset.push_back(new_link);
         
         int diff = latency-low_latency;

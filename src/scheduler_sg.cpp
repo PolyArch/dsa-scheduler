@@ -34,6 +34,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   
   int iter=0;
   while (iter < upperbound) {
+    cout << "iter: " << iter << "\n";
     progress_initCurNums();
     bool succeed_sched = schedule_internal(sbPDG,cur_sched);
 
