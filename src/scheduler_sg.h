@@ -7,6 +7,7 @@ class SchedulerStochasticGreedy : public HeuristicScheduler {
 	public:
 	SchedulerStochasticGreedy(SB_CONFIG::SbModel* sbModel) : HeuristicScheduler(sbModel) {}
 	bool schedule(SbPDG*, Schedule*&);
+	bool schedule_internal(SbPDG*, Schedule*&);
 	bool scheduleNode(Schedule* sched, SbPDG_Node* pdgnode);
 	std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*,
                CandidateRouting&,std::pair<int,int> bestScore);

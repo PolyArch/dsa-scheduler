@@ -1412,7 +1412,8 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
   while(!openset.empty()) {
     sblink* inc_link = openset.front(); 
     openset.pop_front();
-   
+    //cout << inc_link->name() << "\n";   
+
     //dest node
     sbnode* node = inc_link->dest();
     sbnode::const_iterator I,E,II,EE;
@@ -1423,7 +1424,6 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
     if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
       SbPDG_Node* next_pdgnode = pdgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
-      //
       if(!next_pdgnode) {
         //assert(next_pdgnode);
         cout << "problem with latency calculation!\n";

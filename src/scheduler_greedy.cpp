@@ -16,6 +16,8 @@ using namespace std;
 bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG);
 
+  progress_initBestNums();
+  progress_initCurNums();
   bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
   if(!vec_in_assigned) {
     return false;
