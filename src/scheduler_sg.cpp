@@ -34,7 +34,6 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   
   int iter=0;
   while (iter < upperbound) {
-    cout << "iter: " << iter << "\n";
     progress_initCurNums();
     bool succeed_sched = schedule_internal(sbPDG,cur_sched);
 
@@ -57,7 +56,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
       }
       sched = cur_sched;
       if(succeed_sched && !best_succeeded) {
-        max_iters_no_improvement=std::max(200,iter*2);
+        max_iters_no_improvement=std::max(500,iter*2);
       }
       best_succeeded = succeed_sched;
       last_improvement_iter=0;
