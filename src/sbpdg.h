@@ -243,6 +243,9 @@ class SbPDG_Output : public SbPDG_IO {
       return dynamic_cast<SbPDG_Inst*>(_ops[0]->def());
     }
 
+    SbPDG_Node* genNode() {
+      return (_ops[0]->def());
+    }
     //retrieve the value of the def
     uint64_t retrieve() {
       assert(_ops.size()==1);
@@ -514,17 +517,17 @@ class SbPDG {
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
-		void sort_vec_in() {
-			sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
-				return left->num_inputs() > right->num_inputs();
-			});
-		}
-
-		void sort_vec_out() {
-			sort(_vecOutputs.begin(), _vecOutputs.end(),[](SbPDG_VecOutput*& left, SbPDG_VecOutput*& right){	
-				return left->num_outputs() > right->num_outputs();
-			});
-		}
+    void sort_vec_in() {
+    	sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
+    		return left->num_inputs() > right->num_inputs();
+    	});
+    }
+    
+    void sort_vec_out() {
+    	sort(_vecOutputs.begin(), _vecOutputs.end(),[](SbPDG_VecOutput*& left, SbPDG_VecOutput*& right){	
+    		return left->num_outputs() > right->num_outputs();
+    	});
+    }
     void compute(bool print, bool verif);
 
   private:

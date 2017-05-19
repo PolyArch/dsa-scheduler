@@ -36,16 +36,17 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   while (iter < upperbound) {
     progress_initCurNums();
     bool succeed_sched = schedule_internal(sbPDG,cur_sched);
-
+    bool succeed_timing = false;
 
     int tot_mapped = progress_getBestNum(FA) +
                      progress_getBestNum(Input) +
                      progress_getBestNum(Output);
     int lat=-10000,latmis=0;
     if(succeed_sched) {
-      cur_sched->calcLatency(lat,latmis);
+      succeed_timing = cur_sched->fixLatency(lat,latmis);
       lat *= -1;
     }
+    succeed_sched &= succeed_timing;
     std::pair<int,int> score = make_pair(tot_mapped,lat);
     if(score > best_score) {
       //cout << "Saving score " << score.first << "," << score.second 
@@ -66,7 +67,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     cur_sched=NULL;
     iter++;
 
-    if( ((iter-last_improvement_iter) > max_iters_no_improvement)  && best_succeeded ) {
+    if( ((iter-last_improvement_iter) > max_iters_no_improvement)  && best_succeeded) {
       break;
     }
   }

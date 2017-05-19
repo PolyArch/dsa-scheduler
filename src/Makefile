@@ -6,7 +6,7 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS :=  -Wall -g -std=c++11 -O3 -ggdb -gdwarf-3 -lm $(FLAGS)
+CXXFLAGS :=  -Wall -g -std=c++11 -O0 -ggdb -gdwarf-3 -lm $(FLAGS)
 SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bkt.cpp scheduler_greedy.cpp scheduler_mlg.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
 
 GAMS_DIR=gams_models

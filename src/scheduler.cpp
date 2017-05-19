@@ -215,7 +215,7 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
          sched->add_passthrough_node(dest);
       }
     }
-    
+    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
     sched->assign_link(I->second->def(),I->first);
     sched->updateLinkCount(I->first);
   }

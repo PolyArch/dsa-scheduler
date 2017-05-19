@@ -2,13 +2,13 @@
 #define __SB__SCHEDULE_H__
 
 #include <map>
+#include <unordered_set>
 #include "model.h"
 #include "sub_model.h"
 #include "sbpdg.h"
 #include <iostream>
 #include <fstream>
 #include "bitslice.h"
-
 using namespace SB_CONFIG;
 
 //How do you choose which switch in each row and FU to pass ??
@@ -186,6 +186,7 @@ class Schedule {
     } 
 
     void stat_printLinkCount();
+    void stat_printOutputLatency();
 
     typedef std::vector<sblink*>::const_iterator link_iterator;
     
@@ -201,7 +202,12 @@ class Schedule {
     
     SbModel* sbModel() {return _sbModel;}
     
-    void calcLatency(int& lat, int& latmis);
+    void  calcLatency(int& lat, int& latmis);
+    bool  fixLatency(int& lat, int& latmis);
+    bool  fixLatency_fwd(int& lat, int& latmis);
+    bool  fixLatency_bwd(int& lat, int& latmis);
+    bool  fixDelay(SbPDG_Output* pdgout, int ed, std::unordered_set<SbPDG_Node*>& visited);
+    bool  checkOutputMatch();
     
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
@@ -354,10 +360,12 @@ class Schedule {
     std::unordered_map<sbnode*, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
     std::unordered_map<SbPDG_Node*, int> _latOf; 
+    std::unordered_map<SbPDG_Edge*, int> _latOfEdge; 
     std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
     std::unordered_map<sblink*, SbPDG_Node*> _assignLink;   //sblink to pdgnode
     std::unordered_map<SbPDG_Node*, std::vector<sblink*> > _linksOf; //pdgnode to sblink 
     std::unordered_map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
+    std::unordered_map<SbPDG_Edge*, int> _extraLatOfEdge; 
     std::vector< std::vector<int> > _wide_ports;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec

@@ -135,14 +135,19 @@ int main(int argc, char* argv[])
     cout << "Scheduling Failed!\n";
     return 1;
   } else {
-    sched->stat_printLinkCount(); 
+    //sched->stat_printLinkCount(); 
     cout << "Scheduling Successful!\n";
   }
 
   int lat,latmis;
 
   //calculate latency
-  sched->calcLatency(lat,latmis);
+  if (str_schedType == "sg") {
+    sched->calcLatency(lat,latmis);
+  } else {
+    sched->fixLatency_fwd(lat,latmis);
+  }
+  sched->stat_printOutputLatency();
 
   std::string config_header = pdg_rawname + ".h";
   std::ofstream osh(config_header);     

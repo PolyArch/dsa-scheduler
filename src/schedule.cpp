@@ -1384,6 +1384,245 @@ void Schedule::calcAssignEdgeLink() {
   */
 }
 
+void Schedule::stat_printOutputLatency(){
+  /*SbPDG::const_output_iterator Io,Eo;
+  cout<<"Output Latency: ";
+  for(Io=_sbPDG->output_begin(),Eo=_sbPDG->output_end();Io!=Eo;++Io) {
+    SbPDG_Output* pdgout = *Io;
+    cout<<_latOf[pdgout]<<" ";
+  }
+  cout<<endl;*/
+  int n = _sbPDG->num_vec_output();
+  for (int i=0; i<n; i++) {
+    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+    cout<<vec_out->gamsName()<<": ";
+    for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      cout<<_latOf[pdgout]<<" ";
+    }
+    cout<<endl;
+  }
+}
+
+bool Schedule::checkOutputMatch() {
+  /*SbPDG::const_output_iterator Io,Eo;
+  cout<<"Output Latency: ";
+  for(Io=_sbPDG->output_begin(),Eo=_sbPDG->output_end();Io!=Eo;++Io) {
+    SbPDG_Output* pdgout = *Io;
+    cout<<_latOf[pdgout]<<" ";
+  }
+  cout<<endl;*/
+  int n = _sbPDG->num_vec_output();
+  for (int i=0; i<n; i++) {
+    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+    int lat = -1;
+    for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      if (lat == -1) {
+        lat = _latOf[pdgout];
+      }
+      if (lat != _latOf[pdgout]) {
+        assert(0);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
+  bool succ = true;
+  succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
+  if (!succ) return false;
+  succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
+  if (!succ) return false;
+  calcLatency(max_lat, max_lat_mis); //fwd pass
+  succ = checkOutputMatch();
+  if (!succ) return false;
+  return true;
+}
+
+bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
+  int n = _sbPDG->num_vec_output();
+  for (int i=0; i<n; i++) { //iterate over output vectors
+    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+    int maxLat = 0;
+    
+    for(unsigned m=0; m < vec_out->num_outputs(); ++m) { //iterate over each cgra_port to find max latency of the vector port
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      if (_latOf[pdgout] > maxLat) {
+        maxLat = _latOf[pdgout];
+      }
+    }
+    unordered_set<SbPDG_Node*> visited;
+    //TODO: sort ports from small to large latency
+    for (unsigned m=0; m < vec_out->num_outputs(); ++m) { //iterate over each cgra_ports and fix each individual port
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      int ed = maxLat - _latOf[pdgout]; //extra delay to insert
+      //cout<<"Output "<<pdgout->name()<<"  maxLat: "<<maxLat<<" _latOf: "<<_latOf[pdgout]<<" ed: "<<ed<<endl;
+      if (ed > 0) {
+        bool succ = fixDelay(pdgout, ed, visited);
+        if (!succ) return false;
+      }
+    }    
+  }
+  return true;
+}
+
+
+bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>& visited) {
+
+  SbPDG_Node::const_edge_iterator I,E;
+  SbPDG_Node* n = pdgout->genNode();
+  assert(n && "output is always associated with an instruction node or input node");
+  //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<pdgout->name()<<endl;
+  if (visited.count(n) == 1) {
+    cout<<"PDGNode "<<n->name()<<" is already visited!"<<endl;
+    assert(0);
+    return false;
+  }
+  visited.insert(n);
+
+  for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
+    if(*I == NULL) { continue; } //could be immediate, constant within FU
+    SbPDG_Edge* source_pdgedge = (*I);
+    _extraLatOfEdge[source_pdgedge] += ed;
+    if (_extraLatOfEdge[source_pdgedge] > 15) {
+       //cout<<"ed = " << _extraLatOfEdge[source_pdgedge] << " exceeded 16"<<endl;
+     //assert(0);
+      return false;
+    }
+  }
+  //cout<<"Found one that does not go beyond 15!\n";
+  return true;
+}
+
+
+bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
+  list<sblink*> openset;
+  //map<sbnode*,sblink*> came_from;
+  map<sblink*,int> lat_edge;
+  
+  max_lat=0;  
+  max_lat_mis=0;
+
+  SubModel::const_input_iterator I,E;
+  for(I=_sbModel->subModel()->input_begin(),
+      E=_sbModel->subModel()->input_end(); I!=E; ++I) {
+     sbinput* cand_input = const_cast<sbinput*>(&(*I));
+   
+    SbPDG_Node* pdgnode = pdgNodeOf(cand_input);
+    if(pdgnode!=NULL) {
+       sblink* firstOutLink = cand_input->getFirstOutLink();
+       assert(firstOutLink);
+       openset.push_back(firstOutLink);
+       lat_edge[firstOutLink]=_latOf[pdgnode];
+    }
+  }
+    
+    
+ //Outlinks of all the inputs 
+  while (!openset.empty()) {
+    sblink* inc_link = openset.front(); 
+    openset.pop_front();
+    //cout << "Link: "<<inc_link->name() << "\n";   
+
+    //dest node
+    sbnode* node = inc_link->dest();
+    sbnode::const_iterator I,E,II,EE;
+    
+    
+
+    if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
+      SbPDG_Node* next_pdgnode = pdgNodeOf(node);
+      //cout << next_fu->name() << "\n"; 
+      if(!next_pdgnode && !_passthrough_nodes.count(node)) {
+        assert(next_pdgnode);
+        cout << "problem with latency calculation!\n";
+        max_lat=-1;
+        max_lat_mis=-1;
+        return false;
+      }
+
+      SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
+      assert(next_pdginst || _passthrough_nodes.count(node));
+    
+      bool everyone_is_here = true;
+
+      int latency=0;
+      int low_latency=100000000;  //magic number, forgive me
+      for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
+        sblink* inlink = *II;
+        if(pdgNodeOf(inlink) != NULL) {
+          if(lat_edge.count(inlink)==1) {
+            if(lat_edge[inlink]>latency) {
+              latency=lat_edge[inlink];
+            }
+            if(lat_edge[inlink]<low_latency) {
+              low_latency=latency;
+            }
+          } else {
+            everyone_is_here = false;
+            break;
+          }
+        }
+      }
+     
+      if (everyone_is_here && !_passthrough_nodes.count(node)) {
+        for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
+          sblink* inlink = *II;
+          SbPDG_Node* origNode = pdgNodeOf(inlink);
+          if(origNode != NULL) {
+            SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
+            if(lat_edge[inlink]<latency) {
+              int diff = latency - lat_edge[inlink]; //latency per edge
+              assert(edge);
+              assert(((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff)) && "Error: Someone else set this edge before!");
+              _extraLatOfEdge[edge]=diff;
+            }
+            //cout<<"Edge Name: "<<edge->name()<< " extra lat:" << _extraLatOfEdge[edge] << endl;
+            //cout << "(fwdPass) Edge "<<edge->name()<<"  maxLat: " << latency << "  lat_edge: "<<lat_edge[inlink]<<"  extralat: " << _extraLatOfEdge[edge] << "\n";
+          }
+        }
+        //cout << next_fu->name() << " latency " << latency <<"\n";
+      }
+
+      if (everyone_is_here) {
+        sblink* new_link = next_fu->getFirstOutLink();
+        if(_passthrough_nodes.count(node)) {
+          lat_edge[new_link] = latency + 1; //TODO: Check this
+        } else { //regular inst
+          lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());
+        }
+        openset.push_back(new_link);
+        
+        int diff = latency-low_latency;
+        if (diff>max_lat_mis) {
+          max_lat_mis=diff;
+        }
+      }
+    } else if (dynamic_cast<sboutput*>(node)) {
+      sboutput* sb_out = dynamic_cast<sboutput*>(node);
+      SbPDG_Node* pdgnode = pdgNodeOf(sb_out);
+      //TODO: check we aren't over-riding something
+      _latOf[pdgnode]=lat_edge[inc_link];
+
+      if(lat_edge[inc_link] > max_lat) {
+        max_lat = lat_edge[inc_link];
+      }
+    } else {
+      for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
+        sblink* link = *I;
+        
+        if(pdgNodeOf(link) == pdgNodeOf(inc_link)) {
+          lat_edge[link] = lat_edge[inc_link] + 1;
+          openset.push_back(link);
+        }
+      }
+    }
+  }
+  return true;
+}
 
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
@@ -1426,7 +1665,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
       SbPDG_Node* next_pdgnode = pdgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
       if(!next_pdgnode && !_passthrough_nodes.count(node)) {
-        //assert(next_pdgnode);
+        assert(next_pdgnode);
         cout << "problem with latency calculation!\n";
         max_lat=-1;
         max_lat_mis=-1;
@@ -1438,36 +1677,66 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
     
       bool everyone_is_here = true;
 
-      int latency=0;
-      int low_latency=100000000;  //magic number, forgive me
       for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
         sblink* inlink = *II;
         if(pdgNodeOf(inlink) != NULL) {
-          if(lat_edge.count(inlink)==1) {
-            if(lat_edge[inlink]>latency) {
-              latency=lat_edge[inlink];
-            }
-            if(lat_edge[inlink]<low_latency) {
-              low_latency=latency;
-            }
-          } else {
+          if(!lat_edge.count(inlink)) {
             everyone_is_here = false;
             break;
           }
         }
       }
-      
 
-      if(everyone_is_here) {
+      int max_latency=0;
+      int low_latency=100000000;  //magic number, forgive me
+
+ 
+      if (everyone_is_here) {
+        // Latency should be the same across all the incoming edges
+        for (II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
+          sblink* inlink = *II;
+          //cout<<"(calcLat) Link "<<inlink->name()<<endl;
+          SbPDG_Node* origNode = pdgNodeOf(inlink);
+          if (origNode != NULL) {
+            //cout<<"(calcLat) origNode: "<<origNode->name();
+            int curLat = lat_edge[inlink];
+            if(!_passthrough_nodes.count(node)) {
+              //cout<<"(calcLat) destNode: "<<next_pdgnode->name();
+              SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
+              assert(edge);
+              //assert(_extraLatOfEdge.count(edge)!=0 && "The edge value should have been set for all edges in fwd pass!");
+              curLat +=  _extraLatOfEdge[edge];
+            }
+
+            if(curLat>max_latency) {
+              max_latency=curLat;
+            }
+            if(curLat<low_latency) {
+              low_latency=curLat;
+            }
+            //cout << "(calcLat) Edge "<<edge->name()<<"  commonLat" << commonLat <<"  lat_edge: "<<lat_edge[inlink] << "  extralat:" << _extraLatOfEdge[edge] << "\n";
+            assert(max_latency == low_latency && "The latency mismatch between edges should have been zeroed in fwd pass and preserved in bwd pass!");
+          }
+        }
+      }
+
+
+
+      if (everyone_is_here) {
+        // Update latency of outgoing edge
         sblink* new_link = next_fu->getFirstOutLink();
-        if(_passthrough_nodes.count(node)) {
-          lat_edge[new_link] = latency + 1; //TODO: Check this
+
+        if (_passthrough_nodes.count(node)) {
+          lat_edge[new_link] = max_latency + 1; //TODO: Check this
         } else { //regular inst
-          lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());
+          lat_edge[new_link] = max_latency + inst_lat(next_pdginst->inst());
         }
         openset.push_back(new_link);
         
-        int diff = latency-low_latency;
+        //if (dynamic_cast<sboutput*>(new_link->dest())) {
+        // cout<<"(Func) link: "<<new_link->name()<<" lat: "<<lat_edge[new_link]<<endl; 
+        //}
+        int diff = max_latency-low_latency;
         if(diff>max_lat_mis) {
           max_lat_mis=diff;
         }
@@ -1475,9 +1744,8 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
     } else if (dynamic_cast<sboutput*>(node)) {
       sboutput* sb_out = dynamic_cast<sboutput*>(node);
       SbPDG_Node* pdgnode = pdgNodeOf(sb_out);
-      //TODO: check we aren't over-riding something
       _latOf[pdgnode]=lat_edge[inc_link];
-
+      //cout<<"(Output) link: "<<inc_link->name()<<" lat: "<<lat_edge[inc_link]<<endl; 
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }
