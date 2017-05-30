@@ -94,6 +94,27 @@ class SbPDG_Node {
        _uses[pos]=edge;
     }
     
+    void removeIncEdge(SbPDG_Node* orig) { 
+      for (unsigned i = 0; i < _ops.size(); ++i) {
+        SbPDG_Edge* edge = _ops[i];
+        if (edge->def() == orig) {
+            _ops[i]=0;
+            return;
+        }
+      }
+      assert(false && "edge was not found");
+    }
+    
+    void removeOutEdge(SbPDG_Node* dest) {
+       for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+        if ((*it)->use() == dest) {
+            _uses.erase(it);
+            return;
+        }
+      }
+      assert(false && "edge was not found");
+    }
+ 
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {
        for(unsigned i = 0; i < _uses.size(); ++ i) {
          if(_uses[i] && _uses[i]->use()==to) {
@@ -243,7 +264,7 @@ class SbPDG_Output : public SbPDG_IO {
       return dynamic_cast<SbPDG_Inst*>(_ops[0]->def());
     }
 
-    SbPDG_Node* genNode() {
+    SbPDG_Node* first_operand() {
       return (_ops[0]->def());
     }
     //retrieve the value of the def
@@ -343,6 +364,7 @@ class SbPDG {
     ~SbPDG(){
     }
 
+    void remap(int num_HW_FU);
     void printGraphviz(std::ostream& os);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
     void printGraphviz(const char *fname) {
@@ -486,6 +508,7 @@ class SbPDG {
                            std::map<std::string,SbPDG_Node*>& syms ,bool input);
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
+    void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
     void parse_and_add_inst(std::string var_out, std::string opcode, 
                             std::map<std::string,SbPDG_Node*>& syms,

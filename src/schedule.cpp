@@ -1473,7 +1473,7 @@ bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
 bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>& visited) {
 
   SbPDG_Node::const_edge_iterator I,E;
-  SbPDG_Node* n = pdgout->genNode();
+  SbPDG_Node* n = pdgout->first_operand();
   assert(n && "output is always associated with an instruction node or input node");
   //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<pdgout->name()<<endl;
   if (visited.count(n) == 1) {

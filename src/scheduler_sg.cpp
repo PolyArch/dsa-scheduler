@@ -31,7 +31,17 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   bool best_succeeded=false;
 
   int last_improvement_iter=0;
-  
+
+  // An attempt to remap SbPDG
+  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
+  int hw_num_fu = subModel->sizex()*subModel->sizey();
+  sbPDG->remap(hw_num_fu);
+ 
+  ofstream ofs("viz/remap.dot", ios::out);
+  assert(ofs.good());
+  sbPDG->printGraphviz(ofs);
+  ofs.flush();
+
   int iter=0;
   while (iter < upperbound) {
     progress_initCurNums();
@@ -46,7 +56,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
       succeed_timing = cur_sched->fixLatency(lat,latmis);
       lat *= -1;
     }
-    succeed_sched &= succeed_timing;
+    //succeed_sched &= succeed_timing;
     std::pair<int,int> score = make_pair(tot_mapped,lat);
     if(score > best_score) {
       //cout << "Saving score " << score.first << "," << score.second 

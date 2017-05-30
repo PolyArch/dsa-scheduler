@@ -595,7 +595,7 @@ void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, in
 
 //Connect two nodes in PDG
 SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype) {
-  
+ 
   assert(orig != dest && "we only allow acyclic pdgs");
 
   SbPDG_Edge* new_edge = new SbPDG_Edge(orig,dest,etype);
@@ -628,6 +628,64 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   _edges.push_back(new_edge);
   
   return new_edge;
+}
+
+//Disconnect two nodes in PDG
+void SbPDG::disconnect(SbPDG_Node* orig, SbPDG_Node* dest) {
+  
+  assert(orig != dest && "we only allow acyclic pdgs");
+
+  dest->removeIncEdge(orig);
+  orig->removeOutEdge(dest);
+  for (auto it=_edges.begin(); it!=_edges.end(); it++) {
+    if ((*it)->def() == orig && (*it)->use() == dest) {
+        _edges.erase(it);
+        return;
+    }
+  }
+  assert(false && "edge was not found");
+}
+
+
+
+void SbPDG::remap(int num_HW_FU)
+{
+  //Count the number of functional units in PDG
+  int num_PDG_FU = 0;
+  const_inst_iterator Ii,Ei;
+  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {num_PDG_FU++;}
+
+  //Coun the number of dummy nodes needed
+  int numDummy = 0;
+  const_output_iterator Iout,Eout;
+  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
+    SbPDG_Output* pdg_out = (*Iout);
+    SbPDG_Inst* inst = pdg_out->out_inst();
+    if (!inst || inst->num_out() > 1) { 
+     //if producing instruction is an input or
+     // if producing instruction has more than one uses
+      numDummy++;
+    }
+  }
+  
+  if (num_PDG_FU + numDummy > num_HW_FU) {
+     cout <<"Probability that we face problem when it comes to fix timing!\n";
+  } else {
+    for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
+      SbPDG_Output* pdg_out = (*Iout);
+      SbPDG_Inst* inst = pdg_out->out_inst();
+      SbPDG_Node* node = pdg_out->first_operand();
+      if (!inst || inst->num_out() > 1) {
+        SbPDG_Inst* newNode = new SbPDG_Inst();
+        //TODO: insert information about this dummy node
+        newNode->setInst(SB_CONFIG::sb_inst_t::SB_Copy);
+        disconnect(node, pdg_out);
+        connect(node, newNode, 0, SbPDG_Edge::data);
+        connect(newNode, pdg_out, 0, SbPDG_Edge::data);
+        addInst(newNode);
+      }
+    }
+ }
 }
 
 void SbPDG::printGraphviz(ostream& os)
