@@ -4,3 +4,7 @@ build/
 *.swo
 *.swp
 *.swn
+drivers/sb_dfg_emu
+drivers/sb_sched
+drivers/stat-config
+
