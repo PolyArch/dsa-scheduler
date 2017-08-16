@@ -67,6 +67,8 @@ class Scheduler {
   int bestInputSched;
   int bestOutputSched;
 
+  bool verbose;
+
   enum StatType {FA, Input, Output};
 
   void progress_updateCurNum(StatType s, int init = 0){

@@ -598,7 +598,13 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
  
   assert(orig != dest && "we only allow acyclic pdgs");
 
-  SbPDG_Edge* new_edge = new SbPDG_Edge(orig,dest,etype);
+  SbPDG_Edge* new_edge = 0; //check if it's a removed edge first
+  auto edge_it = removed_edges.find(make_pair(orig,dest));
+  if(edge_it != removed_edges.end()) {
+    new_edge = edge_it->second;
+  } else { 
+    new_edge = new SbPDG_Edge(orig, dest, etype);
+  }
 
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
@@ -639,6 +645,7 @@ void SbPDG::disconnect(SbPDG_Node* orig, SbPDG_Node* dest) {
   orig->removeOutEdge(dest);
   for (auto it=_edges.begin(); it!=_edges.end(); it++) {
     if ((*it)->def() == orig && (*it)->use() == dest) {
+        removed_edges[make_pair(orig,dest)] = *it;
         _edges.erase(it);
         return;
     }
@@ -646,35 +653,16 @@ void SbPDG::disconnect(SbPDG_Node* orig, SbPDG_Node* dest) {
   assert(false && "edge was not found");
 }
 
-
-
-void SbPDG::remap(int num_HW_FU)
-{
-  //Count the number of functional units in PDG
-  int num_PDG_FU = 0;
-  const_inst_iterator Ii,Ei;
-  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {num_PDG_FU++;}
-
-  //Coun the number of dummy nodes needed
-  int numDummy = 0;
-  const_output_iterator Iout,Eout;
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
-    SbPDG_Output* pdg_out = (*Iout);
-    SbPDG_Inst* inst = pdg_out->out_inst();
-    if (!inst || inst->num_out() > 1) { 
-     //if producing instruction is an input or
-     // if producing instruction has more than one uses
-      numDummy++;
-    }
-  }
-  
-  if (num_PDG_FU + numDummy > num_HW_FU) {
-     cout <<"Probability that we face problem when it comes to fix timing!\n";
-  } else {
-    for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
+int SbPDG::remappingNeeded(int num_HW_FU) {
+  if(dummy_map.size()==0) {
+    //Count the number of dummy nodes needed
+    const_output_iterator Iout,Eout;
+    for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
       SbPDG_Output* pdg_out = (*Iout);
       SbPDG_Inst* inst = pdg_out->out_inst();
       SbPDG_Node* node = pdg_out->first_operand();
+      //if producing instruction is an input or
+      // if producing instruction has more than one uses
       if (!inst || inst->num_out() > 1) {
         SbPDG_Inst* newNode = new SbPDG_Inst();
         //TODO: insert information about this dummy node
@@ -683,10 +671,87 @@ void SbPDG::remap(int num_HW_FU)
         connect(node, newNode, 0, SbPDG_Edge::data);
         connect(newNode, pdg_out, 0, SbPDG_Edge::data);
         addInst(newNode);
+        newNode->setIsDummy(true);
+        dummy_map[pdg_out] = newNode;
       }
     }
- }
+  }
+  return dummy_map.size();
 }
+
+void SbPDG::removeDummies() {
+  for (auto Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {
+    SbPDG_Inst* inst = *Ii;
+    if(inst->isDummy()) {
+       SbPDG_Node* input = inst->first_operand();
+       SbPDG_Node* output = inst->first_use();
+       disconnect(input,inst);
+       disconnect(inst,output);
+       connect(input,output,0,SbPDG_Edge::data);
+    }
+  }
+
+  for(auto i : dummy_map) {
+    removeInst(i.second); //remove from list of nodes
+  }
+  
+  dummies.clear();
+  dummiesOutputs.clear();
+  dummys_per_port.clear();
+}
+
+
+void SbPDG::remap(int num_HW_FU) {
+  //First Disconnect any Dummy Nodes  (this is n^2 because of remove, but w/e)
+  removeDummies();
+
+  for (auto Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
+    SbPDG_Output* pdg_out = (*Iout);
+    SbPDG_Inst* inst = pdg_out->out_inst();
+    SbPDG_Node* node = pdg_out->first_operand();
+
+    if ((!inst || inst->num_out() > 1) && ((rand()&3)==0) ) { //25% chance
+      disconnect(node, pdg_out);
+      SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
+      connect(node, newNode, 0, SbPDG_Edge::data);
+      connect(newNode, pdg_out, 0, SbPDG_Edge::data);
+      addInst(newNode); //add to list of nodes -- TODO: check if this borked anything
+      dummies.insert(newNode);
+      dummiesOutputs.insert(pdg_out);
+
+      if (num_insts() + (int)dummies.size() > num_HW_FU) {
+        //cerr <<"No more FUs left, so we can't put more dummy nodes,\n"
+        //     <<"  so probabily we will face problems when it comes to fix timing!\n";
+        break;
+      }
+
+    }
+  }
+}
+
+//We may have forgotten which dummies we included in the PDG, if we went on to
+//some other solution.  This function recalls dummies and reconnects things
+//appropriately
+void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
+  removeDummies();
+
+  for (auto Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
+    SbPDG_Output* pdg_out = (*Iout);
+    SbPDG_Node* node = pdg_out->first_operand();
+
+    if (d.count(pdg_out)) {
+      disconnect(node, pdg_out);
+      SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
+      connect(node, newNode, 0, SbPDG_Edge::data);
+      connect(newNode, pdg_out, 0, SbPDG_Edge::data);
+      addInst(newNode); //add to list of nodes -- TODO: check if this borked anything
+      dummies.insert(newNode);
+      dummiesOutputs.insert(pdg_out);
+    }
+  }
+}
+
+
 
 void SbPDG::printGraphviz(ostream& os)
 {

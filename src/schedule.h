@@ -202,7 +202,7 @@ class Schedule {
     
     SbModel* sbModel() {return _sbModel;}
     
-    void  calcLatency(int& lat, int& latmis);
+    void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
     bool  fixLatency(int& lat, int& latmis);
     bool  fixLatency_fwd(int& lat, int& latmis);
     bool  fixLatency_bwd(int& lat, int& latmis);

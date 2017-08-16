@@ -1,3 +1,5 @@
+#include <getopt.h>
+
 #include "model.h"
 #include <assert.h>
 #include <iostream>
@@ -16,6 +18,12 @@
 
 using namespace std;
 using namespace SB_CONFIG;
+
+static struct option long_options[] = {
+  { "algorithm", required_argument, NULL, 's', },
+  { "verbose", no_argument, NULL, 'V', },
+  { 0, 0, 0, 0, },
+};
 
 std::string basename(std::string& filename) {
   size_t lastindex = filename.find_last_of("."); 
@@ -38,33 +46,33 @@ std::string basedir(std::string& filename) {
 
 
 int main(int argc, char* argv[])
-{
+{    
+  int opt;
+  bool verbose = false;
+  string str_schedType = string("sg"); 
+ 
+  while ((opt = getopt_long(argc, argv, "s:o:n:EN", long_options, NULL)) != -1) {
+    switch (opt) {
+    case 's': str_schedType = string(optarg); break;
+    case 'V': verbose = true; break;
+    default: exit(1);
+    }
+  }
 
-  //enum SchedType {GAMS, GREEDY, MLG, BKT, SG, SA};
-  //SchedType schedType = GAMS;
+  argc -= optind;
+  argv += optind;
 
-    
-  if(argc != 4 and argc!=3) {
-    cerr <<  "Usage: sb_sched config.sbmodel compute.sbpdg [gams,greedy,bkt,sg,sa,mlg]\n";
+  if(argc != 2) {
+    cerr <<  "Usage: sb_sched [FLAGS] config.sbmodel compute.sbpdg \n";
     exit(1);
   }
 
-  string str_schedType; 
-  if(argc==3) {
-    str_schedType = string("sg");
-  } else {
-    str_schedType = string(argv[3]);
-  }
-  
+  SbModel sbmodel(argv[0]);
 
+  //cout << "Softbrain CGRA Size:" << sbmodel.subModel()->sizex() << "x"
+  //                               << sbmodel.subModel()->sizey() <<"\n";
 
-  //Sbmodel object based on the hw config
-  SbModel sbmodel(argv[1]);
-
-  cout << "Softbrain CGRA Size:" << sbmodel.subModel()->sizex() << "x"
-                        << sbmodel.subModel()->sizey() <<"\n";
-
-  std::string pdg_filename=argv[2];
+  std::string pdg_filename=argv[1];
   int lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
 
@@ -96,58 +104,44 @@ int main(int argc, char* argv[])
   //Scheduler scheduler(&sbmodel);
   Scheduler* scheduler;
   if(str_schedType == "gams") {
-    //schedType = GAMS;
     scheduler = new GamsScheduler(&sbmodel);
   } else if(str_schedType == "greedy") { /*original*/
-    //schedType = GREEDY;
     scheduler = new SchedulerGreedy(&sbmodel);
   } else if(str_schedType == "mlg") { /*multiple-link greedy*/
-    //schedType = MLG;
     scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
-    //schedType = SG;
     scheduler = new SchedulerStochasticGreedy(&sbmodel);
   } else if(str_schedType == "sa") { /*simulated annealing*/
-    //schedType = SA;
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
   } else if(str_schedType == "bkt") {
-    //schedType = BKT;
     scheduler = new SchedulerBacktracking(&sbmodel);
   } else {
     cerr <<  "Something Went Wrong with Default Scheduler String";
     exit(1);
   }
 
-
+  scheduler->verbose = verbose;
 
   scheduler->check_res(&sbpdg,&sbmodel);
 
   bool succeed_sched = false;
 
   succeed_sched = scheduler->schedule(&sbpdg,sched);
-  if (str_schedType == "sg" || str_schedType == "greedy") {
-    scheduler->progress_printBests();
-  }
 
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(!succeed_sched) {
     cout << "Scheduling Failed!\n";
-    return 1;
-  } else {
-    //sched->stat_printLinkCount(); 
-    cout << "Scheduling Successful!\n";
-  }
+    exit(1);
+  } 
 
   int lat,latmis;
+  sched->calcLatency(lat,latmis);
 
-  //calculate latency
-  if (str_schedType == "sg") {
-    sched->calcLatency(lat,latmis);
-  } else {
-    sched->fixLatency_fwd(lat,latmis);
+  if (verbose) {
+     cout << "Scheduling Successful!\n";
+     sched->stat_printOutputLatency();
   }
-  sched->stat_printOutputLatency();
 
   std::string config_header = pdg_rawname + ".h";
   std::ofstream osh(config_header);     

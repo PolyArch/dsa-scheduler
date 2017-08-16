@@ -343,39 +343,48 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
   reconstructSchedule(routeMap, pdgnode_for, posMap);
 
-#if 0
-  // -------------------------------- DECODE DELAY ------------------------------
-  for(auto Iin=_sbModel->subModel()->input_begin(), 
-     Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
-    sbinput* sbinput_node = (sbinput*) &(*Iin);
-    SbPDG_Node* input_pdgnode = pdgnode_for[sbinput_node];
-    if(!input_pdgnode) {
-      continue;
+  // Iterate over FUs, get the inc_edge assoc. with each FU_INPUT, set extra lat.
+  cur_slice=SWITCH_SLICE;
+  for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+    for (int i = 0; i < _sbModel->subModel()->sizex(); ++i, ++cur_slice) {
+      sbfu* sbfu_node = &fus[i][j];
+      if (_assignNode.count(sbfu_node) != 0) {
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
+ 
+        for (int i = 0; i < NUM_IN_FU_DIRS; ++i) {
+          if (pdg_node->immSlot() == i) {
+            //Do Nothing 
+          } else if (i < (pdg_node->ops_end() - pdg_node->ops_begin())) {
+            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin() + i);
+            if (!inc_edge) {
+              continue;
+            }
+ 
+            // delay for each input
+            int d1 = IN_DELAY_LOC + BITS_PER_DELAY * i;
+            int d2 = d1 + BITS_PER_DELAY - 1;
+            _extraLatOfEdge[inc_edge] = _bitslices.read_slice(cur_slice, d1, d2);
+ 
+            //_bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
+            //cout << "slice: " << cur_slice 
+            //     << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
+ 
+          } else {
+            assert(i != 0 && "can't be no slot for first input");
+          }
+        }
+      }
     }
-    int input_port_num = sbinput_node->port();
-    int delay_slot,offset;
-
-    if(input_port_num < 16) {
-      delay_slot=DELAY_SLICE_1;
-      offset=0;
-    } else if(input_port_num < 32) {
-      delay_slot=DELAY_SLICE_2;
-      offset=16;
-    } else { //if(input_port_num < 48) {
-      delay_slot=DELAY_SLICE_3;
-      offset=32;
-    }
-
-    int start = BITS_PER_DELAY*(input_port_num - offset);
-    uint64_t lat = _bitslices.read_slice(delay_slot, start,start+3);
-
-    assign_lat(input_pdgnode,lat);
-    //cout << "input node " << input_port_num <<  " got lat " << lat << "\n";
+    cur_slice += 1; // because we skipped the switch
   }
-#endif
+ 
 
   int max_lat, max_lat_mis;
-  calcLatency(max_lat,max_lat_mis);
+  calcLatency(max_lat, max_lat_mis,true);
+  if(max_lat != max_lat_mis) {
+    cerr << "The FU input latencies don't match, this may or may not be a problem!\n";
+  }
+
   calc_out_lat();
 
   return inst_histo;
@@ -627,7 +636,9 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               //delay for each input
               int d1=IN_DELAY_LOC+BITS_PER_DELAY*i;
               int d2=d1+BITS_PER_DELAY-1;
-              _bitslices.write(cur_slice,d1,d2,inc_edge->delay());
+              _bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
+              //cout << "slice: " << cur_slice 
+              //   << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
 
             } else {
               assert(i!=0 && "can't be no slot for first input");
@@ -1393,6 +1404,7 @@ void Schedule::stat_printOutputLatency(){
   }
   cout<<endl;*/
   int n = _sbPDG->num_vec_output();
+  cout << "** Output Vector Latencies **\n";
   for (int i=0; i<n; i++) {
     SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
     cout<<vec_out->gamsName()<<": ";
@@ -1473,8 +1485,12 @@ bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
 bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>& visited) {
 
   SbPDG_Node::const_edge_iterator I,E;
-  SbPDG_Node* n = pdgout->first_operand();
-  assert(n && "output is always associated with an instruction node or input node");
+  SbPDG_Inst* n = pdgout->out_inst();
+  if(!n || n->num_out()>1) { //bail if orig is input or has >1 use
+    return false;
+  }
+
+  //assert(n && "output is always associated with an instruction node or input node");
   //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<pdgout->name()<<endl;
   if (visited.count(n) == 1) {
     cout<<"PDGNode "<<n->name()<<" is already visited!"<<endl;
@@ -1624,8 +1640,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   return true;
 }
 
-
-void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
+void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
   list<sblink*> openset;
   //map<sbnode*,sblink*> came_from;
   map<sblink*,int> lat_edge;
@@ -1695,16 +1710,12 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
         // Latency should be the same across all the incoming edges
         for (II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
           sblink* inlink = *II;
-          //cout<<"(calcLat) Link "<<inlink->name()<<endl;
           SbPDG_Node* origNode = pdgNodeOf(inlink);
           if (origNode != NULL) {
-            //cout<<"(calcLat) origNode: "<<origNode->name();
             int curLat = lat_edge[inlink];
             if(!_passthrough_nodes.count(node)) {
-              //cout<<"(calcLat) destNode: "<<next_pdgnode->name();
               SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
               assert(edge);
-              //assert(_extraLatOfEdge.count(edge)!=0 && "The edge value should have been set for all edges in fwd pass!");
               curLat +=  _extraLatOfEdge[edge];
             }
 
@@ -1714,8 +1725,19 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis) {
             if(curLat<low_latency) {
               low_latency=curLat;
             }
-            //cout << "(calcLat) Edge "<<edge->name()<<"  commonLat" << commonLat <<"  lat_edge: "<<lat_edge[inlink] << "  extralat:" << _extraLatOfEdge[edge] << "\n";
-            assert(max_latency == low_latency && "The latency mismatch between edges should have been zeroed in fwd pass and preserved in bwd pass!");
+
+            if(warnMismatch && max_latency != low_latency) {
+               cout << "Mismatch, min_lat:" << low_latency 
+                             << ", max_lat:" << max_latency 
+                    << ", link:" << inlink->name() << "\n";
+               if(!_passthrough_nodes.count(node)) {
+                 SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
+                 cout << "(calcLat) Edge "<<edge->name()<< "  lat_edge: "<<lat_edge[inlink] << "  extralat:" << _extraLatOfEdge[edge] << "\n";
+               } else {
+                 cout << "passthrough\n";
+               }
+
+            }
           }
         }
       }

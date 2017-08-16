@@ -124,6 +124,14 @@ class SbPDG_Node {
        return NULL;
     }
     
+    SbPDG_Node* first_operand() {
+      return (_ops[0]->def());
+    }
+
+    SbPDG_Node* first_use() {
+      return (_uses[0]->use());
+    }
+
     int num_inc() const { return  _ops.size();  }
     int num_out() const { return  _uses.size(); }
     
@@ -169,8 +177,9 @@ class SbPDG_IO : public SbPDG_Node {
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
-    SbPDG_Inst() : SbPDG_Node(), _predInv(false), _imm_slot(-1), _subFunc(0),_accum(0){
-    }
+    SbPDG_Inst() : SbPDG_Node(), _predInv(false), _isDummy(false),
+                     _imm_slot(-1), _subFunc(0), _accum(0) {}
+
 
     void printGraphviz(std::ostream& os);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
@@ -185,6 +194,9 @@ class SbPDG_Inst : public SbPDG_Node {
 
     void setPredInv(bool predInv) { _predInv=predInv;}
     bool predInv() {return _predInv;}
+
+    void setIsDummy(bool d) { _isDummy = d; }
+    bool isDummy() { return _isDummy; }
 
     void setInst(SB_CONFIG::sb_inst_t sbinst) { _sbinst=sbinst; }
     SB_CONFIG::sb_inst_t inst() { return _sbinst; }
@@ -216,6 +228,7 @@ class SbPDG_Inst : public SbPDG_Node {
     std::string _verif_id;
     std::vector<uint64_t> _input_vals;
     bool _predInv;
+    bool _isDummy;
     int _imm_slot;
     int _subFunc;
     uint64_t _accum;
@@ -365,6 +378,11 @@ class SbPDG {
     }
 
     void remap(int num_HW_FU);
+    int  remappingNeeded(int num_HW_FU);
+    void rememberDummies(std::set<SbPDG_Output*> d);
+    void removeDummies();
+
+
     void printGraphviz(std::ostream& os);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
     void printGraphviz(const char *fname) {
@@ -387,7 +405,18 @@ class SbPDG {
 
     void addInst(SbPDG_Inst* inst) {
         _insts.push_back(inst); 
-        _nodes.push_back(inst);}
+        _nodes.push_back(inst);
+    }
+
+    // remove instruction from nodes and insts
+    void removeInst(SbPDG_Inst* inst)
+    {
+      _insts.erase(std::remove(_insts.begin(), _insts.end(), inst), _insts.end());
+      _nodes.erase(std::remove(_nodes.begin(), _nodes.end(), inst), _nodes.end());
+  
+      //_insts.erase(inst);
+      //_nodes.erase(inst);
+    }
 
     //Just for adding single input without keeping track of name/sym-table
     void addInput(SbPDG_Input* input) {
@@ -526,9 +555,11 @@ class SbPDG {
     
     const_input_iterator input_begin() {return _inputs.begin();}
     const_input_iterator input_end() {return _inputs.end();}
-    
+    int num_inputs() { return _inputs.size(); }
+ 
     const_output_iterator output_begin() {return _outputs.begin();}
     const_output_iterator output_end() {return _outputs.end();}
+    int num_outputs() { return _outputs.size(); }
 
     int num_nodes() {return _nodes.size();}
 
@@ -553,6 +584,8 @@ class SbPDG {
     }
     void compute(bool print, bool verif);
 
+    std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
+
   private:
     std::vector<SbPDG_Node*> _nodes;
     
@@ -569,6 +602,14 @@ class SbPDG {
 
     std::vector<SbPDG_Edge*> _edges;
     
+    std::map<std::pair<SbPDG_Node*,SbPDG_Node*>,SbPDG_Edge*> removed_edges;
+  
+    //Dummy Stuffs:
+    std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;
+    std::map<SbPDG_Node*,int> dummys_per_port;
+    std::set<SbPDG_Inst*> dummies;
+    std::set<SbPDG_Output*> dummiesOutputs;
+
     int span;
     int work;
 };

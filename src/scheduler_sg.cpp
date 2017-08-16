@@ -19,70 +19,109 @@ using namespace std;
 #define random 2
 #define mapping random/*0: Randomized(random), 1: Flexible, 2: One-2-One(one2one)*/
 
-bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
-  int upperbound = 10000;
-  int max_iters_no_improvement=100000000;
+bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
+{
+  int upperbound = 50000;
+  int max_iters_no_improvement = 100000000;
   srand(2);
 
   progress_initBestNums();
 
-  Schedule* cur_sched=NULL;
-  std::pair<int,int> best_score = make_pair(0,0);
-  bool best_succeeded=false;
+  Schedule* cur_sched = NULL;
+  std::pair<int, int> best_score = make_pair(0, 0);
+  bool best_succeeded = false;
+  bool best_mapped = false;
+  std::set<SbPDG_Output*> best_dummies;
 
-  int last_improvement_iter=0;
+  int last_improvement_iter = 0;
+
+  int presize = sbPDG->num_insts();
+  int postsize = presize;
 
   // An attempt to remap SbPDG
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   int hw_num_fu = subModel->sizex()*subModel->sizey();
-  sbPDG->remap(hw_num_fu);
- 
-  ofstream ofs("viz/remap.dot", ios::out);
-  assert(ofs.good());
-  sbPDG->printGraphviz(ofs);
-  ofs.flush();
 
-  int iter=0;
+  int remapNeeded = sbPDG->remappingNeeded(hw_num_fu); //setup remap structres 
+  int iter = 0;
   while (iter < upperbound) {
+    if(remapNeeded) { //remap every so often to try new possible dummy positions
+      if( (iter & (16-1)) == 0) {
+        sbPDG->remap(hw_num_fu);
+        postsize = sbPDG->num_insts();
+      }
+    }
+
     progress_initCurNums();
-    bool succeed_sched = schedule_internal(sbPDG,cur_sched);
+    bool succeed_sched = schedule_internal(sbPDG, cur_sched);
     bool succeed_timing = false;
 
-    int tot_mapped = progress_getBestNum(FA) +
-                     progress_getBestNum(Input) +
-                     progress_getBestNum(Output);
-    int lat=-10000,latmis=0;
-    if(succeed_sched) {
+    int tot_mapped =
+      progress_getBestNum(FA) + progress_getBestNum(Input) + progress_getBestNum(Output);
+    int lat = -10000, latmis = 0;
+    if (succeed_sched) { 
       succeed_timing = cur_sched->fixLatency(lat,latmis);
+      tot_mapped+=succeed_timing; //add one to total_mapped if timing succeeded
       lat *= -1;
     }
-    //succeed_sched &= succeed_timing;
-    std::pair<int,int> score = make_pair(tot_mapped,lat);
-    if(score > best_score) {
-      //cout << "Saving score " << score.first << "," << score.second 
-      //     << " - " << succeed_sched << "\n";
+
+    std::pair<int, int> score = make_pair(tot_mapped, lat);
+    if (score > best_score) {
+      if(remapNeeded) {
+        sbPDG->printGraphviz("remap.dot");
+        best_dummies = sbPDG->getDummiesOutputs();
+      }
+
+  
+      if (verbose) {
+        fprintf(stderr, "Iter: %4d, mapped: %3d, lat: %3d, ins: %d/%d, outs: %d/%d,"
+                " insts: %d/%d,%d%s%s\n", iter, score.first - 1, -score.second,
+                progress_getBestNum(Input), sbPDG->num_inputs(),
+                progress_getBestNum(Output), sbPDG->num_outputs(),
+                progress_getBestNum(FA), presize, postsize,
+                succeed_sched ? ", all mapped" : "",
+                succeed_timing ? ", timing met" : "");
+      }
       best_score = score;
-      if(sched) {
+      if (sched) {
         delete sched;
       }
       sched = cur_sched;
-      if(succeed_sched && !best_succeeded) {
-        max_iters_no_improvement=std::max(500,iter*2);
+      if (succeed_timing && !best_succeeded) {
+        max_iters_no_improvement = std::max(1000, iter * 2);
       }
-      best_succeeded = succeed_sched;
-      last_improvement_iter=0;
+
+      best_mapped = succeed_sched;
+      best_succeeded = succeed_timing;
+      last_improvement_iter = iter;
     } else {
       delete cur_sched;
     }
-    cur_sched=NULL;
+    cur_sched = NULL;
     iter++;
 
-    if( ((iter-last_improvement_iter) > max_iters_no_improvement)  && best_succeeded) {
+    if (((iter - last_improvement_iter) > max_iters_no_improvement) && best_succeeded) {
       break;
+    }
+  }
+  if(verbose) {
+    cerr << "Breaking at Iter " << iter << "\n";
+  }
+
+  //Fix back up any dummies
+  if(remapNeeded) {
+    sbPDG->rememberDummies(best_dummies);
+  }
+
+  if(verbose) {
+    if(best_mapped && !best_succeeded) {
+      fprintf(stderr,"DFG Mapped, but Timing not met.  Simulation is still possible, but do not use generated schedule for hardware!");
     }
   }
   return best_succeeded;
 }
+
+
 
 bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG);
@@ -120,7 +159,9 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
     schedule_okay&=scheduleNode(sched,n);
     if (schedule_okay) {
-      progress_incCurNum(FA);
+      if(!n->isDummy()) {
+         progress_incCurNum(FA);
+      }
     } else {
       progress_saveBestNum(FA);
       return false;
