@@ -1,3 +1,5 @@
+include $(SS_STACK)/msg.mk
+
 level=../
 include ../make.config
 
@@ -6,9 +8,9 @@ CXX = g++
 
 CXXFLAGS :=  -Wall -g -std=c++11
 
-LIB_PATH=$(prefix)/lib
-INC_SBMODEL_PATH=$(prefix)/include/softbrain-config
-INC_SBSCHED_PATH=$(prefix)/include/softbrain-scheduler
+LIB_PATH=$(SS_TOOLS)/lib
+INC_SBMODEL_PATH=$(SS_TOOLS)/include/softbrain-config
+INC_SBSCHED_PATH=$(SS_TOOLS)/include/softbrain-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
@@ -25,10 +27,10 @@ stat-config : stat-config.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
 
 sb_sched : sb_sched.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${prefix}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${prefix}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
 
 
 clean:

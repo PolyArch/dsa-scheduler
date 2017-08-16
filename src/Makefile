@@ -1,3 +1,4 @@
+include $(SS_STACK)/msg.mk
 level=../
 include ../make.config
 
@@ -21,7 +22,7 @@ PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS))
 
 BOOST_PATH=${boost}
-INC_SBMODEL_PATH=${prefix}/include/softbrain-config/
+INC_SBMODEL_PATH=${SS_TOOLS}/include/softbrain-config/
 
 all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
