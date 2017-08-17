@@ -173,6 +173,18 @@ void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_N
   addInst(pdg_inst);
 } 
 
+vector<vector<int>> simple_pm(string& s) {
+  int vec_len;
+  istringstream(s)>>vec_len;
+  vector<vector<int>> pm;
+  for(int i = 0; i < vec_len; ++i) {
+    std::vector<int> m;
+    m.push_back(i);
+    pm.push_back(m);
+  }
+  return pm;
+}
+
 SbPDG::SbPDG(string filename) {
 
   string line;
@@ -184,7 +196,9 @@ SbPDG::SbPDG(string filename) {
   }
 
   regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
-  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
+  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); 
+  regex re_input_len("Input:\\s*(\\w+)\\s*\\[\\s*(\\d+)\\s*\\]\\s*");  //bits num id
+  regex re_output_len("Output:\\s*(\\w+)\\s*\\[\\s*(\\d+)\\s*\\]\\s*");  
   regex re_input("Input:\\s*(\\w+)\\s*"); //bits id  
   regex re_output("Output:\\s*(\\w+)\\s*");                          //out
   regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep   -- 3 ip
@@ -209,7 +223,20 @@ SbPDG::SbPDG(string filename) {
       continue;
     }
 
-    if (regex_search(line, m, re_input)) {
+    if (regex_search(line, m, re_input_len)) {
+      string name = m[1];
+      string vec_len = m[2];
+      vector<vector<int>> pm = simple_pm(vec_len);
+      cout << "input_len:" << name << " " << vec_len << " " << pm.size() << "\n";
+      addVecInput(name,pm,syms);
+
+    } else if (regex_search(line, m, re_output_len)) {
+      string name = m[1];
+      string vec_len = m[2];
+      vector<vector<int>> pm = simple_pm(vec_len);
+      addVecOutput(name,pm,syms);
+
+    } else if (regex_search(line, m, re_input)) {
       //cout << m[1] << " " << m[2] << " " << m[3] << "\n";
       string name = m[1];
       addScalarInput(name,syms);
