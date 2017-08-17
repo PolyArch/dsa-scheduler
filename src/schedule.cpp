@@ -345,32 +345,32 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
   // Iterate over FUs, get the inc_edge assoc. with each FU_INPUT, set extra lat.
   cur_slice=SWITCH_SLICE;
-  for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-    for (int i = 0; i < _sbModel->subModel()->sizex(); ++i, ++cur_slice) {
+  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
       sbfu* sbfu_node = &fus[i][j];
       if (_assignNode.count(sbfu_node) != 0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
  
-        for (int i = 0; i < NUM_IN_FU_DIRS; ++i) {
-          if (pdg_node->immSlot() == i) {
+        for (int n = 0; n < NUM_IN_FU_DIRS; ++n) {
+          if (pdg_node->immSlot() == n) {
             //Do Nothing 
-          } else if (i < (pdg_node->ops_end() - pdg_node->ops_begin())) {
-            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin() + i);
+          } else if (n < (pdg_node->ops_end() - pdg_node->ops_begin())) {
+            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin() + n);
             if (!inc_edge) {
               continue;
             }
  
             // delay for each input
-            int d1 = IN_DELAY_LOC + BITS_PER_DELAY * i;
+            int d1 = IN_DELAY_LOC + BITS_PER_DELAY * n;
             int d2 = d1 + BITS_PER_DELAY - 1;
             _extraLatOfEdge[inc_edge] = _bitslices.read_slice(cur_slice, d1, d2);
  
             //_bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
-            //cout << "slice: " << cur_slice 
+            //  cout <<  i << " " << j << " slice: " << cur_slice 
             //     << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
  
           } else {
-            assert(i != 0 && "can't be no slot for first input");
+            assert(n != 0 && "can't be no slot for first input");
           }
         }
       }
@@ -381,7 +381,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
   int max_lat, max_lat_mis;
   calcLatency(max_lat, max_lat_mis,true);
-  if(max_lat != max_lat_mis) {
+  if(0 != max_lat_mis) {
     cerr << "The FU input latencies don't match, this may or may not be a problem!\n";
   }
 
@@ -463,37 +463,8 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     start_bits_vp_mask=total_bits_vp_mask; //next
   }
 
-
-#if 0
-  // --------------------------- ENCODE DELAY ------------------------------
-   for(auto Iin=_sbModel->subModel()->input_begin(), 
-      Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
-     sbinput* sbinput_node = (sbinput*) &(*Iin);
-     SbPDG_Node* input_pdgnode = pdgNodeOf(sbinput_node,0);
-     int lat = _latOf[input_pdgnode];
-     assert(lat<16 && "max delay supported by 4 bits is 15");
- 
-     int input_port_num = sbinput_node->port();
-     int delay_slot,offset;
-
-     if(input_port_num < 16) {
-       delay_slot=DELAY_SLICE_1;
-       offset=0;
-     } else if(input_port_num < 32) {
-       delay_slot=DELAY_SLICE_2;
-       offset=16;
-     } else { //if(input_port_num < 48)
-       delay_slot=DELAY_SLICE_3;
-       offset=32;
-     }
-
-     int start = BITS_PER_DELAY*(input_port_num - offset);
-     _bitslices.write(delay_slot, start,start+3,lat);
-   }
-#endif
- 
   xfer_link_to_switch(); // makes sure we have switch representation of link
-  int cur_slice=5;
+  int cur_slice=SWITCH_SLICE;
 
   vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
 
@@ -511,11 +482,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
       //Write the [Row] -- corresponding row of the siwtch based on the j 
       _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
-
-//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+0*BITS_PER_FU_DIR,FU_DIR_LOC+1*BITS_PER_FU_DIR-1));
-//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+1*BITS_PER_FU_DIR,FU_DIR_LOC+2*BITS_PER_FU_DIR-1));
-//sbdir.fu_dir_of(_bitslices.read_slice(cur_slice,FU_DIR_LOC+2*BITS_PER_FU_DIR,FU_DIR_LOC+3*BITS_PER_FU_DIR-1));
-
 
       //---------------------------------ENCODE SWITCHES -------------------------------
       sbswitch* sbsw = &switches[i][j];
@@ -608,14 +574,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           
           int cur_bit_pos=FU_DIR_LOC;
 
-          for(int i = 0; i < NUM_IN_FU_DIRS; ++i) {
-            unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*i;
+          for(int n = 0; n < NUM_IN_FU_DIRS; ++n) {
+            unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*n;
             unsigned p2 = p1 + BITS_PER_FU_DIR-1;
 
-            if(pdg_node->immSlot()==i) {
+            if(pdg_node->immSlot()==n) {
               _bitslices.write(cur_slice,p1,p2,sbdir.encode_fu_dir(SbDIR::IM));  //imm slot for FU
-            } else if(i  < (pdg_node->ops_end()-pdg_node->ops_begin())) {
-              SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
+            } else if(n  < (pdg_node->ops_end()-pdg_node->ops_begin())) {
+              SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+n);
               if(!inc_edge) {continue;}
               SbPDG_Node* inc_pdg_node = inc_edge->def();
               
@@ -634,14 +600,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               assert(assigned);
 
               //delay for each input
-              int d1=IN_DELAY_LOC+BITS_PER_DELAY*i;
+              int d1=IN_DELAY_LOC+BITS_PER_DELAY*n;
               int d2=d1+BITS_PER_DELAY-1;
               _bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
-              //cout << "slice: " << cur_slice 
+              //cout <<  i << " " << j << " slice: " << cur_slice 
               //   << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
 
             } else {
-              assert(i!=0 && "can't be no slot for first input");
+              assert(n!=0 && "can't be no slot for first input");
             }
 
           }
