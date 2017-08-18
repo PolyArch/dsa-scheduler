@@ -73,7 +73,6 @@ bool SchedulerMultipleLinkGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
 bool SchedulerMultipleLinkGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 
   std::pair<int,int> bestScore = make_pair(MAX_ROUTE,MAX_ROUTE);
-	std::pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot=NULL;
   
@@ -128,8 +127,6 @@ pair<int,int> SchedulerMultipleLinkGreedy::scheduleHere(Schedule* sched, SbPDG_N
                                 CandidateRouting& candRouting,
                                 pair<int,int> bestScore) {
   pair<int,int> score=make_pair(0,0);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
-
   SbPDG_Node::const_edge_iterator I,E;
 
   for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
@@ -170,7 +167,6 @@ pair<int,int> SchedulerMultipleLinkGreedy::scheduleHere(Schedule* sched, SbPDG_N
 
 pair<int,int> SchedulerMultipleLinkGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
 	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
 	if (score == fscore) {
 		score = route_minimizeOverlapping(sched, pdgedge, source, dest, candRouting, scoreLeft);
 	}
@@ -180,7 +176,6 @@ pair<int,int> SchedulerMultipleLinkGreedy::route(Schedule* sched, SbPDG_Edge* pd
 //return value <numOverlappedLinks, Distance>
 /*pair<int,int> Scheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
   map<sbnode*,int> node_dist;
   map<sbnode*,sblink*> came_from;
@@ -259,7 +254,6 @@ pair<int,int> SchedulerMultipleLinkGreedy::route(Schedule* sched, SbPDG_Edge* pd
 pair<int,int> Scheduler::route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
                      int config, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
-	pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
   map<sbnode*,int> node_dist;
   map<sbnode*,int> node_overlap;

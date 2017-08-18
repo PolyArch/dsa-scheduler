@@ -155,7 +155,6 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
                   ports_okay_to_use=false;
                   break;
                 } 
-                std::pair<int,int> fscore = make_pair(0, MAX_ROUTE); /*BUG: 0 should change to MAX_ROUTE for MLG, a better way to fix this is to define fscore for each subclass of HeursisticScheduler*/
                 std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, candRouting, fscore); 
                 if(curScore>=fscore) { //?????
                   ports_okay_to_use=false;
@@ -229,6 +228,16 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
   //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here->name() 
   //<< " nlinks: " << candRouting->routing.size() << "\n";  
   assert(pdgnode);
+
+  int dummy_diff=0, max_lat=0;
+  candRouting->fill_lat(pdgnode,sched,dummy_diff, max_lat);
+
+  if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(pdgnode)) {
+    max_lat += inst_lat(inst->inst());
+  }
+
+  sched->assign_lat(pdgnode,max_lat);
+
   sched->assign_node(pdgnode,here);
   applyRouting(sched,candRouting);
 }
@@ -291,14 +300,14 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
 
 //I was too lazy to implement dijkstra's algorithm (also i don't like priority queues),
 //so instead i made one fast list (openset) and one slow list (openset_long)
+//Why, you ask is dijkstra's necesary -- well, we want to penalize passthrough nodes.
 pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-  
-  pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
   list<sbnode*> openset_long;
 
   unordered_map<sbnode*,int> node_dist;
   unordered_map<sbnode*,sblink*> came_from;
+  unordered_map<sbnode*,sblink*> prior_came_from;
   bool found_dest = false;
   
   openset.push_back(source);
@@ -308,32 +317,31 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   //fill up worklist with nodes reachable 
   Schedule::link_iterator I,E;
   for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    sbnode* dest = (*I)->dest();
+    sblink* link = *I;
+    sbnode* dest = link->dest();
     sbfu* fu = dynamic_cast<sbfu*>(dest);
     if(!fu || sched->pdgNodeOf(fu) == NULL) { // don't start at some other instruction's fu
       node_dist[dest]=0;
       openset.push_back(dest);
+      prior_came_from[dest]=link;
     }
   }
 
   while(!openset.empty() || !openset_long.empty()) {
-
-    sbnode* node=NULL;
     if(openset.empty()) {
       openset = openset_long;
       openset_long.clear();
     }
 
-    node = openset.front();
+    sbnode* node = openset.front();
     openset.pop_front();
 
-    //don't search this node if it's too much anyways
-    //if(x->links+1>=cost_allotted) continue; 
+    int cur_dist = node_dist[node];
+    if(cur_dist >= scoreLeft.first) {
+      continue;
+    }
     
-    //check neighboring nodes
-    sbnode::const_iterator I,E;
-    for(I = node->obegin(), E = node->oend(); I!=E; ++I)
-    {
+    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
       sblink* link = *I;
       
       //check if connection is closed..
@@ -347,14 +355,11 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
      
       sbnode* next = link->dest();
       
-      if(next==_sbModel->subModel()->cross_switch()) continue;
-      if(next==_sbModel->subModel()->load_slice()  ) continue;
-
-      if(node_dist.count(next)!=0) continue; //it has been looked at, or will be looked at
+      if(node_dist.count(next)!=0) continue; //has or will be looked at
 
       found_dest=(next==dest);
       bool passthrough = (dynamic_cast<sbfu*>(next) && !found_dest);
-      int new_dist = node_dist[node]+1+passthrough*1000;
+      int new_dist = cur_dist+1+passthrough*1000;
 
       came_from[next] = link;
       node_dist[next] = new_dist;
@@ -381,7 +386,16 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     candRouting.routing[link]=pdgedge;
     x=link->orig();
   }
-  
+
+  int count = 0; 
+  while(prior_came_from.count(x)!=0) {
+    sblink* link = prior_came_from[x];
+    count++;
+    x=link->orig();
+  }
+  int tot_lat = node_dist[dest] + count -1;
+
+  candRouting.totLat[pdgedge]= tot_lat;
   return score;
 }
 
@@ -389,7 +403,6 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
 pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
                      CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   
-  pair<int,int> fscore = make_pair(MAX_ROUTE,MAX_ROUTE);
   list<sbnode*> openset;
   map<sbnode*,int> node_dist;
   map<sbnode*,int> node_overlap;
@@ -463,87 +476,6 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
   std::pair<int,int> score = make_pair(overlapScore,distScore);
    
   sbnode* x = dest;
-  while(came_from.count(x)!=0) {
-    sblink* link = came_from[x];
-    candRouting.routing[link]=pdgedge;
-    x=link->orig();
-  }
-  
-  return score;
-}
-
-//routes only inside a configuration
-int HeuristicScheduler::route_to_output(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source,
-                     CandidateRouting& candRouting, int scoreLeft) {
-  
-  list<sbnode*> openset;
-  map<sbnode*,int> node_dist;
-  map<sbnode*,sblink*> came_from;
-  bool found_dest = false;
-  
-  openset.push_back(source);
-  
-  SbPDG_Node* pdgnode = pdgedge->def();
-  
-  //fill up worklist with nodes reachable 
-  Schedule::link_iterator I,E;
-  for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    openset.push_back((*I)->dest());
-  }
-  
-  sboutput* the_output = NULL;
-      
-  while(!openset.empty()) {
-    sbnode* node = openset.front(); 
-    openset.pop_front();
-    
-    //don't search this node if it's too much anyways
-    //if(x->links+1>=cost_allotted) continue; 
-    
-    //check neighboring nodes
-    sbnode::const_iterator I,E;
-    for(I = node->obegin(), E = node->oend(); I!=E; ++I)
-    {
-      sblink* link = *I;
-      
-      //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
-      if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
-      
-      sblink* p = link;
-      SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
-                                  candRouting.routing[p]->def();
-      if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
-      
-      
-      sbnode* next = link->dest();
-      
-      if(next==_sbModel->subModel()->cross_switch()) continue;
-      if(next==_sbModel->subModel()->load_slice()  ) continue;
-      if(node_dist.count(next)!=0) continue; //it has been looked at, or will be looked at
-      
-      the_output = dynamic_cast<sboutput*>(next);
-      found_dest=(the_output!=NULL);
-
-      if(dynamic_cast<sbfu*>(next) && !found_dest) continue;  //don't route through fu
-
-      came_from[next] = link;
-      node_dist[next] = node_dist[node]+1;
-
-      if(found_dest) break; 
-      
-      openset.push_back(next);
-    }
-    if(found_dest) break;
-  }
-    
-  
-  if(!found_dest) return MAX_ROUTE;  //routing failed, no routes exist!
-  
-  int score;
-  score = node_dist[the_output];
-  
-  sbnode* x = the_output;
   while(came_from.count(x)!=0) {
     sblink* link = came_from[x];
     candRouting.routing[link]=pdgedge;

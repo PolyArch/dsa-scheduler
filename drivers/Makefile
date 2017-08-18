@@ -6,7 +6,7 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS :=  -Wall -g -std=c++11
+CXXFLAGS :=  -Wall -g -std=c++11 
 
 LIB_PATH=$(SS_TOOLS)/lib
 INC_SBMODEL_PATH=$(SS_TOOLS)/include/softbrain-config
@@ -27,7 +27,7 @@ stat-config : stat-config.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
 
 sb_sched : sb_sched.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -lprofiler -Wl,-rpath,${SS_TOOLS}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib

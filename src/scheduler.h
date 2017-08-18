@@ -29,18 +29,42 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
     return {l.first-r.first,l.second-r.second};
 }        
 
-
-
 class CandidateRouting {
   public:
   std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
+
+  std::unordered_map< SbPDG_Edge*, int > totLat;
+
+  void fill_lat(SbPDG_Node* pdgnode, Schedule* sched,
+                int& diff_lat, int& max_out_lat) {
+    int min_lat = MAX_ROUTE;
+    int max_lat = 0;
+    for(auto I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
+      if(*I == NULL) { continue; } //could be immediate
+      SbPDG_Edge* source_pdgedge = (*I);
+      int new_lat = totLat[source_pdgedge];
+      int orig_lat = sched->latOf(source_pdgedge->def());
+      int cur_lat = new_lat + orig_lat;
+
+      if(cur_lat < min_lat) {
+        min_lat = cur_lat;
+      }
+      if(cur_lat > max_lat) {
+        max_lat = cur_lat;
+      }
+    }
+    diff_lat = max_lat-min_lat;
+    max_out_lat=max_lat;
+  }
+
 
   void clear() {
     routing.clear();
     forwarding.clear();
   }
 };
+
 
 class Triplet {
   public: 
@@ -177,11 +201,12 @@ class Scheduler {
   
 };
 
-class HeuristicScheduler : public Scheduler {
-
+class HeuristicScheduler : public Scheduler { 
 public:
 
-  HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel) {}
+  HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel), 
+  fscore(std::make_pair(MAX_ROUTE,MAX_ROUTE)) {}
+  
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
   virtual bool scheduleNode(Schedule*, SbPDG_Node*) = 0;
   virtual std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
@@ -198,7 +223,6 @@ public:
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
 protected:
-
   bool assignVectorInputs(SbPDG*, Schedule*);
   bool assignVectorOutputs(SbPDG*, Schedule*);
 
@@ -212,10 +236,8 @@ protected:
   void fillInstSpots(Schedule*,SbPDG_Inst*,
                      std::vector<SB_CONFIG::sbnode*>& spots);
 
-   int route_to_output(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source,
-            CandidateRouting&, int scoreLeft);
- 
+  const std::pair<int,int> fscore;
+
 };
 
 #endif

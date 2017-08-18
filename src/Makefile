@@ -28,7 +28,7 @@ all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH)
 
-CXXFLAGS += -I$(INCLUDE_DEST) -L$(BOOST_PATH) -fPIC -lboost_regex
+CXXFLAGS += -I$(INCLUDE_DEST) -L$(BOOST_PATH) -fPIC -lboost_regex -lprofiler
 
 $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 

@@ -122,10 +122,24 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 }
 
 
+bool can_go(SbPDG_Inst* n, unordered_map<SbPDG_Inst*,bool>& seen) {
+  if(!n || seen[n]) {
+    return false;
+  }
+  return true;
+  for(auto II=n->ops_begin(), EE=n->ops_end(); II!=EE; ++II) {
+    if(*II == 0) continue;
+    if(SbPDG_Inst* inc_node = dynamic_cast<SbPDG_Inst*>((*II)->def())) {
+      if(!seen[inc_node]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG);
-
 
   bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
   if(!vec_in_assigned) {
@@ -142,10 +156,9 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
   for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
     SbPDG_Input* n = *I;
 
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
+    for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst && seen.count(use_pdginst)==0) {
+      if(can_go(use_pdginst,seen)) {
         seen[use_pdginst]=true;
         openset.push_back(use_pdginst);
       }
@@ -166,10 +179,10 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
       progress_saveBestNum(FA);
       return false;
     }
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
+
+    for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst && seen.count(use_pdginst)==0) {
+      if(can_go(use_pdginst,seen)) {
         seen[use_pdginst]=true;
         openset.push_back(use_pdginst);
       }
@@ -189,8 +202,7 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
 bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 
-  std::pair<int,int> bestScore = make_pair(0,MAX_ROUTE);
-  std::pair<int,int> fscore = make_pair(0,MAX_ROUTE);
+  std::pair<int,int> bestScore = fscore;
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot = NULL;
 
@@ -198,66 +210,79 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
 
   std::vector<sbnode*> spots;
 
-    if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
-      fillInstSpots(sched, pdginst, spots);             //all possible candidates based on FU capability 
-    } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
-      fillInputSpots(sched,pdg_in,spots); 
-    } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
-      fillOutputSpots(sched,pdg_out,spots); 
-    }
+  if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
+    fillInstSpots(sched, pdginst, spots);             //all possible candidates based on FU capability 
+  } else if(SbPDG_Input* pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode)) {
+    fillInputSpots(sched,pdg_in,spots); 
+  } else if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(pdgnode)) {
+    fillOutputSpots(sched,pdg_out,spots); 
+  }
 
-    //populate a scheduling score for each of canidate sbspot
-    int r1 = rand() % 100;
-    if ( r1 % 2 == 1) {
-      bool succ = false;
-      unsigned int attempt = 0;
-      while (!succ && attempt < spots.size()) {
-        int r2 = rand() % spots.size();
-        sbnode* cand_spot = spots[r2];
+  //populate a scheduling score for each of canidate sbspot
+  int r1 = rand() % 100;
+  if ( (r1 % 8) == 1) { //Pick a totally random spot
+    bool succ = false;
+    unsigned int attempt = 0;
+    while (!succ && attempt < spots.size()) {
+      int r2 = rand() % spots.size();
+      sbnode* cand_spot = spots[r2];
 
-        bestspot = cand_spot;;
-        bestRouting->routing.clear();
-        bestRouting->forwarding.clear();
+      bestspot = cand_spot;;
+      bestRouting->routing.clear();
+      bestRouting->forwarding.clear();
 
-        bestScore = scheduleHere(sched, pdgnode, cand_spot,*bestRouting,bestScore);
+      bestScore = scheduleHere(sched, pdgnode, cand_spot,*bestRouting,bestScore);
+      
 
-        if(bestScore < fscore) {
-          succ = true;
-        } else {
-          attempt++;
-        }
+      if(bestScore < fscore) {
+        applyRouting(sched,pdgnode,bestspot,bestRouting);
+        return true;
+      } else {
+        attempt++;
       }
     }
-    else { 
-      for(unsigned i=0; i < spots.size(); i++) {
-        sbnode* cand_spot = spots[i];
+    return false; // couldn't find one
 
-        curRouting->routing.clear();
-        curRouting->forwarding.clear();
+  } else {  
+    for(unsigned i=0; i < spots.size(); i++) {
+      sbnode* cand_spot = spots[i];
 
-        pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,*curRouting,bestScore);
+      curRouting->routing.clear();
+      curRouting->forwarding.clear();
 
-        if(curScore < bestScore) {
-          bestScore=curScore;
-          bestspot=cand_spot;
-          std::swap(bestRouting,curRouting);
+      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,*curRouting,bestScore);
+      curScore.first = curScore.second;
+      if(curScore < fscore && true /*mode = timinig minimize*/ ) {
+        int curNodeLat=0;
+        int diff = 0;
+        curRouting->fill_lat(pdgnode,sched, diff, curNodeLat);
+        if(diff < 500 && diff >15) {
+          curScore=fscore;
         }
+        curScore.second = diff;
+        //curScore.first+=diff/4;
+      }
 
-        if(bestScore<=make_pair(0,1))  {
-          applyRouting(sched,pdgnode,bestspot,bestRouting);
-          return true;
-        }//apply routing step
+      if(curScore < bestScore) {
+        bestScore=curScore;
+        bestspot=cand_spot;
+        std::swap(bestRouting,curRouting);
+      }
 
-      }//for loop -- check for all sbnode spots
-    }
+      if(bestScore<=make_pair(0,1))  {
+        applyRouting(sched,pdgnode,bestspot,bestRouting);
+        return true;
+      }//apply routing step
 
-  if(bestScore < fscore) {
-    applyRouting(sched,pdgnode,bestspot,bestRouting);
-  } else {
-    //cout << "no route found for pdgnode: " << pdgnode->name() << "\n";
-    return false;
-  }  
-  return true;
+    }//for loop -- check for all sbnode spots
+
+    if(bestScore < fscore) {
+      applyRouting(sched,pdgnode,bestspot,bestRouting);
+    } else {
+      return false;
+    }  
+    return true;
+  }
 }
 
 std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched, 
@@ -266,7 +291,6 @@ std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched,
     std::pair<int,int> bestScore) {
 
   pair<int,int> score=make_pair(0,0);
-  pair<int,int> fscore = make_pair(0,MAX_ROUTE);
 
   SbPDG_Node::const_edge_iterator I,E;
 
@@ -561,7 +585,6 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
         //Get the input pdgnode corresponding to m
         SbPDG_Node* sbpdg_output = vec_out->getOutput(m);
         assert(sched->pdgNodeOf(cgra_out_port) == NULL);
-        std::pair<int,int> fscore = make_pair(0, MAX_ROUTE); //BUG: 0 should change to MAX_ROUTE for MLG, a better way to fix this is to define fscore for each subclass of HeursisticScheduler
         std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, candRouting, fscore); 
         if(curScore>=fscore) { //?????
           ports_okay_to_use=false;
@@ -583,7 +606,6 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
           ports_okay_to_use=false;
           continue;
         } 
-        std::pair<int,int> fscore = make_pair(0, MAX_ROUTE); //BUG: 0 should change to MAX_ROUTE for MLG, a better way to fix this is to define fscore for each subclass of HeursisticScheduler
         std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, candRouting, fscore); 
         if (curScore>=fscore) { //?????
           ports_okay_to_use=false;
@@ -605,7 +627,6 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
           ports_okay_to_use=false;
           break;
         } 
-        std::pair<int,int> fscore = make_pair(0, MAX_ROUTE); //BUG: 0 should change to MAX_ROUTE for MLG, a better way to fix this is to define fscore for each subclass of HeursisticScheduler
         std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, 0, candRouting, fscore); 
         if(curScore>=fscore) { //?????
           ports_okay_to_use=false;

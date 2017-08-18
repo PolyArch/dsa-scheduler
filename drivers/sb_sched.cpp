@@ -16,7 +16,12 @@
 #include <cstdlib>
 #include <string>
 
+# include <iostream>
+# include <chrono>
 using namespace std;
+using sec = chrono::seconds;
+using get_time = chrono::steady_clock ;
+
 using namespace SB_CONFIG;
 
 static struct option long_options[] = {
@@ -126,7 +131,15 @@ int main(int argc, char* argv[])
 
   bool succeed_sched = false;
 
+
+  auto start = get_time::now(); //use auto keyword to minimize typing strokes :)
   succeed_sched = scheduler->schedule(&sbpdg,sched);
+  auto end = get_time::now();
+  auto diff = end - start;
+  if(verbose) {
+    cout<<"sched_time: "<< chrono::duration_cast<sec>(diff).count()<<" seconds "<<endl;
+  }
+
 
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 

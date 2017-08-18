@@ -150,7 +150,10 @@ class Schedule {
       assert(pdgedge);
       _assignEdgeLink[slink].insert(pdgedge);
     }
-    
+   
+    void setLatOfLink(sblink* link, int l) {_latOfLink[link] = l;}
+    int  latOfLink(sblink* link) {return _latOfLink[link];}
+
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);
       if(_assignLink.count(link)==0) {
@@ -232,9 +235,11 @@ class Schedule {
       _sbnodeOf.clear();
       _latOf.clear();
       _latOfVPort.clear();
+      _latOfLink.clear();
       _assignLink.clear();
       _linksOf.clear();
       _assignEdgeLink.clear();
+      _extraLatOfEdge.clear();
     }
 
     //assign outlink to inlink for a switch
@@ -357,6 +362,7 @@ class Schedule {
     std::set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
     std::unordered_map<sblink*, int> linkCount;
+    std::unordered_map<sblink*, int> _latOfLink;
     std::unordered_map<sbnode*, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
     std::unordered_map<SbPDG_Node*, int> _latOf; 
