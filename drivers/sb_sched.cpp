@@ -154,6 +154,7 @@ int main(int argc, char* argv[])
   if (verbose) {
      cout << "Scheduling Successful!\n";
      sched->stat_printOutputLatency();
+     sbpdg.printGraphviz("viz/final.dot");
   }
 
   std::string config_header = pdg_rawname + ".h";

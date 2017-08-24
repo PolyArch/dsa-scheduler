@@ -68,7 +68,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     std::pair<int, int> score = make_pair(tot_mapped, lat);
     if (score > best_score) {
       if(remapNeeded) {
-        sbPDG->printGraphviz("remap.dot");
+        sbPDG->printGraphviz("viz/remap.dot");
         best_dummies = sbPDG->getDummiesOutputs();
       }
 
@@ -511,18 +511,14 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
   sbio_interface si =  subModel->io_interf();
   vector<pair<int,int>> sd;
 
-  int n = sbPDG->num_vec_output();
-
-
   sbPDG->sort_vec_out();
   si.sort_out_vports(sd);
 
-  for(int i = 0; i < n; ++i) {
+  for(int i = 0; i < sbPDG->num_vec_output(); ++i) {
     SbPDG_VecOutput* vec_out = sbPDG->vec_out(i);
     //cout << "Assigning Vector Port:" << vec_out->gamsName() <<"\n";
 
     bool found_vector_port = false;
-
 
     //for (auto& j : sd)
     unsigned int index = 0;

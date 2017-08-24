@@ -126,6 +126,10 @@ class Schedule {
       _maskOf[pdgvec]=mask;
     }
 
+    std::pair<bool,int> vecPortOf(SbPDG_Vec* p) {
+      return _vportOf[p];
+    } 
+
     //sblink to pdgnode
     void assign_link(SbPDG_Node* pdgnode, sblink* slink) {
       sbnode* src = slink->orig();
@@ -240,6 +244,7 @@ class Schedule {
       _linksOf.clear();
       _assignEdgeLink.clear();
       _extraLatOfEdge.clear();
+      _linkOrder.clear();
     }
 
     //assign outlink to inlink for a switch
@@ -350,6 +355,13 @@ class Schedule {
   }
 
 
+  void set_edge_delay(int i, SbPDG_Edge* e) { _extraLatOfEdge[e]=i; }
+
+  void set_link_order(sblink* l, int i) { _linkOrder[l]=i; }
+  int link_order(sblink* l) { return _linkOrder[l]; }
+
+  std::unordered_map<sblink*,int>& get_link_order() {return _linkOrder;}
+
   private:
 
     SbDIR sbdir;
@@ -359,7 +371,7 @@ class Schedule {
     SbPDG*   _sbPDG;
     
 
-    std::set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
+    std::unordered_set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
     std::unordered_map<sblink*, int> linkCount;
     std::unordered_map<sblink*, int> _latOfLink;
@@ -373,6 +385,8 @@ class Schedule {
     std::unordered_map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
     std::unordered_map<SbPDG_Edge*, int> _extraLatOfEdge; 
     std::vector< std::vector<int> > _wide_ports;
+
+    std::unordered_map<sblink*,int> _linkOrder;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
     std::map<SbPDG_Vec*, std::pair<bool,int> > _vportOf;

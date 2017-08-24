@@ -1609,7 +1609,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
   list<sblink*> openset;
   //map<sbnode*,sblink*> came_from;
-  map<sblink*,int> lat_edge;
+  unordered_map<sblink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
@@ -1725,7 +1725,9 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
         if (_passthrough_nodes.count(node)) {
           lat_edge[new_link] = max_latency + 1; //TODO: Check this
         } else { //regular inst
-          lat_edge[new_link] = max_latency + inst_lat(next_pdginst->inst());
+          int l = max_latency + inst_lat(next_pdginst->inst());
+          lat_edge[new_link] = l;
+          next_pdgnode->set_sched_lat(l);
         }
         openset.push_back(new_link);
 
@@ -1742,7 +1744,9 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
       sboutput* sb_out = dynamic_cast<sboutput*>(node);
       SbPDG_Node* pdgnode = pdgNodeOf(sb_out);
 
-      _latOf[pdgnode]=lat_edge[inc_link];
+      int l = lat_edge[inc_link];
+      _latOf[pdgnode]=l;
+      pdgnode->set_sched_lat(l);
 
       //cout<<"(Output) link: "<<inc_link->name()<<" lat: "<<lat_edge[inc_link]<<endl; 
       if(lat_edge[inc_link] > max_lat) {
@@ -1761,6 +1765,8 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
       }
     }
   }
+
+  _linkOrder = lat_edge;
 }
 
 void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 

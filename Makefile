@@ -25,7 +25,6 @@ install_headers:
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
 	cp drivers/sb_sched ${prefix}/bin
-	cp drivers/sb_dfg_emu ${prefix}/bin
 
 install_program: program
 	${MKDIR_P} ${prefix}/lib

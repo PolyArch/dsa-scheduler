@@ -36,8 +36,11 @@ $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 $(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^     
 
-$(OBJ_DEST)/scheduler.o: scheduler.cpp $(GAMS_INC)
+$(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp $(GAMS_INC)
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
+
+
+
 
     
 $(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h

@@ -1,6 +1,9 @@
 #ifndef __SB__SCHEDULE_GAMS_H__
 #define __SB__SCHEDULE_GAMS_H__
 
+#include <iostream>
+#include <fstream>
+
 #include "scheduler.h"
 
 class GamsScheduler : public Scheduler {
@@ -26,6 +29,9 @@ public:
   void setTimeout(float timeout) {
     _reslim=timeout;
   }
+
+  void print_mipstart(std::ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
+                      bool fix);
 
 
   protected:

@@ -5,7 +5,7 @@
 #include <set>
 #include <iomanip>
 #include <string>
-
+#include <list>
 using namespace std;
 using namespace SB_CONFIG;
 
@@ -303,6 +303,7 @@ SbPDG::SbPDG(string filename) {
 
   }
 
+  calc_minLats();
 }
 
 
@@ -393,7 +394,8 @@ void SbPDG_Inst::compute(bool print, bool verif) {
 void SbPDG_Node::printGraphviz(ostream& os) {
   
   string ncolor = "black";
-  os << "N" << _ID << " [ label = \"" << name();
+  os << "N" << _ID << " [ label = \"" << name() 
+     << "\\n lat=" << _min_lat << "\\n schedlat=" << _sched_lat;
         
   os  << "\", color= \"" << ncolor << "\"]; ";
 
@@ -971,6 +973,65 @@ void SbPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbM
   os << "/;\n";
 }
 
+
+
+
+void SbPDG::calc_minLats() {
+  list<SbPDG_Node* > openset;
+  set<bool> seen;
+  for(auto I=input_begin(), E=input_end(); I!=E; ++I) {
+    openset.push_back(*I);
+    seen.insert(*I);
+  }
+
+  //populate the schedule object
+  while(!openset.empty()) {
+    SbPDG_Node* n = openset.front(); 
+    openset.pop_front();
+
+    int cur_lat = 0;
+
+    for(auto I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
+      if(*I == 0) continue;
+      SbPDG_Node* dn = (*I)->def();
+      if(dn->min_lat() > cur_lat) {
+        cur_lat = dn->min_lat();
+      }
+    }
+
+    if(SbPDG_Inst* inst_n = dynamic_cast<SbPDG_Inst*>(n)) {
+      cur_lat += inst_lat(inst_n->inst()) + 1;
+    } else if(dynamic_cast<SbPDG_Input*>(n)) {
+      cur_lat=0;      
+    } else if(dynamic_cast<SbPDG_Output*>(n)) {
+      cur_lat+=1;   
+    }
+
+    n->set_min_lat(cur_lat);
+
+    for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
+      SbPDG_Node* un = (*I)->use();
+
+      bool ready = true;
+      for(auto II=un->ops_begin(), EE=un->ops_end(); II!=EE; ++II) {
+        if(*II == 0) continue;
+        SbPDG_Node* dn = (*II)->def();
+        if(!seen.count(dn)) {
+          ready = false;
+          break;
+        }
+      }
+      if(ready) {
+        seen.insert(un);
+        openset.push_back(un);
+      }
+    }
+  }
+
+
+
+}
+
 //Gams related
 void SbPDG::printGams(std::ostream& os,
                       std::unordered_map<string,SbPDG_Node*>& node_map,
@@ -981,8 +1042,7 @@ void SbPDG::printGams(std::ostream& os,
   
   os << "set v \"verticies\" \n /";   // Print the set of Nodes:
   
-  const_node_iterator Ii,Ei;
-  for (Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
+  for (auto Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
     if(Ii!=_nodes.begin()) os << ", ";
     os << (*Ii)->gamsName();
     assert(*Ii);
@@ -1008,6 +1068,20 @@ void SbPDG::printGams(std::ostream& os,
   }
   os << "/;\n";
   
+
+  os << "parameter minT(v) \"Minimum Vertex Times\" \n /";
+  for (auto Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
+    if(Ii!=_nodes.begin()) os << ", ";
+    SbPDG_Node* n = *Ii;
+    int l = n->min_lat();
+    if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
+      l -= inst_lat(inst->inst());
+    }
+    os << n->gamsName() << " " << l;
+  }
+  os << "/;\n";
+
+
   os << "set iv(v) \"instruction verticies\";\n";
   os << "iv(v) = (not inV(v)) and (not outV(v));\n";
   
@@ -1069,15 +1143,12 @@ void SbPDG::printGams(std::ostream& os,
   // -------------------edges ----------------------------
   os << "set e \"edges\" \n /";   // Print the set of edges:
 
-  const_edge_iterator Ie,Ee;
-  for (Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
+  for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     os << (*Ie)->gamsName();
     edge_map[(*Ie)->gamsName()]=*Ie;
   }
   os << "/;\n";
-  
-
 
   //create the kindC Set
   os << "set kindV(K,v) \"Vertex Type\"; \n";
@@ -1093,7 +1164,7 @@ void SbPDG::printGams(std::ostream& os,
 
   // --------------------------- Print the linkage ------------------------
   os << "parameter Gve(v,e) \"vetex to edge\" \n /";   // def edges
-  for (Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
+  for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     
     SbPDG_Edge* edge = *Ie;  
@@ -1102,7 +1173,7 @@ void SbPDG::printGams(std::ostream& os,
   os << "/;\n";
   
   os << "parameter Gev(e,v) \"edge to vertex\" \n /";   // use edges
-  for (Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
+  for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     
     SbPDG_Edge* edge = *Ie;  
@@ -1112,7 +1183,7 @@ void SbPDG::printGams(std::ostream& os,
   
   os << "set intedges(e) \"edges\" \n /";   // Internal Edges
   first =true;
-  for (Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
+  for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     SbPDG_Edge* edge = *Ie;  
     
     if(!dynamic_cast<SbPDG_Input*>(edge->def()) && !dynamic_cast<SbPDG_Output*>(edge->use()) ) {
@@ -1124,7 +1195,7 @@ void SbPDG::printGams(std::ostream& os,
   os << "/;\n";
   
   os << "parameter delta(e) \"delay of edge\" \n /";   // Print the set of edges:
-  for (Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
+  for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     SbPDG_Edge* edge = *Ie;
     

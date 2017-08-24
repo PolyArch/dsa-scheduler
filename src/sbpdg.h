@@ -12,8 +12,8 @@
 #include <assert.h>
 #include <sstream>
 #include <algorithm>
-
 #include "model.h"
+
 
 class SbPDG_Node;
 
@@ -152,6 +152,12 @@ class SbPDG_Node {
     bool output = false;
     int _iter;
 
+    int min_lat() {return _min_lat;}
+    void set_min_lat(int i) {_min_lat = i;}
+
+    int sched_lat() {return _sched_lat;}
+    void set_sched_lat(int i) {_sched_lat = i;}
+
   protected:    
     uint64_t _val;
     int _ID;
@@ -159,6 +165,8 @@ class SbPDG_Node {
     std::vector<SbPDG_Edge *> _ops;     //in edges 
     std::vector<SbPDG_Edge *> _uses;   //out edges  
     bool _scalar = false;
+    int _min_lat=0;
+    int _sched_lat=0;
 
   private:
     static int ID_SOURCE;
@@ -548,7 +556,11 @@ class SbPDG {
     typedef std::vector<SbPDG_Input*>::const_iterator  const_input_iterator;
     typedef std::vector<SbPDG_Output*>::const_iterator const_output_iterator;
     typedef std::vector<SbPDG_Edge*>::const_iterator   const_edge_iterator;
-    
+
+    const_node_iterator nodes_begin() {return _nodes.begin();}
+    const_node_iterator nodes_end() {return _nodes.end();}
+    int num_nodes() {return _nodes.size();}
+
     const_inst_iterator inst_begin() {return _insts.begin();}
     const_inst_iterator inst_end() {return _insts.end();}
     int num_insts() {return _insts.size();}
@@ -561,7 +573,6 @@ class SbPDG {
     const_output_iterator output_end() {return _outputs.end();}
     int num_outputs() { return _outputs.size(); }
 
-    int num_nodes() {return _nodes.size();}
 
     int num_vec_input() {return _vecInputs.size();}
     int num_vec_output() {return _vecOutputs.size();}
@@ -585,6 +596,8 @@ class SbPDG {
     void compute(bool print, bool verif);
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
+
+    void calc_minLats();
 
   private:
     std::vector<SbPDG_Node*> _nodes;

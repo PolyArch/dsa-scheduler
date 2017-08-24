@@ -17,7 +17,6 @@ using namespace std;
 #include <netdb.h>
 #include <unistd.h>
 
-
 #include "model_parsing.h"
 
 #include "gams_models/softbrain_gams.h"
@@ -30,9 +29,94 @@ using namespace std;
 #include "gams_models/stage_model.h"
 
 
+#include "scheduler_sg.h"
+
+void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
+                                   bool fix) {
+  int config=0;
+  //Mapping Variables
+  for(auto I = sched->assign_node_begin(), E= sched->assign_node_end();I!=E;++I) {
+    sbnode* spot = I->first;
+    SbPDG_Node* pdgnode = I->second;
+    ofs << "Mn.l('" << pdgnode->gamsName() 
+        << "','" << spot->gams_name(config) << "')=1;\n";
+  }
+ 
+  for(auto Il = sched->assign_link_begin(), 
+      El= sched->assign_link_end();Il!=El;++Il) {
+    sblink* link = Il->first;
+    SbPDG_Node* pdgnode = Il->second;
+    ofs << "Mvl.l('" << pdgnode->gamsName() 
+        << "','" << link->gams_name(config) << "')=1;\n";
+  }
+  
+  for(auto Ile = sched->assign_edgelink_begin(), 
+      Ele= sched->assign_edgelink_end();Ile!=Ele;++Ile) {
+    
+    sblink* link = Ile->first;
+    set<SbPDG_Edge*>& edgelist= Ile->second;
+    
+    set<SbPDG_Edge*>::const_iterator Ie,Ee;
+    for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
+      SbPDG_Edge* pdgedge = *Ie;
+      ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
+          << link->gams_name(config) << "')=1;\n";
+    }
+  }
+
+  for(int i = 0; i < sbPDG->num_vec_input(); ++i) {
+    SbPDG_VecInput* vec_in = sbPDG->vec_in(i);
+    pair<bool,int> vecPort = sched->vecPortOf(vec_in); 
+    ofs << "Mp.l('" << vec_in->gamsName() << "','"
+        << "ip" << vecPort.second << "')=1;\n";
+  }
+
+  for(int i = 0; i < sbPDG->num_vec_output(); ++i) {
+    SbPDG_VecOutput* vec_out = sbPDG->vec_out(i);
+    pair<bool,int> vecPort = sched->vecPortOf(vec_out); 
+    ofs << "Mp.l('" << vec_out->gamsName() << "','"
+        << "op" << vecPort.second << "')=1;\n";
+  }
+
+  //Ordering
+  auto link_order = sched->get_link_order();
+  for(auto i : link_order) {
+    sblink* l = i.first;
+    int order = i.second;
+    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
+  }
+
+  //Timing
+  int d1,d2;
+  sched->calcLatency(d1,d2); //make sure stuff is filled in
+  for (auto Ii=sbPDG->nodes_begin(),Ei=sbPDG->nodes_end();Ii!=Ei;++Ii)  { 
+    SbPDG_Node* n = *Ii;
+    int l = n->sched_lat();
+    if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
+      l -= inst_lat(inst->inst());
+    }
+    ofs << "Tv.l('" << n->gamsName() << "')=" << l << ";\n";
+  }
+
+  ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
+      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) + delta(e) + 1;);\n";
+
+  //Mp.fx(pv,pn) = round(Mp.l(pv,pn));
+  //Mn.fx(v,n) = round(Mn.l(v,n));
+
+
+  //ofs << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
+  ofs << "length.l=smax(v,Tv.l(v));\n";
+  ofs << "cost.l = length.l;\n";
+//  ofs << "cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));\n";
+  ofs << "display Tv.l;\n";
+  ofs << "display length.l;\n";
+  ofs << "display cost.l;\n";
+
+}
 
 //MIP START IS DEFUNCT NOW THAT THE SCHEDULER CAN'T KEEP UP WITH REQs OF PROBLEM
-#define USE_MIP_START 0 
+#define USE_MIP_START 1
 
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   string hw_model          = string((const char*)gams_models_hw_model_gms);
@@ -42,7 +126,6 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   transfer_model[gams_models_stage_model_gms_len] = '\0';
   string stage_model       = string((char*) transfer_model);
   stage_model = stage_model.substr(0, stage_model.length()-2);
-  cout << stage_model << endl;
   string softbrain_gams    = string((const char*)gams_models_softbrain_gams_gms);
   string softbrain_gams_hw = string((const char*)gams_models_softbrain_gams_hw_gms);
 
@@ -58,13 +141,17 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   system(("rm -f " + gams_out_file).c_str());
   
   #if USE_MIP_START 
-  schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
-  schedule->calcAssignEdgeLink();
-  #else
-  schedule = new Schedule(_sbModel,sbPDG);
+  SchedulerStochasticGreedy heur_scheduler(_sbModel);
+  Schedule* heur_sched=NULL;
+
+  heur_scheduler.schedule(sbPDG,heur_sched);
+  //schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
+  heur_sched->calcAssignEdgeLink();
   #endif
 
- 
+
+  schedule = new Schedule(_sbModel,sbPDG);
+
   //bool use_hw=true;
   bool use_hw=false;
 
@@ -111,94 +198,10 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   assert(ofs_mipstart.good());
 
   #if USE_MIP_START
-  int config=0;
-  //print mipstart
-  Schedule::assign_node_iterator I,E;
-  for(I = schedule->assign_node_begin(), E= schedule->assign_node_end();I!=E;++I) {
-    sbnode* spot = I->first;
-    SbPDG_Node* pdgnode = I->second;
-    ofs_mipstart << "Mn.l('" << pdgnode->gamsName() 
-                 << "','" << spot->gams_name(config) << "')=1;\n";
-  }
- 
-
-  Schedule::assign_link_iterator Il,El;
-  for(Il = schedule->assign_link_begin(), 
-      El= schedule->assign_link_end();Il!=El;++Il) {
-    sblink* link = Il->first;
-    SbPDG_Node* pdgnode = Il->second;
-    ofs_mipstart << "Mvl.l('" << pdgnode->gamsName() 
-                 << "','" << link->gams_name(config) << "')=1;\n";
-  }
-  
-  Schedule::assign_edgelink_iterator Ile,Ele;
-  for(Ile = schedule->assign_edgelink_begin(), 
-      Ele= schedule->assign_edgelink_end();Ile!=Ele;++Ile) {
-    
-    sblink* link = Ile->first;
-    set<SbPDG_Edge*>& edgelist= Ile->second;
-    
-    set<SbPDG_Edge*>::const_iterator Ie,Ee;
-    for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-      SbPDG_Edge* pdgedge = *Ie;
-      
-      ofs_mipstart << "Mel.l('" << pdgedge->gamsName() << "','" 
-                 << link->gams_name(config) << "')=1;\n";
-    }
-  }
-  
-  ofs_mipstart << "Tv.l(v)=0;\n";
-  
-  {
-   map<SbPDG_Node*,bool> seen;
-  
-  list<SbPDG_Node* > openset;
-  SbPDG::const_input_iterator I,E;
-  for(I=sbPDG->input_begin(),E=sbPDG->input_end();I!=E;++I) {
-    SbPDG_Input* n = *I;
-    //openset.push_back(n);
-    ofs_mipstart << "Tv.l('" << n->gamsName() << "')=0;\n";
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
-      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
-        openset.push_back(use_pdginst);
-      }
-    }
-  }
-  
-  while(!openset.empty()) {
-    SbPDG_Node* n = openset.front(); 
-    openset.pop_front();
-
-    if(!seen[n]) {
-      ofs_mipstart << "Tv.l('" << n->gamsName() << "')="
-                   << "smax((v1,e)$(Gve(v1,e) and "
-                   << "Gev(e,'" << n->gamsName() << "')),Tv.l(v1)"
-                   << "+ sum(l,Mel.l(e,l)) + delta(e));\n";
-
-    }
-    seen[n]=true;
-    
-    SbPDG_Node::const_edge_iterator I,E;
-    for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
-      SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(use_pdginst) {
-        openset.push_back(use_pdginst);
-      }
-    }
-  }
-
-  }
-
-  //ofs_mipstart << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
-  ofs_mipstart << "length.l=smax(v,Tv.l(v));\n";
-  ofs_mipstart << "cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));\n";
-  ofs_mipstart << "display Tv.l;\n";
-  ofs_mipstart << "display length.l;\n";
-  ofs_mipstart << "display cost.l;\n";
+  print_mipstart(ofs_mipstart,heur_sched,sbPDG,true/* fix */);
+  #endif
   ofs_mipstart.close();
-#endif
+  
 
   schedule->clearAll();
 
@@ -212,8 +215,13 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_sb_model(_gams_work_dir + "/softbrain_model.gams", ios::out);
   assert(ofs_sb_model.good());
   gamsToSbnode.clear(); gamsToSblink.clear();
+
+  
+
+  cout << _sbModel->subModel()->sizex() << " is the x size \n";
+
   _sbModel->subModel()->PrintGamsModel(ofs_sb_model,gamsToSbnode,gamsToSblink,
-                                       gamsToSbswitch,gamsToPortN,0/*nconfigs*/);
+                                       gamsToSbswitch,gamsToPortN,1/*nconfigs*/);
 
   cout << gamsToSbnode.size() << " " << gamsToSblink.size() << " " << gamsToSbswitch.size() << "\n";
 
@@ -395,7 +403,8 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
       if(delay_str.empty()) continue;
       unsigned delay = (unsigned)(stof(delay_str));
 
-      pdgedge->set_delay(delay);
+      //pdgedge->set_delay(delay);
+      schedule->set_edge_delay(delay,pdgedge);
 
     } else if(parse_stage==VtoN) {
       stringstream ss(line);
