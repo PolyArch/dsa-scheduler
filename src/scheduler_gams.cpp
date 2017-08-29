@@ -115,9 +115,6 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 
 }
 
-//MIP START IS DEFUNCT NOW THAT THE SCHEDULER CAN'T KEEP UP WITH REQs OF PROBLEM
-#define USE_MIP_START 1
-
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   string hw_model          = string((const char*)gams_models_hw_model_gms);
   string timing_model      = string((const char*)gams_models_timing_model_gms);
@@ -140,14 +137,13 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   
   system(("rm -f " + gams_out_file).c_str());
   
-  #if USE_MIP_START 
-  SchedulerStochasticGreedy heur_scheduler(_sbModel);
   Schedule* heur_sched=NULL;
 
-  heur_scheduler.schedule(sbPDG,heur_sched);
-  //schedule = scheduleGreedyBFS(sbPDG); // Get the scheduled pdg object
-  heur_sched->calcAssignEdgeLink();
-  #endif
+  if(_mipstart) {
+    SchedulerStochasticGreedy heur_scheduler(_sbModel);
+    heur_scheduler.schedule(sbPDG,heur_sched);
+    heur_sched->calcAssignEdgeLink();
+  }
 
 
   schedule = new Schedule(_sbModel,sbPDG);
@@ -161,6 +157,42 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     // Print the Constraints
     ofstream ofs_constraints(_gams_work_dir+"/constraints.gams", ios::out);
     assert(ofs_constraints.good());
+
+    ofs_constraints << "set stages_opt /place_heur_deform, place_heur_pos, fixR, MRT, MR, mipstart, passthrough/;\n";
+    ofs_constraints << "set stages(stages_opt);\n";
+
+    ofs_constraints << "stages('passthrough')=1;\n";
+
+    if(_mipstart) {
+      ofs_constraints << "stages('mipstart')=1;\n";
+    }
+
+    if(str_subalg == "") {
+      str_subalg = "MR.RT";
+    }
+
+    if(str_subalg == "MRT") {
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "MR.RT") {
+      ofs_constraints << "stages('MR')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "M.RT") {
+      ofs_constraints << "stages('place_heur_deform')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "M.R.T") {
+      ofs_constraints << "stages('place_heur_deform')=1;\n";
+      ofs_constraints << "stages('MR')=1;\n";
+      ofs_constraints << "stages('fixR')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "MR.T") {
+      ofs_constraints << "stages('MR')=1;\n";
+      ofs_constraints << "stages('fixR')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else {
+      cerr << "Bad Subalg Option\n";
+      exit(1);
+    }
+
     //ofs_constraints << multi_model;
     if(use_hw) {
       ofs_constraints << hw_model;
@@ -197,9 +229,9 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_mipstart(_gams_work_dir+"/mip_start.gams", ios::out);
   assert(ofs_mipstart.good());
 
-  #if USE_MIP_START
-  print_mipstart(ofs_mipstart,heur_sched,sbPDG,true/* fix */);
-  #endif
+  if(_mipstart) {
+    print_mipstart(ofs_mipstart,heur_sched,sbPDG,true/* fix */);
+  }
   ofs_mipstart.close();
   
 
@@ -270,7 +302,8 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   ifstream gamsout(gams_out_file.c_str());
   enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
-  bool message_start=false, message_fus_ok=false, message_ports_ok=false;
+  bool message_start=false, message_fus_ok=false, 
+       message_ports_ok=false, message_complete=false;
 
   while(gamsout.good()) {  
     getline(gamsout,line);
@@ -305,6 +338,10 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
         message_fus_ok=true; continue;
       } else if(ModelParsing::StartsWith(line,"[status_message_ports_ok]")) {
         message_ports_ok=true; continue;
+      } else if(ModelParsing::StartsWith(line,"[status_message_complete]")) {
+        message_complete=true; continue;
+      } else if(ModelParsing::StartsWith(line,"[status_message]")) {
+        // do nothing
       } 
     }
 
@@ -513,27 +550,31 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   } else if (!message_ports_ok) {
     cerr << "\n\nError: Port specifications are NOT satisfiable with given SBCONFIG.\n\n";
     exit(1);
+  }  else if (!message_complete) {
+    return false; 
   }
 
-  if(_showGams) {
-    //Print the I/Os
-    std::cout << "in/out mapping:";
 
-    SbPDG::const_input_iterator Ii,Ei;
-    for(Ii=schedule->sbpdg()->input_begin(),Ei=schedule->sbpdg()->input_end();Ii!=Ei;++Ii) {
-      SbPDG_Input* in = *Ii;
-      int p = schedule->getPortFor(in);
-      cout << in->name() << " " << p << ", ";
-    }
 
-    SbPDG::const_output_iterator Io,Eo;
-    for(Io=schedule->sbpdg()->output_begin(),Eo=schedule->sbpdg()->output_end();Io!=Eo;++Io) {
-      SbPDG_Output* out = *Io;
-      int p = schedule->getPortFor(out);
-      cout << out->name() << " " << p << ", ";
-    }
-    std::cout << "\n";
-  }
+  //if(_showGams) {
+  //  //Print the I/Os
+  //  std::cout << "in/out mapping:";
+
+  //  SbPDG::const_input_iterator Ii,Ei;
+  //  for(Ii=schedule->sbpdg()->input_begin(),Ei=schedule->sbpdg()->input_end();Ii!=Ei;++Ii) {
+  //    SbPDG_Input* in = *Ii;
+  //    int p = schedule->getPortFor(in);
+  //    cout << in->name() << " " << p << ", ";
+  //  }
+
+  //  SbPDG::const_output_iterator Io,Eo;
+  //  for(Io=schedule->sbpdg()->output_begin(),Eo=schedule->sbpdg()->output_end();Io!=Eo;++Io) {
+  //    SbPDG_Output* out = *Io;
+  //    int p = schedule->getPortFor(out);
+  //    cout << out->name() << " " << p << ", ";
+  //  }
+  //  std::cout << "\n";
+  //}
   
   
   return true;

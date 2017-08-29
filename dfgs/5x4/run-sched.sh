@@ -1,3 +1,4 @@
+#!/bin/bash
 mkdir -p output
 
 lat=""
@@ -12,20 +13,30 @@ else
 alg=$1
 fi
 
+if [ -z "$2" ]; then
+subalg="MR.RT"
+else
+subalg=$2
+fi
 
+bench=""
 
 for i in *.dfg; do
   echo "************ $i *************"; 	
-  $SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg | tee out.txt;
+  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams";
+  echo $cmd
+  $cmd | tee out.txt
+  #$cmd > out.txt
+  bench="$bench $i"
   lat="$lat `grep "latency:" out.txt | cut -d" " -f 2`"
   time="$time `grep "sched_time:" out.txt | cut -d" " -f 2`"
   lat_eq="$lat_eq+`grep "latency:" out.txt | cut -d" " -f 2`"
   time_eq="$time_eq+`grep "sched_time:" out.txt | cut -d" " -f 2`"
 done
 
-
-echo -n $lat " | "
-echo $lat_eq | bc
-echo -n $time " | "
-echo $time_eq | bc
+echo $bench         | tee sum.txt 
+echo -n $lat " | "  | tee sum.txt  
+echo $lat_eq | bc   | tee sum.txt 
+echo -n $time " | " | tee sum.txt  
+echo $time_eq | bc  | tee sum.txt  
 

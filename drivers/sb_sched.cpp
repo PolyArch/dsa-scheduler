@@ -25,8 +25,18 @@ using get_time = chrono::steady_clock ;
 using namespace SB_CONFIG;
 
 static struct option long_options[] = {
-  { "algorithm", required_argument, NULL, 's', },
-  { "verbose", no_argument, NULL, 'V', },
+  { "algorithm", required_argument, NULL, 'a', },
+  { "sub-alg", required_argument, NULL, 's', },
+  { "verbose", no_argument, NULL, 'v', },
+
+  { "show-gams", no_argument, NULL, 'G', },
+  { "mipstart", no_argument, NULL, 'm', },
+
+
+  { "relative-gap", required_argument, NULL, 'r', },
+  { "absolute-gap", required_argument, NULL, 'g', },
+  { "timeout",      required_argument, NULL, 't', },
+
   { 0, 0, 0, 0, },
 };
 
@@ -54,12 +64,27 @@ int main(int argc, char* argv[])
 {    
   int opt;
   bool verbose = false;
+  bool show_gams = false, mipstart=false;
   string str_schedType = string("sg"); 
- 
-  while ((opt = getopt_long(argc, argv, "s:o:n:EN", long_options, NULL)) != -1) {
+  string str_subalg = string("");
+
+  float absolute_gap=1.0f;
+  float relative_gap=0.1f;
+  float timeout=86400.0f;
+
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:m", long_options, NULL)) != -1) {
     switch (opt) {
-    case 's': str_schedType = string(optarg); break;
-    case 'V': verbose = true; break;
+    case 'a': str_schedType = string(optarg); break;
+    case 's': str_subalg = string(optarg); break;
+    case 'v': verbose = true; break;
+    case 'G': show_gams = true; break;
+    case 'm': mipstart=true; break;
+
+    case 'r': relative_gap=atof(optarg); break;
+    case 'g': absolute_gap=atof(optarg); break;
+    case 't': timeout=atof(optarg); break;
+
+
     default: exit(1);
     }
   }
@@ -109,7 +134,10 @@ int main(int argc, char* argv[])
   //Scheduler scheduler(&sbmodel);
   Scheduler* scheduler;
   if(str_schedType == "gams") {
-    scheduler = new GamsScheduler(&sbmodel);
+    auto* scheduler_gams = new GamsScheduler(&sbmodel);
+    scheduler_gams->showGams(show_gams);
+    scheduler_gams->setMipstart(mipstart);
+    scheduler = scheduler_gams;
   } else if(str_schedType == "greedy") { /*original*/
     scheduler = new SchedulerGreedy(&sbmodel);
   } else if(str_schedType == "mlg") { /*multiple-link greedy*/
@@ -126,26 +154,23 @@ int main(int argc, char* argv[])
   }
 
   scheduler->verbose = verbose;
+  scheduler->str_subalg = str_subalg;
+  scheduler->setGap(relative_gap,absolute_gap);
+  scheduler->setTimeout(timeout);
 
   scheduler->check_res(&sbpdg,&sbmodel);
 
   bool succeed_sched = false;
 
-
-  auto start = get_time::now(); //use auto keyword to minimize typing strokes :)
-  succeed_sched = scheduler->schedule(&sbpdg,sched);
-  auto end = get_time::now();
-  auto diff = end - start;
-  if(verbose) {
-    cout<<"sched_time: "<< chrono::duration_cast<sec>(diff).count()<<" seconds "<<endl;
-  }
-
+  succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(!succeed_sched) {
+    cout << "latency: " << 0 << "\n";  
+    cout << "latency mismatch: " << 0 << "\n";  
     cout << "Scheduling Failed!\n";
-    exit(1);
+    return 1;
   } 
 
   int lat,latmis;
@@ -155,6 +180,8 @@ int main(int argc, char* argv[])
      cout << "Scheduling Successful!\n";
      sched->stat_printOutputLatency();
      sbpdg.printGraphviz("viz/final.dot");
+     cout << "latency: " << lat << "\n";  
+     cout << "latency mismatch: " << latmis << "\n";  
   }
 
   std::string config_header = pdg_rawname + ".h";
@@ -171,7 +198,5 @@ int main(int argc, char* argv[])
 //  (sched->sbpdg()->input_end()- sched->sbpdg()->input_begin())+
 //  (sched->sbpdg()->output_end()-sched->sbpdg()->output_begin());
 
-  cout << "latency: " << lat << "\n";  
-  cout << "latency mismatch: " << latmis << "\n";  
 }
 

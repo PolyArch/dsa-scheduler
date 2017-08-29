@@ -1204,7 +1204,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
 
   if(!node) {
     cerr << "SbPDG_Node: " << pdgnode->name() << " is not scheduled\n"; 
-    return;
+    assert(0);
   }
   
   SbPDG_Node::const_edge_iterator I,E;
@@ -1247,7 +1247,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     SbPDG_Node* cur_pdgnode = cur_edge->def();
     openset.pop_front();
     
-    cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
+    //cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
 
     _assignEdgeLink[cur_link].insert(cur_edge);
     

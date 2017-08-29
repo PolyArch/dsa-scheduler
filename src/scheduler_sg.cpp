@@ -21,7 +21,6 @@ using namespace std;
 
 bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 {
-  int upperbound = 50000;
   int max_iters_no_improvement = 100000000;
   srand(2);
 
@@ -44,7 +43,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
   int remapNeeded = sbPDG->remappingNeeded(hw_num_fu); //setup remap structres 
   int iter = 0;
-  while (iter < upperbound) {
+  while (iter < _max_iters) {
     if(remapNeeded) { //remap every so often to try new possible dummy positions
       if( (iter & (16-1)) == 0) {
         sbPDG->remap(hw_num_fu);
@@ -232,7 +231,6 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
       bestRouting->forwarding.clear();
 
       bestScore = scheduleHere(sched, pdgnode, cand_spot,*bestRouting,bestScore);
-      
 
       if(bestScore < fscore) {
         applyRouting(sched,pdgnode,bestspot,bestRouting);

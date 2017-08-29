@@ -4,6 +4,7 @@ outfile.pw=4096;
 put outfile;
 put "[status_message_begin_scheduling]" /
 
+* place_heur_deform, place_heur_pos, fix_stage_1, fix_stage_2, mipstart, 
 
 Variable            cost;
 positive variable   length;
@@ -21,6 +22,8 @@ binary variable     PT(n);
 *Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
 *Mel.prior(e,l)=10;
 *PT.prior(n)=10;
+
+Mel.l(e,l)=0;
 
 integer variable Tv(v);
 positive variable minTpv(pv);
@@ -57,11 +60,20 @@ cp(pv,pn)=1;
 
 $batinclude mip_start.gams
 
+variable    hnlmel(e,n), hlnmel(e,n), hlrmel(e,r);
+*Intermediate variables in case of mipstart
+hnlmel.l(e,n) = sum(l$Hnl(n,l),Mel.l(e,l));
+hlnmel.l(e,n) = sum(l$Hln(l,n),Mel.l(e,l));
+hlrmel.l(e,r) = sum(l$Hlr(l,r),Mel.l(e,l));
+
 * Set not-possible variables to 0
-loop(K,
-Mn.fx(v,n)$(kindV(K,v) and not kindN(K,n))=0;);
+loop(K, Mn.fx(v,n)$(kindV(K,v) and not kindN(K,n))=0;);
 Mp.fx(pv,pn)$(not cp(pv,pn))=0;
 Mvl.fx(v,l)$(kindV('Output',v))=0;
+
+*Nothing coming into an input node, or going out of an output node
+hnlmel.fx(e,n)$(kindN('Output',n)) = 0;
+hlnmel.fx(e,n)$(kindN('Input',n)) = 0;
 
 *no non-inputs on input links
 Mvl.fx(v,l)$(InputL(l) and not kindV('Input',v))=0;
@@ -72,7 +84,7 @@ loop(v1$(not sum(v2$Gvv(v1,v2), kindV('Output',v2))),
 );
 
 *PT.fx(n)$(not FU(n))=0;
-PT.fx(n)=0;
+PT.l(n)=0;
 
 
 * Set input latencies to 0
@@ -80,13 +92,8 @@ Tv.lo(v) = minT(v);
 Tv.up(v) = minT(v) + 25;
 Tv.up(v)$kindV('Input',v)=0;
 
-Equations
-    assignVertex(K,v)
-    oneVperN(n)
-    incoming_links(e,r)
-    outgoing_links(e,r);
 
-equation assignPort(pv), onePVperPN(pn);
+equations assignPort(pv), onePVperPN(pn);
 assignPort(pv)..                               sum(pn$cp(pv,pn),Mp(pv,pn)) =e= 1;
 onePVperPN(pn)..                               sum(pv$cp(pv,pn),Mp(pv,pn)) =l= 1;
 
@@ -101,26 +108,28 @@ equation orderVectorPorts(pv,pn,v,n,v,n);
 orderVectorPorts(pv,pn,v1,n1,v2,n2)$(cp(pv,pn) and VI(pv,v1)<>0 and PI(pn,n1)<>0 and PI(pn,n2)<>0 and VI(pv,v2)<>0 and PI(pn,n2) < PI(pn,n1) and VI(pv,v2) > VI(pv,v1) ).. 2 - Mp(pv,pn) - Mn(v1,n1) =g= Mn(v2,n2);
 
 
+equations assignVertex(K,v), oneVperN(n);
+
 assignVertex(K,v)$kindV(K,v)..     sum(n$(kindN(K,n)), Mn(v, n)) =e= 1;
-*oneVperN(n)..  sum(v,Mn(v,n)) =l= 1;
+oneVperN(n)..  sum(v,Mn(v,n)) =l= 1;
 *Passthrough Version -- Delete above line
-oneVperN(n)..  sum(v,Mn(v,n)) + PT(n) =l= 1;
+*oneVperN(n)..  sum(v,Mn(v,n)) + PT(n) =l= 1;
 
 
 positive variable D(e);
-Equations deformation(v,e,v,n,n);
+equation deformation(v,e,v,n,n);
 deformation(v1,e,v2,n1,n2)$(Gve(v1,e) and Gev(e,v2) and c(v1,n1) and c(v2,n2) and ORD(n1) <> ORD(n2)).. 
   D(e) =g= DIST(n1,n2) * (Mn(v1,n1) + Mn(v2,n2) - 1);
 
 
 
-Equations deformation2(v,e,v,n,n);
+equation deformation2(v,e,v,n,n);
 deformation2(v1,e,v2,n1,n)$(Gve(v1,e) and Gev(e,v2) and c(v1,n1)).. 
   d(e) =g= ORD(n) * ( Mn(v1,n1) - 1 +
       sum(n2$(c(v2,n2) and ORD(n1) <> ORD(n2) and DIST(n1,n2) = ORD(n)), Mn(v2,n2)));
 
 positive variable PXv(v),PYv(v);
-Equations pos_x1(v,n), pos_x2(v,n), pos_y1(v,n), pos_y2(v,n);
+equations pos_x1(v,n), pos_x2(v,n), pos_y1(v,n), pos_y2(v,n);
 pos_x1(v,n)$(c(v,n)).. PXv(v) =g= PXn(n) * Mn(v,n);
 pos_x2(v,n)$(c(v,n)).. PXv(v) =l= PXn(n)  + (1 - Mn(v,n)) * 20;
 pos_y1(v,n)$(c(v,n)).. PYv(v) =g= PYn(n) * Mn(v,n);
@@ -128,17 +137,17 @@ pos_y2(v,n)$(c(v,n)).. PYv(v) =l= PYn(n)  + (1 - Mn(v,n)) * 20;
 
 
 positive variable DX(e), DY(e);
-Equations pd_x1(v,e,v), pd_x2(v,e,v), pd_y1(v,e,v), pd_y2(v,e,v);
+equations pd_x1(v,e,v), pd_x2(v,e,v), pd_y1(v,e,v), pd_y2(v,e,v);
 pd_x1(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..  dx(e) =g= ( PXv(v1) - PXv(v2) + 2);
 pd_x2(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..  dx(e) =g= ( PXv(v2) - PXv(v1) );
 pd_y1(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..  dy(e) =g= ( PYv(v1) - PYv(v2) + 2);
 pd_y2(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..  dy(e) =g= ( PYv(v2) - PYv(v1) );
 
-Equations pos_diff(e);
+equations pos_diff(e);
 pos_diff(e).. d(e) =e= dx(e) + dy(e);
 
                                 
-Equations sum_deformation;
+equations sum_deformation;
 sum_deformation..  cost =e= sum(e,D(e));
 
 
@@ -173,24 +182,38 @@ source_mapping(e,n,v)$(Gve(v,e))..  sum(l$Hnl(n,l),Mel(e,l)) =e= Mn(v,n);
 dest_mapping(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =e= Mn(v,n);
 
 * Passthrough versions
+equation    c_hnlmel(e,n), c_hlnmel(e,n);
+
+c_hnlmel(e,n).. hnlmel(e,n) =e= sum(l$Hnl(n,l),Mel(e,l));
+c_hlnmel(e,n).. hlnmel(e,n) =e= sum(l$Hln(l,n),Mel(e,l));
+
 equation    source_mapping1(e,n,v), dest_mapping1(e,n,v);
 equation    source_mapping2(e,n,v), dest_mapping2(e,n,v);
-source_mapping1(e,n,v)$(Gve(v,e))..  sum(l$Hnl(n,l),Mel(e,l)) =l= Mn(v,n) + PT(n);
-source_mapping2(e,n,v)$(Gve(v,e))..  sum(l$Hnl(n,l),Mel(e,l)) =g= Mn(v,n);
-dest_mapping1(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =l= Mn(v,n) + PT(n);
-dest_mapping2(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =g= Mn(v,n);
+source_mapping1(e,n,v)$(Gve(v,e))..  hnlmel(e,n) =l= Mn(v,n) + hlnmel(e,n);
+source_mapping2(e,n,v)$(Gve(v,e))..  hnlmel(e,n) =g= Mn(v,n);
+dest_mapping1(e,n,v)$(Gev(e,v))..    hlnmel(e,n) =l= Mn(v,n) + hnlmel(e,n);
+dest_mapping2(e,n,v)$(Gev(e,v))..    hlnmel(e,n) =g= Mn(v,n);
 
-incoming_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =e= sum(l$Hrl(r,l), Mel(e,l));
-outgoing_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =l= 1;
+equation    no_fu_router_loop(n,r,l1,l2,e);
+no_fu_router_loop(n,r,l1,l2,e)$(Hnl(n,l1) and Hlr(l1,r) and Hrl(r,l2) and Hln(l2,n))..
+                          Mel(e,l1) + Mel(e,l2) =l= 1;
+
+equation c_hlrmel(e,r);
+
+c_hlrmel(e,r).. hlrmel(e,r) =e= sum(l$Hlr(l,r),Mel(e,l));
+
+equations incoming_links(e,r),  outgoing_links(e,r);
+incoming_links(e,r)..   hlrmel(e,r) =e= sum(l$Hrl(r,l), Mel(e,l));
+outgoing_links(e,r)..   hlrmel(e,r) =l= 1;
 
 * must not reconverge edges!
 equation limit_inc_v(v,r);
 limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 
 *pass through
-equation pass_through1(e,n), pass_through2(e,n);
-pass_through1(e,n)..  sum(l$Hln(l,n),Mel(e,l)) + 1 - PT(n) =g= sum(l$Hnl(n,l), Mel(e,l));
-pass_through2(e,n)..  sum(l$Hln(l,n),Mel(e,l)) - 1 + PT(n) =l= sum(l$Hnl(n,l), Mel(e,l));
+*equation pass_through1(e,n), pass_through2(e,n);
+*pass_through1(e,n)..  sum(l$Hln(l,n),Mel(e,l)) + 1 - PT(n) =g= sum(l$Hnl(n,l), Mel(e,l));
+*pass_through2(e,n)..  sum(l$Hln(l,n),Mel(e,l)) - 1 + PT(n) =l= sum(l$Hnl(n,l), Mel(e,l));
 
 *equation io_mapping2(e,n);
 *io_mapping2(intedges,n)$(KindN('Input',n) or KindN('Output',n))..
@@ -238,53 +261,160 @@ option threads=8;
 
 
 
-*Model fus_ok / assignVertex, oneVperN, obj /;
-*solve fus_ok    using mip minimizing cost;
-*
-*put "[status_message_fus_ok]" /;
-*
-*Model ports_ok / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, obj  /;
-*solve ports_ok    using mip minimizing cost;
-*
-*put "[status_message_ports_ok]" /;
-*
-*
-*
-*
-*extra.up(e)=100;
-*Model schedule_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, incoming_links, outgoing_links, source_mapping, dest_mapping, opposite_calc_l_used, calc_l_used2, oneEperL, limit_inc_v, latency, max_pv, add, obj /;
-*solve schedule_MR using mip minimizing cost;
-*
-**Model schedule_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,
-**                    flexiVectorPorts, incoming_links, outgoing_links, 
-**                    source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
-**                    pass_through1, pass_through2,
-**                    opposite_calc_l_used, calc_l_used2, oneEperL, 
-**                    limit_inc_v, latency, max_pv, add, obj /;
-**solve schedule_MR using mip minimizing cost;
-*
-*
-**Model map_heur / deformation, sum_deformation, assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts /;
-**solve map_heur using mip minimizing cost;
-*
-**Model map_heur / pos_x1, pos_x2, pos_y1, pos_y2, pd_x1, pd_x2, pd_y1, pd_y2, pos_diff, sum_deformation, assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts /;
-**solve map_heur using mip minimizing cost;
-*
-*display Mn.l;
-*
-*
-*
-*
-*option mip=gurobi;
+Model fus_ok / assignVertex, oneVperN, obj /;
+Model ports_ok / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, obj  /;
 
 
-put "[status_message_mapping_routing_ok]" /;
+file optfile /gurobi.opt/;      
+file optfile2 /cplex.opt/;      
+
+
+if(stages('mipstart'),
+
+put "[status_message_fus_ok]" /;
+put "[status_message_ports_ok]" /;
+
+put optfile;
+put 'mipstart 1'/;
+putclose;
+put optfile2;
+put 'mipstart 1'/;
+putclose;
+put outfile;
+
+
+else 
+
+solve fus_ok    using mip minimizing cost;
+put "[status_message_fus_ok]" /;
+
+solve ports_ok    using mip minimizing cost;
+put "[status_message_ports_ok]" /;
+
+);
+
+
+Model map_heur / deformation, sum_deformation, assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts /;
+
+  if(stages('place_heur_deform'),  
+  map_heur.holdfixed=1;
+  if(stages('mipstart'),
+    map_heur.optfile=1;
+  );
+
+  solve map_heur using mip minimizing cost;
+  
+  put "[status_message] M. (deform)" /;
+  
+  Mp.fx(pv,pn) = round(Mp.l(pv,pn));
+  Mn.fx(v,n) = round(Mn.l(v,n));  
+  
+  put "[status_message] fix mapping" /;
+
+  if(map_heur.Modelstat gt 2 and map_heur.Modelstat <> 7 and map_heur.Modelstat <> 8,
+    put "[SCHEDULE FAILED]" /; abort "schedule failed";
+  );
+
+);
+
+
+
+Model map_heur2 / pos_x1, pos_x2, pos_y1, pos_y2, pd_x1, pd_x2, pd_y1, pd_y2, pos_diff, sum_deformation, assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts /;
+
+if(stages('place_heur_pos'),
+  map_heur2.holdfixed=1;
+  if(stages('mipstart'),
+    map_heur2.optfile=1;
+  );
+
+  solve map_heur2 using mip minimizing cost;
+
+  if(stages('mipstart'),
+    map_heur2.optfile=1;
+  );
+
+
+  if(map_heur2.Modelstat gt 2 and map_heur2.Modelstat <>7 and map_heur2.Modelstat <> 8,
+    put "[SCHEDULE FAILED]" /; abort "schedule failed";
+  );
+  
+  
+  put "[status_message] M. (pos)" /;
+  
+  Mp.fx(pv,pn) = round(Mp.l(pv,pn));
+  Mn.fx(v,n) = round(Mn.l(v,n));
+  
+  put "[status_message] fix mapping" /;
+);
+
+
+
+
+Model sched_MRp / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,
+                    flexiVectorPorts, incoming_links, outgoing_links, 
+                    c_hnlmel, c_hlnmel, c_hlrmel,
+                    no_fu_router_loop,
+                    source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
+                    opposite_calc_l_used, calc_l_used2, oneEperL, 
+                    limit_inc_v, latency, max_pv, add, obj /;
+
+
+Model sched_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, incoming_links, outgoing_links, source_mapping, dest_mapping, opposite_calc_l_used, calc_l_used2, oneEperL, limit_inc_v, latency, max_pv, add, obj /;
+
+
+
+
+if(stages('MR'),
+  extra.up(e)=100;
+  
+  if(stages('passthrough'),
+    if(stages('mipstart'),
+      sched_MRp.optfile=1;
+    );
+
+    sched_MRp.holdfixed=1;
+    solve sched_MRp using mip minimizing cost;
+    if(sched_MRp.Modelstat gt 2 and sched_MRp.Modelstat<>7 and sched_MRp.Modelstat<>8,
+      put "[SCHEDULE FAILED]" /; abort "schedule failed";
+    );
+
+  else
+    if(stages('mipstart'),
+      sched_MR.optfile=1;
+    );
+
+    sched_MR.holdfixed=1;
+    solve sched_MR using mip minimizing cost;
+    if(sched_MR.Modelstat gt 2 and sched_MR.Modelstat<>7 and sched_MR.Modelstat<>8,
+      put "[SCHEDULE FAILED]" /; abort "schedule failed";
+    );
+  );
+  
+  if(stages('mipstart'),
+    sched_MR.optfile=1;
+  );
+  
+  put "[status_message] MR." /;
+  
+  Mp.fx(pv,pn) = round(Mp.l(pv,pn));
+  Mn.fx(v,n) = round(Mn.l(v,n));
+  
+  put "[status_message] fix mapping" /;
+
+);
+
+
+if(stages('fixR'),
+  Mvl.fx(v,l) = round(Mvl.l(v,l));
+  Mel.fx(e,l) = round(Mel.l(e,l));
+  put "[status_message] fix routing" /;
+);
+
+option mip=gurobi;
+
+
 
 *fix the positions of the functional units
-Mp.fx(pv,pn) = round(Mp.l(pv,pn));
-*Mn.fx(v,n) = round(Mn.l(v,n));
-*Mvl.fx(v,l) = round(Mvl.l(v,l));
-*Mel.fx(e,l) = round(Mel.l(e,l));
 *Mp.fx(pv,pn) = round(Mp.l(pv,pn));
 *O.fx(l) = round(O.l(l));
 *Tv.fx(v) = round(Tv.l(v));
@@ -299,17 +429,15 @@ display Mn.l;
 
 
 
-
-*    deformation, sum_deformation, 
-
-*Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links, 
-*  assignPort, 
-*  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
-*  calc_l_used2, oneEperL, 
-*  source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
-*  pass_through1, pass_through2,
-*  limit_inc_v,
-*  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
+  assignPort, 
+  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
+  calc_l_used2, oneEperL, 
+  c_hnlmel, c_hlnmel, c_hlrmel,
+  no_fu_router_loop,
+  source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
+  limit_inc_v,
+  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
 
 Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 
@@ -319,28 +447,48 @@ Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links,
   limit_inc_v,
   latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
 
+if(stages('MRT'),
+  if(stages('passthrough'),
+    if(stages('mipstart'),
+      schedulep.optfile=1;
+    );
+    schedulep.holdfixed=1;
+    solve   schedulep    using mip minimizing cost;
+    if(schedulep.Modelstat gt 2 and schedulep.Modelstat<>7 and schedulep.Modelstat<>8,
+      put " [SCHEDULE FAILED]" ;
+      put schedulep.Modelstat /; abort "schedule failed";
+    );
+
+
+  else
+    if(stages('mipstart'),
+      schedule.optfile=1;
+    );
+    schedule.holdfixed=1;
+    solve   schedule    using mip minimizing cost;
+    if(schedule.Modelstat gt 2 and schedule.Modelstat <> 7 and schedule.Modelstat <> 8,
+      put "[SCHEDULE FAILED]" /; abort "schedule failed";
+    );
+  );
+
+  put "[status_message] MRT" /;
+);
+
+
+put "[status_message_complete]" /
+
+loop((e,n),
+  if(sum(l$Hln(l,n),Mel.l(e,l)) and sum(l$Hnl(n,l), Mel.l(e,l)),
+    PT.l(n)=1;
+  );
+);
 
 
 
-
-
-schedule.prioropt=1;
-schedule.threads=8;
+*schedule.prioropt=1;
+*schedule.threads=8;
 *schedule.reslim=100;
-schedule.holdFixed=1;
-
-
-
-schedule.optfile=1;
-file optfile /gurobi.opt/;      
-put optfile;
-put 'mipstart 1'/;
-putclose;
-file optfile2 /cplex.opt/;      
-put optfile2;
-put 'mipstart 1'/;
-putclose;
-
+*schedule.holdFixed=1;
 
 
 *schedule.optfile=1;
@@ -371,21 +519,9 @@ putclose;
 *display Mel.l;
 display Mvl.l;
 
-
-
-solve   schedule    using mip minimizing cost;
-
-
-
-
-
 *put schedule.Modelstat /;
 
-*If(schedule.Modelstat gt %ModelStat.Locally Optimal%,
-*put "[SCHEDULE FAILED]" /;
-*)
 
-
-display schedule.numEqu;
-display schedule.etSolve;
-display schedule.numVar;
+*display schedule.numEqu;
+*display schedule.etSolve;
+*display schedule.numVar;

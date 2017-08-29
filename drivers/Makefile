@@ -26,7 +26,7 @@ reschedule : reschedule.cpp
 stat-config : stat-config.cpp
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
 
-sb_sched : sb_sched.cpp
+sb_sched : sb_sched.cpp $(INC_SBMODEL_PATH)/*.h
 	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp

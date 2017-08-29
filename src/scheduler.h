@@ -12,8 +12,13 @@
 #include <string>
 #include <unordered_map>
 #include <map>
+#include <chrono>
 
 #define MAX_ROUTE 100000000
+
+# include <chrono>
+using msec = std::chrono::milliseconds;
+using get_time = std::chrono::steady_clock;
 
 
 
@@ -77,7 +82,8 @@ class Triplet {
 
 class Scheduler {
   public:
-  Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel) {}
+  Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel),
+  _optcr(0.1f), _optca(0.0f), _reslim(100000.0f)  {}
 
   bool check_res(SbPDG* sbPDG,    SbModel* sbmodel);
 
@@ -92,6 +98,7 @@ class Scheduler {
   int bestOutputSched;
 
   bool verbose;
+  std::string str_subalg;
 
   enum StatType {FA, Input, Output};
 
@@ -173,7 +180,6 @@ class Scheduler {
     return ret;
   }
 
-
   void progress_initCurNums(){
     progress_updateCurNum(FA,0);
     progress_updateCurNum(Input,0);
@@ -186,7 +192,6 @@ class Scheduler {
     progress_updateBestNum(Output,-1);
   }
 
-
   std::string AUX(int x) {
     return (x==-1 ? "-" : std::to_string(x));
   }  
@@ -195,10 +200,36 @@ class Scheduler {
     std::cout<<"Progress: ("<<AUX(bestInputSched)<<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
   }
 
+  virtual bool schedule_timed(SbPDG* sbPDG, Schedule*& sched) {
+    auto start = get_time::now();
+    bool succeed_sched = schedule(sbPDG,sched);
+    auto end = get_time::now();
+    auto diff = end - start;
+
+    if(verbose) {
+      std::cout<<"sched_time: "
+               << ((float)std::chrono::duration_cast<msec>(diff).count())/1000
+               <<" seconds \n";
+    }
+
+    return succeed_sched;
+  }
+
+  void setGap(float relative, float absolute=1.0f) {          
+    _optcr=relative;
+    _optca=absolute;
+  }
+
+  void setTimeout(float timeout) {
+    _reslim=timeout;
+  }
+
+
   protected:
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
-  
+ 
+  float _optcr,_optca,_reslim;
 };
 
 class HeuristicScheduler : public Scheduler { 
@@ -207,7 +238,6 @@ public:
   HeuristicScheduler(SB_CONFIG::SbModel* sbModel) : Scheduler(sbModel), 
   fscore(std::make_pair(MAX_ROUTE,MAX_ROUTE)) {}
   
-  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule) = 0;
   virtual bool scheduleNode(Schedule*, SbPDG_Node*) = 0;
   virtual std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, 
                CandidateRouting&,std::pair<int,int> bestScore) = 0;
@@ -225,10 +255,9 @@ public:
 protected:
   bool assignVectorInputs(SbPDG*, Schedule*);
   bool assignVectorOutputs(SbPDG*, Schedule*);
-
   void applyRouting(Schedule*, CandidateRouting*);
   void applyRouting(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*, CandidateRouting*);
-  
+
   void fillInputSpots(Schedule*,SbPDG_Input*,
                     std::vector<SB_CONFIG::sbnode*>& spots);
   void fillOutputSpots(Schedule*,SbPDG_Output*, 
@@ -237,7 +266,6 @@ protected:
                      std::vector<SB_CONFIG::sbnode*>& spots);
 
   const std::pair<int,int> fscore;
-
 };
 
 #endif
