@@ -162,6 +162,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     ofs_constraints << "set stages(stages_opt);\n";
 
     ofs_constraints << "stages('passthrough')=1;\n";
+    ofs_constraints << "scalar max_edge_delay /" << _maxEdgeDelay << "/;\n";
 
     if(_mipstart) {
       ofs_constraints << "stages('mipstart')=1;\n";

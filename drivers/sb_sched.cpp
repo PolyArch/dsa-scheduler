@@ -32,10 +32,11 @@ static struct option long_options[] = {
   { "show-gams", no_argument, NULL, 'G', },
   { "mipstart", no_argument, NULL, 'm', },
 
-
   { "relative-gap", required_argument, NULL, 'r', },
   { "absolute-gap", required_argument, NULL, 'g', },
   { "timeout",      required_argument, NULL, 't', },
+
+  { "max-edge-delay", required_argument, NULL, 'd', },
 
   { 0, 0, 0, 0, },
 };
@@ -71,8 +72,10 @@ int main(int argc, char* argv[])
   float absolute_gap=1.0f;
   float relative_gap=0.1f;
   float timeout=86400.0f;
+  int max_edge_delay=15;
+  
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:m", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, NULL)) != -1) {
     switch (opt) {
     case 'a': str_schedType = string(optarg); break;
     case 's': str_subalg = string(optarg); break;
@@ -83,8 +86,7 @@ int main(int argc, char* argv[])
     case 'r': relative_gap=atof(optarg); break;
     case 'g': absolute_gap=atof(optarg); break;
     case 't': timeout=atof(optarg); break;
-
-
+    case 'd': max_edge_delay=atoi(optarg); break;
     default: exit(1);
     }
   }
@@ -157,6 +159,7 @@ int main(int argc, char* argv[])
   scheduler->str_subalg = str_subalg;
   scheduler->setGap(relative_gap,absolute_gap);
   scheduler->setTimeout(timeout);
+  scheduler->setMaxEdgeDelay(max_edge_delay);
 
   scheduler->check_res(&sbpdg,&sbmodel);
 

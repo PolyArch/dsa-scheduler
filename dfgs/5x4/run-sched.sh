@@ -23,7 +23,7 @@ bench=""
 
 for i in *.dfg; do
   echo "************ $i *************"; 	
-  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams";
+  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams --mipstart";
   echo $cmd
   $cmd | tee out.txt
   #$cmd > out.txt

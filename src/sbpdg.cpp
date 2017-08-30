@@ -192,7 +192,7 @@ SbPDG::SbPDG(string filename) {
 
   if(ifs.fail()) {
     cerr << "Could Not Open: " << filename << "\n";
-    assert(0);
+    exit(1);
   }
 
   regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id

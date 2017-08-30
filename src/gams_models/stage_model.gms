@@ -7,15 +7,17 @@ put "[status_message_begin_scheduling]" /
 * place_heur_deform, place_heur_pos, fix_stage_1, fix_stage_2, mipstart, 
 
 Variable            cost;
-positive variable   length;
+integer variable   length;
 binary variable     Mn(v,n), Mel(e,l), Mp(pv,pn);
 
-positive variable   Mvl(v,l);
-positive variable   O(l),extra(e);
+binary variable   Mvl(v,l);
+integer variable   O(l);
+integer variable extra(e);
 *maxExtra
 
 * Not using these variables
 binary variable     PT(n);
+binary variable     PTen(e,n);
 
 *Mvl.prior(v,l)=100;
 *Mn.prior(v,n)=0;
@@ -26,8 +28,8 @@ binary variable     PT(n);
 Mel.l(e,l)=0;
 
 integer variable Tv(v);
-positive variable minTpv(pv);
-positive variable maxTpv(pv);
+integer variable minTpv(pv);
+integer variable maxTpv(pv);
 
 * generate compatibility matrix
 set c(v,n);
@@ -58,22 +60,33 @@ FU(n)$(not KindN('Input',n) and not KindN('Output',n))=Yes;
 *flexiVectorPorts are always compatible with anything
 cp(pv,pn)=1; 
 
+loop((e,v)$(KindV('Output',v) and Gev(e,v)),
+  put e.tl/;
+  extra.fx(e)=0;
+);
+
 $batinclude mip_start.gams
 
-variable    hnlmel(e,n), hlnmel(e,n), hlrmel(e,r);
+loop((e,n),
+  if(sum(l$Hln(l,n),Mel.l(e,l)) and sum(l$Hnl(n,l), Mel.l(e,l)),
+    PTen.l(e,n)=1;
+  );
+);
+
+loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
+  minTpv.l(pv)=Tv.l(v);
+  maxTpv.l(pv)=Tv.l(v);
+);
+
+
+*variable    hlrmel(e,r);
 *Intermediate variables in case of mipstart
-hnlmel.l(e,n) = sum(l$Hnl(n,l),Mel.l(e,l));
-hlnmel.l(e,n) = sum(l$Hln(l,n),Mel.l(e,l));
-hlrmel.l(e,r) = sum(l$Hlr(l,r),Mel.l(e,l));
+*hlrmel.l(e,r) = sum(l$Hlr(l,r),Mel.l(e,l));
 
 * Set not-possible variables to 0
 loop(K, Mn.fx(v,n)$(kindV(K,v) and not kindN(K,n))=0;);
 Mp.fx(pv,pn)$(not cp(pv,pn))=0;
 Mvl.fx(v,l)$(kindV('Output',v))=0;
-
-*Nothing coming into an input node, or going out of an output node
-hnlmel.fx(e,n)$(kindN('Output',n)) = 0;
-hlnmel.fx(e,n)$(kindN('Input',n)) = 0;
 
 *no non-inputs on input links
 Mvl.fx(v,l)$(InputL(l) and not kindV('Input',v))=0;
@@ -82,6 +95,8 @@ Mvl.fx(v,l)$(InputL(l) and not kindV('Input',v))=0;
 loop(v1$(not sum(v2$Gvv(v1,v2), kindV('Output',v2))),
   Mvl.fx(v1,l)$(OutputL(l))=0;
 );
+
+PTen.fx(e,n)$(not FU(n))=0;
 
 *PT.fx(n)$(not FU(n))=0;
 PT.l(n)=0;
@@ -181,30 +196,20 @@ equation    source_mapping(e,n,v), dest_mapping(e,n,v);
 source_mapping(e,n,v)$(Gve(v,e))..  sum(l$Hnl(n,l),Mel(e,l)) =e= Mn(v,n);
 dest_mapping(e,n,v)$(Gev(e,v))..    sum(l$Hln(l,n),Mel(e,l)) =e= Mn(v,n);
 
-* Passthrough versions
-equation    c_hnlmel(e,n), c_hlnmel(e,n);
-
-c_hnlmel(e,n).. hnlmel(e,n) =e= sum(l$Hnl(n,l),Mel(e,l));
-c_hlnmel(e,n).. hlnmel(e,n) =e= sum(l$Hln(l,n),Mel(e,l));
-
-equation    source_mapping1(e,n,v), dest_mapping1(e,n,v);
-equation    source_mapping2(e,n,v), dest_mapping2(e,n,v);
-source_mapping1(e,n,v)$(Gve(v,e))..  hnlmel(e,n) =l= Mn(v,n) + hlnmel(e,n);
-source_mapping2(e,n,v)$(Gve(v,e))..  hnlmel(e,n) =g= Mn(v,n);
-dest_mapping1(e,n,v)$(Gev(e,v))..    hlnmel(e,n) =l= Mn(v,n) + hnlmel(e,n);
-dest_mapping2(e,n,v)$(Gev(e,v))..    hlnmel(e,n) =g= Mn(v,n);
+equation    source_mapping_p(v,e,n), dest_mapping_p(e,v,n);
+source_mapping_p(v1,e,n)$(Gve(v1,e)).. sum(l$Hnl(n,l),Mel(e,l)) =e= 
+                                                                Mn(v1,n) + PTen(e,n);
+dest_mapping_p(e,v2,n)$(Gev(e,v2))..   sum(l$Hln(l,n),Mel(e,l)) =e= 
+                                                                Mn(v2,n) + PTen(e,n);
 
 equation    no_fu_router_loop(n,r,l1,l2,e);
 no_fu_router_loop(n,r,l1,l2,e)$(Hnl(n,l1) and Hlr(l1,r) and Hrl(r,l2) and Hln(l2,n))..
                           Mel(e,l1) + Mel(e,l2) =l= 1;
 
-equation c_hlrmel(e,r);
-
-c_hlrmel(e,r).. hlrmel(e,r) =e= sum(l$Hlr(l,r),Mel(e,l));
 
 equations incoming_links(e,r),  outgoing_links(e,r);
-incoming_links(e,r)..   hlrmel(e,r) =e= sum(l$Hrl(r,l), Mel(e,l));
-outgoing_links(e,r)..   hlrmel(e,r) =l= 1;
+incoming_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =e= sum(l$Hrl(r,l), Mel(e,l));
+outgoing_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =l= 1;
 
 * must not reconverge edges!
 equation limit_inc_v(v,r);
@@ -219,11 +224,17 @@ limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 *io_mapping2(intedges,n)$(KindN('Input',n) or KindN('Output',n))..
 *                        sum(l$Hln(l,n),Mel(intedges,l)) =l= 1;                        
 
+equation latency_relaxed(v,e,v);
+latency_relaxed(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
+  Tv(v2) =g= Tv(v1) + sum(l,Mel(e,l)) + delta(e) - 1;
+
 equation latency(v,e,v);
 latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
   Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) - 1;
 
-extra.up(e)=15;
+equation set_max_extra(e,v);
+set_max_extra(e,v)$((not KindV('Output',v)) and Gev(e,v)).. 
+        extra(e) =l= max_edge_delay * (1 + sum(n,PTen(e,n)));
 
 *Define minimum and maximum times for vector ports
 Equations min_pv(pv,v),dist_pv(pv);
@@ -352,21 +363,18 @@ if(stages('place_heur_pos'),
 
 Model sched_MRp / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,
                     flexiVectorPorts, incoming_links, outgoing_links, 
-                    c_hnlmel, c_hlnmel, c_hlrmel,
                     no_fu_router_loop,
-                    source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
+                    source_mapping_p, dest_mapping_p,  
                     opposite_calc_l_used, calc_l_used2, oneEperL, 
-                    limit_inc_v, latency, max_pv, add, obj /;
+                    limit_inc_v, latency_relaxed, max_pv, add, obj /;
 
 
-Model sched_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, incoming_links, outgoing_links, source_mapping, dest_mapping, opposite_calc_l_used, calc_l_used2, oneEperL, limit_inc_v, latency, max_pv, add, obj /;
+Model sched_MR / assignVertex, oneVperN,assignPort,onePVperPN,orderVectorPorts,flexiVectorPorts, incoming_links, outgoing_links, source_mapping, dest_mapping, opposite_calc_l_used, calc_l_used2, oneEperL, limit_inc_v, latency_relaxed, max_pv, add, obj /;
 
 
 
 
 if(stages('MR'),
-  extra.up(e)=100;
-  
   if(stages('passthrough'),
     if(stages('mipstart'),
       sched_MRp.optfile=1;
@@ -412,30 +420,22 @@ if(stages('fixR'),
 
 option mip=gurobi;
 
-
-
 *fix the positions of the functional units
 *Mp.fx(pv,pn) = round(Mp.l(pv,pn));
 *O.fx(l) = round(O.l(l));
 *Tv.fx(v) = round(Tv.l(v));
-
-extra.up(e)=15;
-
 
 display Mn.l;
 
 
 *Model   schedule  / all /;
 
-
-
 Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 
   onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
   calc_l_used2, oneEperL, 
-  c_hnlmel, c_hlnmel, c_hlrmel,
   no_fu_router_loop,
-  source_mapping1, dest_mapping1, source_mapping2, dest_mapping2, 
+  source_mapping_p, dest_mapping_p, set_max_extra, 
   limit_inc_v,
   latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
 
@@ -443,7 +443,7 @@ Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links,
   assignPort, 
   onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
   calc_l_used2, oneEperL, 
-  source_mapping, dest_mapping, 
+  source_mapping, dest_mapping, set_max_extra, 
   limit_inc_v,
   latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
 

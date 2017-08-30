@@ -220,9 +220,8 @@ class Scheduler {
     _optca=absolute;
   }
 
-  void setTimeout(float timeout) {
-    _reslim=timeout;
-  }
+  void setTimeout(float timeout) {_reslim=timeout;}
+  void setMaxEdgeDelay(int d) {_maxEdgeDelay=d;}
 
 
   protected:
@@ -230,6 +229,7 @@ class Scheduler {
   SB_CONFIG::SbModel* _sbModel;
  
   float _optcr,_optca,_reslim;
+  int _maxEdgeDelay;
 };
 
 class HeuristicScheduler : public Scheduler { 
