@@ -100,6 +100,8 @@ int main(int argc, char* argv[])
   }
 
   SbModel sbmodel(argv[0]);
+  sbmodel.setMaxEdgeDelay(max_edge_delay);
+  sbmodel.maxEdgeDelay();
 
   //cout << "Softbrain CGRA Size:" << sbmodel.subModel()->sizex() << "x"
   //                               << sbmodel.subModel()->sizey() <<"\n";
@@ -159,7 +161,6 @@ int main(int argc, char* argv[])
   scheduler->str_subalg = str_subalg;
   scheduler->setGap(relative_gap,absolute_gap);
   scheduler->setTimeout(timeout);
-  scheduler->setMaxEdgeDelay(max_edge_delay);
 
   scheduler->check_res(&sbpdg,&sbmodel);
 

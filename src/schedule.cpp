@@ -463,7 +463,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     start_bits_vp_mask=total_bits_vp_mask; //next
   }
 
-  xfer_link_to_switch(); // makes sure we have switch representation of link
+  xfer_link_to_switch(); // makes sure we have switch representation of routing
   int cur_slice=SWITCH_SLICE;
 
   vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
@@ -1626,8 +1626,6 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
        sblink* firstOutLink = cand_input->getFirstOutLink();
        openset.push_back(firstOutLink);
        lat_edge[firstOutLink]=_latOf[pdgnode];
-       //cout << "init setting: " << firstOutLink->name() << "\n";
-
     }
   }
     
@@ -1757,13 +1755,23 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
     } else {
     
       for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
-        sblink* link = *I;
-        
-        if(pdgNodeOf(link) == pdgNodeOf(inc_link)) {
-          lat_edge[link] = lat_edge[inc_link] + 1;
-          //cout << "setting: " << link->name() << "\n";
-          openset.push_back(link);
+        sblink* out_link = *I;        
+
+        //We'll need to check to make sure if there is ambiguity between links
+        if(have_switch_links()) {
+          sbswitch* sbsw = dynamic_cast<sbswitch*>(node);
+          assert(sbsw);
+          sblink* new_inc_link = get_switch_in_link(sbsw,out_link);
+          if(new_inc_link != inc_link) {
+            continue;
+          }
+          assert(pdgNodeOf(out_link) == pdgNodeOf(inc_link));
+        } else if(pdgNodeOf(out_link) != pdgNodeOf(inc_link)) {
+          continue;
         }
+
+        lat_edge[out_link] = lat_edge[inc_link] + 1;
+        openset.push_back(out_link);
       }
     }
   }

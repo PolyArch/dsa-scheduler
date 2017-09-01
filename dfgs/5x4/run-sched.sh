@@ -23,7 +23,7 @@ bench=""
 
 for i in *.dfg; do
   echo "************ $i *************"; 	
-  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams --mipstart";
+  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams --mipstart --max-edge-delay=7";
   echo $cmd
   $cmd | tee out.txt
   #$cmd > out.txt
@@ -35,8 +35,8 @@ for i in *.dfg; do
 done
 
 echo $bench         | tee sum.txt 
-echo -n $lat " | "  | tee sum.txt  
-echo $lat_eq | bc   | tee sum.txt 
-echo -n $time " | " | tee sum.txt  
-echo $time_eq | bc  | tee sum.txt  
+echo -n $lat " | "  | tee -a sum.txt 
+echo $lat_eq | bc   | tee -a sum.txt 
+echo -n $time " | " | tee -a sum.txt 
+echo $time_eq | bc  | tee -a sum.txt 
 

@@ -28,10 +28,14 @@ loop(v,
     );
     put /
 );
-*put "[extra-lat]" /
-*loop(e$(extra.l(e)<>0),
-*    put e.tl ":" extra.l(e) / 
-*);
+put "[switch-map]" /
+loop(r,
+    put r.tl ":"
+    loop((l1,l2)$(Hlr(l1,r) and Hrl(r,l2) and Sll.l(l1,l2)<>0),
+        put l1.tl l2.tl","
+    );
+    put /
+);
 put "[timing]" /
 loop(v,
     put v.tl ":" Tv.l(v) / 

@@ -57,10 +57,32 @@ class Schedule {
     //Rest of Stuff
     SbPDG* sbpdg() const {return _sbPDG;}
 
+    
+    std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map_for_sw(sbswitch* sbsw) {
+      return _assignSwitch[sbsw];
+    }
+
+    //check if inlink
+    sblink* get_switch_in_link(sbswitch* sbsw, sblink* out_link) {
+      auto iter = _assignSwitch[sbsw].find(out_link);
+      if(iter == _assignSwitch[sbsw].end()) {
+        return NULL;
+      } else {
+        return _assignSwitch[sbsw][out_link];
+      }
+    }
+
+    bool have_switch_links() {
+      return _assignSwitch.size() !=0;
+    }
+
     //For a switch, assign the outlink to inlink
     void assign_switch(sbswitch* sbsw, 
                        sblink* slink,
                        sblink* slink_out) {
+      assert(sbsw);
+      assert(slink);
+      assert(slink_out);
       _assignSwitch[sbsw][slink_out]=slink;                           //out to in for a sw      
     }
 
@@ -132,17 +154,18 @@ class Schedule {
 
     //sblink to pdgnode
     void assign_link(SbPDG_Node* pdgnode, sblink* slink) {
-      sbnode* src = slink->orig();
-      for(auto I = src->ibegin(), E = src->iend(); I!=E; ++I) {
-         sblink* opp_link = *I;
-         if(opp_link->orig() == slink->dest()) {
-           if(pdgNodeOf(opp_link) == pdgnode) {
-             std::cout << pdgnode->name() << " " 
-                  << slink->name() << " " << opp_link->name() << "\n";
-             assert(0);
-           }
-         }
-      }
+      //This ensures no 2-way cyclic links -- but this is okay now
+      //sbnode* src = slink->orig();
+      //for(auto I = src->ibegin(), E = src->iend(); I!=E; ++I) {
+      //   sblink* opp_link = *I;
+      //   if(opp_link->orig() == slink->dest()) {
+      //     if(pdgNodeOf(opp_link) == pdgnode) {
+      //       std::cout << pdgnode->name() << " " 
+      //            << slink->name() << " " << opp_link->name() << "\n";
+      //       assert(0);
+      //     }
+      //   }
+      //}
       assert(slink);
       _assignLink[slink]=pdgnode;
       _linksOf[pdgnode].push_back(slink);

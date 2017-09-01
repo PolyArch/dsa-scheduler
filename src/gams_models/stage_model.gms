@@ -19,6 +19,10 @@ integer variable extra(e);
 binary variable     PT(n);
 binary variable     PTen(e,n);
 
+positive variable   Sll(l,l);
+binary variable     Nl(l);
+
+
 *Mvl.prior(v,l)=100;
 *Mn.prior(v,n)=0;
 *Mn.prior(v,n)$(kindV('Input',v) or kindN('Input',n))=5;
@@ -44,6 +48,8 @@ alias(n,n1,n2);
 alias(e,e1,e2);
 set Gvv(v,v);
 Gvv(v1,v2)=YES$(sum(e,Gve(v1,e) and Gev(e,v2))); 
+set Nll(l,l);
+Nll(l1,l2)=YES$(sum(n,Hln(l1,n) and Hnl(n,l2)));
 set Hll(l,l);
 Hll(l1,l2)=YES$( sum(n,Hln(l1,n) and Hnl(n,l2)) or (sum(r,Hlr(l1,r) and Hrl(r,l2)) and not sum(n,Hnl(n,l1) and Hln(l2,n))) );
 set Rll(l,l);
@@ -256,11 +262,29 @@ equation block_cycles(l,l,e);
 block_cycles(l1,l2,e)$Hll(l1,l2).. O(l1) + CARD(L) *(Mel(e,l1) + Mel(e,l2) -1) - CARD(L) +1 =l= O(l2);
 O.up(l)=CARD(L);
 
-*equation block_cycles2(l,l);
-*block_cycles2(l1,l2)$(sum(n,Hnl(n,l2) and Hln(l1,n))).. O(l1) + 1 =l= O(l2)
+
+
+*---   Constraints for Relaxed Routing ---*
+
+*can only route if something routed on inputs
+equation forceBackward(l,l,e);
+forceBackward(l1,l2,e)$(Rll(l1,l2)).. Mel(e,l2) + Sll(l1,l2) =l= Mel(e,l1) + 1;
+
+equation block_cycles_sll(l,l);
+block_cycles_sll(l1,l2)$Rll(l1,l2).. O(l1) + CARD(L) *(Sll(l1,l2) ) - CARD(L) +1 =l= O(l2);
+
+equation block_cycles_sll2(l,l);
+block_cycles_sll2(l1,l2)$Nll(l1,l2).. O(l1) + 1 =l= O(l2);
+
+equation    calcNumMapped2(l);
+calcNumMapped2(l)..                  sum(v,Mvl(v,l)) =e= (1 - Nl(l));
+
+equation    one_source(l);
+one_source(l2)$((sum(l1$Rll(l1,l2),1))).. sum(l1$Rll(l1,l2), Sll(l1,l2)) + Nl(l2) =e= 1;
+
+*---  ----------------------------  ---*
 
 option threads=8;
-
 
 
 Model fus_ok / assignVertex, oneVperN, obj /;
@@ -420,16 +444,34 @@ option mip=gurobi;
 display Mn.l;
 
 
+
+
 *Model   schedule  / all /;
 
-Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
-  assignPort, 
-  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
-  calc_l_used2, oneEperL, 
-  no_fu_router_loop,
+*Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
+*  assignPort, 
+*  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
+*  calc_l_used2, oneEperL, 
+*  no_fu_router_loop,
+*  source_mapping_p, dest_mapping_p, set_max_extra, 
+*  limit_inc_v,
+*  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+
+Model schedulep /assignVertex, oneVperN, incoming_links,
+  assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
+  opposite_calc_l_used, calc_l_used2, oneEperL, 
   source_mapping_p, dest_mapping_p, set_max_extra, 
-  limit_inc_v,
-  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+  latency, min_pv, dist_pv, max_pv, add, obj, 
+  forceBackward, 
+  calcNumMapped2, 
+  one_source, 
+  block_cycles_sll, block_cycles_sll2
+  /;
+
+
+*** ------------------------------- ***
+
+
 
 Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 

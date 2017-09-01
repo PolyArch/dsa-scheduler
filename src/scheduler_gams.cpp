@@ -33,6 +33,9 @@ using namespace std;
 
 void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
                                    bool fix) {
+
+  sched->xfer_link_to_switch(); // makes sure we have switch representation of routing
+
   int config=0;
   //Mapping Variables
   for(auto I = sched->assign_node_begin(), E= sched->assign_node_end();I!=E;++I) {
@@ -64,6 +67,21 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     }
   }
 
+  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
+      sbswitch* sbsw = &switches[i][j];
+      auto link_map = sched->link_map_for_sw(sbsw);
+      for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
+        sblink* outlink=I->first;
+        sblink* inlink=I->second;
+        ofs << "Sll.l('" << inlink->gams_name(config) << "','"
+                         << outlink->gams_name(config) << "')=1;\n";
+      }
+    }//end for switch x
+  }//end for switch y            
+
+  //Ports
   for(int i = 0; i < sbPDG->num_vec_input(); ++i) {
     SbPDG_VecInput* vec_in = sbPDG->vec_in(i);
     pair<bool,int> vecPort = sched->vecPortOf(vec_in); 
@@ -117,6 +135,8 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
       << ");\n\n";
 
   //ofs << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
+  //
+  ofs << "Nl.l(l) = 1 - sum(v,Mvl.l(v,l));\n";
   ofs << "length.l=smax(v,Tv.l(v));\n";
   ofs << "cost.l = length.l;\n";
 //  ofs << "cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));\n";

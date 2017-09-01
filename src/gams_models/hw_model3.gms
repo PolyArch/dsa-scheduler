@@ -87,7 +87,7 @@ mustMapVL(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l1);
 equation mustMapVL2(l1,l2);
 mustMapVL2(l1,l2)$(Rll(l1,l2))..     Sll(l1,l2) =l= Nl(l2);
 
-*no routing if no mappings
+*no routing if no mappings -- aggregated versions of prior two
 equation noWeirdInRoutes(l);
 noWeirdInRoutes(l1)$(sum(l2$Rll(l1,l2),1))..  sum(l2$Rll(l1,l2), Sll(l1,l2)) =g= Nl(l1);
 
