@@ -73,7 +73,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
   
       if (verbose) {
-        fprintf(stderr, "Iter: %4d, mapped: %3d, lat: %3d, ins: %d/%d, outs: %d/%d,"
+        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, ins: %d/%d, outs: %d/%d,"
                 " insts: %d/%d,%d%s%s\n", iter, score.first - 1, -score.second,
                 progress_getBestNum(Input), sbPDG->num_inputs(),
                 progress_getBestNum(Output), sbPDG->num_outputs(),
@@ -104,7 +104,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     }
   }
   if(verbose) {
-    cerr << "Breaking at Iter " << iter << "\n";
+    cout << "Breaking at Iter " << iter << "\n";
   }
 
   //Fix back up any dummies
@@ -250,12 +250,12 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
 
       pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,*curRouting,bestScore);
       curScore.first = curScore.second;
-      if(curScore < fscore && true /*mode = timinig minimize*/ ) {
+      if(curScore < fscore &&  _integrate_timing) {
         int curNodeLat=0;
         int diff = 0;
         curRouting->fill_lat(pdgnode,sched, diff, curNodeLat);
-        if(diff < 500 && diff >15) {
-          curScore=fscore;
+        if(diff < 500 && diff > _sbModel->maxEdgeDelay() ) {
+          curScore=fscore; // FAIL
         }
         curScore.second = diff;
         //curScore.first+=diff/4;

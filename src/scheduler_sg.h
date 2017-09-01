@@ -20,11 +20,12 @@ public:
   bool assignVectorOutputs(SbPDG* sbPDG, Schedule* sched);
   bool assignVectorInputs(SbPDG* sbPDG, Schedule* sched);
 
-
   void set_max_iters(int i) {_max_iters=i;}
+  void set_integrate_timing(bool b) {_integrate_timing = b;}
+
 protected:
   int _max_iters = 20000;
-
+  bool _integrate_timing = true;
 };
 
 #endif

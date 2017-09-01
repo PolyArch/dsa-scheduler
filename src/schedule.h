@@ -362,6 +362,7 @@ class Schedule {
 
   std::unordered_map<sblink*,int>& get_link_order() {return _linkOrder;}
 
+
   private:
 
     SbDIR sbdir;
@@ -369,7 +370,6 @@ class Schedule {
     bitslices<uint64_t> _bitslices;
     SbModel* _sbModel;
     SbPDG*   _sbPDG;
-    
 
     std::unordered_set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 

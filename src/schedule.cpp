@@ -1469,13 +1469,10 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
     if(*I == NULL) { continue; } //could be immediate, constant within FU
     SbPDG_Edge* source_pdgedge = (*I);
     _extraLatOfEdge[source_pdgedge] += ed;
-    if (_extraLatOfEdge[source_pdgedge] > 15) {
-       //cout<<"ed = " << _extraLatOfEdge[source_pdgedge] << " exceeded 16"<<endl;
-     //assert(0);
+    if (_extraLatOfEdge[source_pdgedge] > _sbModel->maxEdgeDelay()) {
       return false;
     }
   }
-  //cout<<"Found one that does not go beyond 15!\n";
   return true;
 }
 
@@ -1560,6 +1557,11 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
               int diff = latency - lat_edge[inlink]; //latency per edge
               assert(edge);
               assert(((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff)) && "Error: Someone else set this edge before!");
+              if(diff > _sbModel->maxEdgeDelay()) {
+
+                //cout << diff  << " > " << _sbModel->maxEdgeDelay() << "\n";
+                return false;
+              }
               _extraLatOfEdge[edge]=diff;
             }
             //cout<<"Edge Name: "<<edge->name()<< " extra lat:" << _extraLatOfEdge[edge] << endl;

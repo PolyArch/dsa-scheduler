@@ -67,17 +67,6 @@ loop((e,v)$(KindV('Output',v) and Gev(e,v)),
 
 $batinclude mip_start.gams
 
-loop((e,n),
-  if(sum(l$Hln(l,n),Mel.l(e,l)) and sum(l$Hnl(n,l), Mel.l(e,l)),
-    PTen.l(e,n)=1;
-  );
-);
-
-loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
-  minTpv.l(pv)=Tv.l(v);
-  maxTpv.l(pv)=Tv.l(v);
-);
-
 
 *variable    hlrmel(e,r);
 *Intermediate variables in case of mipstart
@@ -106,6 +95,16 @@ PT.l(n)=0;
 Tv.lo(v) = minT(v);
 Tv.up(v) = minT(v) + 25;
 Tv.up(v)$kindV('Input',v)=0;
+
+loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
+  minTpv.lo(pv)=minT(v);
+  maxTpv.lo(pv)=minT(v);
+
+  minTpv.up(pv)=minT(v) + 25;
+  maxTpv.up(pv)=minT(v) + 25;
+);
+
+
 
 
 equations assignPort(pv), onePVperPN(pn);
@@ -215,14 +214,6 @@ outgoing_links(e,r)..   sum(l$Hlr(l,r),Mel(e,l)) =l= 1;
 equation limit_inc_v(v,r);
 limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 
-*pass through
-*equation pass_through1(e,n), pass_through2(e,n);
-*pass_through1(e,n)..  sum(l$Hln(l,n),Mel(e,l)) + 1 - PT(n) =g= sum(l$Hnl(n,l), Mel(e,l));
-*pass_through2(e,n)..  sum(l$Hln(l,n),Mel(e,l)) - 1 + PT(n) =l= sum(l$Hnl(n,l), Mel(e,l));
-
-*equation io_mapping2(e,n);
-*io_mapping2(intedges,n)$(KindN('Input',n) or KindN('Output',n))..
-*                        sum(l$Hln(l,n),Mel(intedges,l)) =l= 1;                        
 
 equation latency_relaxed(v,e,v);
 latency_relaxed(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
@@ -317,11 +308,6 @@ Model map_heur / deformation, sum_deformation, assignVertex, oneVperN,assignPort
   
   put "[status_message] M. (deform)" /;
   
-  Mp.fx(pv,pn) = round(Mp.l(pv,pn));
-  Mn.fx(v,n) = round(Mn.l(v,n));  
-  
-  put "[status_message] fix mapping" /;
-
   if(map_heur.Modelstat gt 2 and map_heur.Modelstat <> 7 and map_heur.Modelstat <> 8,
     put "[SCHEDULE FAILED]" /; abort "schedule failed";
   );
@@ -351,12 +337,18 @@ if(stages('place_heur_pos'),
   
   
   put "[status_message] M. (pos)" /;
-  
+);
+
+if(stages('fixM'),
   Mp.fx(pv,pn) = round(Mp.l(pv,pn));
   Mn.fx(v,n) = round(Mn.l(v,n));
-  
+
+*  Mn.fx(v,n)$(not FU(n)) = round(Mn.l(v,n));
+*  Mn.fx(v,n)$(PXn(n)=1) = round(Mn.l(v,n));
+*  Mn.fx(v,n)$(PYn(n)=1) = round(Mn.l(v,n));
   put "[status_message] fix mapping" /;
 );
+
 
 
 

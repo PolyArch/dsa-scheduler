@@ -99,11 +99,22 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   }
 
   ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
-      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) + delta(e) + 1;);\n";
+      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) - delta(e) + 1;\n"
+      << ");\n\n";
 
   //Mp.fx(pv,pn) = round(Mp.l(pv,pn));
   //Mn.fx(v,n) = round(Mn.l(v,n));
 
+  ofs << "loop((e,n),\n"
+      << "  if(sum(l$Hln(l,n),Mel.l(e,l)) and sum(l$Hnl(n,l), Mel.l(e,l)),\n"
+      << "    PTen.l(e,n)=1;\n"
+      << "  );\n"
+      << ");\n\n";
+  
+  ofs << "loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),\n"
+      << "  minTpv.l(pv)=Tv.l(v);\n"
+      << "  maxTpv.l(pv)=Tv.l(v);\n"
+      << ");\n\n";
 
   //ofs << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
   ofs << "length.l=smax(v,Tv.l(v));\n";
@@ -116,6 +127,31 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 }
 
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
+  //Get the heuristic scheduling done first
+  Schedule* heur_sched=NULL;
+  bool heur_success=false;
+
+  bool mrt_heur = ModelParsing::StartsWith(str_subalg,"MRT'");
+  bool mr_heur = ModelParsing::StartsWith(str_subalg,"MR'");
+  bool heur_fix = mrt_heur || mr_heur;
+
+  if(_mipstart || heur_fix) {
+    SchedulerStochasticGreedy heur_scheduler(_sbModel);
+    if(mrt_heur) {
+      heur_scheduler.set_integrate_timing(true);
+    } else if(mr_heur) {
+      heur_scheduler.set_integrate_timing(false);
+    }
+    heur_success=heur_scheduler.schedule(sbPDG,heur_sched);
+    heur_sched->calcAssignEdgeLink();
+  }
+
+  if(str_subalg == "MRT'" || str_subalg == "MR'.T'" || str_subalg == "MR'") {
+    schedule = heur_sched;
+    return heur_success;
+  }
+
+  //load up various models?
   string hw_model          = string((const char*)gams_models_hw_model_gms);
   string timing_model      = string((const char*)gams_models_timing_model_gms);
   char* transfer_model = (char*) malloc(gams_models_stage_model_gms_len+1);
@@ -137,15 +173,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   
   system(("rm -f " + gams_out_file).c_str());
   
-  Schedule* heur_sched=NULL;
-
-  if(_mipstart) {
-    SchedulerStochasticGreedy heur_scheduler(_sbModel);
-    heur_scheduler.schedule(sbPDG,heur_sched);
-    heur_sched->calcAssignEdgeLink();
-  }
-
-
+  // New schedule to work on
   schedule = new Schedule(_sbModel,sbPDG);
 
   //bool use_hw=true;
@@ -158,13 +186,13 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     ofstream ofs_constraints(_gams_work_dir+"/constraints.gams", ios::out);
     assert(ofs_constraints.good());
 
-    ofs_constraints << "set stages_opt /place_heur_deform, place_heur_pos, fixR, MRT, MR, mipstart, passthrough/;\n";
+    ofs_constraints << "set stages_opt /place_heur_deform, place_heur_pos, fixR, fixM, MRT, MR, mipstart, passthrough/;\n";
     ofs_constraints << "set stages(stages_opt);\n";
 
     ofs_constraints << "stages('passthrough')=1;\n";
-    ofs_constraints << "scalar max_edge_delay /" << _maxEdgeDelay << "/;\n";
+    ofs_constraints << "scalar max_edge_delay /" << _sbModel->maxEdgeDelay() << "/;\n";
 
-    if(_mipstart) {
+    if(_mipstart || heur_fix) {
       ofs_constraints << "stages('mipstart')=1;\n";
     }
 
@@ -179,15 +207,23 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
       ofs_constraints << "stages('MRT')=1;\n";
     } else if(str_subalg == "M.RT") {
       ofs_constraints << "stages('place_heur_deform')=1;\n";
-      ofs_constraints << "stages('MRT')=1;\n";
-    } else if(str_subalg == "M.R.T") {
-      ofs_constraints << "stages('place_heur_deform')=1;\n";
-      ofs_constraints << "stages('MR')=1;\n";
-      ofs_constraints << "stages('fixR')=1;\n";
+      ofs_constraints << "stages('fixM')=1;\n";
       ofs_constraints << "stages('MRT')=1;\n";
     } else if(str_subalg == "MR.T") {
       ofs_constraints << "stages('MR')=1;\n";
       ofs_constraints << "stages('fixR')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "M.R.T") {
+      ofs_constraints << "stages('place_heur_deform')=1;\n";
+      ofs_constraints << "stages('fixM')=1;\n";
+      ofs_constraints << "stages('MR')=1;\n";
+      ofs_constraints << "stages('fixR')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "MR'.RT") {
+      ofs_constraints << "stages('fixM')=1;\n";
+      ofs_constraints << "stages('MRT')=1;\n";
+    } else if(str_subalg == "MRT'.RT") {
+      ofs_constraints << "stages('fixM')=1;\n";
       ofs_constraints << "stages('MRT')=1;\n";
     } else {
       cerr << "Bad Subalg Option\n";
