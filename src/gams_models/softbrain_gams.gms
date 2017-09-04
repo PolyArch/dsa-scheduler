@@ -40,6 +40,10 @@ put "[timing]" /
 loop(v,
     put v.tl ":" Tv.l(v) / 
 );
+*put "[link-order]" /
+*loop(l,
+*    put l.tl ":" O.l(l) / 
+*);
 put "[edge-delay]" /
 loop(e,
     put e.tl ":" extra.l(e) / 

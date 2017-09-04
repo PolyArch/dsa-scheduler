@@ -170,23 +170,21 @@ int main(int argc, char* argv[])
 
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
-  if(!succeed_sched) {
-    cout << "latency: " << 0 << "\n";  
-    cout << "latency mismatch: " << 0 << "\n";  
-    cout << "Scheduling Failed!\n";
-    return 1;
+  if(verbose) {
+    int lat,latmis;
+    sched->calcLatency(lat,latmis);
+    if(succeed_sched) {
+      cout << "latency: " << lat << "\n";  
+      cout << "latency mismatch: " << latmis << "\n";
+      cout << "Scheduling Successful!\n";
+    } else { 
+      cout << "latency: " << 0 << "\n";  
+      cout << "latency mismatch: " << 0 << "\n";  
+      cout << "Scheduling Failed!\n";
+    }
+    sched->stat_printOutputLatency();
+    sbpdg.printGraphviz("viz/final.dot");
   } 
-
-  int lat,latmis;
-  sched->calcLatency(lat,latmis);
-
-  if (verbose) {
-     cout << "Scheduling Successful!\n";
-     sched->stat_printOutputLatency();
-     sbpdg.printGraphviz("viz/final.dot");
-     cout << "latency: " << lat << "\n";  
-     cout << "latency mismatch: " << latmis << "\n";  
-  }
 
   std::string config_header = pdg_rawname + ".h";
   std::ofstream osh(config_header);     

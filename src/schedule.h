@@ -83,7 +83,7 @@ class Schedule {
       assert(sbsw);
       assert(slink);
       assert(slink_out);
-      _assignSwitch[sbsw][slink_out]=slink;                           //out to in for a sw      
+      _assignSwitch[sbsw][slink_out]=slink;     //out to in for a sw      
     }
 
     void assign_lat(SbPDG_Node* pdgnode, int lat=0) {
@@ -237,7 +237,7 @@ class Schedule {
     bool  fixLatency_fwd(int& lat, int& latmis);
     bool  fixLatency_bwd(int& lat, int& latmis);
     bool  fixDelay(SbPDG_Output* pdgout, int ed, std::unordered_set<SbPDG_Node*>& visited);
-    bool  checkOutputMatch();
+    void  checkOutputMatch(int& latmis);
     
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
@@ -256,6 +256,7 @@ class Schedule {
     assign_edgelink_iterator assign_edgelink_end() { return _assignEdgeLink.end(); }
     
     void clearAll() {
+      _assignSwitch.clear();
       _assignVPort.clear();
       _vportOf.clear();
       _assignNode.clear();

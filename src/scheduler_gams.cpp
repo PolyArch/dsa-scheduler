@@ -286,7 +286,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_mipstart(_gams_work_dir+"/mip_start.gams", ios::out);
   assert(ofs_mipstart.good());
 
-  if(_mipstart) {
+  if(_mipstart || heur_fix) {
     print_mipstart(ofs_mipstart,heur_sched,sbPDG,true/* fix */);
   }
   ofs_mipstart.close();
@@ -536,6 +536,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
       }
 
       while(ss.good()) {
+        getline(ss, link_name, ' '); // not redundant, get rid of first space
         getline(ss, link_name, ' ');
         getline(ss, out_link_name, ',');
 

@@ -61,10 +61,12 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     if (succeed_sched) { 
       succeed_timing = cur_sched->fixLatency(lat,latmis);
       tot_mapped+=succeed_timing; //add one to total_mapped if timing succeeded
-      lat *= -1;
+    } else {
+      latmis = 1000;
     }
+    int obj = latmis*256+lat;
 
-    std::pair<int, int> score = make_pair(tot_mapped, lat);
+    std::pair<int, int> score = make_pair(tot_mapped, -obj);
     if (score > best_score) {
       if(remapNeeded) {
         sbPDG->printGraphviz("viz/remap.dot");
@@ -73,8 +75,9 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
   
       if (verbose) {
-        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d/%d,%d%s%s\n", iter, score.first - 1, -score.second,
+        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, mis: %d ins: %d/%d, outs: %d/%d,"
+                " insts: %d/%d,%d%s%s\n", iter, score.first - 1, 
+                lat, latmis,
                 progress_getBestNum(Input), sbPDG->num_inputs(),
                 progress_getBestNum(Output), sbPDG->num_outputs(),
                 progress_getBestNum(FA), presize, postsize,

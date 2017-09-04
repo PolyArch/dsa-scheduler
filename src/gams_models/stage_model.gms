@@ -10,8 +10,8 @@ Variable            cost;
 integer variable   length;
 binary variable     Mn(v,n), Mel(e,l), Mp(pv,pn);
 
-binary variable   Mvl(v,l);
-integer variable   O(l);
+positive variable   Mvl(v,l);
+positive variable   O(l);
 integer variable extra(e);
 *maxExtra
 
@@ -19,9 +19,12 @@ integer variable extra(e);
 binary variable     PT(n);
 binary variable     PTen(e,n);
 
-positive variable   Sll(l,l);
+binary variable   Sll(l,l);
 binary variable     Nl(l);
 
+scalar MLAT /35/;
+
+Mvl.up(v,l)=1;
 
 *Mvl.prior(v,l)=100;
 *Mn.prior(v,n)=0;
@@ -259,19 +262,23 @@ obj.. cost =e= length;
 *);
 
 equation block_cycles(l,l,e);
-block_cycles(l1,l2,e)$Hll(l1,l2).. O(l1) + CARD(L) *(Mel(e,l1) + Mel(e,l2) -1) - CARD(L) +1 =l= O(l2);
-O.up(l)=CARD(L);
+block_cycles(l1,l2,e)$Hll(l1,l2).. O(l1) + MLAT *(Mel(e,l1) + Mel(e,l2) -1) - MLAT +1 =l= O(l2);
+O.up(l)=MLAT;
 
 
 
 *---   Constraints for Relaxed Routing ---*
+
+equation noWeirdInRoutes(l);
+noWeirdInRoutes(l1)$(sum(l2$Rll(l1,l2),1)).. 
+                                   sum(l2$Rll(l1,l2), Sll(l1,l2)) =g= (1 - Nl(l1));
 
 *can only route if something routed on inputs
 equation forceBackward(l,l,e);
 forceBackward(l1,l2,e)$(Rll(l1,l2)).. Mel(e,l2) + Sll(l1,l2) =l= Mel(e,l1) + 1;
 
 equation block_cycles_sll(l,l);
-block_cycles_sll(l1,l2)$Rll(l1,l2).. O(l1) + CARD(L) *(Sll(l1,l2) ) - CARD(L) +1 =l= O(l2);
+block_cycles_sll(l1,l2)$Rll(l1,l2).. O(l1) + MLAT *(Sll(l1,l2) ) - MLAT +1 =l= O(l2);
 
 equation block_cycles_sll2(l,l);
 block_cycles_sll2(l1,l2)$Nll(l1,l2).. O(l1) + 1 =l= O(l2);
@@ -280,7 +287,7 @@ equation    calcNumMapped2(l);
 calcNumMapped2(l)..                  sum(v,Mvl(v,l)) =e= (1 - Nl(l));
 
 equation    one_source(l);
-one_source(l2)$((sum(l1$Rll(l1,l2),1))).. sum(l1$Rll(l1,l2), Sll(l1,l2)) + Nl(l2) =e= 1;
+one_source(l2)$((sum(l1$Rll(l1,l2),1))).. sum(l1$Rll(l1,l2), Sll(l1,l2)) + Nl(l2)=e=1;
 
 *---  ----------------------------  ---*
 
@@ -367,6 +374,22 @@ if(stages('fixM'),
   Mp.fx(pv,pn) = round(Mp.l(pv,pn));
   Mn.fx(v,n) = round(Mn.l(v,n));
 
+  loop(e,
+    if(sum(l,Mel.l(e,l))=2,
+      Mel.fx(e,l)=Mel.l(e,l);
+*      Sll.fx(l1,l2)$(Mel.l(e,l2))=Sll.l(l1,l2);
+    );
+  );
+
+*  PTen.fx(e,n) = round(PTen.l(e,n));
+*
+*  Tv.fx(v) = round(Tv.l(v));
+*  loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
+*    minTpv.fx(pv)=round(Tv.l(v));
+*    maxTpv.fx(pv)=round(Tv.l(v));
+*  );
+
+
 *  Mn.fx(v,n)$(not FU(n)) = round(Mn.l(v,n));
 *  Mn.fx(v,n)$(PXn(n)=1) = round(Mn.l(v,n));
 *  Mn.fx(v,n)$(PYn(n)=1) = round(Mn.l(v,n));
@@ -446,27 +469,24 @@ display Mn.l;
 
 
 
-*Model   schedule  / all /;
-
-*Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
-*  assignPort, 
-*  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
-*  calc_l_used2, oneEperL, 
-*  no_fu_router_loop,
-*  source_mapping_p, dest_mapping_p, set_max_extra, 
-*  limit_inc_v,
-*  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
-
-Model schedulep /assignVertex, oneVperN, incoming_links,
-  assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
-  opposite_calc_l_used, calc_l_used2, oneEperL, 
+Sll.fx(l,l)=0;
+Sll.l(l,l)=0;
+Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
+  assignPort, 
+  onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
+  calc_l_used2, oneEperL, 
+  no_fu_router_loop,
   source_mapping_p, dest_mapping_p, set_max_extra, 
-  latency, min_pv, dist_pv, max_pv, add, obj, 
-  forceBackward, 
-  calcNumMapped2, 
-  one_source, 
-  block_cycles_sll, block_cycles_sll2
-  /;
+  limit_inc_v,
+  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+
+*Model schedulep /assignVertex, oneVperN, incoming_links,
+*  assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
+*  opposite_calc_l_used, calc_l_used2, oneEperL, 
+*  source_mapping_p, dest_mapping_p, set_max_extra, 
+*  latency, min_pv, dist_pv, max_pv, add, obj, 
+*  forceBackward, calcNumMapped2, one_source, noWeirdInRoutes,
+*  block_cycles_sll, block_cycles_sll2/;
 
 
 *** ------------------------------- ***
@@ -552,6 +572,7 @@ loop((e,n),
 
 *display Mel.l;
 display Mvl.l;
+display Sll.l;
 
 *put schedule.Modelstat /;
 

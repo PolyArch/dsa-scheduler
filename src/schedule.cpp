@@ -1382,42 +1382,35 @@ void Schedule::stat_printOutputLatency(){
   }
 }
 
-bool Schedule::checkOutputMatch() {
-  /*SbPDG::const_output_iterator Io,Eo;
-  cout<<"Output Latency: ";
-  for(Io=_sbPDG->output_begin(),Eo=_sbPDG->output_end();Io!=Eo;++Io) {
-    SbPDG_Output* pdgout = *Io;
-    cout<<_latOf[pdgout]<<" ";
-  }
-  cout<<endl;*/
+void Schedule::checkOutputMatch(int &max_lat_mis) {
   int n = _sbPDG->num_vec_output();
   for (int i=0; i<n; i++) {
     SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
-    int lat = -1;
+    int low_lat=10000, up_lat=0;
     for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
       SbPDG_Output* pdgout = vec_out->getOutput(m);
-      if (lat == -1) {
-        lat = _latOf[pdgout];
+      int lat = _latOf[pdgout];
+      if(lat < low_lat) {
+        low_lat = lat;
       }
-      if (lat != _latOf[pdgout]) {
-        assert(0);
-        return false;
+      if(lat > up_lat) {
+        up_lat = lat;
+      }
+      int diff = up_lat - low_lat;
+      if(diff > max_lat_mis) {
+        max_lat_mis = diff;
       }
     }
   }
-  return true;
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   bool succ = true;
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
-  if (!succ) return false;
-  succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
-  if (!succ) return false;
+  if (succ) succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
   calcLatency(max_lat, max_lat_mis); //fwd pass
-  succ = checkOutputMatch();
-  if (!succ) return false;
-  return true;
+  checkOutputMatch(max_lat_mis);
+  return succ;
 }
 
 bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
@@ -1735,7 +1728,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
         //     << ", old:" << _latOf[next_pdgnode]
         //     << ", new:" << max_latency << " " << lat_edge[new_link] << "\n";
 
-        int diff = max_latency-low_latency;
+        int diff = max_latency-low_latency - _sbModel->maxEdgeDelay();
         if(diff>max_lat_mis) {
           max_lat_mis=diff;
         }
