@@ -64,7 +64,10 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     } else {
       latmis = 1000;
     }
-    int obj = latmis*256+lat;
+    int obj = lat;
+    if(_integrate_timing) { 
+      obj = latmis*256+lat;
+    }
 
     std::pair<int, int> score = make_pair(tot_mapped, -obj);
     if (score > best_score) {
@@ -169,8 +172,15 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
   //populate the schedule object
   while(!openset.empty()) {
-    SbPDG_Inst* n = openset.front(); 
-    openset.pop_front();
+    int i = rand()%openset.size();
+    list<SbPDG_Inst*>::iterator it = openset.begin();
+    std::advance(it,i);
+    
+    SbPDG_Inst* n = *it; 
+    openset.erase(it); 
+
+    //SbPDG_Inst* n = openset.front(); 
+    //openset.pop_front();
 
     schedule_okay&=scheduleNode(sched,n);
     if (schedule_okay) {
