@@ -12,7 +12,7 @@ public:
     Scheduler(sbModel),
     _gams_files_setup(false), _use_server(false),
     _gams_work_dir("gams"),
-    _showGams(true), _mipstart(false) { }
+    _showGams(true), _mipstart(false), _sll(false) { }
 
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule);
   bool requestGams(const char *filename);
@@ -23,6 +23,7 @@ public:
   void setMipstart(bool mipstart) {_mipstart=mipstart;}
   void use_server() { _use_server = true; }
 
+  void setSll(bool sll) {_sll=sll;}
   void print_mipstart(std::ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
                       bool fix);
 
@@ -32,6 +33,7 @@ public:
   bool _use_server;
   std::string _gams_work_dir;
   bool _showGams, _mipstart;
+  bool _sll;
 
   std::unordered_map<std::string, std::pair<SB_CONFIG::sbnode*,int> >  gamsToSbnode;  
   std::unordered_map<std::string, std::pair<SB_CONFIG::sblink*,int> > gamsToSblink;

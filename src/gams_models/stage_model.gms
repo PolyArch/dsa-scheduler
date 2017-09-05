@@ -468,9 +468,7 @@ display Mn.l;
 
 
 
-
-Sll.fx(l,l)=0;
-Sll.l(l,l)=0;
+*passthrough, non-sll
 Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 
   onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
@@ -480,19 +478,16 @@ Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links,
   limit_inc_v,
   latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
 
-*Model schedulep /assignVertex, oneVperN, incoming_links,
-*  assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
-*  opposite_calc_l_used, calc_l_used2, oneEperL, 
-*  source_mapping_p, dest_mapping_p, set_max_extra, 
-*  latency, min_pv, dist_pv, max_pv, add, obj, 
-*  forceBackward, calcNumMapped2, one_source, noWeirdInRoutes,
-*  block_cycles_sll, block_cycles_sll2/;
+*passthrough + sll
+Model schedules /assignVertex, oneVperN, incoming_links,
+  assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
+  opposite_calc_l_used, calc_l_used2, oneEperL, 
+  source_mapping_p, dest_mapping_p, set_max_extra, 
+  latency, min_pv, dist_pv, max_pv, add, obj, 
+  forceBackward, calcNumMapped2, one_source, noWeirdInRoutes,
+  block_cycles_sll, block_cycles_sll2/;
 
-
-*** ------------------------------- ***
-
-
-
+*non-passthrough, non-sll
 Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 
   onePVperPN, flexiVectorPorts, orderVectorPorts, opposite_calc_l_used,
@@ -503,17 +498,34 @@ Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links,
 
 if(stages('MRT'),
   if(stages('passthrough'),
-    if(stages('mipstart'),
-      schedulep.optfile=1;
-    );
-    schedulep.holdfixed=1;
-    solve   schedulep    using mip minimizing cost;
-    if(schedulep.Modelstat gt 2 and schedulep.Modelstat<>7 and schedulep.Modelstat<>8,
-      put " [SCHEDULE FAILED]" ;
-      put schedulep.Modelstat /; abort "schedule failed";
-    );
 
-
+    if(stages('sll'),
+      if(stages('mipstart'),
+        schedules.optfile=1;
+      );
+      schedules.holdfixed=1;
+      solve   schedules    using mip minimizing cost;
+      if(schedules.Modelstat gt 2 and schedules.Modelstat<>7 
+                                  and schedules.Modelstat<>8,
+        put " [SCHEDULE FAILED]" ;
+        put schedules.Modelstat /; abort "schedule failed";
+      );
+    else
+      loop((l1,l2),
+        Sll.fx(l1,l2)=0;
+        Sll.l(l1,l2)=0;
+      );
+      if(stages('mipstart'),
+        schedulep.optfile=1;
+      );
+      schedulep.holdfixed=1;
+      solve   schedulep    using mip minimizing cost;
+      if(schedulep.Modelstat gt 2 and schedulep.Modelstat<>7 
+                                  and schedulep.Modelstat<>8,
+        put " [SCHEDULE FAILED]" ;
+        put schedulep.Modelstat /; abort "schedule failed";
+      );
+    );
   else
     if(stages('mipstart'),
       schedule.optfile=1;

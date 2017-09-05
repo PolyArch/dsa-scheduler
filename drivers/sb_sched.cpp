@@ -31,6 +31,7 @@ static struct option long_options[] = {
 
   { "show-gams", no_argument, NULL, 'G', },
   { "mipstart", no_argument, NULL, 'm', },
+  { "sll", no_argument, NULL, 'S', },
 
   { "relative-gap", required_argument, NULL, 'r', },
   { "absolute-gap", required_argument, NULL, 'g', },
@@ -65,7 +66,7 @@ int main(int argc, char* argv[])
 {    
   int opt;
   bool verbose = false;
-  bool show_gams = false, mipstart=false;
+  bool show_gams = false, mipstart=false, sll=false;
   string str_schedType = string("sg"); 
   string str_subalg = string("");
 
@@ -82,6 +83,7 @@ int main(int argc, char* argv[])
     case 'v': verbose = true; break;
     case 'G': show_gams = true; break;
     case 'm': mipstart=true; break;
+    case 'S': sll=true; break;
 
     case 'r': relative_gap=atof(optarg); break;
     case 'g': absolute_gap=atof(optarg); break;
@@ -141,6 +143,7 @@ int main(int argc, char* argv[])
     auto* scheduler_gams = new GamsScheduler(&sbmodel);
     scheduler_gams->showGams(show_gams);
     scheduler_gams->setMipstart(mipstart);
+    scheduler_gams->setSll(sll);
     scheduler = scheduler_gams;
   } else if(str_schedType == "greedy") { /*original*/
     scheduler = new SchedulerGreedy(&sbmodel);

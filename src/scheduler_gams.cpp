@@ -206,7 +206,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     ofstream ofs_constraints(_gams_work_dir+"/constraints.gams", ios::out);
     assert(ofs_constraints.good());
 
-    ofs_constraints << "set stages_opt /place_heur_deform, place_heur_pos, fixR, fixM, MRT, MR, mipstart, passthrough/;\n";
+    ofs_constraints << "set stages_opt /place_heur_deform, place_heur_pos, fixR, fixM, MRT, MR, mipstart, passthrough, sll/;\n";
     ofs_constraints << "set stages(stages_opt);\n";
 
     ofs_constraints << "stages('passthrough')=1;\n";
@@ -214,6 +214,10 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
 
     if(_mipstart || heur_fix) {
       ofs_constraints << "stages('mipstart')=1;\n";
+    }
+
+    if(_sll) {
+      ofs_constraints << "stages('sll')=1;\n";
     }
 
     if(str_subalg == "") {

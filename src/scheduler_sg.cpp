@@ -27,7 +27,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
   progress_initBestNums();
 
   Schedule* cur_sched = NULL;
-  std::pair<int, int> best_score = make_pair(0, 0);
+  std::pair<int, int> best_score = make_pair(0, -10000000);
   bool best_succeeded = false;
   bool best_mapped = false;
   std::set<SbPDG_Output*> best_dummies;
@@ -57,13 +57,14 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
     int tot_mapped =
       progress_getBestNum(FA) + progress_getBestNum(Input) + progress_getBestNum(Output);
-    int lat = -10000, latmis = 0;
+    int lat = 10000, latmis = 0;
     if (succeed_sched) { 
       succeed_timing = cur_sched->fixLatency(lat,latmis);
       tot_mapped+=succeed_timing; //add one to total_mapped if timing succeeded
     } else {
       latmis = 1000;
     }
+
     int obj = lat;
     if(_integrate_timing) { 
       obj = latmis*256+lat;
@@ -78,9 +79,9 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
   
       if (verbose) {
-        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, mis: %d ins: %d/%d, outs: %d/%d,"
+        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
                 " insts: %d/%d,%d%s%s\n", iter, score.first - 1, 
-                lat, latmis,
+                lat, latmis, obj,
                 progress_getBestNum(Input), sbPDG->num_inputs(),
                 progress_getBestNum(Output), sbPDG->num_outputs(),
                 progress_getBestNum(FA), presize, postsize,
