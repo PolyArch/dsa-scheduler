@@ -39,34 +39,49 @@ class CandidateRouting {
   std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
-  std::unordered_map< SbPDG_Edge*, int > totLat;
+  std::unordered_map< SbPDG_Edge*, std::pair<int,int> > edge_prop;
+
 
   void fill_lat(SbPDG_Node* pdgnode, Schedule* sched,
-                int& diff_lat, int& max_out_lat) {
-    int min_lat = MAX_ROUTE;
-    int max_lat = 0;
+                int& min_node_lat, int& max_node_lat) {
+    min_node_lat = 0; //need minimax, so that's why this is odd
+    max_node_lat = MAX_ROUTE;
+    bool input = dynamic_cast<SbPDG_Input*>(pdgnode);
+    bool output = dynamic_cast<SbPDG_Output*>(pdgnode);
+    if(input) {
+      max_node_lat = 0;
+      return;
+    }
+
     for(auto I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
       if(*I == NULL) { continue; } //could be immediate
       SbPDG_Edge* source_pdgedge = (*I);
-      int new_lat = totLat[source_pdgedge];
-      int orig_lat = sched->latOf(source_pdgedge->def());
-      int cur_lat = new_lat + orig_lat;
+      auto i = edge_prop[source_pdgedge];
+      int num_links = i.first;
+      int num_passthroughs = i.second;
+  
+      auto p = sched->lat_bounds(source_pdgedge->def());
 
-      if(cur_lat < min_lat) {
-        min_lat = cur_lat;
+      int min_inc_lat = p.first + num_links; 
+      int max_inc_lat = p.second + num_links +
+              sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs);
+
+      //earliest starting time is *latest* incomming edge
+      if(min_inc_lat > min_node_lat) {
+        min_node_lat = min_inc_lat;
       }
-      if(cur_lat > max_lat) {
-        max_lat = cur_lat;
+      //latest starting time is *earliest* incomming edge
+      if(max_inc_lat < max_node_lat) {
+        max_node_lat = max_inc_lat;
       }
     }
-    diff_lat = max_lat-min_lat;
-    max_out_lat=max_lat;
   }
 
 
   void clear() {
     routing.clear();
     forwarding.clear();
+    edge_prop.clear();
   }
 };
 
@@ -196,20 +211,24 @@ class Scheduler {
     return (x==-1 ? "-" : std::to_string(x));
   }  
 
+  float total_msec() {
+    auto end = get_time::now();
+    auto diff = end - _start;
+    return ((float)std::chrono::duration_cast<msec>(diff).count());
+  }
+
   void progress_printBests(){
-    std::cout<<"Progress: ("<<AUX(bestInputSched)<<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
+    std::cout<<"Progress: ("<<AUX(bestInputSched)
+             <<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
   }
 
   virtual bool schedule_timed(SbPDG* sbPDG, Schedule*& sched) {
-    auto start = get_time::now();
+    _start = get_time::now();
+
     bool succeed_sched = schedule(sbPDG,sched);
-    auto end = get_time::now();
-    auto diff = end - start;
 
     if(verbose) {
-      std::cout<<"sched_time: "
-               << ((float)std::chrono::duration_cast<msec>(diff).count())/1000
-               <<" seconds \n";
+      printf("sched_time: %0.2f seconds\n", total_msec()/1000.0f);
     }
 
     return succeed_sched;
@@ -227,7 +246,11 @@ class Scheduler {
   SB_CONFIG::SbModel* _sbModel;
  
   float _optcr,_optca,_reslim;
+  std::chrono::time_point<std::chrono::steady_clock> _start;
 };
+
+
+
 
 class HeuristicScheduler : public Scheduler { 
 public:

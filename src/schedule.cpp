@@ -1383,8 +1383,10 @@ void Schedule::stat_printOutputLatency(){
 }
 
 void Schedule::checkOutputMatch(int &max_lat_mis) {
-  int n = _sbPDG->num_vec_output();
-  for (int i=0; i<n; i++) {
+
+  int violation=0;
+
+  for (int i=0; i<_sbPDG->num_vec_output(); i++) {
     SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
     int low_lat=10000, up_lat=0;
     for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
@@ -1401,7 +1403,31 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
         max_lat_mis = diff;
       }
     }
+
+    int min_vec_lat = 0;
+    int max_vec_lat = 1000000;
+    for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+       SbPDG_Output* pdgout = vec_out->getOutput(m);
+
+       auto p = _latBounds[pdgout];
+       int min_inc_lat = p.first; 
+       int max_inc_lat = p.second;
+ 
+       //earliest starting time is *latest* incomming edge
+       if(min_inc_lat > min_vec_lat) {
+         min_vec_lat = min_inc_lat;
+       }
+       //latest starting time is *earliest* incomming edge
+       if(max_inc_lat < max_vec_lat) {
+         max_vec_lat = max_inc_lat;
+       }
+    }
+
+    if(min_vec_lat > max_vec_lat) {
+      violation += min_vec_lat-max_vec_lat;
+    }
   }
+  add_violation(violation);
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
@@ -1488,7 +1514,9 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
        sblink* firstOutLink = cand_input->getFirstOutLink();
        assert(firstOutLink);
        openset.push_back(firstOutLink);
-       lat_edge[firstOutLink]=_latOf[pdgnode];
+       int init_lat = _latOf[pdgnode];
+       assert(init_lat==0);
+       lat_edge[firstOutLink]=init_lat;
     }
   }
     
@@ -1503,8 +1531,6 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
     sbnode* node = inc_link->dest();
     sbnode::const_iterator I,E,II,EE;
     
-    
-
     if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
       SbPDG_Node* next_pdgnode = pdgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
@@ -1601,7 +1627,8 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   return true;
 }
 
-void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
+void Schedule::calcLatency(int &max_lat, int &max_lat_mis, 
+    bool warnMismatch) {
   list<sblink*> openset;
   //map<sbnode*,sblink*> came_from;
   unordered_map<sblink*,int> lat_edge;
@@ -1739,7 +1766,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
       int l = lat_edge[inc_link];
       _latOf[pdgnode]=l;
-      pdgnode->set_sched_lat(l);
+      pdgnode->set_sched_lat(l); //for graphviz printing
 
       //cout<<"(Output) link: "<<inc_link->name()<<" lat: "<<lat_edge[inc_link]<<endl; 
       if(lat_edge[inc_link] > max_lat) {

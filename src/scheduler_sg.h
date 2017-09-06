@@ -26,6 +26,7 @@ public:
 protected:
   int _max_iters = 20000;
   bool _integrate_timing = true;
+  int _best_latmis, _best_lat, _best_violation;
 };
 
 #endif

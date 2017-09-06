@@ -36,6 +36,7 @@ static struct option long_options[] = {
   { "relative-gap", required_argument, NULL, 'r', },
   { "absolute-gap", required_argument, NULL, 'g', },
   { "timeout",      required_argument, NULL, 't', },
+  { "max-iters",    required_argument, NULL, 'i', },
 
   { "max-edge-delay", required_argument, NULL, 'd', },
 
@@ -74,6 +75,7 @@ int main(int argc, char* argv[])
   float relative_gap=0.1f;
   float timeout=86400.0f;
   int max_edge_delay=15;
+  int max_iters=20000;
   
 
   while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, NULL)) != -1) {
@@ -88,7 +90,10 @@ int main(int argc, char* argv[])
     case 'r': relative_gap=atof(optarg); break;
     case 'g': absolute_gap=atof(optarg); break;
     case 't': timeout=atof(optarg); break;
+    case 'i': max_iters=atoi(optarg); break;
+
     case 'd': max_edge_delay=atoi(optarg); break;
+
     default: exit(1);
     }
   }
@@ -150,7 +155,9 @@ int main(int argc, char* argv[])
   } else if(str_schedType == "mlg") { /*multiple-link greedy*/
     scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
-    scheduler = new SchedulerStochasticGreedy(&sbmodel);
+    auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
+    scheduler_sg->set_max_iters(max_iters);
+    scheduler = scheduler_sg;
   } else if(str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
   } else if(str_schedType == "bkt") {

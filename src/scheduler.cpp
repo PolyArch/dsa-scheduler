@@ -211,7 +211,8 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
       if(!dest_pdgnode) {
-         sched->add_passthrough_node(dest);
+        sched->add_passthrough_node(dest);
+        //sched->assign_edge_pt(I->second,dest);
       }
     }
     //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
@@ -229,14 +230,21 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
   //<< " nlinks: " << candRouting->routing.size() << "\n";  
   assert(pdgnode);
 
-  int dummy_diff=0, max_lat=0;
-  candRouting->fill_lat(pdgnode,sched,dummy_diff, max_lat);
+  int min_node_lat, max_node_lat;
+  candRouting->fill_lat(pdgnode,sched,min_node_lat,max_node_lat);
 
   if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(pdgnode)) {
-    max_lat += inst_lat(inst->inst());
+     int i = inst_lat(inst->inst());
+     min_node_lat += i;
+     max_node_lat += i;
   }
 
-  sched->assign_lat(pdgnode,max_lat);
+  if(min_node_lat > max_node_lat) {
+    sched->add_violation(min_node_lat-max_node_lat);
+    max_node_lat = min_node_lat;
+  }
+
+  sched->assign_lat_bounds(pdgnode,min_node_lat,max_node_lat);
 
   sched->assign_node(pdgnode,here);
   applyRouting(sched,candRouting);
@@ -337,7 +345,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     openset.pop_front();
 
     int cur_dist = node_dist[node];
-    if(cur_dist >= scoreLeft.first) {
+    if(cur_dist >= scoreLeft.second) {
       continue;
     }
     
@@ -366,6 +374,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
 
       if(found_dest) break; 
       
+//      if(passthrough&&((((uint64_t)next)&0x70)!=0))  dumb idea
       if(passthrough) {
         openset_long.push_back(next);
       } else {
@@ -393,9 +402,15 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     count++;
     x=link->orig();
   }
-  int tot_lat = node_dist[dest] + count -1;
 
-  candRouting.totLat[pdgedge]= tot_lat;
+  int tot_lat = node_dist[dest] + count -1;
+  int pts=0;
+  while(tot_lat > 1000) {
+    tot_lat -= 1000;
+    pts++;
+  }
+
+  candRouting.edge_prop[pdgedge]=make_pair(tot_lat,pts);
   return score;
 }
 

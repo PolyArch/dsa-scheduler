@@ -86,12 +86,28 @@ class Schedule {
       _assignSwitch[sbsw][slink_out]=slink;     //out to in for a sw      
     }
 
-    void assign_lat(SbPDG_Node* pdgnode, int lat=0) {
+    void assign_lat(SbPDG_Node* pdgnode, int lat) {
       _latOf[pdgnode]=lat;
     }
- 
     int latOf(SbPDG_Node* pdgnode) {
       return _latOf[pdgnode];
+    }
+
+    void assign_lat_bounds(SbPDG_Node* pdgnode, int min, int max) {
+      _latBounds[pdgnode]=std::make_pair(min,max);
+    }
+    std::pair<int,int> lat_bounds(SbPDG_Node* pdgnode) {
+      return _latBounds[pdgnode];
+    }
+
+//    void assign_edge_pt(SbPDG_Edge* edge, SbPDG_Node* pt) {
+//      add_passthrough_node(pt);
+//      _passthroughsOf[edge].insert(pt);
+//    }
+
+    int violation() {return _totalViolation;}
+    void add_violation(int violation) {
+      _totalViolation += violation;
     }
 
     //Assign the sbnode to pdgnode and vice verse 
@@ -256,12 +272,16 @@ class Schedule {
     assign_edgelink_iterator assign_edgelink_end() { return _assignEdgeLink.end(); }
     
     void clearAll() {
+      _totalViolation=0;
       _assignSwitch.clear();
       _assignVPort.clear();
       _vportOf.clear();
       _assignNode.clear();
       _sbnodeOf.clear();
       _latOf.clear();
+      _latBounds.clear();
+      _passthrough_nodes.clear();
+      //_passthroughsOf.clear();
       _latOfVPort.clear();
       _latOfLink.clear();
       _assignLink.clear();
@@ -395,6 +415,8 @@ class Schedule {
     SbModel* _sbModel;
     SbPDG*   _sbPDG;
 
+    int _totalViolation=0;
+
     std::unordered_set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
 
     std::unordered_map<sblink*, int> linkCount;
@@ -402,6 +424,9 @@ class Schedule {
     std::unordered_map<sbnode*, SbPDG_Node*> _assignNode;  //sbnode to pdgnode
     std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
     std::unordered_map<SbPDG_Node*, int> _latOf; 
+    std::unordered_map<SbPDG_Node*, std::pair<int,int>> _latBounds;  //min, max bounds
+//    std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; 
+
     std::unordered_map<SbPDG_Edge*, int> _latOfEdge; 
     std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
     std::unordered_map<sblink*, SbPDG_Node*> _assignLink;   //sblink to pdgnode
