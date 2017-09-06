@@ -27,12 +27,16 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
   progress_initBestNums();
 
   Schedule* cur_sched = NULL;
-  std::pair<int, int> best_score = make_pair(0, -10000000);
+  std::pair<int, int> best_score = make_pair(0, 0);
   bool best_succeeded = false;
   bool best_mapped = false;
   std::set<SbPDG_Output*> best_dummies;
 
   int last_improvement_iter = 0;
+
+  _best_latmis=MAX_ROUTE;
+  _best_lat=MAX_ROUTE;
+  _best_violation=MAX_ROUTE;
 
   int presize = sbPDG->num_insts();
   int postsize = presize;
@@ -44,6 +48,12 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
   int remapNeeded = sbPDG->remappingNeeded(hw_num_fu); //setup remap structres 
   int iter = 0;
   while (iter < _max_iters) {
+    if( (iter & (256-1)) == 0) {
+      if( total_msec() > _reslim * 1000) {
+        break;
+      }
+    }
+
     if(remapNeeded) { //remap every so often to try new possible dummy positions
       if( (iter & (16-1)) == 0) {
         sbPDG->remap(hw_num_fu);
@@ -53,35 +63,44 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
     progress_initCurNums();
     bool succeed_sched = schedule_internal(sbPDG, cur_sched);
-    bool succeed_timing = false;
-
     int tot_mapped =
-      progress_getBestNum(FA) + progress_getBestNum(Input) + progress_getBestNum(Output);
-    int lat = 10000, latmis = 0;
+      progress_getBestNum(FA) + progress_getBestNum(Input) + 
+                                progress_getBestNum(Output);
+
+    bool succeed_timing = false;
+    int lat = MAX_ROUTE, latmis = MAX_ROUTE;
     if (succeed_sched) { 
       succeed_timing = cur_sched->fixLatency(lat,latmis);
-      tot_mapped+=succeed_timing; //add one to total_mapped if timing succeeded
     } else {
-      latmis = 1000;
+      latmis = MAX_ROUTE;
     }
+
+    int violation = cur_sched->violation();
 
     int obj = lat;
     if(_integrate_timing) { 
-      obj = latmis*256+lat;
+//      obj = latmis*256+lat;
+      obj = violation*8192+lat*32+latmis;
     }
 
-    std::pair<int, int> score = make_pair(tot_mapped, -obj);
+    std::pair<int, int> score = make_pair(tot_mapped + succeed_sched + succeed_timing, 
+                                          -obj);
     if (score > best_score) {
+      if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
+        //_best_latmis=latmis;
+        _best_violation=violation;
+      }
+
       if(remapNeeded) {
         sbPDG->printGraphviz("viz/remap.dot");
         best_dummies = sbPDG->getDummiesOutputs();
       }
 
-  
       if (verbose) {
-        fprintf(stdout, "Iter: %4d, mapped: %3d, lat: %3d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d/%d,%d%s%s\n", iter, score.first - 1, 
-                lat, latmis, obj,
+        fprintf(stdout, "Iter: %4d, time:%0.2f, mapped: %3d, " 
+                "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
+                " insts: %d/%d,%d%s%s\n", iter, total_msec()/1000.f, 
+                tot_mapped, lat, violation, latmis, obj,
                 progress_getBestNum(Input), sbPDG->num_inputs(),
                 progress_getBestNum(Output), sbPDG->num_outputs(),
                 progress_getBestNum(FA), presize, postsize,
@@ -193,6 +212,10 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
       return false;
     }
 
+    if(_integrate_timing && sched->violation() > _best_violation) {
+      return false;
+    }
+
     for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
       if(can_go(use_pdginst,seen)) {
@@ -259,20 +282,24 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
     for(unsigned i=0; i < spots.size(); i++) {
       sbnode* cand_spot = spots[i];
 
-      curRouting->routing.clear();
-      curRouting->forwarding.clear();
+      curRouting->clear();
+      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,
+                                            *curRouting, bestScore);
 
-      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,*curRouting,bestScore);
-      curScore.first = curScore.second;
-      if(curScore < fscore &&  _integrate_timing) {
-        int curNodeLat=0;
-        int diff = 0;
-        curRouting->fill_lat(pdgnode,sched, diff, curNodeLat);
-        if(diff < 500 && diff > _sbModel->maxEdgeDelay() ) {
-          curScore=fscore; // FAIL
+      if(curScore < fscore) { //if not failing score
+        if(_integrate_timing) {
+          curScore.first = curScore.second;
+
+          int min_node_lat, max_node_lat;
+          curRouting->fill_lat(pdgnode, sched, min_node_lat, max_node_lat);
+
+          int violation = min_node_lat-max_node_lat;
+
+          if(violation > 0) {
+            curScore=fscore; // FAIL
+          }
+          curScore.second = -violation;
         }
-        curScore.second = diff;
-        //curScore.first+=diff/4;
       }
 
       if(curScore < bestScore) {
