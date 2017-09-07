@@ -211,12 +211,12 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
       if(!dest_pdgnode) {
-        sched->add_passthrough_node(dest);
-        //sched->assign_edge_pt(I->second,dest);
+        //sched->add_passthrough_node(dest);
+        sched->assign_edge_pt(I->second,dest);
       }
     }
     //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
-    sched->assign_link(I->second->def(),I->first);
+    sched->assign_edgelink(I->second,I->first);
     sched->updateLinkCount(I->first);
   }
   //TODO: Apply forwarding
@@ -231,13 +231,15 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
   assert(pdgnode);
 
   int min_node_lat, max_node_lat;
-  candRouting->fill_lat(pdgnode,sched,min_node_lat,max_node_lat);
+  candRouting->fill_lat(sched,min_node_lat,max_node_lat);
 
   if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(pdgnode)) {
      int i = inst_lat(inst->inst());
      min_node_lat += i;
      max_node_lat += i;
   }
+
+  //cout << pdgnode->name() << " " << min_node_lat << " " << max_node_lat << "\n";
 
   if(min_node_lat > max_node_lat) {
     sched->add_violation(min_node_lat-max_node_lat);
@@ -345,7 +347,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     openset.pop_front();
 
     int cur_dist = node_dist[node];
-    if(cur_dist >= scoreLeft.second) {
+    if(cur_dist >= scoreLeft.first) {
       continue;
     }
     

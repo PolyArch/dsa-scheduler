@@ -15,6 +15,8 @@ public:
     _showGams(true), _mipstart(false), _sll(false) { }
 
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule);
+  virtual bool schedule_internal(SbPDG* sbPDG, Schedule*& schedule);
+
   bool requestGams(const char *filename);
 
   void showGams(bool show) {

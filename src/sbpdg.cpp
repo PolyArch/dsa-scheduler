@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <string>
 #include <list>
+#include "schedule.h"
+
 using namespace std;
 using namespace SB_CONFIG;
 
@@ -391,12 +393,21 @@ void SbPDG_Inst::compute(bool print, bool verif) {
 
 
 
-void SbPDG_Node::printGraphviz(ostream& os) {
+void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
   
   string ncolor = "black";
-  os << "N" << _ID << " [ label = \"" << name() 
-     << "\\n lat=" << _min_lat << "\\n schedlat=" << _sched_lat;
-        
+  os << "N" << _ID << " [ label = \"" << name();
+
+  if(sched) {
+    os << "\\n lat=" << sched->latOf(this)  << " ";
+  }
+  os << "min:" << _min_lat;
+
+  if(sched) {
+    auto p = sched->lat_bounds(this);
+    os << "\\n bounds=" << p.first << " to " << p.second;
+  }
+
   os  << "\", color= \"" << ncolor << "\"]; ";
 
   os << "\n";
@@ -417,23 +428,30 @@ void SbPDG_Node::printGraphviz(ostream& os) {
     SbPDG_Node* n = e->use();
     os << "N" << _ID << " -> N" << n->_ID << "[ color=";
     os << ncolor;
-    os << "];\n";
+    os << " label = \"";
+    if(sched) {
+      os << "l:" << sched->link_count(e) 
+         << "\\nex:" << sched->edge_delay(e)
+         << "\\npt:" << sched->num_passthroughs(e);
+    }
+      
+    os << "\"];\n";
   }
  
   os << "\n";
 
 }
 
-void SbPDG_Inst::printGraphviz(ostream& os) {
-  SbPDG_Node::printGraphviz(os);
+void SbPDG_Inst::printGraphviz(ostream& os, Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
-void SbPDG_Output::printGraphviz(ostream& os) {
-  SbPDG_Node::printGraphviz(os);
+void SbPDG_Output::printGraphviz(ostream& os,Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
-void SbPDG_Input::printGraphviz(ostream& os) {
-  SbPDG_Node::printGraphviz(os);
+void SbPDG_Input::printGraphviz(ostream& os,Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
 void SbPDG_Node::printEmuDFG(ostream& os, string dfg_name) {
@@ -782,23 +800,29 @@ void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
 
 
 
-void SbPDG::printGraphviz(ostream& os)
+void SbPDG::printGraphviz(ostream& os, Schedule* sched)
 {
   os << "Digraph G { \nnewrank=true;\n " ;
   const_inst_iterator Ii,Ei;
 
   //Insts
-  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { (*Ii)->printGraphviz(os); }
+  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { 
+    (*Ii)->printGraphviz(os,sched); 
+  }
   
   const_input_iterator Iin,Ein;
 
   //Inputs
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { (*Iin)->printGraphviz(os); }
+  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
+    (*Iin)->printGraphviz(os,sched); 
+  }
   
   const_output_iterator Iout,Eout;
 
   //Outputs
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { (*Iout)->printGraphviz(os); }
+  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
+    (*Iout)->printGraphviz(os,sched); 
+  }
 
   int cluster_num=0;
 

@@ -1404,34 +1404,42 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
       }
     }
 
-    int min_vec_lat = 0;
-    int max_vec_lat = 1000000;
-    for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-       SbPDG_Output* pdgout = vec_out->getOutput(m);
+    //int min_vec_lat = 0;
+    //int max_vec_lat = 1000000;
+    //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+    //   SbPDG_Output* pdgout = vec_out->getOutput(m);
 
-       auto p = _latBounds[pdgout];
-       int min_inc_lat = p.first; 
-       int max_inc_lat = p.second;
+    //   auto p = _latBounds[pdgout];
+    //   int min_inc_lat = p.first; 
+    //   int max_inc_lat = p.second;
  
-       //earliest starting time is *latest* incomming edge
-       if(min_inc_lat > min_vec_lat) {
-         min_vec_lat = min_inc_lat;
-       }
-       //latest starting time is *earliest* incomming edge
-       if(max_inc_lat < max_vec_lat) {
-         max_vec_lat = max_inc_lat;
-       }
-    }
+    //   //earliest starting time is *latest* incomming edge
+    //   if(min_inc_lat > min_vec_lat) {
+    //     min_vec_lat = min_inc_lat;
+    //   }
+    //   //latest starting time is *earliest* incomming edge
+    //   if(max_inc_lat < max_vec_lat) {
+    //     max_vec_lat = max_inc_lat;
+    //   }
+    //}
 
-    if(min_vec_lat > max_vec_lat) {
-      violation += min_vec_lat-max_vec_lat;
-    }
+    //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+    //   SbPDG_Output* pdgout = vec_out->getOutput(m);
+    //   assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
+    //}
+
+
+    //if(min_vec_lat > max_vec_lat) {
+    //  violation += min_vec_lat-max_vec_lat;
+    //}
   }
   add_violation(violation);
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   bool succ = true;
+  _extraLatOfEdge.clear();
+
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
   if (succ) succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
   calcLatency(max_lat, max_lat_mis); //fwd pass
@@ -1514,9 +1522,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
        sblink* firstOutLink = cand_input->getFirstOutLink();
        assert(firstOutLink);
        openset.push_back(firstOutLink);
-       int init_lat = _latOf[pdgnode];
-       assert(init_lat==0);
-       lat_edge[firstOutLink]=init_lat;
+       lat_edge[firstOutLink] = _latOf[pdgnode];
     }
   }
     
@@ -1747,8 +1753,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
         } else { //regular inst
           int l = max_latency + inst_lat(next_pdginst->inst());
           lat_edge[new_link] = l;
-          next_pdgnode->set_sched_lat(l);
+          _latOf[next_pdgnode]=l;
         }
+
+
         openset.push_back(new_link);
 
         //cout << "lat of " << next_pdgnode->name() 

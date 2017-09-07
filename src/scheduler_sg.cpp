@@ -21,8 +21,10 @@ using namespace std;
 
 bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 {
+  static int _srand_no=1; 
+
   int max_iters_no_improvement = 100000000;
-  srand(2);
+  srand(++_srand_no);
 
   progress_initBestNums();
 
@@ -128,6 +130,9 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     if (((iter - last_improvement_iter) > max_iters_no_improvement) && best_succeeded) {
       break;
     }
+    if(violation ==0 && iter > _max_iters_zero_vio) {
+      break;
+    }
   }
   if(verbose) {
     cout << "Breaking at Iter " << iter << "\n";
@@ -138,28 +143,29 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
     sbPDG->rememberDummies(best_dummies);
   }
 
-  if(verbose) {
-    if(best_mapped && !best_succeeded) {
-      fprintf(stderr,"DFG Mapped, but Timing not met.  Simulation is still possible, but do not use generated schedule for hardware!");
-    }
-  }
+//  if(verbose) {
+//    if(best_mapped && !best_succeeded) {
+//      fprintf(stderr,"DFG Mapped, but Timing not met.  Simulation is still possible, but do not use generated schedule for hardware!");
+//    }
+//  }
   return best_succeeded;
 }
 
 
-bool can_go(SbPDG_Inst* n, unordered_map<SbPDG_Inst*,bool>& seen) {
-  if(!n || seen[n]) {
+bool can_go(SbPDG_Inst* n, unordered_map<SbPDG_Inst*,int>& state) {
+  if(!n || state[n]==1) {
     return false;
   }
-  return true;
+//  return true;
   for(auto II=n->ops_begin(), EE=n->ops_end(); II!=EE; ++II) {
     if(*II == 0) continue;
     if(SbPDG_Inst* inc_node = dynamic_cast<SbPDG_Inst*>((*II)->def())) {
-      if(!seen[inc_node]) {
+      if(state[inc_node]!=2) {
         return false;
       }
     }
   }
+  state[n]=1;
   return true;
 }
 
@@ -171,7 +177,7 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
     return false;
   }
 
-  unordered_map<SbPDG_Inst*,bool> seen;
+  unordered_map<SbPDG_Inst*,int> state;
   bool schedule_okay=true; 
 
   list<SbPDG_Inst* > openset;
@@ -183,8 +189,7 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
     for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(can_go(use_pdginst,seen)) {
-        seen[use_pdginst]=true;
+      if(can_go(use_pdginst,state)) {
         openset.push_back(use_pdginst);
       }
     }
@@ -212,14 +217,16 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
       return false;
     }
 
+    state[n]=2;
+
+
     if(_integrate_timing && sched->violation() > _best_violation) {
       return false;
     }
 
     for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
-      if(can_go(use_pdginst,seen)) {
-        seen[use_pdginst]=true;
+      if(can_go(use_pdginst,state)) {
         openset.push_back(use_pdginst);
       }
     }
@@ -285,17 +292,17 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
       curRouting->clear();
       pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,
                                             *curRouting, bestScore);
+      curScore.first = curScore.second;
+
 
       if(curScore < fscore) { //if not failing score
         if(_integrate_timing) {
-          curScore.first = curScore.second;
 
           int min_node_lat, max_node_lat;
-          curRouting->fill_lat(pdgnode, sched, min_node_lat, max_node_lat);
+          curRouting->fill_lat(sched, min_node_lat, max_node_lat);
 
           int violation = min_node_lat-max_node_lat;
-
-          if(violation > 0) {
+          if(_strict_timing && violation > 0) {
             curScore=fscore; // FAIL
           }
           curScore.second = -violation;
@@ -705,6 +712,23 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
         //cout << "Could not find output hardware vector port\n";
         return false;
       }
+
+      //*** Accounting for timing
+      int min_vec_lat, max_vec_lat;
+      candRouting.fill_lat(sched,min_vec_lat,max_vec_lat);
+    
+      if(min_vec_lat > max_vec_lat) {
+        sched->add_violation(min_vec_lat-max_vec_lat);
+        //max_node_lat = min_node_lat;
+      }
+      for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+        SbPDG_Output* pdgout = vec_out->getOutput(m);
+        sched->assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
+      }
+      //***
+
+
+
       //progress_incCurNum(Output);
     }
     progress_saveBestNum(Output);

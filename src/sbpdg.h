@@ -14,7 +14,7 @@
 #include <algorithm>
 #include "model.h"
 
-
+class Schedule;
 class SbPDG_Node;
 
 class SbPDG_Edge {
@@ -54,7 +54,7 @@ class SbPDG_Edge {
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
-    virtual void printGraphviz(std::ostream& os);
+    virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
     void setScalar() {_scalar = true;};
     bool getScalar() {return _scalar;};
@@ -189,7 +189,7 @@ class SbPDG_Inst : public SbPDG_Node {
                      _imm_slot(-1), _subFunc(0), _accum(0) {}
 
 
-    void printGraphviz(std::ostream& os);
+    void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     void setImm( uint64_t val ) { _imm=val; }
@@ -246,7 +246,7 @@ class SbPDG_Inst : public SbPDG_Node {
 
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
-    void printGraphviz(std::ostream& os);
+    void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
     std::string name() {
@@ -265,7 +265,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
 
 class SbPDG_Output : public SbPDG_IO {
   public:
-    void printGraphviz(std::ostream& os);
+    void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
     void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
@@ -391,12 +391,12 @@ class SbPDG {
     void removeDummies();
 
 
-    void printGraphviz(std::ostream& os);
+    void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
-    void printGraphviz(const char *fname) {
+    void printGraphviz(const char *fname, Schedule* sched=NULL) {
       std::ofstream os(fname);
       assert(os.good());
-      printGraphviz(os);
+      printGraphviz(os, sched);
     }
     
     void printGams(std::ostream& os, std::unordered_map<std::string,SbPDG_Node*>&,

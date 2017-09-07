@@ -42,20 +42,15 @@ class CandidateRouting {
   std::unordered_map< SbPDG_Edge*, std::pair<int,int> > edge_prop;
 
 
-  void fill_lat(SbPDG_Node* pdgnode, Schedule* sched,
-                int& min_node_lat, int& max_node_lat) {
+  void fill_lat(Schedule* sched,
+                int& min_node_lat, int& max_node_lat, bool print=false) {
     min_node_lat = 0; //need minimax, so that's why this is odd
     max_node_lat = MAX_ROUTE;
-    bool input = dynamic_cast<SbPDG_Input*>(pdgnode);
-    bool output = dynamic_cast<SbPDG_Output*>(pdgnode);
-    if(input) {
-      max_node_lat = 0;
-      return;
-    }
+    SbPDG_Node* n = (*edge_prop.begin()).first->use();
+    bool output = dynamic_cast<SbPDG_Output*>(n);
 
-    for(auto I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
-      if(*I == NULL) { continue; } //could be immediate
-      SbPDG_Edge* source_pdgedge = (*I);
+    for(auto I=edge_prop.begin(), E=edge_prop.end();I!=E;++I) {
+      SbPDG_Edge* source_pdgedge = (*I).first;
       auto i = edge_prop[source_pdgedge];
       int num_links = i.first;
       int num_passthroughs = i.second;
@@ -66,6 +61,13 @@ class CandidateRouting {
       int max_inc_lat = p.second + num_links +
               sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs);
 
+    if(print) {
+      std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
+      std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
+      std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs) << "\n";
+    }
+
+
       //earliest starting time is *latest* incomming edge
       if(min_inc_lat > min_node_lat) {
         min_node_lat = min_inc_lat;
@@ -75,6 +77,10 @@ class CandidateRouting {
         max_node_lat = max_inc_lat;
       }
     }
+    if(print) {
+      std::cout << "  min_inc_lat" << min_node_lat << " " << max_node_lat << "\n";
+    }
+
   }
 
 
@@ -113,6 +119,9 @@ class Scheduler {
   int bestOutputSched;
 
   bool verbose;
+  bool suppress_timing_print=false;
+  void set_max_iters(int i) {_max_iters=i;}
+
   std::string str_subalg;
 
   enum StatType {FA, Input, Output};
@@ -227,7 +236,7 @@ class Scheduler {
 
     bool succeed_sched = schedule(sbPDG,sched);
 
-    if(verbose) {
+    if(verbose && ! suppress_timing_print) {
       printf("sched_time: %0.2f seconds\n", total_msec()/1000.0f);
     }
 
@@ -245,6 +254,8 @@ class Scheduler {
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
  
+  int _max_iters = 20000;
+
   float _optcr,_optca,_reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;
 };

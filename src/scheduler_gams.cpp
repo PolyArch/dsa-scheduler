@@ -147,6 +147,21 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 }
 
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
+  int iters=0;
+
+  while(total_msec() < _reslim * 1000) {
+    bool success = schedule_internal(sbPDG,schedule);
+    iters++;
+    if(success || iters > 20) {
+      return success;
+    }     
+  }
+  return false;
+}
+
+
+bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
+
   //Get the heuristic scheduling done first
   Schedule* heur_sched=NULL;
   bool heur_success=false;
@@ -157,12 +172,18 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
 
   if(_mipstart || heur_fix) {
     SchedulerStochasticGreedy heur_scheduler(_sbModel);
+    heur_scheduler.suppress_timing_print=true;
+    heur_scheduler.verbose=verbose;
+    heur_scheduler.set_max_iters(_max_iters);
+    heur_scheduler.set_max_iters_zero_vio(20000);
+    heur_scheduler.setTimeout(_reslim - (total_msec()/1000));
+
     if(mrt_heur) {
       heur_scheduler.set_integrate_timing(true);
     } else if(mr_heur) {
       heur_scheduler.set_integrate_timing(false);
     }
-    heur_success=heur_scheduler.schedule(sbPDG,heur_sched);
+    heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
     heur_sched->calcAssignEdgeLink();
   }
 
@@ -277,7 +298,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_sb_gams.good());
   
-  ofs_sb_gams << "option reslim=" << _reslim << ";\n"
+  ofs_sb_gams << "option reslim=" << _reslim - (total_msec()/1000) << ";\n"
                  << "option optcr="  <<  _optcr << ";\n"   
                  << "option optca="  <<  _optca << ";\n";
   if(use_hw) {

@@ -44,8 +44,6 @@ $(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp $(GAMS_INC)
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 
 
-
-
     
 $(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<

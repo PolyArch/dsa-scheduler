@@ -156,7 +156,6 @@ int main(int argc, char* argv[])
     scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
     auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
-    scheduler_sg->set_max_iters(max_iters);
     scheduler = scheduler_sg;
   } else if(str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
@@ -171,6 +170,7 @@ int main(int argc, char* argv[])
   scheduler->str_subalg = str_subalg;
   scheduler->setGap(relative_gap,absolute_gap);
   scheduler->setTimeout(timeout);
+  scheduler->set_max_iters(max_iters);
 
   scheduler->check_res(&sbpdg,&sbmodel);
 
@@ -193,7 +193,7 @@ int main(int argc, char* argv[])
       cout << "Scheduling Failed!\n";
     }
     sched->stat_printOutputLatency();
-    sbpdg.printGraphviz("viz/final.dot");
+    sbpdg.printGraphviz("viz/final.dot",sched);
   } 
 
   std::string config_header = pdg_rawname + ".h";
