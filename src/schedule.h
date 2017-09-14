@@ -110,11 +110,18 @@ class Schedule {
       _totalViolation += violation;
     }
 
+    int vioOf(SbPDG_Node* n) { return _vioOf[n];}
+    void record_violation(SbPDG_Node* n, int violation) {
+      _vioOf[n]=violation; 
+    }
+
+
     //Assign the sbnode to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
       //std::cout << snode->name() << " assigned to " 
       //          << pdgnode->gamsName() << "\n";
       assert(_assignNode.count(snode)==0);
+      assert(pdgnode && (uint64_t)pdgnode != 0x1); //don't ask
       _assignNode[snode] = pdgnode;
       _sbnodeOf[pdgnode] = snode;
     }
@@ -289,6 +296,7 @@ class Schedule {
       _latOf.clear();
       _latBounds.clear();
       _passthrough_nodes.clear();
+      _vioOf.clear();
       _passthroughsOf.clear();
       _latOfVPort.clear();
       _latOfLink.clear();
@@ -435,6 +443,9 @@ class Schedule {
     int _totalViolation=0;
 
     std::unordered_set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
+    std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; //for stats
+    std::unordered_map<SbPDG_Node*, int> _vioOf; //for stats
+
 
     std::unordered_map<sblink*, int> linkCount;
     std::unordered_map<sblink*, int> _latOfLink;
@@ -442,7 +453,6 @@ class Schedule {
     std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
     std::unordered_map<SbPDG_Node*, int> _latOf; 
     std::unordered_map<SbPDG_Node*, std::pair<int,int>> _latBounds;  //min, max bounds
-    std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; 
 
     std::unordered_map<SbPDG_Edge*, int> _latOfEdge; 
     std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 

@@ -724,6 +724,7 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
       for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
         SbPDG_Output* pdgout = vec_out->getOutput(m);
         sched->assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
+        sched->record_violation(pdgout,min_vec_lat-max_vec_lat);
       }
       //***
 

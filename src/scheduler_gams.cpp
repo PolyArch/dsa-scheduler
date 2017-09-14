@@ -109,7 +109,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   sched->calcLatency(d1,d2); //make sure stuff is filled in
   for (auto Ii=sbPDG->nodes_begin(),Ei=sbPDG->nodes_end();Ii!=Ei;++Ii)  { 
     SbPDG_Node* n = *Ii;
-    int l = n->sched_lat();
+    int l = sched->latOf(n);
     if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
       l -= inst_lat(inst->inst());
     }

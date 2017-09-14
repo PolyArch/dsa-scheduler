@@ -243,6 +243,7 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
 
   if(min_node_lat > max_node_lat) {
     sched->add_violation(min_node_lat-max_node_lat);
+    sched->record_violation(pdgnode,min_node_lat-max_node_lat);
     max_node_lat = min_node_lat;
   }
 

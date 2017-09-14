@@ -406,6 +406,7 @@ void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
   if(sched) {
     auto p = sched->lat_bounds(this);
     os << "\\n bounds=" << p.first << " to " << p.second;
+    os << "\\n vio=" << sched->vioOf(this);
   }
 
   os  << "\", color= \"" << ncolor << "\"]; ";

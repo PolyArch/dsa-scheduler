@@ -32,11 +32,13 @@ static struct option long_options[] = {
   { "show-gams", no_argument, NULL, 'G', },
   { "mipstart", no_argument, NULL, 'm', },
   { "sll", no_argument, NULL, 'S', },
+  { "no-int-time", no_argument, NULL, 'n', },
 
   { "relative-gap", required_argument, NULL, 'r', },
   { "absolute-gap", required_argument, NULL, 'g', },
   { "timeout",      required_argument, NULL, 't', },
   { "max-iters",    required_argument, NULL, 'i', },
+
 
   { "max-edge-delay", required_argument, NULL, 'd', },
 
@@ -77,6 +79,7 @@ int main(int argc, char* argv[])
   int max_edge_delay=15;
   int max_iters=20000;
   
+  bool no_int_time=false;
 
   while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, NULL)) != -1) {
     switch (opt) {
@@ -86,6 +89,7 @@ int main(int argc, char* argv[])
     case 'G': show_gams = true; break;
     case 'm': mipstart=true; break;
     case 'S': sll=true; break;
+    case 'n': no_int_time=true; break;
 
     case 'r': relative_gap=atof(optarg); break;
     case 'g': absolute_gap=atof(optarg); break;
@@ -156,6 +160,7 @@ int main(int argc, char* argv[])
     scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
     auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
+    scheduler_sg->set_integrate_timing(!no_int_time);
     scheduler = scheduler_sg;
   } else if(str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
