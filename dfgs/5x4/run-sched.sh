@@ -19,11 +19,19 @@ else
 subalg=$2
 fi
 
+if [ -z "$3" ]; then
+ed=15
+else
+ed=$3
+fi
+
+
 bench=""
 
 for i in *.dfg; do
   echo "************ $i *************"; 	
-  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams --mipstart --max-edge-delay=7 --timeout=3600";
+  cmd="$SS_TOOLS/bin/sb_sched $SS_TOOLS/configs/softbrain_5x4.sbmodel $i --verbose --algorithm $alg --sub-alg $subalg --show-gams --mipstart --max-edge-delay=$ed --timeout=3600";
+
   echo $cmd
   $cmd | tee out.txt
   #$cmd > out.txt
@@ -34,9 +42,7 @@ for i in *.dfg; do
   time_eq="$time_eq+`grep "sched_time:" out.txt | cut -d" " -f 2`"
 done
 
-echo $bench         | tee sum.txt 
-echo -n $lat " | "  | tee -a sum.txt 
-echo $lat_eq | bc   | tee -a sum.txt 
-echo -n $time " | " | tee -a sum.txt 
-echo $time_eq | bc  | tee -a sum.txt 
+echo $bench             | tee sum.txt 
+echo $lat               | tee -a sum.txt 
+echo $time              | tee -a sum.txt 
 
