@@ -1203,8 +1203,9 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
   sbnode* node = locationOf(pdgnode);  
 
   if(!node) {
-    cerr << "SbPDG_Node: " << pdgnode->name() << " is not scheduled\n"; 
-    assert(0);
+    //cerr << "SbPDG_Node: " << pdgnode->name() << " is not scheduled\n";
+    return;
+    //assert(0);
   }
   
   SbPDG_Node::const_edge_iterator I,E;
@@ -1384,7 +1385,7 @@ void Schedule::stat_printOutputLatency(){
 
 void Schedule::checkOutputMatch(int &max_lat_mis) {
 
-  int violation=0;
+  //int violation=0;
 
   for (int i=0; i<_sbPDG->num_vec_output(); i++) {
     SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
@@ -1433,7 +1434,7 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
     //  violation += min_vec_lat-max_vec_lat;
     //}
   }
-  add_violation(violation);
+  //add_violation(violation);
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
@@ -1581,6 +1582,11 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
             if(lat_edge[inlink]<latency) {
               int diff = latency - lat_edge[inlink]; //latency per edge
               assert(edge);
+              if(!((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff))) {
+                std::string config_header = "fail";
+                printConfigText(config_header.c_str());
+                   
+              }
               assert(((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff)) && "Error: Someone else set this edge before!");
               if(diff > _sbModel->maxEdgeDelay()) {
 

@@ -17,7 +17,7 @@
 #define MAX_ROUTE 100000000
 
 # include <chrono>
-using msec = std::chrono::milliseconds;
+using usec = std::chrono::microseconds;
 using get_time = std::chrono::steady_clock;
 
 
@@ -220,10 +220,10 @@ class Scheduler {
     return (x==-1 ? "-" : std::to_string(x));
   }  
 
-  float total_msec() {
+  double total_msec() {
     auto end = get_time::now();
     auto diff = end - _start;
-    return ((float)std::chrono::duration_cast<msec>(diff).count());
+    return ((double)std::chrono::duration_cast<usec>(diff).count())/1000.0;
   }
 
   void progress_printBests(){
@@ -237,7 +237,7 @@ class Scheduler {
     bool succeed_sched = schedule(sbPDG,sched);
 
     if(verbose && ! suppress_timing_print) {
-      printf("sched_time: %0.2f seconds\n", total_msec()/1000.0f);
+      printf("sched_time: %0.4f seconds\n", total_msec()/1000.0);
     }
 
     return succeed_sched;

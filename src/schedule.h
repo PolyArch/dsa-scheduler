@@ -189,7 +189,7 @@ class Schedule {
       //     }
       //   }
       //}
-      assert(slink);
+       assert(slink);
       _assignLink[slink]=pdgnode;
       _linksOf[pdgnode].push_back(slink);
     }
@@ -199,7 +199,8 @@ class Schedule {
       assert(slink);
       assert(pdgedge);
       assert(_assignLink[slink]==NULL || _assignLink[slink] == pdgedge->def());
-      _assignLink[slink]=pdgedge->def();
+      
+      assign_link(pdgedge->def(),slink);
 
       _assignEdgeLink[slink].insert(pdgedge);
       _assignLinkEdge[pdgedge].insert(slink);

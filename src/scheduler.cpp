@@ -370,6 +370,9 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
 
       found_dest=(next==dest);
       bool passthrough = (dynamic_cast<sbfu*>(next) && !found_dest);
+
+      //passthrough = passthrough && ((rand()&0x7)!=0);
+
       int new_dist = cur_dist+1+passthrough*1000;
 
       came_from[next] = link;

@@ -657,25 +657,6 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
         progress_incCurNum(Output);
         num++;
       }
-#elif mapping == one2one
-      /*One-to-One Mapping*/
-      for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-        //Get the sbnode corresponding to mask[m]
-        int cgra_port_num = vport_desc[m].first;
-        sboutput* cgra_out_port = subModel->get_output(cgra_port_num);
-        //Get the input pdgnode corresponding to m
-        SbPDG_Node* sbpdg_output = vec_out->getOutput(m);
-        if(sched->pdgNodeOf(cgra_out_port) != NULL) {
-          ports_okay_to_use=false;
-          break;
-        } 
-        std::pair<int,int> curScore = scheduleHere(sched, sbpdg_output, cgra_out_port, 0, candRouting, fscore); 
-        if(curScore>=fscore) { //?????
-          ports_okay_to_use=false;
-          break;
-        }
-        progress_incCurNum(Output);
-      }
 #endif
       progress_saveBestNum(Output);  
       if (!ports_okay_to_use) {
@@ -684,54 +665,45 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
       }
       //cout<<"Succeeded!"<<endl;
       // Assign Individual Elements
-#if mapping == one2one
-      for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-        int hwPort = m;
-        int pdgPort = m;
-#else
-        for (auto i: hw2pdg) {
-          int hwPort = num2pos[i.first];
-          int pdgPort = i.second;
-#endif
-          mask[hwPort]=true;
-          //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[hwPort].first;
-          sboutput* cgra_out_port = subModel->get_output(cgra_port_num);
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node* sbpdg_output = vec_out->getOutput(pdgPort);
-          sched->assign_node(sbpdg_output,cgra_out_port);
-        }
-        //Perform the vector assignment
-        sched->assign_vport(vec_out,vport_id,mask);
-        found_vector_port=true;
-      } while (attempt++ < sd.size() - index - 1 && !found_vector_port);
-      applyRouting(sched, &candRouting); //Commit the routing
-
-      if (!found_vector_port) {
-        progress_saveBestNum(Output);  
-        //cout << "Could not find output hardware vector port\n";
-        return false;
+      for (auto i: hw2pdg) {
+        int hwPort = num2pos[i.first];
+        int pdgPort = i.second;
+        mask[hwPort]=true;
+        //Get the sbnode corresponding to mask[m]
+        int cgra_port_num = vport_desc[hwPort].first;
+        sboutput* cgra_out_port = subModel->get_output(cgra_port_num);
+        //Get the input pdgnode corresponding to m
+        SbPDG_Node* sbpdg_output = vec_out->getOutput(pdgPort);
+        sched->assign_node(sbpdg_output,cgra_out_port);
       }
+      //Perform the vector assignment
+      sched->assign_vport(vec_out,vport_id,mask);
+      found_vector_port=true;
+    } while (attempt++ < sd.size() - index - 1 && !found_vector_port);
+    applyRouting(sched, &candRouting); //Commit the routing
 
-      //*** Accounting for timing
-      int min_vec_lat, max_vec_lat;
-      candRouting.fill_lat(sched,min_vec_lat,max_vec_lat);
-    
-      if(min_vec_lat > max_vec_lat) {
-        sched->add_violation(min_vec_lat-max_vec_lat);
-        //max_node_lat = min_node_lat;
-      }
-      for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-        SbPDG_Output* pdgout = vec_out->getOutput(m);
-        sched->assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
-        sched->record_violation(pdgout,min_vec_lat-max_vec_lat);
-      }
-      //***
-
-
-
-      //progress_incCurNum(Output);
+    if (!found_vector_port) {
+      progress_saveBestNum(Output);  
+      //cout << "Could not find output hardware vector port\n";
+      return false;
     }
-    progress_saveBestNum(Output);
-    return true;
+
+    //*** Accounting for timing
+    int min_vec_lat, max_vec_lat;
+    candRouting.fill_lat(sched,min_vec_lat,max_vec_lat);
+   
+    if(min_vec_lat > max_vec_lat) {
+      sched->add_violation(min_vec_lat-max_vec_lat);
+      //max_node_lat = min_node_lat;
+    }
+    for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      sched->assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
+      sched->record_violation(pdgout,min_vec_lat-max_vec_lat);
+    }
+
+  //progress_incCurNum(Output);
   }
+  progress_saveBestNum(Output);
+  return true;
+}
