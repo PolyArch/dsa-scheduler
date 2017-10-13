@@ -56,8 +56,10 @@ class SbPDG_Node {
  public:
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
-    void setScalar() {_scalar = true;};
-    bool getScalar() {return _scalar;};
+    virtual uint64_t discard() {return false;} //execution-related
+
+    void setScalar() {_scalar = true;}
+    bool getScalar() {return _scalar;}
     int findDepth(std::ostream& os, std::string dfg_name, int level);
     SbPDG_Node() {
         _ID=ID_SOURCE++;
@@ -231,6 +233,8 @@ class SbPDG_Inst : public SbPDG_Node {
 
     void set_verif_id(std::string s) {_verif_id = s;}
 
+    virtual uint64_t discard() {return _discard;}
+
   private:
     std::ofstream _verif_stream;
     std::string _verif_id;
@@ -240,6 +244,7 @@ class SbPDG_Inst : public SbPDG_Node {
     int _imm_slot;
     int _subFunc;
     uint64_t _accum;
+    uint64_t _discard;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };
@@ -293,6 +298,11 @@ class SbPDG_Output : public SbPDG_IO {
       assert(_ops.size()==1);
       return _ops[0]->def()->get_value();
     }
+
+    virtual uint64_t discard() {
+      return _ops[0]->def()->discard();
+    }
+
 
     std::string _realName;
     int _subIter;

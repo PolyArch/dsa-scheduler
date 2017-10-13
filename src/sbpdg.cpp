@@ -361,20 +361,26 @@ void SbPDG_Inst::compute(bool print, bool verif) {
   if(print) {
     std::cout << name() << " (" << _ID << "): ";
   }
-  
+
+  _discard=false;
+
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
     } else {
-       assert(_ops[i]->def());
-      _input_vals[i]=_ops[i]->def()->get_value();
+      SbPDG_Node*  n =  _ops[i]->def();
+      _input_vals[i] = n->get_value();
+      if(n->discard()) {
+        _discard=true;
+      }
     }
     if(print) {
       std::cout << std::hex << _input_vals[i] << " ";
     }
   }
   
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum);
+
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard);
   
   if(print) {
     std::cout << " = " << _val << "\n";
