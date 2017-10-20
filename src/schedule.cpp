@@ -630,8 +630,8 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
   //cout << "cur slice: " << cur_slice << "\n";
   //--------------------------------------- ENCODE CONSTANTS ------------------------
-  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {    
-    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {    
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* sbfu_node = &fus[i][j];
       if(_assignNode.count(sbfu_node)!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
