@@ -380,7 +380,7 @@ void SbPDG_Inst::compute(bool print, bool verif) {
   }
   
 
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard);
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
   
   if(print) {
     std::cout << " = " << _val << "\n";

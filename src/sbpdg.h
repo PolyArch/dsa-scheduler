@@ -38,6 +38,8 @@ class SbPDG_Edge {
 
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
+    //uint64_t data; //Vignesh
+    //bool back_array[1] = {false}; //Vignesh
   private:
     int _ID;
     SbPDG_Node *_def, *_use;
@@ -45,7 +47,7 @@ class SbPDG_Edge {
 
     int _delay =0;
 
-    
+  
 
   private:
     static int ID_SOURCE;
@@ -116,6 +118,20 @@ class SbPDG_Node {
       }
       assert(false && "edge was not found");
     }
+
+//    bool checkBackPressure(SbPDG_Edge* a, SbPDG_Edge* b) {
+//	a->back_array = (a->data > b->data) ? true : false;
+//	b->back_array = (b->data > a->data) ? true : false;
+//	return a->back_array;
+//	} //Vignesh
+//
+//    bool applyBackPressure(SbPDG_Node* c, SbPDG_Edge* a, SbPDG_Edge* b) {
+//	return (a->data == true && b->data == true) ? true : false;
+//	} //Vignesh
+//
+//    void oneNodeSort(SbPDG_Node* c, SbPDG_Edge* a, SbPDG_Edge* b) {
+//	c->backpressure_result = (a->data > b->data) ? a->data : b->data;
+//	}`//Vignesh	
  
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {
        for(unsigned i = 0; i < _uses.size(); ++ i) {
@@ -153,6 +169,8 @@ class SbPDG_Node {
     bool input = false;
     bool output = false;
     int _iter;
+    //bool back_array = false; Vignesh
+    //uint64_t backPressure_result; //Vignesh
 
     int min_lat() {return _min_lat;}
     void set_min_lat(int i) {_min_lat = i;}
@@ -165,6 +183,7 @@ class SbPDG_Node {
     int _ID;
     std::string _name;
     std::vector<SbPDG_Edge *> _ops;     //in edges 
+    std::vector<bool>  _back_array;     //in edges 
     std::vector<SbPDG_Edge *> _uses;   //out edges  
     bool _scalar = false;
     int _min_lat=0;
@@ -341,6 +360,9 @@ class SbPDG_VecInput : public SbPDG_Vec {
     ss << "IPV_" << _name ;
     return ss.str();
   }
+
+  //Dynamic Function to communicate to simulator if there is backpressure on this cycle
+  bool backresspureOn() {return false;}
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
