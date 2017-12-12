@@ -39,7 +39,6 @@ static struct option long_options[] = {
   { "timeout",      required_argument, NULL, 't', },
   { "max-iters",    required_argument, NULL, 'i', },
 
-
   { "max-edge-delay", required_argument, NULL, 'd', },
 
   { 0, 0, 0, 0, },

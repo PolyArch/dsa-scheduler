@@ -19,12 +19,14 @@ install: directories install_headers install_program install_drivers
 	
 
 install_headers:
-	${MKDIR_P} ${prefix}/include/softbrain-scheduler
-	cp src/*.h ${prefix}/include/softbrain-scheduler/
+	${MKDIR_P} ${prefix}/include/ss-scheduler
+	cp src/*.h ${prefix}/include/ss-scheduler/
 
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
 	cp drivers/sb_sched ${prefix}/bin
+	cp drivers/sb_dfg_emu ${prefix}/bin
+
 
 install_program: program
 	${MKDIR_P} ${prefix}/lib

@@ -9,14 +9,14 @@ CXX = g++
 CXXFLAGS :=  -Wall -g -std=c++11 
 
 LIB_PATH=$(SS_TOOLS)/lib
-INC_SBMODEL_PATH=$(SS_TOOLS)/include/softbrain-config
-INC_SBSCHED_PATH=$(SS_TOOLS)/include/softbrain-scheduler
+INC_SBMODEL_PATH=$(SS_TOOLS)/include/ss-config
+INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
 #all: reschedule stat-config
 
-all: sb_sched
+all: sb_sched sb_dfg_emu
 #reschedul
 
 
