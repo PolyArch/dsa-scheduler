@@ -362,7 +362,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
   }
 
   //Dynamic Function to communicate to simulator if there is backpressure on this cycle
-  bool backresspureOn() {return false;}
+  bool backPressureOn() {return false;}
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
