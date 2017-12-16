@@ -44,7 +44,12 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-void SbPDG::compute(bool print, bool verif) {
+// This function is called from the simulator to 
+void SbPDG::compute(bool print, bool verif, int g) {
+
+  if(_orderedInstsGroup.size()<=g) {
+    _orderedInstsGroup.resize(g+1);
+  }
 
   if(_orderedInsts.size()==0) {
     std::set<SbPDG_Inst*> done_nodes;
@@ -65,7 +70,7 @@ void SbPDG::compute(bool print, bool verif) {
 }
 
 SbPDG::SbPDG() {
-
+  _vecInputGroups.push_back({});
 } 
 
 
@@ -188,6 +193,7 @@ vector<vector<int>> simple_pm(string& s) {
 }
 
 SbPDG::SbPDG(string filename) {
+  _vecInputGroups.push_back({});
 
   string line;
   ifstream ifs(filename.c_str());
@@ -223,9 +229,12 @@ SbPDG::SbPDG(string filename) {
     
     if(ModelParsing::StartsWith(line,"#") || line.empty()) {
       continue;
-    }
-
-    if (regex_search(line, m, re_input_len)) {
+    } 
+    if(ModelParsing::StartsWith(line,"---")) {
+      //need to skip
+      vector<SbPDG_VecInput*> empty;
+      _vecInputGroups.push_back(empty);
+    } else if (regex_search(line, m, re_input_len)) {
       string name = m[1];
       string vec_len = m[2];
       vector<vector<int>> pm = simple_pm(vec_len);

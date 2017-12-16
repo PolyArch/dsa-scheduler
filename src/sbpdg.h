@@ -609,11 +609,28 @@ class SbPDG {
     int num_vec_input() {return _vecInputs.size();}
     int num_vec_output() {return _vecOutputs.size();}
 
-    void insert_vec_in(SbPDG_VecInput*    in) {_vecInputs.push_back(in);}
+    void insert_vec_in(SbPDG_VecInput*    in) {
+      _vecInputs.push_back(in);
+      _vecInputGroups[_vecInputGroups.size()-1].push_back(in);
+    }
+
+    void insert_vec_in_group(SbPDG_VecInput* in, unsigned group) {
+      if(_vecInputGroups.size() <= group) {
+       _vecInputGroups.resize(group+1);
+      }
+      _vecInputGroups[group].push_back(in);
+    }
+
     void insert_vec_out(SbPDG_VecOutput* out) {_vecOutputs.push_back(out);}
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
+
+    std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
+    std::vector<SbPDG_VecOutput*>&  vec_out_group(int i) {return _vecOutputGroups[i];}
+    int num_vec_in_groups() {return _vecInputGroups.size();}
+ 
+
     void sort_vec_in() {
     	sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
     		return left->num_inputs() > right->num_inputs();
@@ -625,7 +642,7 @@ class SbPDG {
     		return left->num_outputs() > right->num_outputs();
     	});
     }
-    void compute(bool print, bool verif);
+    void compute(bool print, bool verif, int group);
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
@@ -640,6 +657,8 @@ class SbPDG {
     std::vector<SbPDG_Output*> _outputs;
 
     std::vector<SbPDG_Inst*> _orderedInsts;
+    std::vector<std::vector<SbPDG_Inst*>> _orderedInstsGroup;
+
 
 
     std::vector<SbPDG_VecInput*> _vecInputs;
@@ -648,7 +667,12 @@ class SbPDG {
     std::vector<SbPDG_Edge*> _edges;
     
     std::map<std::pair<SbPDG_Node*,SbPDG_Node*>,SbPDG_Edge*> removed_edges;
-  
+
+    std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
+    std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
+
+
+
     //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;
     std::map<SbPDG_Node*,int> dummys_per_port;

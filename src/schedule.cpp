@@ -268,6 +268,20 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   }//end for i
 
 
+  for(int g=0; g < 4; ++g) {
+    //Read input nodes
+    for(int i = 0; i < 64; ++i) {  //64 ports ? 
+      uint64_t inact = _bitslices.read_slice(IN_ACT_GROUP1+g, i, i);
+      
+      if(inact) {
+        SbPDG_VecInput* in_vec = 
+          dynamic_cast<SbPDG_VecInput*>(vportOf(make_pair(true,i)));
+        assert(in_vec);
+        _sbPDG->insert_vec_in_group(in_vec,g);
+      }
+    }
+  }
+
   //---------------------------------DECODE FUNC UNITS ---------------------------
   cur_slice=SWITCH_SLICE;
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
@@ -377,7 +391,6 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     }
     cur_slice += 1; // because we skipped the switch
   }
- 
 
   int max_lat, max_lat_mis;
   calcLatency(max_lat, max_lat_mis,true);
@@ -414,6 +427,17 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(IN_ACT_SLICE, pn.second,pn.second,1);
     } else { //OUTPUT
       _bitslices.write(OUT_ACT_SLICE,pn.second,pn.second,1);
+    }
+  }
+
+  int num_vec_groups = _sbPDG->num_vec_groups();
+  assert(num_vec_groups < NUM_VEC_IN_GROUPS);
+  for(int i = 0; i < num_vec_groups; ++i) {
+    vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(i);
+    for(auto* vec_in : vec) {
+      
+      int port_num = vecPortOf(vec_in).second;
+      _bitslices.write(IN_ACT_GROUP1+i, port_num, port_num,1);
     }
   }
 
@@ -1914,10 +1938,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
             _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::data); 
           }
         
-        } else if(sbswitch* sbsw = dynamic_cast<sbswitch*>(nextItem)){ //must be switch
-//          cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
-//               << "    (" << sbsw->x() << " " << sbsw->y() << ")" << "\n";
-          sbsw=sbsw;
+        } else if(dynamic_cast<sbswitch*>(nextItem)){ //must be switch
           worklist.push_back(make_pair(nextItem,newOutDir));
         } else {
           assert(0);
