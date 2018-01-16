@@ -38,12 +38,12 @@ class SbPDG_Edge {
 
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
-    //uint64_t data; //Vignesh
-    //bool back_array[1] = {false}; //Vignesh
+    
   private:
     int _ID;
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
+   // std::vector<SbPDG_Input*> _nodes;
 
     int _delay =0;
 
@@ -169,29 +169,55 @@ class SbPDG_Node {
     bool input = false;
     bool output = false;
     int _iter;
-    //bool back_array = false; Vignesh
-    //uint64_t backPressure_result; //Vignesh
 
     int min_lat() {return _min_lat;}
     void set_min_lat(int i) {_min_lat = i;}
 
     int sched_lat() {return _sched_lat;}
     void set_sched_lat(int i) {_sched_lat = i;}
+    
+    int op_index(SbPDG_Edge* e) {
+        for(int i = 0; i < num_inc(); i++) {
+          if(_ops[i] == e) {
+            return i;
+          }
+        }
+    }
+
+  //Dynamic Function to communicate to simulator if there is backpressure on this cycle -- Function to check if this particular input is the parent of a particular vector
+   bool backPressureHelper(SbPDG_Edge* e) {
+           SbPDG_Edge* op_edge = e;
+           int index_of_op_edge = op_index(op_edge);
+            if(_back_array[index_of_op_edge] == true)
+              {
+                    return true;
+              }
+       return false;
+     }
+
 
   protected:    
     uint64_t _val;
     int _ID;
     std::string _name;
     std::vector<SbPDG_Edge *> _ops;     //in edges 
-    std::vector<bool>  _back_array;     //in edges 
-    std::vector<SbPDG_Edge *> _uses;   //out edges  
+    std::vector<bool> _back_array;     //in edges 
+    std::vector<SbPDG_Edge *> _uses;   //out edges
+    std::vector<SbPDG_Node *> _nodes;  
     bool _scalar = false;
     int _min_lat=0;
     int _sched_lat=0;
+    void initialize();  // { _back_array->push_back(true); _back_array->push_back(true); }
 
   private:
     static int ID_SOURCE;
 };
+
+//void SbPDG_Node:: initialize()
+//{
+  //_back_array.push_back(true);
+  //_back_array.push_back(true);
+//}
 
 
 class SbPDG_IO : public SbPDG_Node {
@@ -202,6 +228,8 @@ class SbPDG_IO : public SbPDG_Node {
   protected:
     int _vport;
 };
+
+std::vector<SbPDG_Node *> _nodes;
 
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
@@ -285,6 +313,17 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     std::string _realName;
     int _subIter;
     int _size;
+    
+    bool usesHelper() {
+           for(std::vector<SbPDG_Edge *>::iterator itt = _uses.begin(); itt != _uses.end(); ++itt) {
+           SbPDG_Edge* use_edge = *itt;
+           if(backPressureHelper(use_edge) == true)
+		{
+			return true;
+		} 
+    return false;
+    }
+   }
 };
 
 class SbPDG_Output : public SbPDG_IO {
@@ -361,8 +400,34 @@ class SbPDG_VecInput : public SbPDG_Vec {
     return ss.str();
   }
 
-  //Dynamic Function to communicate to simulator if there is backpressure on this cycle
-  bool backPressureOn() {return false;}
+  //Dynamic Function to communicate to simulator if there is backpressure on this cycle -- Function to check if this particular input is the parent of a particular vector
+  bool backPressureOn() {
+     for(unsigned int i = 0; i < _inputs.size(); i++)
+     {
+            if(_inputs[i]->usesHelper() == true)   
+     	      {
+		    return true;
+	      }
+     }
+  return false;
+}
+
+  /* bool backPressure2(SbPDG_Node* n) {
+   for(int j = 0; j < _outputs.num_outputs(); j++)
+    {
+     for(std::vector<SbPDG_Output *>::iterator it = _outputs.begin(); it!= _outputs.end(); ++it)
+      {
+        if(*it -> getOutput(j) == op_index(n) )
+	 {
+		return true;
+	 }
+     }
+    }
+   return false;
+}*/
+
+   //Function to check if back_array[0] or back_array[1] for an instruction comes from its vector parent
+   
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
@@ -378,6 +443,8 @@ class SbPDG_VecInput : public SbPDG_Vec {
 
   private:
     std::vector<SbPDG_Input*> _inputs;
+   // std::vector<SbPDG_Edge *> _uses;
+   // std::vector<SbPDG_Edge *> _ops;
 };
 
 
