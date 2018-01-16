@@ -373,16 +373,13 @@ void SbPDG_Inst::compute(bool print, bool verif) {
       if(n->discard()) {
         _discard=true;
       }
-               
     }
     if(print) {
       std::cout << std::hex << _input_vals[i] << " ";
     }
   }
-  //_back_array.push_back(true);
-  //_back_array->push_back(false);
+  
 
-   
   _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
   
   if(print) {
@@ -1065,47 +1062,6 @@ void SbPDG::calc_minLats() {
 
 
 }
-
-int i = 0;
-int j = 0;
-
-/*SbPDG_VecInput::addbackPressure(SbPDG_Edge* _ops[0], SbPDG_Edge* _ops[1])
-{
- while(i < ALEN)
- {
-         while(j < ALEN)
-         {
-                 if(_ops[1]->backPressureOn() == true)
-                 {
-                         _ops[1] = array2[j];
-                         _ops[0] = array1[++i];
-                         //MERGE(_ops[0],_ops[1]);
-                 }
- 
-                 else if(_ops[0]->backPressureOn() == true)
-                 {
-                         _ops[1] = array2[++j];
-                         _ops[0] = array1[i];
-                         //MERGE(_ops[0],_ops[1]);
-                 }
- 
-                 else
-                 {
-                         _ops[1] = array2[j];
-                         j++;
-                         _ops[0] = array1[i];
-                         i++;
-                         //MERGE(_ops[0],_ops[1]);
-                 }
-         }
- }
-}
-*/
-
-
-
-
-
 
 //Gams related
 void SbPDG::printGams(std::ostream& os,
