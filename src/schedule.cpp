@@ -103,7 +103,8 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
           SbPDG_Input* pdg_in = new SbPDG_Input();
           pdg_in->setVPort(_sbPDG->num_vec_input());
           pdgnode_for[in]=pdg_in;
-          _sbPDG->addInput(pdg_in);
+          _sbPDG->addInput(pdg_in); //add input to pdg
+          vec_input->addInput(pdg_in); //add input to vector
 
           //cout << mi << " (" << in->port() << ")";
         }
