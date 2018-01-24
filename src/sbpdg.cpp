@@ -14,6 +14,11 @@ using namespace SB_CONFIG;
 int SbPDG_Node::ID_SOURCE=0;
 int SbPDG_Edge::ID_SOURCE=0;
 
+bool SbPDG_VecInput::backPressureOn() {
+  return false;
+}
+
+
 void order_insts(SbPDG_Inst* inst,
                  std::set<SbPDG_Inst*>& done_nodes,         //done insts
                  std::vector<SbPDG_Inst*>& ordered_insts) {
@@ -46,31 +51,39 @@ void order_insts(SbPDG_Inst* inst,
 
 // This function is called from the simulator to 
 void SbPDG::compute(bool print, bool verif, int g) {
+  //if(_orderedInstsGroup.size()<=(unsigned)g) {
+  //  _orderedInstsGroup.resize(g+1);
+  //}
 
-  if(_orderedInstsGroup.size()<=g) {
-    _orderedInstsGroup.resize(g+1);
-  }
+  //if(_orderedInsts.size()==0) {
+  //  std::set<SbPDG_Inst*> done_nodes;
 
-  if(_orderedInsts.size()==0) {
-    std::set<SbPDG_Inst*> done_nodes;
+  //  //for each output node traverse 
+  //  //the incoming node
+  //  for(SbPDG_Output* out : _outputs) {
+  //    if(SbPDG_Inst* producing_node = out->out_inst()) {
+  //      order_insts(producing_node, done_nodes, _orderedInsts);
+  //    }
+  //  } 
+  //}
 
-    //for each output node traverse 
-    //the incoming node
-    for(SbPDG_Output* out : _outputs) {
-      if(SbPDG_Inst* producing_node = out->out_inst()) {
-        order_insts(producing_node, done_nodes, _orderedInsts);
-      }
-    } 
-  }
+  //for(SbPDG_Inst* inst : _orderedInsts) {
+  //  inst->compute(print,verif);
+  //}
 
-  for(SbPDG_Inst* inst : _orderedInsts) {
-    inst->compute(print,verif);
+  assert(g < (int)_vecInputGroups.size());
+  for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
+    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
+      vec->getInput(j)->compute(print,verif);
+    }
   }
 
 }
 
 SbPDG::SbPDG() {
   _vecInputGroups.push_back({});
+  _vecOutputGroups.push_back({});
 } 
 
 
@@ -192,8 +205,7 @@ vector<vector<int>> simple_pm(string& s) {
   return pm;
 }
 
-SbPDG::SbPDG(string filename) {
-  _vecInputGroups.push_back({});
+SbPDG::SbPDG(string filename) : SbPDG() {
 
   string line;
   ifstream ifs(filename.c_str());
@@ -232,13 +244,13 @@ SbPDG::SbPDG(string filename) {
     } 
     if(ModelParsing::StartsWith(line,"---")) {
       //need to skip
-      vector<SbPDG_VecInput*> empty;
-      _vecInputGroups.push_back(empty);
+      _vecInputGroups.push_back({});
+      _vecOutputGroups.push_back({});
     } else if (regex_search(line, m, re_input_len)) {
       string name = m[1];
       string vec_len = m[2];
       vector<vector<int>> pm = simple_pm(vec_len);
-      cout << "input_len:" << name << " " << vec_len << " " << pm.size() << "\n";
+      //cout << "input_len:" << name << " " << vec_len << " " << pm.size() << "\n";
       addVecInput(name,pm,syms);
 
     } else if (regex_search(line, m, re_output_len)) {
@@ -388,7 +400,6 @@ void SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   
-
   _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
   
   if(print) {
@@ -403,6 +414,12 @@ void SbPDG_Inst::compute(bool print, bool verif) {
       _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
       assert(_verif_stream.is_open());
     }
+  }
+
+  
+  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SbPDG_Node* use = (*iter)->use();
+    use->inc_inputs_ready(print, verif); //this may recursively call compute
   }
 }
 

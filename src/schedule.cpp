@@ -88,7 +88,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     if(slices().read_slice(IN_ACT_SLICE,i,i)) {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input()); 
       //vec_input->setLocMap(pm);
-      _sbPDG->insert_vec_in(vec_input);
+      //_sbPDG->insert_vec_in(vec_input);
 
       //cout << "vp" << i << "  ";
 
@@ -116,7 +116,6 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     start_bits_vp_mask=total_bits_vp_mask; //next
   }
 
-
   start_bits_vp_mask=0;
   total_bits_vp_mask=0;
 
@@ -128,7 +127,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
     if(slices().read_slice(OUT_ACT_SLICE,i,i)) { //activate output port
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput("O",_sbPDG->num_vec_output()); 
-      _sbPDG->insert_vec_out(vec_output);
+      //_sbPDG->insert_vec_out(vec_output);
 
       vector<bool> mask;
       mask.resize(port_m.size());
@@ -271,14 +270,26 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
   for(int g=0; g < 4; ++g) {
     //Read input nodes
-    for(int i = 0; i < 64; ++i) {  //64 ports ? 
-      uint64_t inact = _bitslices.read_slice(IN_ACT_GROUP1+g, i, i);
+    for(int i = 0; i < 32; ++i) {  //32 ports max
+      int i_adj=(g%2)*32+i;
+      uint64_t inact = _bitslices.read_slice(IN_ACT_GROUP12+g/2, i_adj, i_adj);
       
       if(inact) {
         SbPDG_VecInput* in_vec = 
           dynamic_cast<SbPDG_VecInput*>(vportOf(make_pair(true,i)));
         assert(in_vec);
         _sbPDG->insert_vec_in_group(in_vec,g);
+      }
+    }
+    for(int i = 0; i < 32; ++i) {  //32 ports ? 
+      int i_adj=(g%2)*32+i;
+      uint64_t outact = _bitslices.read_slice(OUT_ACT_GROUP12+g/2, i_adj, i_adj);
+      
+      if(outact) {
+        SbPDG_VecOutput* out_vec = 
+          dynamic_cast<SbPDG_VecOutput*>(vportOf(make_pair(false,i)));
+        assert(out_vec);
+        _sbPDG->insert_vec_out_group(out_vec,g);
       }
     }
   }
@@ -431,16 +442,31 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }
   }
 
-  int num_vec_groups = _sbPDG->num_vec_groups();
+  int num_vec_groups = _sbPDG->num_vec_in_groups();
   assert(num_vec_groups < NUM_VEC_IN_GROUPS);
-  for(int i = 0; i < num_vec_groups; ++i) {
-    vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(i);
+  for(int g = 0; g < num_vec_groups; ++g) {
+    vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(g);
     for(auto* vec_in : vec) {
-      
       int port_num = vecPortOf(vec_in).second;
-      _bitslices.write(IN_ACT_GROUP1+i, port_num, port_num,1);
+      int bit_pos=(g%2)*32+port_num;
+      _bitslices.write(IN_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
     }
   }
+  num_vec_groups = _sbPDG->num_vec_out_groups();
+ 
+  num_vec_groups = _sbPDG->num_vec_out_groups();
+  assert(num_vec_groups < NUM_VEC_OUT_GROUPS);
+  for(int g = 0; g < num_vec_groups; ++g) {
+    vector<SbPDG_VecOutput*>& vec = _sbPDG->vec_out_group(g);
+    for(auto* vec_out : vec) {
+      int port_num = vecPortOf(vec_out).second;
+      int bit_pos=(g%2)*32+port_num;
+      _bitslices.write(OUT_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
+    }
+  }
+  num_vec_groups = _sbPDG->num_vec_out_groups();
+
+
 
   // --------------------------- ENCODE VP MASK ------------------------------
   int start_bits_vp_mask=0;
@@ -661,7 +687,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       if(_assignNode.count(sbfu_node)!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
         if(pdg_node->immSlot()!=-1) {
-           cout << i << " " << j << " " << pdg_node->immSlot() << "\n";
+           //cout << i << " " << j << " " << pdg_node->immSlot() << "\n";
            _bitslices.write(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1,j);
            _bitslices.write(cur_slice,COL_LOC,COL_LOC+COL_BITS-1,i);
            ++cur_slice;
@@ -1774,8 +1800,6 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
           }
         }
       }
-
-
 
       if (everyone_is_here) {
         // Update latency of outgoing edge

@@ -364,7 +364,9 @@ class Schedule {
     _passthrough_nodes.insert(passthrough);
   }
 
-  static const int NUM_VEC_IN_GROUPS=4;
+  static const int NUM_VEC_IN_GROUPS=4; //hard coded number of groups for simplicity
+  static const int NUM_VEC_OUT_GROUPS=4;
+
 
   static const int IN_ACT_SLICE=0;
   static const int OUT_ACT_SLICE=1;
@@ -376,10 +378,12 @@ class Schedule {
   static const int VP_MAP_SLICE_2=3;
   static const int VP_MAP_SLICE_OUT=4;
 
-  static const int IN_ACT_GROUP1=5;
-  static const int IN_ACT_GROUP2=6;
-  static const int IN_ACT_GROUP3=7;
-  static const int IN_ACT_GROUP4=8;
+  static const int IN_ACT_GROUP12=5;
+  static const int IN_ACT_GROUP34=6;
+
+  static const int OUT_ACT_GROUP12=7;
+  static const int OUT_ACT_GROUP34=8;
+
   
   static const int SWITCH_SLICE=9;        //the starting slice position in bitslice
 

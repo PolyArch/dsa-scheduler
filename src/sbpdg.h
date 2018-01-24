@@ -70,6 +70,7 @@ class SbPDG_Node {
     typedef std::vector<SbPDG_Edge*>::const_iterator const_edge_iterator;
      
     void addIncEdge(unsigned pos, SbPDG_Edge *edge) { 
+      _num_inc_edges++;
       assert(pos <=4);
       if(_ops.size()<=pos) { 
          _ops.resize(pos+1,NULL); 
@@ -99,6 +100,7 @@ class SbPDG_Node {
     }
     
     void removeIncEdge(SbPDG_Node* orig) { 
+      _num_inc_edges--;
       for (unsigned i = 0; i < _ops.size(); ++i) {
         SbPDG_Edge* edge = _ops[i];
         if (edge->def() == orig) {
@@ -119,19 +121,7 @@ class SbPDG_Node {
       assert(false && "edge was not found");
     }
 
-//    bool checkBackPressure(SbPDG_Edge* a, SbPDG_Edge* b) {
-//	a->back_array = (a->data > b->data) ? true : false;
-//	b->back_array = (b->data > a->data) ? true : false;
-//	return a->back_array;
-//	} //Vignesh
-//
-//    bool applyBackPressure(SbPDG_Node* c, SbPDG_Edge* a, SbPDG_Edge* b) {
-//	return (a->data == true && b->data == true) ? true : false;
-//	} //Vignesh
-//
-//    void oneNodeSort(SbPDG_Node* c, SbPDG_Edge* a, SbPDG_Edge* b) {
-//	c->backpressure_result = (a->data > b->data) ? a->data : b->data;
-//	}`//Vignesh	
+    virtual void compute(bool print, bool verif) {} 
  
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {
        for(unsigned i = 0; i < _uses.size(); ++ i) {
@@ -178,8 +168,19 @@ class SbPDG_Node {
     int sched_lat() {return _sched_lat;}
     void set_sched_lat(int i) {_sched_lat = i;}
 
+    void inc_inputs_ready(bool print, bool verif) {
+      _inputs_ready+=1;
+      if(_inputs_ready == _num_inc_edges) {
+        compute(print,verif);
+        _inputs_ready=0;
+      }
+    }
+
   protected:    
-    uint64_t _val;
+    uint64_t _val; //dynamic var
+    int _inputs_ready=0; //dynamic inputs ready
+    int _num_inc_edges=0; //number of incomming edges, not including immmediates
+
     int _ID;
     std::string _name;
     std::vector<SbPDG_Edge *> _ops;     //in edges 
@@ -248,7 +249,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-    void compute(bool print, bool verif); 
+    virtual void  compute(bool print, bool verif); 
 
     void set_verif_id(std::string s) {_verif_id = s;}
 
@@ -281,7 +282,14 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
         return ss.str();
     }
     std::string gamsName();
-    
+
+    virtual void compute(bool print, bool verif) {
+       for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+         SbPDG_Node* use = (*iter)->use();
+         use->inc_inputs_ready(print, verif); //this may recursively call compute
+       }
+    }
+
     std::string _realName;
     int _subIter;
     int _size;
@@ -362,7 +370,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
   }
 
   //Dynamic Function to communicate to simulator if there is backpressure on this cycle
-  bool backPressureOn() {return false;}
+  bool backPressureOn();
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
@@ -613,6 +621,11 @@ class SbPDG {
       _vecInputs.push_back(in);
       _vecInputGroups[_vecInputGroups.size()-1].push_back(in);
     }
+    void insert_vec_out(SbPDG_VecOutput*    out) {
+      _vecOutputs.push_back(out);
+      _vecOutputGroups[_vecOutputGroups.size()-1].push_back(out);
+    }
+
 
     void insert_vec_in_group(SbPDG_VecInput* in, unsigned group) {
       if(_vecInputGroups.size() <= group) {
@@ -620,8 +633,35 @@ class SbPDG {
       }
       _vecInputGroups[group].push_back(in);
     }
+    void insert_vec_out_group(SbPDG_VecOutput* out, unsigned group) {
+      if(_vecOutputGroups.size() <= group) {
+       _vecOutputGroups.resize(group+1);
+      }
+      _vecOutputGroups[group].push_back(out);
+    }
 
-    void insert_vec_out(SbPDG_VecOutput* out) {_vecOutputs.push_back(out);}
+
+
+    int find_group_for_vec(SbPDG_VecInput* in) {
+      for(unsigned i =0; i < _vecInputGroups.size(); ++i) {
+        for(SbPDG_VecInput* v : _vecInputGroups[i]) {
+          if(v == in) {
+            return i;
+          }
+        }
+      }
+      assert(0 && "Vec Input not found");
+    }
+    int find_group_for_vec(SbPDG_VecOutput* out) {
+      for(unsigned i =0; i < _vecOutputGroups.size(); ++i) {
+        for(SbPDG_VecOutput* v : _vecOutputGroups[i]) {
+          if(v == out) {
+            return i;
+          }
+        }
+      }
+      assert(0 && "Vec Output not found");
+    }
 
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
@@ -629,8 +669,9 @@ class SbPDG {
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
     std::vector<SbPDG_VecOutput*>&  vec_out_group(int i) {return _vecOutputGroups[i];}
     int num_vec_in_groups() {return _vecInputGroups.size();}
- 
+    int num_vec_out_groups() {return _vecOutputGroups.size();}
 
+ 
     void sort_vec_in() {
     	sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
     		return left->num_inputs() > right->num_inputs();
@@ -642,7 +683,7 @@ class SbPDG {
     		return left->num_outputs() > right->num_outputs();
     	});
     }
-    void compute(bool print, bool verif, int group);
+    void compute(bool print, bool verif, int group); 
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
