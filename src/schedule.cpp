@@ -1946,21 +1946,14 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
           SbPDG_Inst* dest_pdgnode = dynamic_cast<SbPDG_Inst*>(pdgnode_for[fu_node]);
           assert(dest_pdgnode);
           
-          int slot=0;
-          for(; slot < NUM_IN_FU_DIRS; ++slot) {
+          for(int slot = 0; slot < NUM_IN_FU_DIRS; ++slot) { 
             if(posMap[dest_pdgnode][slot] == outLink->dir()) {
-              break; 
-            }
-          }
-          
-          assert(slot>=0 && slot <NUM_IN_FU_DIRS);
+              auto edge_type = SbPDG_Edge::data;
+              if(slot==2) edge_type = dest_pdgnode->predInv()? 
+                             SbPDG_Edge::ctrl_true : SbPDG_Edge::ctrl_false;
 
-          if(slot==2 && !dest_pdgnode->predInv()) {
-            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::ctrl_true);
-          } else if(slot==2 && dest_pdgnode->predInv()) {
-            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::ctrl_false);
-          } else {
-            _sbPDG->connect(pdgnode,dest_pdgnode,slot, SbPDG_Edge::data); 
+              _sbPDG->connect(pdgnode,dest_pdgnode,slot, edge_type); 
+            }
           }
         
         } else if(dynamic_cast<sbswitch*>(nextItem)){ //must be switch
