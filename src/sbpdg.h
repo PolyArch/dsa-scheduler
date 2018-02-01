@@ -58,7 +58,7 @@ class SbPDG_Node {
  public:
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
-    virtual uint64_t discard() {return false;} //execution-related
+    virtual uint64_t discard() {return _discard;} //execution-related
 
     void setScalar() {_scalar = true;}
     bool getScalar() {return _scalar;}
@@ -154,7 +154,7 @@ class SbPDG_Node {
     
     int id() {return _ID;}
     
-    void     set_value(uint64_t v) {_val=v;}
+    void     set_value(uint64_t v, bool valid) {_val=v; _discard=!valid;}
     uint64_t get_value()           {return _val;}
     bool input = false;
     bool output = false;
@@ -178,6 +178,7 @@ class SbPDG_Node {
 
   protected:    
     uint64_t _val; //dynamic var
+    uint64_t _discard=false;
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
 
@@ -264,7 +265,6 @@ class SbPDG_Inst : public SbPDG_Node {
     int _imm_slot;
     int _subFunc;
     uint64_t _accum;
-    uint64_t _discard;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };

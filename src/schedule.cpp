@@ -273,7 +273,6 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     for(int i = 0; i < 32; ++i) {  //32 ports max
       int i_adj=(g%2)*32+i;
       uint64_t inact = _bitslices.read_slice(IN_ACT_GROUP12+g/2, i_adj, i_adj);
-      
       if(inact) {
         SbPDG_VecInput* in_vec = 
           dynamic_cast<SbPDG_VecInput*>(vportOf(make_pair(true,i)));

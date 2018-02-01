@@ -380,10 +380,8 @@ class Schedule {
 
   static const int IN_ACT_GROUP12=5;
   static const int IN_ACT_GROUP34=6;
-
   static const int OUT_ACT_GROUP12=7;
   static const int OUT_ACT_GROUP34=8;
-
   
   static const int SWITCH_SLICE=9;        //the starting slice position in bitslice
 
