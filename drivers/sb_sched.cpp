@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
     sbpdg.printGraphviz("viz/final.dot",sched);
   } 
 
-  std::string config_header = pdg_rawname + ".h";
+  std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigBits(osh, dfg_base);
