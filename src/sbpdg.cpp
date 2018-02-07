@@ -418,7 +418,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
 
-  int num_computed=1;
+  int num_computed=!_discard;
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();

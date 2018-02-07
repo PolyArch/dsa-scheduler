@@ -215,7 +215,7 @@ class SbPDG_Inst : public SbPDG_Node {
 
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    void printEmuDFG(std::ostream& os, std::string dfg_name);
+    virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     void setImm( uint64_t val ) { _imm=val; }
 //    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
@@ -274,7 +274,7 @@ class SbPDG_Inst : public SbPDG_Node {
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
+    virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
     std::string name() {
         std::stringstream ss;
@@ -303,7 +303,7 @@ class SbPDG_Output : public SbPDG_IO {
   public:
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
-    void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
+    virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
     std::string name() {
         std::stringstream ss;
