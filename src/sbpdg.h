@@ -121,7 +121,7 @@ class SbPDG_Node {
       assert(false && "edge was not found");
     }
 
-    virtual void compute(bool print, bool verif) {} 
+    virtual int compute(bool print, bool verif) {return 0;} 
  
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {
        for(unsigned i = 0; i < _uses.size(); ++ i) {
@@ -168,12 +168,14 @@ class SbPDG_Node {
     int sched_lat() {return _sched_lat;}
     void set_sched_lat(int i) {_sched_lat = i;}
 
-    void inc_inputs_ready(bool print, bool verif) {
+    int inc_inputs_ready(bool print, bool verif) {
       _inputs_ready+=1;
       if(_inputs_ready == _num_inc_edges) {
-        compute(print,verif);
+        int num_computed = compute(print,verif);
         _inputs_ready=0;
+        return num_computed;
       }
+      return 0;
     }
 
   protected:    
@@ -250,7 +252,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-    virtual void  compute(bool print, bool verif); 
+    virtual int compute(bool print, bool verif); 
 
     void set_verif_id(std::string s) {_verif_id = s;}
 
@@ -283,11 +285,13 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     }
     std::string gamsName();
 
-    virtual void compute(bool print, bool verif) {
+    virtual int compute(bool print, bool verif) {
+       int num_computed=0;
        for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
          SbPDG_Node* use = (*iter)->use();
-         use->inc_inputs_ready(print, verif); //this may recursively call compute
+         num_computed+=use->inc_inputs_ready(print, verif); //recursively call compute
        }
+       return num_computed;
     }
 
     std::string _realName;
@@ -683,7 +687,7 @@ class SbPDG {
     		return left->num_outputs() > right->num_outputs();
     	});
     }
-    void compute(bool print, bool verif, int group); 
+    int compute(bool print, bool verif, int group); 
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
@@ -712,7 +716,7 @@ class SbPDG {
     std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
 
-
+    int _total_dyn_insts=0;
 
     //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;

@@ -50,7 +50,7 @@ void order_insts(SbPDG_Inst* inst,
 }
 
 // This function is called from the simulator to 
-void SbPDG::compute(bool print, bool verif, int g) {
+int SbPDG::compute(bool print, bool verif, int g) {
   //if(_orderedInstsGroup.size()<=(unsigned)g) {
   //  _orderedInstsGroup.resize(g+1);
   //}
@@ -71,14 +71,16 @@ void SbPDG::compute(bool print, bool verif, int g) {
   //  inst->compute(print,verif);
   //}
 
+  int num_computed=0;
+
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SbPDG_VecInput* vec = _vecInputGroups[g][i];
     for(unsigned j = 0; j < vec->num_inputs(); ++j) {
-      vec->getInput(j)->compute(print,verif);
+      num_computed += vec->getInput(j)->compute(print,verif);
     }
   }
-
+  return num_computed;
 }
 
 SbPDG::SbPDG() {
@@ -371,7 +373,7 @@ void SbPDG_Inst::setImmSlot(int i) {
 
 
 //compute:
-void SbPDG_Inst::compute(bool print, bool verif) {
+int SbPDG_Inst::compute(bool print, bool verif) {
   assert(_ops.size() <=3);
 
   if(_input_vals.size()==0) {
@@ -416,11 +418,14 @@ void SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
 
-  
+  int num_computed=1;
+
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
-    use->inc_inputs_ready(print, verif); //this may recursively call compute
+    num_computed += use->inc_inputs_ready(print, verif); //recursively call compute
   }
+
+  return num_computed;
 }
 
 
