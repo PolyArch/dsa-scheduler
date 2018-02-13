@@ -83,6 +83,19 @@ int SbPDG::compute(bool print, bool verif, int g) {
   return num_computed;
 }
 
+int SbPDG::maxGroupThroughput(int g) {
+  int maxgt=0;
+
+  assert(g < (int)_vecInputGroups.size());
+  for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
+    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
+      maxgt=std::max(maxgt,vec->getInput(j)->maxThroughput());
+    }
+  }
+  return maxgt;
+}
+
 SbPDG::SbPDG() {
   _vecInputGroups.push_back({});
   _vecOutputGroups.push_back({});

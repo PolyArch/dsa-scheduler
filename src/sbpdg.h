@@ -112,7 +112,7 @@ class SbPDG_Node {
     }
     
     void removeOutEdge(SbPDG_Node* dest) {
-       for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+      for (auto it=_uses.begin(); it!=_uses.end(); it++) {
         if ((*it)->use() == dest) {
             _uses.erase(it);
             return;
@@ -131,7 +131,16 @@ class SbPDG_Node {
        }
        return NULL;
     }
-    
+
+    virtual int maxThroughput() {
+       if(_max_thr==0) {
+         for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+           _max_thr=std::max(_max_thr,(*it)->use()->maxThroughput());
+         }    
+       }
+       return _max_thr; 
+    }
+
     SbPDG_Node* first_operand() {
       return (_ops[0]->def());
     }
@@ -192,7 +201,7 @@ class SbPDG_Node {
     bool _scalar = false;
     int _min_lat=0;
     int _sched_lat=0;
-
+    int _max_thr=0;
   private:
     static int ID_SOURCE;
 };
@@ -233,6 +242,16 @@ class SbPDG_Inst : public SbPDG_Node {
 
     void setInst(SB_CONFIG::sb_inst_t sbinst) { _sbinst=sbinst; }
     SB_CONFIG::sb_inst_t inst() { return _sbinst; }
+
+    virtual int maxThroughput() {
+       if(_max_thr==0) {
+         _max_thr=inst_thr(inst());
+         for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+           _max_thr=std::max(_max_thr,(*it)->use()->maxThroughput());
+         }    
+       }
+       return _max_thr; 
+    }
 
     std::string name() {
         std::stringstream ss;
@@ -688,6 +707,7 @@ class SbPDG {
     	});
     }
     int compute(bool print, bool verif, int group); 
+    int maxGroupThroughput(int group); 
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
