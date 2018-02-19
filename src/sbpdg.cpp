@@ -173,7 +173,7 @@ void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_N
     assert(0 && "variable name cannot be a valid integer");
   }
 
-  SbPDG_Inst* pdg_inst = new SbPDG_Inst();
+  SbPDG_Inst* pdg_inst = new SbPDG_Inst(this);
   pdg_inst->setName(var_out);
   syms[var_out]=pdg_inst;
   pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
@@ -395,7 +395,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   assert(_input_vals.size() <= _ops.size());
 
   if(print) {
-    std::cout << name() << " (" << _ID << "): ";
+    _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
   _discard=false;
@@ -411,14 +411,14 @@ int SbPDG_Inst::compute(bool print, bool verif) {
       }
     }
     if(print) {
-      std::cout << std::hex << _input_vals[i] << " ";
+      _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
   
   _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
   
   if(print) {
-    std::cout << " = " << _val << "\n";
+    _sbpdg->dbg_stream() << " = " << _val << "\n";
   }
 
   if(verif) {
@@ -701,7 +701,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   if(edge_it != removed_edges.end()) {
     new_edge = edge_it->second;
   } else { 
-    new_edge = new SbPDG_Edge(orig, dest, etype);
+    new_edge = new SbPDG_Edge(orig, dest, etype, this);
   }
 
   SbPDG_Inst* inst = 0;
@@ -762,7 +762,7 @@ int SbPDG::remappingNeeded(int num_HW_FU) {
       //if producing instruction is an input or
       // if producing instruction has more than one uses
       if (!inst || inst->num_out() > 1) {
-        SbPDG_Inst* newNode = new SbPDG_Inst();
+        SbPDG_Inst* newNode = new SbPDG_Inst(this);
         //TODO: insert information about this dummy node
         newNode->setInst(SB_CONFIG::sb_inst_t::SB_Copy);
         disconnect(node, pdg_out);

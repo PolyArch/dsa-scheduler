@@ -100,7 +100,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
         if(mask[mi]) {
           int sb_in_port = port_m[mi].first;
           sbinput* in = _sbModel->subModel()->get_input(sb_in_port);
-          SbPDG_Input* pdg_in = new SbPDG_Input();
+          SbPDG_Input* pdg_in = new SbPDG_Input(_sbPDG);
           pdg_in->setVPort(_sbPDG->num_vec_input());
           pdgnode_for[in]=pdg_in;
           _sbPDG->addInput(pdg_in); //add input to pdg
@@ -136,7 +136,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
                                      start_bits_vp_mask+mi,start_bits_vp_mask+mi);
         if(mask[mi]) {
           sboutput* out = _sbModel->subModel()->get_output(port_m[mi].first);
-          SbPDG_Output* pdg_out = new SbPDG_Output();
+          SbPDG_Output* pdg_out = new SbPDG_Output(_sbPDG);
           pdg_out->setVPort(_sbPDG->num_vec_output());
           pdgnode_for[out]=pdg_out;
           _sbPDG->addOutput(pdg_out);
@@ -302,7 +302,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
       //opcode
       uint64_t op=_bitslices.read_slice(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1);
       if(op!=0) { //if O
-        pdg_inst = new SbPDG_Inst();
+        pdg_inst = new SbPDG_Inst(_sbPDG);
         stringstream verif_name;
         verif_name << i << "-" << j;
         pdg_inst->set_verif_id(verif_name.str());
@@ -1033,7 +1033,7 @@ Schedule::Schedule(string filename) {
                   d_input=dynamic_cast<sbinput*>(_sbModel->subModel()->switchAt(posX,posY)
                     ->getInLink(inDir)->orig());
                   if(pdgnode_for.count(d_input)==0) {
-                    pdg_in = new SbPDG_Input();
+                    pdg_in = new SbPDG_Input(_sbPDG);
                     pdgnode_for[d_input]=pdg_in;
                     _sbPDG->addInput(pdg_in);
                   } else {
@@ -1047,7 +1047,7 @@ Schedule::Schedule(string filename) {
                   d_output=dynamic_cast<sboutput*>(_sbModel->subModel()->switchAt(posX,posY)
                     ->getOutLink(outDir)->dest());
                     
-                  pdg_out = new SbPDG_Output();
+                  pdg_out = new SbPDG_Output(_sbPDG);
                   pdgnode_for[d_output]=pdg_out;
                   _sbPDG->addOutput(pdg_out);
                   pdg_out->setVPort(d_output->port());
@@ -1069,7 +1069,7 @@ Schedule::Schedule(string filename) {
           posY = atoi(caps[1].c_str());
 
           //create corresponding PDG Node
-          pdg_inst = new SbPDG_Inst();
+          pdg_inst = new SbPDG_Inst(_sbPDG);
 
           //adding the sbnode to pdgnode mapping
           pdgnode_for[_sbModel->subModel()->fuAt(posX,posY)]=pdg_inst;

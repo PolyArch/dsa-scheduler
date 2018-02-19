@@ -16,6 +16,7 @@
 
 class Schedule;
 class SbPDG_Node;
+class SbPDG;
 
 class SbPDG_Edge {
   public:
@@ -23,11 +24,12 @@ class SbPDG_Edge {
     
     EdgeType etype() {return _etype;}
     
-    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype) {
+    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg) {
        _def=def;
        _use=use;
        _etype=etype;
        _ID=ID_SOURCE++;
+       _sbpdg=sbpdg;
     }
 
     SbPDG_Node* def() const {return _def;}
@@ -42,6 +44,7 @@ class SbPDG_Edge {
     //bool back_array[1] = {false}; //Vignesh
   private:
     int _ID;
+    SbPDG* _sbpdg;  //sometimes this is just nice to have : )
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
 
@@ -60,10 +63,13 @@ class SbPDG_Node {
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
     virtual uint64_t discard() {return _discard;} //execution-related
 
+    
+
     void setScalar() {_scalar = true;}
     bool getScalar() {return _scalar;}
     int findDepth(std::ostream& os, std::string dfg_name, int level);
-    SbPDG_Node() {
+    SbPDG_Node(SbPDG* sbpdg) {
+        _sbpdg=sbpdg;
         _ID=ID_SOURCE++;
     }
     
@@ -188,6 +194,8 @@ class SbPDG_Node {
     }
 
   protected:    
+    SbPDG* _sbpdg;  //sometimes this is just nice to have : )
+
     uint64_t _val; //dynamic var
     uint64_t _discard=false;
     int _inputs_ready=0; //dynamic inputs ready
@@ -202,24 +210,16 @@ class SbPDG_Node {
     int _min_lat=0;
     int _sched_lat=0;
     int _max_thr=0;
+
   private:
     static int ID_SOURCE;
 };
 
 
-class SbPDG_IO : public SbPDG_Node {
-  public:
-  void setVPort(int vport) { _vport = vport; } 
-  int vport() {return _vport;}
-
-  protected:
-    int _vport;
-};
-
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
-    SbPDG_Inst() : SbPDG_Node(), _predInv(false), _isDummy(false),
+    SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg), _predInv(false), _isDummy(false),
                      _imm_slot(-1), _subFunc(0), _accum(0) {}
 
 
@@ -290,11 +290,26 @@ class SbPDG_Inst : public SbPDG_Node {
     SB_CONFIG::sb_inst_t _sbinst;
 };
 
+class SbPDG_IO : public SbPDG_Node {
+  public:
+  void setVPort(int vport) { _vport = vport; } 
+  int vport() {return _vport;}
+
+  SbPDG_IO(SbPDG* sbpdg) : SbPDG_Node(sbpdg) {}
+
+  protected:
+    SbPDG* _sbpdg;
+    int _vport;
+};
+
+
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
+    SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+
     std::string name() {
         std::stringstream ss;
         ss << _name << ":";
@@ -324,6 +339,8 @@ class SbPDG_Output : public SbPDG_IO {
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
+    SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+
     std::string name() {
         std::stringstream ss;
         ss << _name << ":";
@@ -352,7 +369,6 @@ class SbPDG_Output : public SbPDG_IO {
     virtual uint64_t discard() {
       return _ops[0]->def()->discard();
     }
-
 
     std::string _realName;
     int _subIter;
@@ -471,7 +487,7 @@ class SbPDG {
 
 
     SbPDG_Inst* CreateInst() {
-      return new SbPDG_Inst();
+      return new SbPDG_Inst(this);
     }
 
     void addInst(SbPDG_Inst* inst) {
@@ -504,7 +520,7 @@ class SbPDG {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
       insert_vec_in(vec_input);
  
-      SbPDG_Input* pdg_in = new SbPDG_Input();  //new input nodes
+      SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
       syms[name]=pdg_in;
       pdg_in->setName(name);
       pdg_in->setVPort(_vecInputs.size());
@@ -526,7 +542,7 @@ class SbPDG {
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       insert_vec_out(vec_output);
  
-      SbPDG_Output* pdg_out = new SbPDG_Output();
+      SbPDG_Output* pdg_out = new SbPDG_Output(this);
       std::string out_name=name+"_out";
       syms[out_name]=pdg_out;
       pdg_out->setName(out_name);
@@ -563,7 +579,7 @@ class SbPDG {
           assert(0);
         }
 
-        SbPDG_Output* pdg_out = new SbPDG_Output();
+        SbPDG_Output* pdg_out = new SbPDG_Output(this);
         std::string out_name = dep_name + "_out";
         syms[out_name]=pdg_out;
         pdg_out->setName(out_name);
@@ -594,7 +610,7 @@ class SbPDG {
         std::stringstream ss;
         ss << name << i;                //Vector input names: A0, A1
         //std::cout << "name: " << name << "\n";
-        SbPDG_Input* pdg_in = new SbPDG_Input();
+        SbPDG_Input* pdg_in = new SbPDG_Input(this);
         std::string name = ss.str();
         syms[name]=pdg_in;
         pdg_in->setName(name);
@@ -713,6 +729,9 @@ class SbPDG {
 
     void calc_minLats();
 
+    void set_dbg_stream(std::ostream* dbg_stream) {_dbg_stream=dbg_stream;}
+    std::ostream& dbg_stream() {return *_dbg_stream;}
+    
   private:
     std::vector<SbPDG_Node*> _nodes;
     
@@ -743,6 +762,8 @@ class SbPDG {
     std::map<SbPDG_Node*,int> dummys_per_port;
     std::set<SbPDG_Inst*> dummies;
     std::set<SbPDG_Output*> dummiesOutputs;
+
+    std::ostream* _dbg_stream;
 
     int span;
     int work;
