@@ -454,7 +454,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   num_vec_groups = _sbPDG->num_vec_out_groups();
  
   num_vec_groups = _sbPDG->num_vec_out_groups();
-  assert(num_vec_groups < NUM_VEC_OUT_GROUPS);
+  assert(num_vec_groups <= NUM_VEC_OUT_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SbPDG_VecOutput*>& vec = _sbPDG->vec_out_group(g);
     for(auto* vec_out : vec) {
