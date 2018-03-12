@@ -6,7 +6,7 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-OPT = -O3
+OPT ?= -O3
 #OPT = -Og
 #OPT = -O0
 
