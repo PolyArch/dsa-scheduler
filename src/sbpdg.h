@@ -722,8 +722,26 @@ class SbPDG {
     		return left->num_outputs() > right->num_outputs();
     	});
     }
-    int compute(bool print, bool verif, int group); 
+    int compute(bool print, bool verif, int group);  //atomically compute
     int maxGroupThroughput(int group); 
+
+    // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
+    
+    //Simulator pushes data to vector given by vector_id
+    void push_vector(int vector_id, std::vector<uint64_t> data);
+
+    //Advances simulation by one cycle  (return whether there was activity)
+    bool cycle(); 
+
+    //Simulator would like to op size elements from vector port (vector_id)
+    //Returns true if possible
+    bool can_pop_output(int vector_id, int size);
+
+    //Simulator grabs size elements from vector port (vector_id)
+    //assertion failure on insufficient size 
+    void pop_vector_output(int vector_id, std::vector<uint64_t>& data, int size);
+
+    // ---------------------------------------------------------------------------
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
