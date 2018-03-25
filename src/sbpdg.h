@@ -220,7 +220,9 @@ class SbPDG_Node {
 class SbPDG_Inst : public SbPDG_Node {
   public:
     SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg), _predInv(false), _isDummy(false),
-                     _imm_slot(-1), _subFunc(0), _accum(0) {}
+                     _imm_slot(-1), _subFunc(0) {
+      _reg.resize(8,0);
+    }
 
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
@@ -285,7 +287,7 @@ class SbPDG_Inst : public SbPDG_Node {
     bool _isDummy;
     int _imm_slot;
     int _subFunc;
-    uint64_t _accum;
+    std::vector<uint64_t> _reg;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };

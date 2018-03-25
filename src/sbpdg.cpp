@@ -415,7 +415,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
   
   if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
