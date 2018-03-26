@@ -49,6 +49,30 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
+
+// Adding new code for cycle-by-cycle CGRA functionality
+  
+int SbPDG::cycle_compute(bool print, bool verif) {
+ 
+  int num_computed = 0;
+  SbPDG_VecInput* vec;
+
+  for (unsigned int vector_id=0; vector_id<num_vec_input(); ++vector_id){
+    vec = _vecInputs[vector_id];
+    for (unsigned int i=0; i<vec->num_inputs(); ++i){
+      // should call compute only if the data is available: that's correct
+      num_computed += vec->getInput(i)->compute(print, verif);
+    } 
+  }
+
+  return num_computed;
+}
+
+
+// --------------------------------------------------
+
+
+
 // This function is called from the simulator to 
 int SbPDG::compute(bool print, bool verif, int g) {
   //if(_orderedInstsGroup.size()<=(unsigned)g) {
@@ -71,17 +95,28 @@ int SbPDG::compute(bool print, bool verif, int g) {
   //  inst->compute(print,verif);
   //}
 
+  //printf("came inside compute function at line:74\n");
+
+
   int num_computed=0;
 
+  // we are essentially removing this assert??
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
+    // current input: gth group, ith vector?
     SbPDG_VecInput* vec = _vecInputGroups[g][i];
+    // runs for size of curr_input: num_inputs may not be same?
+    // for(unsigned j = 0; j < vec.size(); ++j) {
     for(unsigned j = 0; j < vec->num_inputs(); ++j) {
-      num_computed += vec->getInput(j)->compute(print,verif);
+      /* if(vec->getInput(j)!={}) then .... */
+      // pushing data to the graph
+      num_computed += vec->getInput(j)->compute(print,verif); //calling some other compute
     }
   }
   return num_computed;
 }
+
+//int SbPDG::push_vector()
 
 int SbPDG::maxGroupThroughput(int g) {
   int maxgt=0;
@@ -385,14 +420,21 @@ void SbPDG_Inst::setImmSlot(int i) {
 }
 
 
-//compute:
+
+//compute:actual compute called from SbPDG class (slightly modify this)
 int SbPDG_Inst::compute(bool print, bool verif) {
+  cout << "Enter into compute: 424" << endl;
+  cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
   assert(_ops.size() <=3);
 
+  cout << "Step5.1: check input size " << _ops.size() << endl;
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());
   }
   assert(_input_vals.size() <= _ops.size());
+
+  if(_ops.size()==1)
+    cout << "OUTPUT NODE DETECTED" << endl;
 
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
@@ -400,6 +442,8 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
   _discard=false;
 
+  cout << "Step5.2: came here to set the input values" << endl;
+  // here getting the input from the nodes
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
@@ -415,12 +459,27 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   
+  // this is done here for every node
   _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
-  
+
+  cout << "Step8: checking the output value of execute " << _val << endl;
+   
+
+  // if this is output node, set the value of node with _val
+  // check how is number of cycles being taken care of here
+  // if their _ops available, then pop it
+ /*   if(_uses.size()==1){
+    SbPDG_Node* n = _uses[0]->def(); // output node
+    n->set_value(_val, true); // assuming no discard now 
+    return 0;
+  }*/
+
+
   if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
   }
 
+  // what is this?
   if(verif) {
     if (_verif_stream.is_open()) {
       _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";

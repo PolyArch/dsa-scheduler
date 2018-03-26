@@ -9,10 +9,14 @@
 #include <unordered_map>
 #include <map>
 #include <vector>
+#include <list>
 #include <assert.h>
 #include <sstream>
 #include <algorithm>
 #include "model.h"
+
+// New code added
+using namespace std;
 
 class Schedule;
 class SbPDG_Node;
@@ -32,7 +36,9 @@ class SbPDG_Edge {
        _sbpdg=sbpdg;
     }
 
-    SbPDG_Node* def() const {return _def;}
+    SbPDG_Node* def() const {
+      // cout << "Step6: comes here for the node corresponding to the input edge" << endl;
+      return _def;}
     SbPDG_Node* use() const {return _use;}
     
     std::string gamsName();
@@ -127,7 +133,10 @@ class SbPDG_Node {
       assert(false && "edge was not found");
     }
 
-    virtual int compute(bool print, bool verif) {return 0;} 
+    virtual int compute(bool print, bool verif) {
+      cout << "COMES HERE AT OUTPUT NODE" << endl;
+      return 0;
+    } 
  
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {
        for(unsigned i = 0; i < _uses.size(); ++ i) {
@@ -170,7 +179,10 @@ class SbPDG_Node {
     int id() {return _ID;}
     
     void     set_value(uint64_t v, bool valid) {_val=v; _discard=!valid;}
-    uint64_t get_value()           {return _val;}
+    uint64_t get_value()           {
+      
+      cout << "Step7: calls this function to get the value: " << _val << endl;
+      return _val;}
     bool input = false;
     bool output = false;
     int _iter;
@@ -184,8 +196,10 @@ class SbPDG_Node {
     void set_sched_lat(int i) {_sched_lat = i;}
 
     int inc_inputs_ready(bool print, bool verif) {
+      cout << "Step3: came to increment the inputs for the compute node in node class" << endl;
       _inputs_ready+=1;
       if(_inputs_ready == _num_inc_edges) {
+        cout << "Step4 : call compute if all inputs are ready" << endl;
         int num_computed = compute(print,verif);
         _inputs_ready=0;
         return num_computed;
@@ -272,6 +286,8 @@ class SbPDG_Inst : public SbPDG_Node {
     int subFunc() const {return _subFunc;}
 
     virtual int compute(bool print, bool verif); 
+    // new line added
+    // virtual int compute(bool print, bool verif, int v); 
 
     void set_verif_id(std::string s) {_verif_id = s;}
 
@@ -321,9 +337,12 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
 
     virtual int compute(bool print, bool verif) {
        int num_computed=0;
+       int temp = 0;
+       cout << "Step2: came to push data to output edges of this input" << endl;
+       // goes through all out edges of this input and inc inputs to that node
        for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
          SbPDG_Node* use = (*iter)->use();
-         num_computed+=use->inc_inputs_ready(print, verif); //recursively call compute
+         num_computed += use->inc_inputs_ready(print, verif);
        }
        return num_computed;
     }
@@ -416,6 +435,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
   std::vector<SbPDG_Input*>::iterator input_end() {return _inputs.end();}
   unsigned num_inputs() const {return _inputs.size();}
 
+  // scalar input corresponding to index i
   SbPDG_Input* getInput(int i) {return _inputs[i];}
 
 	/*bool operator < (const SbPDG_VecInput& s) const
@@ -658,6 +678,7 @@ class SbPDG {
 
     void insert_vec_in(SbPDG_VecInput*    in) {
       _vecInputs.push_back(in);
+      // add to the group we are creating right now
       _vecInputGroups[_vecInputGroups.size()-1].push_back(in);
     }
     void insert_vec_out(SbPDG_VecOutput*    out) {
@@ -726,20 +747,70 @@ class SbPDG {
     int maxGroupThroughput(int group); 
 
     // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
-    
+
     //Simulator pushes data to vector given by vector_id
-    void push_vector(int vector_id, std::vector<uint64_t> data);
+    void push_vector(unsigned int vector_id, std::vector<uint64_t> data) {
+      // input nodes corresponding to this vector id
+      SbPDG_VecInput* vec = _vecInputs[vector_id]; 
+      for (int i =0 ; i<vec->num_inputs(); i++){
+        SbPDG_Input* temp = vec->getInput(i); 
+        temp->set_value(data[i],true);
+      }
+    }
+
+    bool can_push_input(unsigned int vector_id){
+      // check is some value present at input node or there is some backpressure
+      // check if there is invalid value at the node
+      return true;
+    }
 
     //Advances simulation by one cycle  (return whether there was activity)
-    bool cycle(); 
+    int cycle_compute(bool print, bool verif);
+
+    bool cycle() {
+      // some issue in print = true
+      int num_computed = cycle_compute(false, true); //should be true of expect to print
+      if (num_computed == 0)
+       return false;
+      else 
+       return true;
+    }
+   // if this is output node, set the value of node with _val
+   // check how is number of cycles being taken care of here
+   // if their _ops available, then pop it
+
 
     //Simulator would like to op size elements from vector port (vector_id)
-    //Returns true if possible
-    bool can_pop_output(int vector_id, int size);
+    bool can_pop_output(unsigned int vector_id, unsigned int len){
+      // Where are the outputs set?
+      SbPDG_VecOutput* vec = _vecOutputs[vector_id]; 
+      int v=0;
+      // _ops is set after getting ready
+      for (unsigned int i=0; i<vec->num_outputs(); ++i){
+        SbPDG_Output* temp = vec->getOutput(i);
+        if(temp->get_value()!=0) // not default value
+          v++;
+      }
+      if(v==len)
+        return true;
+      else
+        return false;
+    }
 
     //Simulator grabs size elements from vector port (vector_id)
     //assertion failure on insufficient size 
-    void pop_vector_output(int vector_id, std::vector<uint64_t>& data, int size);
+    void pop_vector_output(int vector_id, std::vector<uint64_t>& data, unsigned int len){
+      SbPDG_VecOutput* vec = _vecOutputs[vector_id]; 
+      for (int i =0 ; i<vec->num_outputs(); i++){
+        SbPDG_Output* temp = vec->getOutput(i); 
+        // don't know if value of output nodes is ever set
+        data.push_back(temp->get_value()); //value should be set by compute
+        temp->set_value(0, false); // pop means set it to invalid?
+      }
+
+      // Insufficient output size
+      // assert(data.size()==len); 
+    }
 
     // ---------------------------------------------------------------------------
 

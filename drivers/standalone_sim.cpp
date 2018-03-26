@@ -186,29 +186,44 @@ int main(int argc, char* argv[])
   
   //Assumptions:
   //2 inputs (2-wide inputs)
-  //1 output (1-wide)
+  //1 output (2-wide)
   
-  std::vector<uint64_t> input_data = {1,1};
-  sbpdg.push_vector(0,input_data);
+  std::vector<uint64_t> input_data1 = {1,4};
+  std::vector<uint64_t> input_data2 = {2,3};
+  if(sbpdg.can_push_input(0))
+    sbpdg.push_vector(0,input_data1);
+  if(sbpdg.can_push_input(1))
+    sbpdg.push_vector(1,input_data2);
 
-  for(int cycle = 0; cycle < 100; ++cycle) {
-    if(cycle==10) {
-      sbpdg.push_vector(1,input_data);
+  for(int cycle = 0; cycle < 2; ++cycle) {
+    /*if(cycle==10) {
+      sbpdg.push_vector(1,input_data2);
+    }*/
+    if(cycle==10){
+      // 4,2,2,1
+      cout << sbpdg.num_inputs() << endl;
+      cout << sbpdg.num_vec_input() << endl;
+      cout << sbpdg.num_outputs() << endl;
+      cout << sbpdg.num_vec_output() << endl;
+      // cout << sbpdg.num_pdgnodes() << endl;
+      // cout << sbpdg.
     }
 
+    cout << "NEW CYCLE: CHECK OUTPUTS" << endl;
 
     std::vector<uint64_t> data; 
-    if(sbpdg.can_pop_output(0,1)) {
-      sbpdg.pop_vector_output(0,data,1);
+    if(sbpdg.can_pop_output(0,2)) {
+      cout << "output available" << endl;
+      sbpdg.pop_vector_output(0,data,1); //data is a reference here
     }
 
-    cout << "Cycle: " << cycle;
+    // cout << "Cycle: " << cycle;
     if(data.size() > 0) {
       cout << ", output= " << data[0] << "\n";
     } else {
       cout << "\n";
     }
-    sbpdg.cycle();
+    sbpdg.cycle(); //computing every cycle although only 1 data is available
   }
 
 
