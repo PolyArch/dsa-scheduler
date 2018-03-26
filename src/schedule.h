@@ -378,15 +378,18 @@ class Schedule {
   static const int VP_MAP_SLICE_2=3;
   static const int VP_MAP_SLICE_OUT=4;
 
+  static const int NUM_DFG_GROUPS=6;
   static const int IN_ACT_GROUP12=5;
   static const int IN_ACT_GROUP34=6;
-  static const int OUT_ACT_GROUP12=7;
-  static const int OUT_ACT_GROUP34=8;
-  
-  static const int SWITCH_SLICE=9;        //the starting slice position in bitslice
+  static const int IN_ACT_GROUP56=7;
+
+  static const int OUT_ACT_GROUP12=8;
+  static const int OUT_ACT_GROUP34=9;
+  static const int OUT_ACT_GROUP56=10;
+
+  static const int SWITCH_SLICE=11;        //the starting slice position in bitslice
 
   static const int NUM_IN_DIRS=8;
-
   static const int NUM_OUT_DIRS=8;
   static const int NUM_IN_FU_DIRS=3;
   static const int BITS_PER_DIR=3;
