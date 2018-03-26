@@ -364,10 +364,6 @@ class Schedule {
     _passthrough_nodes.insert(passthrough);
   }
 
-  static const int NUM_VEC_IN_GROUPS=4; //hard coded number of groups for simplicity
-  static const int NUM_VEC_OUT_GROUPS=4;
-
-
   static const int IN_ACT_SLICE=0;
   static const int OUT_ACT_SLICE=1;
   //static const int DELAY_SLICE_1=2;

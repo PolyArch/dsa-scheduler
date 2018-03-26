@@ -49,6 +49,36 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
+void SbPDG::check_for_errors() {
+  bool error = false;
+  for (auto I=_inputs.begin(),E=_inputs.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on input " << (*I)->name() << "\n";  
+      error=true;
+    }
+  }
+  for (auto I=_insts.begin(),E=_insts.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on inst " << (*I)->name() << "\n";  
+      error=true;
+    }
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on inst " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+  for (auto I=_outputs.begin(),E=_outputs.end();I!=E;++I)  { 
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on output " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+
+  if(error) {
+    assert(0 && "ERROR: BAD PDG");
+  }
+}
+
 // This function is called from the simulator to 
 int SbPDG::compute(bool print, bool verif, int g) {
   //if(_orderedInstsGroup.size()<=(unsigned)g) {
@@ -342,6 +372,7 @@ SbPDG::SbPDG(string filename) : SbPDG() {
   }
 
   calc_minLats();
+  check_for_errors();
 }
 
 

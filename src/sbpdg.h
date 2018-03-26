@@ -733,7 +733,9 @@ class SbPDG {
 
     void set_dbg_stream(std::ostream* dbg_stream) {_dbg_stream=dbg_stream;}
     std::ostream& dbg_stream() {return *_dbg_stream;}
-    
+
+    void check_for_errors();
+
   private:
     std::vector<SbPDG_Node*> _nodes;
     

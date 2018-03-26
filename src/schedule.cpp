@@ -414,14 +414,6 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   return inst_histo;
 }
 
-//Configuration
-//Slice0 - 64b: Active Input Ports (interfaces)
-//Slice1 - 64b: Active Output Ports (interfaces)
-//Slice2 - 64b: In Row 1 Delay
-//Slice3 - 64b: In Row 2 Delay
-//Slice4 - 64b: In Row 3 Delay
-//Slice5 - Switch Data 
-
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
