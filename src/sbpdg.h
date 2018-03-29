@@ -146,6 +146,9 @@ class SbPDG_Node {
         // cout << "COMES IN MY VIRTUAL FUNCTION" << endl;
         return;
     }
+
+    void inc_inputs_wait(bool _back_array[]);
+
     //-------------------------------------------------------
     
     SbPDG_Edge* getLinkTowards(SbPDG_Node* to) {

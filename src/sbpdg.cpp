@@ -437,8 +437,8 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   }
   assert(_input_vals.size() <= _ops.size());
 
-  if(_ops.size()==1)
-    cout << "OUTPUT NODE DETECTED" << endl;
+  // if(_ops.size()==1)
+  //   cout << "OUTPUT NODE DETECTED" << endl;
 
   
   if(print) {
@@ -447,7 +447,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
   _discard=false;
 
-  cout << "Step5.2: came here to set the input values" << endl;
+  // cout << "Step5.2: came here to set the input values" << endl;
   // here getting the input from the nodes
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
@@ -464,7 +464,8 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
 
-  // if one of the input values is not valid, just return
+  // if one of the input values is not valid, just return: TODO: check if
+  // required
   if(_discard)
     return 0;
   
@@ -476,13 +477,17 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   _discard = true; // discard for now
   // _val = temp;
    // cout << "SCHEDULING LATENCY FOR MULT: " << _sched_lat << endl;
-   // can edge by the dest of input node?
   // cout << "INSTRUCTION LATENCY FOR ADD: " << inst_lat(pdginst->inst()) << endl;
+
+  // call function from base class here and send it back_array
+  // inc_inputs_wait(_back_array);
+
 
   // pop_input: set _val to be default and check if this is valid
   for(unsigned i = 0; i < _ops.size(); ++i) {
     SbPDG_Node*  n =  _ops[i]->def();
-    n->set_value(0,false); // set to invalid: considering 0 as default value
+    // cout << "INSTRUCTION THROUGHPUT IS: " << inst_thr(pdginst->inst())  << endl;
+    n->set_value(0,false, inst_thr(pdginst->inst())-1); // set to invalid: considering 0 as default value, -1 because it is input
   }
 
   cout << "Step8: checking the output value of execute " << temp << endl;
@@ -556,7 +561,16 @@ void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
         // (_sbpdg->get_temp()).push_back(make_pair(cycle,temp));
       }
 
+void SbPDG_Node::inc_inputs_wait(bool _back_array[]) {
+    for (int i=0; i<_sbpdg->num_inputs(); ++i) {
+        if(_back_array[i] == 1){
+            // _sbpdg->push_transient();
+            set_value(0,false,1);
+        }
+    }
+}
 
+//------------------------------------------------------------------
 
 
 void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
