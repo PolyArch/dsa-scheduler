@@ -49,15 +49,17 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-
 // Adding new code for cycle-by-cycle CGRA functionality
   
 int SbPDG::cycle_compute(bool print, bool verif) {
  
+  // storing the output every cycles: solving other issues first
+  // cycle_store();
+
   int num_computed = 0;
   SbPDG_VecInput* vec;
 
-  for (unsigned int vector_id=0; vector_id<num_vec_input(); ++vector_id){
+  for (int vector_id=0; vector_id<num_vec_input(); ++vector_id){
     vec = _vecInputs[vector_id];
     for (unsigned int i=0; i<vec->num_inputs(); ++i){
       // should call compute only if the data is available: that's correct
@@ -425,6 +427,8 @@ void SbPDG_Inst::setImmSlot(int i) {
 int SbPDG_Inst::compute(bool print, bool verif) {
   cout << "Enter into compute: 424" << endl;
   cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
+
+
   assert(_ops.size() <=3);
 
   cout << "Step5.1: check input size " << _ops.size() << endl;
@@ -436,6 +440,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   if(_ops.size()==1)
     cout << "OUTPUT NODE DETECTED" << endl;
 
+  
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
@@ -448,7 +453,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
     } else {
-      SbPDG_Node*  n =  _ops[i]->def();
+      SbPDG_Node*  n =  _ops[i]->def(); // this is input node?
       _input_vals[i] = n->get_value();
       if(n->discard()) {
         _discard=true;
@@ -458,23 +463,30 @@ int SbPDG_Inst::compute(bool print, bool verif) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
-  
-  // this is done here for every node
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
 
-  cout << "Step8: checking the output value of execute " << _val << endl;
-   
-
-  // if this is output node, set the value of node with _val
-  // check how is number of cycles being taken care of here
-  // if their _ops available, then pop it
- /*   if(_uses.size()==1){
-    SbPDG_Node* n = _uses[0]->def(); // output node
-    n->set_value(_val, true); // assuming no discard now 
+  // if one of the input values is not valid, just return
+  if(_discard)
     return 0;
-  }*/
+  
+  // Read in some temp value and set _val after inst_lat cycles: change here
+  int temp = 0;
+  temp=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
+  SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); // the current node 
+  this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
+  _discard = true; // discard for now
+  // _val = temp;
+   // cout << "SCHEDULING LATENCY FOR MULT: " << _sched_lat << endl;
+   // can edge by the dest of input node?
+  // cout << "INSTRUCTION LATENCY FOR ADD: " << inst_lat(pdginst->inst()) << endl;
 
+  // pop_input: set _val to be default and check if this is valid
+  for(unsigned i = 0; i < _ops.size(); ++i) {
+    SbPDG_Node*  n =  _ops[i]->def();
+    n->set_value(0,false); // set to invalid: considering 0 as default value
+  }
 
+  cout << "Step8: checking the output value of execute " << temp << endl;
+   
   if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
   }
@@ -492,13 +504,58 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
   int num_computed=!_discard;
 
+  /*
+  int t = 0;
+
+  // should be done after that many number of cycles: should we do it in
+  // cycle_store?: this can be a function in node?
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
-    num_computed += use->inc_inputs_ready(print, verif); //recursively call compute
+    t = use->inc_inputs_ready(print, verif); //recursively call compute
+    if(t==0) {
+       //cout << "this was output node" << endl;
+      // cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
+      use->set_value(_val, true, inst_lat(pdginst->inst())); // assuming no discard now: after 0 cycles? same
+    }
+    else {
+      num_computed += t;
+    }
   }
+  */
 
   return num_computed;
 }
+
+// Virtual function-------------------------------------------------
+void SbPDG_Inst::update_next_nodes(bool print, bool verif){
+  cout << "SHOULD COME HERE IN SECOND CYCLE" << endl;
+  int t = 0;
+
+  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SbPDG_Node* use = (*iter)->use();
+    t = use->inc_inputs_ready(print, verif); //recursively call compute
+    // cout << "value of computed nodes: " << t << endl; // this is correct
+    if(t==0) {
+      cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
+      use->set_value(_val, true); // assuming no discard now    
+    }
+    else {
+      // num_computed += t;
+    }
+  }
+}
+
+//----------------------------------------------------
+
+void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
+    _sbpdg->push_transient(this, v,valid,cycle);
+         // struct cycle_result* temp = _sbpdg->init(this, v, valid);
+         //struct cycle_result* temp = new cycle_result(this, v, valid);
+         //_sbpdg.push_transient(cycle,temp);
+        // (_sbpdg->transient_values).push_back(make_pair(cycle,temp));
+        // (_sbpdg->get_temp()).push_back(make_pair(cycle,temp));
+      }
+
 
 
 

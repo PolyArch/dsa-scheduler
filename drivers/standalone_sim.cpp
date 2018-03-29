@@ -195,10 +195,15 @@ int main(int argc, char* argv[])
   if(sbpdg.can_push_input(1))
     sbpdg.push_vector(1,input_data2);
 
-  for(int cycle = 0; cycle < 2; ++cycle) {
+  // tick=0;
+
+  for(int cycle = 0; cycle < 3; ++cycle) {
     /*if(cycle==10) {
       sbpdg.push_vector(1,input_data2);
     }*/
+    // tick should be a global variable
+    // sbpdg.set_tick(cycle);
+
     if(cycle==10){
       // 4,2,2,1
       cout << sbpdg.num_inputs() << endl;
@@ -219,7 +224,7 @@ int main(int argc, char* argv[])
 
     // cout << "Cycle: " << cycle;
     if(data.size() > 0) {
-      cout << ", output= " << data[0] << "\n";
+      cout << ", output1= " << data[0] << "\n" << "output2= " << data[1] << "\n";
     } else {
       cout << "\n";
     }
