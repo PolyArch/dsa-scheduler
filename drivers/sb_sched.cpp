@@ -135,6 +135,13 @@ int main(int argc, char* argv[])
   //sbpdg object based on the dfg
   SbPDG sbpdg(pdg_filename);
 
+  /* scheduler for testing purposes
+  for (int i=0; i<100; i++){
+    cycle();
+  }
+  */
+
+
   //cout << "file: " << filename << "\n";
 
   // ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);

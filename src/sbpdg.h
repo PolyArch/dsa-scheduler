@@ -38,7 +38,6 @@ class SbPDG_Edge {
     }
 
     SbPDG_Node* def() const {
-      // cout << "Step6: comes here for the node corresponding to the input edge" << endl;
       return _def;
     }
     SbPDG_Node* use() const {return _use;}
@@ -136,14 +135,12 @@ class SbPDG_Node {
     }
 
     virtual int compute(bool print, bool verif) {
-      // cout << "COMES HERE AT OUTPUT NODE" << endl;
       return 0;
     } 
 
     //Extra function-----------------------------------------
       virtual void update_next_nodes(bool print, bool verif) {
         // working fine
-        // cout << "COMES IN MY VIRTUAL FUNCTION" << endl;
         return;
     }
 
@@ -192,7 +189,6 @@ class SbPDG_Node {
     int id() {return _ID;}
     
     void     set_value(uint64_t v, bool valid) {
-        cout << "SHOULD COME AT OLD SET_VALUE AT OUTPUT NODE" << endl;
       _val=v; _discard=!valid;
     }
 
@@ -219,8 +215,6 @@ class SbPDG_Node {
     //--------------------------------------------
 
     uint64_t get_value()           {
-      
-      cout << "Step7: calls this function to get the value: " << _val << endl;
       return _val;}
     bool input = false;
     bool output = false;
@@ -235,10 +229,8 @@ class SbPDG_Node {
     void set_sched_lat(int i) {_sched_lat = i;}
 
     int inc_inputs_ready(bool print, bool verif) {
-      cout << "Step3: came to increment the inputs for the compute node in node class" << endl;
       _inputs_ready+=1;
       if(_inputs_ready == _num_inc_edges) {
-        cout << "Step4 : call compute if all inputs are ready" << endl;
         int num_computed = compute(print,verif);
         _inputs_ready=0;
         return num_computed;
@@ -246,7 +238,24 @@ class SbPDG_Node {
       return 0;
     }
 
-  protected:    
+
+    
+    // Functions for backpressure I might need it--------------------------------
+    int op_index(SbPDG_Edge* e) { 
+      for(unsigned int i = 0; i < _ops.size(); i++) {
+          if(_ops[i] == e) {
+             return i;
+          }
+      }
+    
+      assert(0 && "no edge found"); 
+      return  (_ops.size() + 1);
+   }
+
+   //---------------------------------------------------------------------------
+    
+    
+    protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
     uint64_t _val = 0; //dynamic var (setting the default value)
@@ -381,11 +390,21 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     }
     std::string gamsName();
 
+    //Function for backpressure-------------------------------------------
+    bool usesHelper() {
+       for(std::vector<SbPDG_Edge *>::iterator it = _uses.begin(); it != _uses.end(); ++it) {
+           SbPDG_Edge* use_edge = *it;
+           SbPDG_Node* inst = use_edge->use();
+           if(inst->backPressureHelper(use_edge) == true) {
+              return true;
+           }
+       }
+    return false;
+    } 
+    // ------------------------------------------------------
+
     virtual int compute(bool print, bool verif) {
        int num_computed=0;
-       // int temp = 0;
-       cout << "Step2: came to push data to output edges of this input" << endl;
-       // goes through all out edges of this input and inc inputs to that node
        for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
          SbPDG_Node* use = (*iter)->use();
          num_computed += use->inc_inputs_ready(print, verif);
@@ -474,7 +493,15 @@ class SbPDG_VecInput : public SbPDG_Vec {
   }
 
   //Dynamic Function to communicate to simulator if there is backpressure on this cycle
-  bool backPressureOn();
+  bool backPressureOn() {
+     for(unsigned int i = 0; i < _inputs.size(); i++) {
+         if(_inputs[i]->usesHelper() == true) {
+            return true;
+         }
+     }
+     return false;
+  }
+  //---------------------------------------------------------
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
@@ -820,7 +847,7 @@ class SbPDG {
       SbPDG_VecInput* vec = _vecInputs[vector_id]; 
       for (unsigned int i =0 ; i<vec->num_inputs(); i++){
         SbPDG_Input* temp = vec->getInput(i); 
-        cout << "values of the input nodes: " << temp->get_value() << endl;
+        // cout << "values of the input nodes: " << temp->get_value() << endl;
         if(!temp->discard()) // if discard is not true
         // if(temp->get_value()!=0) // if value is not default
           return false;
@@ -851,7 +878,7 @@ class SbPDG {
       // _ops is set after getting ready
       for (unsigned int i=0; i<vec->num_outputs(); ++i){
         SbPDG_Output* temp = vec->getOutput(i);
-        cout << "In can_pop_output, value of output node: " << temp->get_value() << " and their validity" << !temp->discard() << endl;
+        // cout << "In can_pop_output, value of output node: " << temp->get_value() << " and their validity" << !temp->discard() << endl;
         if(temp->get_value()!=0) // not default value: for seeing the output: validity not working well!
         // if(!temp->discard()==true) // value of output valid: why len is required?
           v++;
@@ -885,11 +912,12 @@ class SbPDG {
 
     
     void cycle_store(bool print, bool verif){
-        cout << "CYCLE_STORE CALLED EVERY CYCLE" << endl;
+        // cout << "CYCLE_STORE CALLED EVERY CYCLE" << endl;
         std::list<std::pair<int, struct cycle_result*>>::iterator it;
 
         for(it=transient_values.begin(); it!=transient_values.end(); ++it){
-          if((*it).first == 0){
+          // if((*it).first == 0){
+          if((*it).first == 1){
             // cout << "Store the value in this cycle and store " << (*it).second->val << "validity " << (*it).second->valid << endl;
             ((*it).second->n)->set_value((*it).second->val, (*it).second->valid);
             ((*it).second->n)->update_next_nodes(print, verif);

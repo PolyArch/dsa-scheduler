@@ -14,9 +14,11 @@ using namespace SB_CONFIG;
 int SbPDG_Node::ID_SOURCE=0;
 int SbPDG_Edge::ID_SOURCE=0;
 
-bool SbPDG_VecInput::backPressureOn() {
+// What is thus?
+/*bool SbPDG_VecInput::backPressureOn() {
   return false;
 }
+*/
 
 
 void order_insts(SbPDG_Inst* inst,
@@ -425,30 +427,22 @@ void SbPDG_Inst::setImmSlot(int i) {
 
 //compute:actual compute called from SbPDG class (slightly modify this)
 int SbPDG_Inst::compute(bool print, bool verif) {
-  cout << "Enter into compute: 424" << endl;
-  cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
+  // cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
 
 
   assert(_ops.size() <=3);
 
-  cout << "Step5.1: check input size " << _ops.size() << endl;
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());
   }
   assert(_input_vals.size() <= _ops.size());
 
-  // if(_ops.size()==1)
-  //   cout << "OUTPUT NODE DETECTED" << endl;
-
-  
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
   _discard=false;
 
-  // cout << "Step5.2: came here to set the input values" << endl;
-  // here getting the input from the nodes
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
@@ -486,12 +480,21 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   // pop_input: set _val to be default and check if this is valid
   for(unsigned i = 0; i < _ops.size(); ++i) {
     SbPDG_Node*  n =  _ops[i]->def();
-    // cout << "INSTRUCTION THROUGHPUT IS: " << inst_thr(pdginst->inst())  << endl;
-    n->set_value(0,false, inst_thr(pdginst->inst())-1); // set to invalid: considering 0 as default value, -1 because it is input
+    n->set_value(0,false, inst_thr(pdginst->inst())); // set to invalid: considering 0 as default value, -1 because it is input: no need
   }
 
-  cout << "Step8: checking the output value of execute " << temp << endl;
-   
+    /*
+    int id = n->getScalar(); // no?
+    if(_back_array[id]==1){
+       n->set_value(0,false, inst_thr(pdginst->inst())+1);
+       _back_array[id] = 0;
+    }
+    else {
+       // cout << "INSTRUCTION THROUGHPUT IS: " << inst_thr(pdginst->inst())  << endl;
+       n->set_value(0,false, inst_thr(pdginst->inst())); // set to invalid: considering 0 as default value, -1 because it is input: no need
+    }
+    */
+
   if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
   }
@@ -509,27 +512,92 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
   int num_computed=!_discard;
 
-  /*
-  int t = 0;
+  return num_computed;
+}
 
-  // should be done after that many number of cycles: should we do it in
-  // cycle_store?: this can be a function in node?
-  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-    SbPDG_Node* use = (*iter)->use();
-    t = use->inc_inputs_ready(print, verif); //recursively call compute
-    if(t==0) {
-       //cout << "this was output node" << endl;
-      // cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
-      use->set_value(_val, true, inst_lat(pdginst->inst())); // assuming no discard now: after 0 cycles? same
+
+//compute:actual compute called from SbPDG class (slightly modify this)
+int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
+  // cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
+
+
+  assert(_ops.size() <=3);
+
+  if(_input_vals.size()==0) {
+    _input_vals.resize(_ops.size());
+  }
+  assert(_input_vals.size() <= _ops.size());
+
+  if(print) {
+    _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
+  }
+
+  _discard=false;
+
+  for(unsigned i = 0; i < _ops.size(); ++i) {
+    if(immSlot() == (int)i) {
+      _input_vals[i]=imm();
+    } else {
+      SbPDG_Node*  n =  _ops[i]->def(); // this is input node?
+      _input_vals[i] = n->get_value();
+      if(n->discard()) {
+        _discard=true;
+      }
     }
-    else {
-      num_computed += t;
+    if(print) {
+      _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
-  */
+
+  if(_discard)
+    return 0;
+  
+  int temp = 0;
+  temp=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
+  SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); // the current node 
+  this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
+  _discard = true; // discard for now
+  // cout << "INSTRUCTION LATENCY FOR ADD: " << inst_lat(pdginst->inst()) << endl;
+
+  // call function from base class here and send it back_array
+  // inc_inputs_wait(_back_array);
+  // pop_input: set _val to be default and check if this is valid
+  for(unsigned i = 0; i < _ops.size(); ++i) {
+    SbPDG_Node*  n =  _ops[i]->def();
+    n->set_value(0,false, inst_thr(pdginst->inst())); // set to invalid: considering 0 as default value, -1 because it is input: no need
+  }
+
+    /*
+    int id = n->getScalar(); // no?
+    if(_back_array[id]==1){
+       n->set_value(0,false, inst_thr(pdginst->inst())+1);
+       _back_array[id] = 0;
+    }
+    else {
+       // cout << "INSTRUCTION THROUGHPUT IS: " << inst_thr(pdginst->inst())  << endl;
+       n->set_value(0,false, inst_thr(pdginst->inst())); // set to invalid: considering 0 as default value, -1 because it is input: no need
+    }
+    */
+
+  if(print) {
+    _sbpdg->dbg_stream() << " = " << _val << "\n";
+  }
+
+  if(verif) {
+    if (_verif_stream.is_open()) {
+      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+      _verif_stream.flush();
+    } else {
+      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
+      assert(_verif_stream.is_open());
+    }
+  }
+
+  int num_computed=!_discard;
 
   return num_computed;
 }
+
 
 // Virtual function-------------------------------------------------
 void SbPDG_Inst::update_next_nodes(bool print, bool verif){
@@ -565,7 +633,10 @@ void SbPDG_Node::inc_inputs_wait(bool _back_array[]) {
     for (int i=0; i<_sbpdg->num_inputs(); ++i) {
         if(_back_array[i] == 1){
             // _sbpdg->push_transient();
-            set_value(0,false,1);
+            // base class cannot access derived class function
+            // SbPDG_Node* n = dynamic_cast<SbPDG_Node*>(getInput(i)); // mostly won't work: casting to base class?
+            // n->set_value(0,false,1);
+            set_value(0,false,1); // how did it chose the node? no i sent (some issue)
         }
     }
 }

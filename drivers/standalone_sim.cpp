@@ -214,7 +214,7 @@ int main(int argc, char* argv[])
       // cout << sbpdg.
     }
 
-    cout << "NEW CYCLE: CHECK OUTPUTS" << endl;
+    cout << "NEW CYCLE:" << cycle << " CHECK OUTPUTS" << endl;
 
     std::vector<uint64_t> data; 
     if(sbpdg.can_pop_output(0,2)) {
