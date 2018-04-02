@@ -268,7 +268,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   }//end for i
 
 
-  for(int g=0; g < 4; ++g) {
+  for(int g=0; g < NUM_DFG_GROUPS; ++g) {
     //Read input nodes
     for(int i = 0; i < 32; ++i) {  //32 ports max
       int i_adj=(g%2)*32+i;
@@ -414,14 +414,6 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   return inst_histo;
 }
 
-//Configuration
-//Slice0 - 64b: Active Input Ports (interfaces)
-//Slice1 - 64b: Active Output Ports (interfaces)
-//Slice2 - 64b: In Row 1 Delay
-//Slice3 - 64b: In Row 2 Delay
-//Slice4 - 64b: In Row 3 Delay
-//Slice5 - Switch Data 
-
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
@@ -442,7 +434,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   }
 
   int num_vec_groups = _sbPDG->num_vec_in_groups();
-  assert(num_vec_groups <= NUM_VEC_IN_GROUPS);
+  assert(num_vec_groups <= NUM_DFG_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(g);
     for(auto* vec_in : vec) {
@@ -451,10 +443,9 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(IN_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
     }
   }
+
   num_vec_groups = _sbPDG->num_vec_out_groups();
- 
-  num_vec_groups = _sbPDG->num_vec_out_groups();
-  assert(num_vec_groups <= NUM_VEC_OUT_GROUPS);
+  assert(num_vec_groups <= NUM_DFG_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SbPDG_VecOutput*>& vec = _sbPDG->vec_out_group(g);
     for(auto* vec_out : vec) {
@@ -463,7 +454,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(OUT_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
     }
   }
-  num_vec_groups = _sbPDG->num_vec_out_groups();
 
 
 

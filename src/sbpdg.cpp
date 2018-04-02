@@ -50,7 +50,6 @@ void order_insts(SbPDG_Inst* inst,
 }
 
 // Adding new code for cycle-by-cycle CGRA functionality
-  
 int SbPDG::cycle_compute(bool print, bool verif) {
  
   // storing the output every cycles: solving other issues first
@@ -74,6 +73,36 @@ int SbPDG::cycle_compute(bool print, bool verif) {
 // --------------------------------------------------
 
 
+
+void SbPDG::check_for_errors() {
+  bool error = false;
+  for (auto I=_inputs.begin(),E=_inputs.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on input " << (*I)->name() << "\n";  
+      error=true;
+    }
+  }
+  for (auto I=_insts.begin(),E=_insts.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on inst " << (*I)->name() << "\n";  
+      error=true;
+    }
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on inst " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+  for (auto I=_outputs.begin(),E=_outputs.end();I!=E;++I)  { 
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on output " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+
+  if(error) {
+    assert(0 && "ERROR: BAD PDG");
+  }
+}
 
 // This function is called from the simulator to 
 int SbPDG::compute(bool print, bool verif, int g) {
@@ -379,6 +408,7 @@ SbPDG::SbPDG(string filename) : SbPDG() {
   }
 
   calc_minLats();
+  check_for_errors();
 }
 
 
@@ -422,12 +452,10 @@ void SbPDG_Inst::setImmSlot(int i) {
 }
 
 
-
 //compute:actual compute called from SbPDG class (slightly modify this)
-int SbPDG_Inst::compute(bool print, bool verif) {
+int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   cout << "Enter into compute: 424" << endl;
   cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
-
 
   assert(_ops.size() <=3);
 
@@ -471,7 +499,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   
   // Read in some temp value and set _val after inst_lat cycles: change here
   int temp = 0;
-  temp=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
+  temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
   SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); // the current node 
   this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
   _discard = true; // discard for now
@@ -527,6 +555,63 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   */
+
+  return num_computed;
+}
+
+
+//compute:actual compute called from SbPDG class (slightly modify this)
+int SbPDG_Inst::compute(bool print, bool verif) {
+  assert(_ops.size() <=3);
+
+  if(_input_vals.size()==0) {
+    _input_vals.resize(_ops.size());
+  }
+  assert(_input_vals.size() <= _ops.size());
+
+  if(print) {
+    _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
+  }
+
+  _discard=false;
+
+  for(unsigned i = 0; i < _ops.size(); ++i) {
+    if(immSlot() == (int)i) {
+      _input_vals[i]=imm();
+    } else {
+      SbPDG_Node*  n =  _ops[i]->def(); // this is input node?
+      _input_vals[i] = n->get_value();
+      if(n->discard()) {
+        _discard=true;
+      }
+    }
+    if(print) {
+      _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
+    }
+  }
+  
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
+  
+  if(print) {
+    _sbpdg->dbg_stream() << " = " << _val << "\n";
+  }
+
+  if(verif) {
+    if (_verif_stream.is_open()) {
+      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+      _verif_stream.flush();
+    } else {
+      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
+      assert(_verif_stream.is_open());
+    }
+  }
+
+  int num_computed=!_discard;
+
+  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SbPDG_Node* use = (*iter)->use();
+    num_computed += use->inc_inputs_ready(print, verif); //recursively call compute
+  }
 
   return num_computed;
 }
