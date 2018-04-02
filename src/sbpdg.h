@@ -286,7 +286,9 @@ class SbPDG_Node {
 class SbPDG_Inst : public SbPDG_Node {
   public:
     SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg), _predInv(false), _isDummy(false),
-                     _imm_slot(-1), _subFunc(0), _accum(0) {}
+                     _imm_slot(-1), _subFunc(0) {
+      _reg.resize(8,0);
+    }
 
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
@@ -341,6 +343,8 @@ class SbPDG_Inst : public SbPDG_Node {
     int subFunc() const {return _subFunc;}
 
     virtual int compute(bool print, bool verif); 
+    virtual int compute_backcgra(bool print, bool verif);
+
     // new line added
     // virtual int compute(bool print, bool verif, int v); 
 
@@ -356,7 +360,7 @@ class SbPDG_Inst : public SbPDG_Node {
     bool _isDummy;
     int _imm_slot;
     int _subFunc;
-    uint64_t _accum;
+    std::vector<uint64_t> _reg;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
 };
@@ -946,8 +950,7 @@ class SbPDG {
     void set_dbg_stream(std::ostream* dbg_stream) {_dbg_stream=dbg_stream;}
     std::ostream& dbg_stream() {return *_dbg_stream;}
     
-    // declaring the global variable tick here
-    
+    void check_for_errors();
 
   private:
     // to keep track of number of cycles
@@ -956,10 +959,10 @@ class SbPDG {
        uint64_t val;
        bool valid;
 
-       cycle_result(SbPDG_Node* node, uint64_t value, bool valid){
+       cycle_result(SbPDG_Node* node, uint64_t value, bool valid_in){
           n = node;
           val = value;
-          valid = valid;
+          valid = valid_in;
        }
     };
 

@@ -52,7 +52,6 @@ void order_insts(SbPDG_Inst* inst,
 }
 
 // Adding new code for cycle-by-cycle CGRA functionality
-  
 int SbPDG::cycle_compute(bool print, bool verif) {
  
   // storing the output every cycles: solving other issues first
@@ -76,6 +75,36 @@ int SbPDG::cycle_compute(bool print, bool verif) {
 // --------------------------------------------------
 
 
+
+void SbPDG::check_for_errors() {
+  bool error = false;
+  for (auto I=_inputs.begin(),E=_inputs.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on input " << (*I)->name() << "\n";  
+      error=true;
+    }
+  }
+  for (auto I=_insts.begin(),E=_insts.end();I!=E;++I)  { 
+    if((*I)->num_out()==0) {
+      cerr << "Error: No uses on inst " << (*I)->name() << "\n";  
+      error=true;
+    }
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on inst " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+  for (auto I=_outputs.begin(),E=_outputs.end();I!=E;++I)  { 
+    if((*I)->num_inc()==0) {
+      cerr << "Error: No operands on output " << (*I)->name() << "\n";
+      error=true;
+    }
+  }
+
+  if(error) {
+    assert(0 && "ERROR: BAD PDG");
+  }
+}
 
 // This function is called from the simulator to 
 int SbPDG::compute(bool print, bool verif, int g) {
@@ -381,6 +410,7 @@ SbPDG::SbPDG(string filename) : SbPDG() {
   }
 
   calc_minLats();
+  check_for_errors();
 }
 
 
@@ -424,11 +454,15 @@ void SbPDG_Inst::setImmSlot(int i) {
 }
 
 
-
 //compute:actual compute called from SbPDG class (slightly modify this)
+<<<<<<< HEAD
 int SbPDG_Inst::compute(bool print, bool verif) {
   // cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
-
+=======
+int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
+  cout << "Enter into compute: 424" << endl;
+  cout << "Step5: in Inst class to execute the node and _ops size is " << _ops.size() << endl;
+>>>>>>> 949d39850e41a2eef3eb2c95463c41208e46414d
 
   assert(_ops.size() <=3);
 
@@ -465,7 +499,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
   
   // Read in some temp value and set _val after inst_lat cycles: change here
   int temp = 0;
-  temp=SB_CONFIG::execute(_sbinst,_input_vals,_accum,_discard,_back_array);
+  temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
   SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); // the current node 
   this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
   _discard = true; // discard for now
