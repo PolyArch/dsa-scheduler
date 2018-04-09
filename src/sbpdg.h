@@ -15,10 +15,6 @@
 #include <algorithm>
 #include "model.h"
 
-// New code added
-using namespace std;
-
-
 class Schedule;
 class SbPDG_Node;
 class SbPDG;
@@ -68,9 +64,23 @@ class SbPDG_Node {
  public:
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
-    virtual uint64_t discard() {return _discard;} //execution-related
 
-    
+
+
+
+    // SERIOUS PROBLEMS WITH THESE 2 FUNCTIONS: ONE ALWAYS RETURNS TRUE AND
+    // OTHER ALWAYS FALSE
+
+    // some issue with this function
+    virtual uint64_t discard() {
+        // std::cout << "came in node class's discard to send back: " << _discard << "\n";
+        return _discard;} //execution-related
+
+    // for test---------------------------
+    bool get_discard() {
+        return _discard;
+    }
+    //------------------------------------
 
     void setScalar() {_scalar = true;}
     bool getScalar() {return _scalar;}
@@ -139,12 +149,18 @@ class SbPDG_Node {
     } 
 
     //Extra function-----------------------------------------
-      virtual void update_next_nodes(bool print, bool verif) {
-        // working fine
+    virtual void update_next_nodes(bool print, bool verif) {
         return;
     }
+      
+    virtual int compute_backcgra(bool print, bool verif) {
+      // std::cout << "line 143 virtual compute?\n"; 
+      // set the output node to the input value in gem5?
+      return 0;
+    } 
 
-    void inc_inputs_wait(bool _back_array[]);
+
+    // void inc_inputs_wait(bool _back_array[]);
 
     //-------------------------------------------------------
     
@@ -189,33 +205,15 @@ class SbPDG_Node {
     int id() {return _ID;}
     
     void     set_value(uint64_t v, bool valid) {
-      _val=v; _discard=!valid;
+      _val=v; 
+      _discard=!valid;
     }
 
-    // cycle code ----------------------------------------
-            
      // sets value at this cycle
      void set_value(uint64_t v, bool valid, int cycle);
-     
-
-     // void cycle_store();
-     //void cycle_store(){
-     //   cout << "CYCLE_STORE CALLED EVERY CYCLE" << endl;
-     //   std::list<std::pair<int, _sbpdg::struct cycle_result>>::iterator it;
-     //   for(it=_sbpdg->transient_values.begin(); it!=_sbpdg->transient_values.end(); ++it){
-     //     if((*it).first == 0){
-     //       (*it).second.n->set_value((*it).second.val, (*it).second.valid);
-     //       _sbpdg->transient_values.erase(it); // check this
-     //     }
-     //     else{
-     //       (*it).first--;
-     //     }
-     //   }
-     //} 
     //--------------------------------------------
 
-    uint64_t get_value()           {
-      return _val;}
+    uint64_t get_value() {return _val;}
     bool input = false;
     bool output = false;
     int _iter;
@@ -252,15 +250,25 @@ class SbPDG_Node {
       return  (_ops.size() + 1);
    }
 
+    int inc_inputs_ready_backcgra(bool print, bool verif) {
+      _inputs_ready+=1;
+      if(_inputs_ready == _num_inc_edges) {
+        int num_computed = compute_backcgra(print,verif);
+        _inputs_ready=0;
+        return num_computed;
+      }
+      return 0;
+    }
    //---------------------------------------------------------------------------
     
     
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
-    uint64_t _val = 0; //dynamic var (setting the default value)
-    // uint64_t _discard=false; // Why is it set to false?
+    uint64_t _val = 1000000; //dynamic var (setting the default value)
     uint64_t _discard=true;
+    // uint64_t _val; //dynamic var (setting the default value)
+    // uint64_t _discard=false; // Why is it set to false?
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
 
@@ -343,14 +351,17 @@ class SbPDG_Inst : public SbPDG_Node {
     int subFunc() const {return _subFunc;}
 
     virtual int compute(bool print, bool verif); 
-    virtual int compute_backcgra(bool print, bool verif);
 
     // new line added
-    // virtual int compute(bool print, bool verif, int v); 
+    virtual int compute_backcgra(bool print, bool verif);
 
     void set_verif_id(std::string s) {_verif_id = s;}
 
-    virtual uint64_t discard() {return _discard;}
+    virtual uint64_t discard() {
+        // std::cout << "coming here to return discard: " << _discard << "\n";
+        return _discard;
+    }
+
 
   private:
     std::ofstream _verif_stream;
@@ -394,23 +405,22 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     }
     std::string gamsName();
 
-    //Function for backpressure-------------------------------------------
-    bool usesHelper() {
-       for(std::vector<SbPDG_Edge *>::iterator it = _uses.begin(); it != _uses.end(); ++it) {
-           SbPDG_Edge* use_edge = *it;
-           SbPDG_Node* inst = use_edge->use();
-           if(inst->backPressureHelper(use_edge) == true) {
-              return true;
-           }
+    // just the same function?
+    virtual int compute_backcgra(bool print, bool verif) {
+       int num_computed=0;
+       for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+         SbPDG_Node* use = (*iter)->use();
+         num_computed += use->inc_inputs_ready_backcgra(print, verif);
        }
-    return false;
-    } 
-    // ------------------------------------------------------
+       return num_computed;
+    }
+    //---------------------------------------
 
     virtual int compute(bool print, bool verif) {
        int num_computed=0;
        for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
          SbPDG_Node* use = (*iter)->use();
+   
          num_computed += use->inc_inputs_ready(print, verif);
        }
        return num_computed;
@@ -496,16 +506,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
     return ss.str();
   }
 
-  //Dynamic Function to communicate to simulator if there is backpressure on this cycle
-  bool backPressureOn() {
-     for(unsigned int i = 0; i < _inputs.size(); i++) {
-         if(_inputs[i]->usesHelper() == true) {
-            return true;
-         }
-     }
-     return false;
-  }
-  //---------------------------------------------------------
+  bool backPressureOn();
 
   void addInput(SbPDG_Input* in) { _inputs.push_back(in); }
   std::vector<SbPDG_Input*>::iterator input_begin() {return _inputs.begin();}
@@ -757,6 +758,7 @@ class SbPDG {
     void insert_vec_in(SbPDG_VecInput*    in) {
       _vecInputs.push_back(in);
       // add to the group we are creating right now
+      std::cout << "It does come in inserting vec_in" << "\n";
       _vecInputGroups[_vecInputGroups.size()-1].push_back(in);
     }
     void insert_vec_out(SbPDG_VecOutput*    out) {
@@ -826,34 +828,30 @@ class SbPDG {
 
     // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
 
-    /*
-    unsigned int get_tick(){
-      return tick;
-    }
+    // Just for testing
+    /*int input_size() {
+        return _vecInputs.size();
+    }*/
 
-    void set_tick(int cycle){
-      tick = cycle;
-    }
-    */
+
     //Simulator pushes data to vector given by vector_id
-    void push_vector(unsigned int vector_id, std::vector<uint64_t> data) {
-      // input nodes corresponding to this vector id
-      SbPDG_VecInput* vec = _vecInputs[vector_id]; 
-      for (unsigned int i =0 ; i<vec->num_inputs(); ++i){
-        SbPDG_Input* temp = vec->getInput(i); 
+    void push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
+      assert(data.size() == vec_in->num_inputs() && "insufficient data available");
+      for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
+        std::cout << "data I am pushing is: " << data[i] << "\n";
+        SbPDG_Input* temp = vec_in->getInput(i); 
         temp->set_value(data[i],true);
       }
     }
 
-    bool can_push_input(unsigned int vector_id){
-      // check is some value present at input node or there is some backpressure
-      // check if there is invalid value at the node
-      SbPDG_VecInput* vec = _vecInputs[vector_id]; 
-      for (unsigned int i =0 ; i<vec->num_inputs(); i++){
-        SbPDG_Input* temp = vec->getInput(i); 
+    // check if some value present at input node or there is some backpressure or invalid value
+    bool can_push_input(SbPDG_VecInput* vec_in){
+      // std::cout << "size of input vector: " << vec_in->num_inputs() << "\n";
+      for (unsigned int i =0 ; i< vec_in->num_inputs(); i++){
+        SbPDG_Input* temp = vec_in->getInput(i); 
         // cout << "values of the input nodes: " << temp->get_value() << endl;
-        if(!temp->discard()) // if discard is not true
-        // if(temp->get_value()!=0) // if value is not default
+        // if(!temp->discard()) // if discard is not true
+        if(temp->get_value()!=1000000) // if value is not default
           return false;
       }
       return true;
@@ -861,7 +859,9 @@ class SbPDG {
 
     //Advances simulation by one cycle  (return whether there was activity)
     int cycle_compute(bool print, bool verif);
+    int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
 
+    // not required after gem5 code
     bool cycle() {
       // some issue in print = true
       int num_computed = 0;
@@ -873,21 +873,61 @@ class SbPDG {
       else 
        return true;
     }
-   
+
+    bool backcgra_cycle(SbPDG_VecInput* vec_in, int cur_cycle) {
+      // some issue in print = true
+      int num_computed = 0;
+      num_computed = compute_backcgra(vec_in, false, true); //should be true of expect to print
+      // store every cycle
+      // cycle_store(false, true);
+      if (num_computed == 0){
+        // set the output node value same as input:TODO
+        std::cout << "none config computation triggered in this case\n";
+        for (unsigned int i=0; i<vec_in->num_inputs(); ++i) {
+            SbPDG_Node* n = vec_in->getInput(i);
+            push_transient(n, 1000000, false, cur_cycle); // popping the input
+            assert(n->num_out()==1 && "incorrectly detected none config\n");
+            auto it = n->uses_begin();
+            SbPDG_Node* use = (*it)->use();
+            push_transient(use, n->get_value() ,true, cur_cycle+1); // set this value to output in next cycle
+            // SbPDG_Edge* e = *it; // (should be only 1 ops)
+            // push_transient(e->def(), n->get_value() ,true, cur_cycle+1); // set this value to output in next cycle
+        }
+        // assuming only 1 input in this case
+        // SbPDG_Node* n = vec_in->getInput(0)->first_use();
+        // push_transient(n, vec_in->getInput(0), true, 1); // set this value to output in next cycle
+        return false;
+      }
+      else 
+       return true;
+    }
+
+    /*
+    void print_discard(SbPDG_VecOutput* vec_out){
+
+      for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
+          std::cout << vec_out->getOutput(i)->get_discard() << "\n";
+      }
+
+    }*/
+
     //Simulator would like to op size elements from vector port (vector_id)
-    bool can_pop_output(unsigned int vector_id, unsigned int len){
-      // Where are the outputs set?
-      SbPDG_VecOutput* vec = _vecOutputs[vector_id]; 
+    bool can_pop_output(SbPDG_VecOutput* vec_out, unsigned int len){
+        
+      // should be an assert statement
+      assert(len>0 && "Cannot pop 0 length output\n");
+
       unsigned int v=0;
-      // _ops is set after getting ready
-      for (unsigned int i=0; i<vec->num_outputs(); ++i){
-        SbPDG_Output* temp = vec->getOutput(i);
-        // cout << "In can_pop_output, value of output node: " << temp->get_value() << " and their validity" << !temp->discard() << endl;
-        if(temp->get_value()!=0) // not default value: for seeing the output: validity not working well!
-        // if(!temp->discard()==true) // value of output valid: why len is required?
+      for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
+        // SbPDG_Output* temp = vec_out->getOutput(i);
+        SbPDG_Node* temp = vec_out->getOutput(i); // see the class type (object data type)
+        // std::cout << "In can_pop_output, value of output node: " << temp->get_value() << " and their validity " << !temp->discard() << "\n";
+        if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
+        // trying this for gem5
+        // if(!temp->discard()==true) // value of output valid
+        // if(!temp->get_discard()==true) // value of output valid
           v++;
       }
-      // cout << "VALUE OF V IS: " << v << endl;
       if(v==len)
         return true;
       else
@@ -896,13 +936,23 @@ class SbPDG {
 
     //Simulator grabs size elements from vector port (vector_id)
     //assertion failure on insufficient size 
-    void pop_vector_output(int vector_id, std::vector<uint64_t>& data, unsigned int len){
-      SbPDG_VecOutput* vec = _vecOutputs[vector_id]; 
-      for (unsigned int i =0 ; i<vec->num_outputs(); i++){
-        SbPDG_Output* temp = vec->getOutput(i); 
-        // cout << "VALUE OF VALID OUTPUT NODES: " << temp->get_value() << endl;
-        data.push_back(temp->get_value()); //value should be set by compute
-        temp->set_value(0, false); // pop means set it to invalid?
+    void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, unsigned int len){
+      // std::cout << "comes to pop vector output\n";
+      assert(vec_out->num_outputs()==len && "insufficient output available\n");
+      
+      for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
+        SbPDG_Node* temp = vec_out->getOutput(i); 
+        // assert(!temp->discard() && "The output node should be valid here\n");
+        data.push_back(temp->get_value());
+        // temp->set_value(NULL, false); // pop means set it to invalid?: ask
+        // how to disable these warnings
+        // temp->set_value(0, false); // pop means set it to invalid?
+        temp->set_value(1000000, false); // pop means set it to invalid?
+        // setting inst to discard and calling node's discard function:
+        // don't know the issue here? why failure?: with true, it's working
+        // fine (some issue with default values: may mean something)
+        // std::cout << "Let's check the value of this output node now: " << temp->get_value() << " and it's validity: " << !temp->discard() << "\n";
+        // assert(temp->discard()==true && "We didn't set the output node to be invalid\n");
       }
 
       // Insufficient output size
@@ -910,8 +960,9 @@ class SbPDG {
     }
 
     void push_transient(SbPDG_Node* n, uint64_t v, bool valid, int cycle){
+        // std::cout << "push this should be called at least for all inputs with value of cycle: " << cycle <<"\n";
         struct cycle_result* temp = new cycle_result(n, v, valid);
-        transient_values.push_back(make_pair(cycle, temp));
+        transient_values.push_back(std::make_pair(cycle, temp));
     }
 
     
@@ -920,26 +971,19 @@ class SbPDG {
         std::list<std::pair<int, struct cycle_result*>>::iterator it;
 
         for(it=transient_values.begin(); it!=transient_values.end(); ++it){
-          // if((*it).first == 0){
-          if((*it).first == 1){
-            // cout << "Store the value in this cycle and store " << (*it).second->val << "validity " << (*it).second->valid << endl;
+          if((*it).first <= 1){
+            // std::cout << "Store the value in this cycle and store " << (*it).second->val << "validity " << (*it).second->valid << "\n";
             ((*it).second->n)->set_value((*it).second->val, (*it).second->valid);
             ((*it).second->n)->update_next_nodes(print, verif);
-            // cout << "before size " << transient_values.size() << endl;
-            transient_values.erase(it); // check this
-            // due to variable size of iterator
+            transient_values.erase(it);
             it--;
-            // cout << "after size " << transient_values.size() << endl;
           }
           else{
             (*it).first--;
           }
         }
-        // earlier used to call with respect to the node: should be in sbpdg
         // _sbpdg->update_next_nodes(print, verif); // virtual function in SbPDG node and declared in inst
      }
-
-
 
     // ---------------------------------------------------------------------------
 
@@ -953,7 +997,7 @@ class SbPDG {
     void check_for_errors();
 
   private:
-    // to keep track of number of cycles
+    // to keep track of number of cycles---------------------
     struct cycle_result{
        SbPDG_Node* n;
        uint64_t val;
@@ -966,7 +1010,6 @@ class SbPDG {
        }
     };
 
-    // unsigned int tick=0;
     std::list<std::pair<int,struct cycle_result*>> transient_values;
     //--------------------------------------
 
