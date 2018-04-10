@@ -78,7 +78,7 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
 
 bool SchedulerGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 
-	std::pair<int,int> bestScore = make_pair(0,MAX_ROUTE);
+  std::pair<int,int> bestScore = fscore;
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot=NULL;
   
