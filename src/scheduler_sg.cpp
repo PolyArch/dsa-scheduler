@@ -81,16 +81,16 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
     int obj = lat;
     if(_integrate_timing) { 
-//      obj = latmis*256+lat;
-      obj = violation*8192+lat*32+latmis;
+      obj = latmis*256+lat;
+      //obj = violation*8192+lat*32+latmis;
     }
 
     std::pair<int, int> score = make_pair(tot_mapped + succeed_sched + succeed_timing, 
                                           -obj);
     if (score > best_score) {
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
-        //_best_latmis=latmis;
-        _best_violation=violation;
+        _best_latmis=latmis;
+        //_best_violation=violation;
       }
 
       if(remapNeeded) {
@@ -107,7 +107,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
                 progress_getBestNum(Output), sbPDG->num_outputs(),
                 progress_getBestNum(FA), presize, postsize,
                 succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", timing met" : "");
+                succeed_timing ? ", mismatch == 0" : "");
       }
       best_score = score;
       if (sched) {
@@ -148,7 +148,9 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 //      fprintf(stderr,"DFG Mapped, but Timing not met.  Simulation is still possible, but do not use generated schedule for hardware!");
 //    }
 //  }
-  return best_succeeded;
+
+//  return best_succeeded;
+  return best_mapped;
 }
 
 
