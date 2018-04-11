@@ -56,6 +56,8 @@ class SbPDG_Edge {
     static int ID_SOURCE;
 };
 
+class SbPDG_Inst;
+
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
@@ -145,6 +147,15 @@ class SbPDG_Node {
          }    
        }
        return _max_thr; 
+    }
+
+    virtual void depInsts(std::vector<SbPDG_Inst*>& insts) {
+      for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+        SbPDG_Node* use = (*it)->use();
+        if(std::find(insts.begin(),insts.end(),use)!=insts.end()) {
+          use->depInsts(insts); 
+        }
+      }  
     }
 
     SbPDG_Node* first_operand() {
@@ -253,6 +264,16 @@ class SbPDG_Inst : public SbPDG_Node {
          }    
        }
        return _max_thr; 
+    }
+
+    virtual void depInsts(std::vector<SbPDG_Inst*>& insts) {
+      insts.push_back(this);
+      for (auto it=_uses.begin(); it!=_uses.end(); it++) {
+        SbPDG_Node* use = (*it)->use();
+        if(std::find(insts.begin(),insts.end(),use)!=insts.end()) {
+          use->depInsts(insts); 
+        }
+      }  
     }
 
     std::string name() {
@@ -709,10 +730,8 @@ class SbPDG {
 
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
     std::vector<SbPDG_VecOutput*>&  vec_out_group(int i) {return _vecOutputGroups[i];}
-    int num_vec_in_groups() {return _vecInputGroups.size();}
-    int num_vec_out_groups() {return _vecOutputGroups.size();}
+    int num_groups() {return _vecInputGroups.size();}
 
- 
     void sort_vec_in() {
     	sort(_vecInputs.begin(), _vecInputs.end(),[](SbPDG_VecInput*& left, SbPDG_VecInput*& right){
     		return left->num_inputs() > right->num_inputs();
@@ -726,6 +745,8 @@ class SbPDG {
     }
     int compute(bool print, bool verif, int group); 
     int maxGroupThroughput(int group); 
+    void instsForGroup(int g, std::vector<SbPDG_Inst*>& insts);
+
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
