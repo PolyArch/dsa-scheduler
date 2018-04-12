@@ -116,10 +116,6 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     ofs << "Tv.l('" << n->gamsName() << "')=" << l << ";\n";
   }
 
-  ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
-      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) - delta(e) + 1;\n"
-      << ");\n\n";
-
   //Mp.fx(pv,pn) = round(Mp.l(pv,pn));
   //Mn.fx(v,n) = round(Mn.l(v,n));
 
@@ -128,10 +124,18 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
       << "    PTen.l(e,n)=1;\n"
       << "  );\n"
       << ");\n\n";
-  
-  ofs << "loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),\n"
-      << "  minTpv.l(pv)=Tv.l(v);\n"
-      << "  maxTpv.l(pv)=Tv.l(v);\n"
+
+  ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
+      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) - delta(e) + 1;\n"
+      << "extra.l(e) = min(extra.l(e),  max_edge_delay * (1 + sum(n, PTen.l(e,n))))"
+      << ");\n\n";
+
+
+  ofs << "minTpv.l(pv)=10000;" 
+      << "maxTpv.l(pv)=0;" 
+      << "loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),\n"
+      << "  minTpv.l(pv)=min(Tv.l(v),minTpv.l(pv));\n"
+      << "  maxTpv.l(pv)=max(Tv.l(v),maxTpv.l(pv));\n"
       << ");\n\n";
 
   //ofs << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";

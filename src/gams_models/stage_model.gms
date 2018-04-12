@@ -32,9 +32,12 @@ Mvl.up(v,l)=1;
 *Mel.prior(e,l)=10;
 *PT.prior(n)=10;
 
+positive variable maxMis;
 Mel.l(e,l)=0;
-
+binary  variable Tv_le_Te(e,v);
+positive variable minTv(v);
 integer variable Tv(v);
+integer variable Te(e);
 integer variable minTpv(pv);
 integer variable maxTpv(pv);
 
@@ -112,6 +115,25 @@ loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
   minTpv.up(pv)=minT(v) + 25;
   maxTpv.up(pv)=minT(v) + 25;
 );
+
+* Fix the lat-mis related variables
+*binary  variable Tv_le_Te(e,v);
+
+*maxMis.l = 1000;
+minTv.l(v) = 0;
+
+loop((v1,e)$Gve(v1,e),
+  Te.l(e) = Tv.l(v1) + sum(l,Mel.l(e,l)) + delta(e) + extra.l(e) - 1;
+);
+
+*loop((e,v2)$(Gev(e,v2),
+Tv_le_Te.l(e,v2)$Gev(e,v2) = (Te.l(e) = Tv.l(v2));
+
+*loop((e,v2)$Gev(e,v2),
+*  if(Te.l(e) = Tv.l(v2),
+*    Tv_le_Te.l(e,v2)$Gev(e,v2) = 1;
+*  );
+*)
 
 
 
@@ -227,10 +249,31 @@ limit_inc_v(v,r)..   sum(l$Hlr(l,r),Mvl(v,l)) =l= 1;
 equation latency_relaxed(v,e,v);
 latency_relaxed(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
   Tv(v2) =g= Tv(v1) + sum(l,Mel(e,l)) + delta(e) - 1;
+*
+*equation latency(v,e,v);
+*latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
+*  Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) - 1;
 
-equation latency(v,e,v);
-latency(v1,e,v2)$(Gve(v1,e) and Gev(e,v2))..     
-  Tv(v2) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) - 1;
+equation latency_e(v,e);
+latency_e(v1,e)$(Gve(v1,e))..
+  Te(e) =e= Tv(v1) + sum(l,Mel(e,l)) + delta(e) + extra(e) - 1;
+
+equation latency_v(e,v);
+latency_v(e,v2)$(Gev(e,v2))..         Tv(v2) =g= Te(e);
+equation latency_vmin(e,v);
+latency_vmin(e,v2)$(Gev(e,v2))..   minTv(v2) =l= Te(e);
+
+equation calc_Tv_le_Te(e,v);
+calc_Tv_le_Te(e,v2)$(Gev(e,v2))..   (Tv(v2) - Te(e)) =l= 25 * (1 - Tv_le_Te(e,v2));
+
+equation force_One_Tv_le_Te(v);
+force_One_Tv_le_Te(v)$(not KindV('Input',v)).. sum(e$Gev(e,v), Tv_le_Te(e,v)) =g= 1;
+
+equation calc_mis(v);
+calc_mis(v)..  maxMis =g= Tv(v) - minTv(v);
+
+
+
 
 equation set_max_extra(e,v);
 set_max_extra(e,v)$((not KindV('Output',v)) and Gev(e,v)).. 
@@ -244,13 +287,17 @@ min_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. minTpv(pv) =l= Tv(v);
 max_pv(pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)).. maxTpv(pv) =g= Tv(v);
 
 * All elements of vector port arrive simultaneously
-dist_pv(pv).. minTpv(pv) + 0 =g= maxTpv(pv); 
+dist_pv(pv).. minTpv(pv) + maxMis =g= maxTpv(pv); 
 add(pv)..     length =g= maxTpv(pv);
 
 *cost.l = 1000000* sum((iv,k)$kindV(K,iv),(1-sum(n$(kindN(K,n)), Mn.l(iv, n)))) +  1000 * length.l + sum(l,sum(v,Mvl.l(v,l)));
 
 Equation obj;
 obj.. cost =e= length;
+
+Equation mis_obj;
+mis_obj.. cost =e= maxMis * 32 + length;
+
 
 * Code for determining an ordering for removing cycles
 *O.l(l)=0;
@@ -468,6 +515,8 @@ display Mn.l;
 
 
 
+
+
 *passthrough, non-sll
 Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links, 
   assignPort, 
@@ -476,14 +525,18 @@ Model schedulep /assignVertex, oneVperN, incoming_links, outgoing_links,
   no_fu_router_loop,
   source_mapping_p, dest_mapping_p, set_max_extra, 
   limit_inc_v,
-  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+*  latency, 
+  latency_e, latency_v, latency_vmin, calc_Tv_le_Te, force_One_Tv_le_Te, calc_mis,
+  min_pv, dist_pv, max_pv, add, mis_obj, block_cycles /;
 
 *passthrough + sll
 Model schedules /assignVertex, oneVperN, incoming_links,
   assignPort, onePVperPN, flexiVectorPorts, orderVectorPorts, 
   opposite_calc_l_used, calc_l_used2, oneEperL, 
   source_mapping_p, dest_mapping_p, set_max_extra, 
-  latency, min_pv, dist_pv, max_pv, add, obj, 
+*  latency, 
+  latency_e, latency_v, latency_vmin, calc_Tv_le_Te, force_One_Tv_le_Te, calc_mis,
+  min_pv, dist_pv, max_pv, add, mis_obj, 
   forceBackward, calcNumMapped2, one_source, noWeirdInRoutes,
   block_cycles_sll, block_cycles_sll2/;
 
@@ -494,7 +547,9 @@ Model schedule /assignVertex, oneVperN, incoming_links, outgoing_links,
   calc_l_used2, oneEperL, 
   source_mapping, dest_mapping, set_max_extra, 
   limit_inc_v,
-  latency, min_pv, dist_pv, max_pv, add, obj, block_cycles /;
+*  latency, 
+  latency_e, latency_v, latency_vmin, calc_Tv_le_Te, force_One_Tv_le_Te, calc_mis,
+  min_pv, dist_pv, max_pv, add, mis_obj, block_cycles /;
 
 if(stages('MRT'),
   if(stages('passthrough'),
