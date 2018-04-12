@@ -15,7 +15,7 @@ int SbPDG_Node::ID_SOURCE=0;
 int SbPDG_Edge::ID_SOURCE=0;
 
 bool SbPDG_VecInput::backPressureOn() {
-  return false;
+    return false;
 }
 
 
@@ -516,7 +516,16 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
 // new compute for back cgra-----------------------------
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
-  std::cout << "major compute at 519\n";
+  // std::cout << "major compute at 519\n";
+
+  // if this node already has a value, don't compute this cycle never comes here, do not need this?
+  /*if(this->get_value()!=1000000){
+      std::cout << "output node already has a value which is not consumed! " << this->get_value() << " and discard: " << this->discard() << "\n"; 
+      return 0;
+  }*/
+
+
+
 
   assert(_ops.size() <=3);
 
@@ -549,46 +558,44 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   if(_discard)
     return 0;
   
-  std::cout << "comes in this my special compute function\n"; 
+  // std::cout << "comes in this my special compute function\n"; 
+  
+  // initializing back pressure
+  if(_back_array.size() == 0)
+      _back_array.resize(_ops.size());
+  for(int i=0; i<_ops.size(); ++i) {
+      _back_array[i] = 0;
+  }
+
   // Read in some temp value and set _val after inst_lat cycles
   int temp = 0;
   temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
-  SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); // the current node 
+
+  // setting the output node (current node)
+  SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); 
   this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
   _discard = true;
 
 
-  int inst_throughput = inst_thr(pdginst->inst());
   // pop the inputs after inst_thr+back_press here
-if(_back_array.size() != 0) {  // otherwise this should be true if my function is correct
+  int inst_throughput = inst_thr(pdginst->inst());
+  // std::cout << "instruction throughput is " << inst_throughput << "\n";
+  // std::cout << "instruction latency is " << inst_lat(pdginst->inst()) << "\n";
   for(unsigned i = 0; i < _ops.size(); ++i) {
-    int id = op_index(_ops[i]); // no?
-    std::cout << "Let's print the id in back array here and size of back array: " << id << " " <<  _back_array.size() << " and _ops.size is: " << _ops.size() << " i: " << i << "\n";
-    SbPDG_Node*  n =  _ops[i]->def();
-        if(_back_array[id]==1){
-           n->set_value(1000000,false, inst_throughput+1);
-           _back_array[id] = 0;
+
+      SbPDG_Node*  n =  _ops[i]->def();
+
+     // std::cout << "Let's print the value of back array: " <<  _back_array[i] << "\n";
+        if(_back_array[i]==1){
+           n->set_value(1000000,false, inst_throughput*2);
+           // n->set_value(1000000,true, inst_throughput*2);
+           // _back_array[i] = 0; (temporary array)
         }
         else {
-           n->set_value(1000000, false, inst_throughput); // set to invalid: considering 0 as default value, -1 because it is input: no need
+           n->set_value(1000000, false, inst_throughput);
+           // n->set_value(1000000, true, inst_throughput); // set to invalid: considering 0 as default value, -1 because it is input: no need
         }
     }
-  }
-
-  else {
-      // trying to deal with optimized using volatile
-   for(volatile int i = 0; i < _ops.size(); ++i) {
-    volatile int id = op_index(_ops[i]); // no?
-    if(_ops[i] == NULL) // this was a null pointer? or 0?
-        continue;
-    std::cout << "Let's print the id in back array here and size of back array: " << id << " " <<  _back_array.size() << " and _ops.size is: " << _ops.size() << " i: " << i << "\n";
-    // SbPDG_Node*  n =  _ops[i]->def();
-
-      // cout << "INSTRUCTION THROUGHPUT IS: " << inst_thr(pdginst->inst())  << endl;
-       _ops[i]->def()->set_value(1000000, false, inst_throughput); // set to invalid: considering 0 as default value, -1 because it is input: no need
-    }
-  }
-    
 
   // wrong: just for test
   print = false; verif = false;
@@ -623,17 +630,27 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
   // cout << "SHOULD COME HERE IN SECOND CYCLE" << endl;
   int t = 0;
 
+
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
     t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
     // cout << "value of computed nodes: " << t << endl; // this is correct
     if(t==0) {
       // cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
+      // cout << "SIZE OF INCOMING EDGE OF OUTPUT NODE: " << _ops.size() << endl; 
+      
+      // unset the input node value also: uses should be only 1
+      /*for(auto it = _ops.begin(); it != _ops.end(); it++) {
+         SbPDG_Node* n = (*it)->use();
+         assert(n==use && "instruction and output node cannot be same\n");
+         n->set_value(1000000, false);
+      }*/
       use->set_value(_val, true); // assuming no discard now    
     }
     else {
       // num_computed += t;
     }
+    
   }
 }
 
@@ -642,8 +659,16 @@ void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
     _sbpdg->push_transient(this, v,valid,cycle);
 }
 
+/*bool SbPDG_Node::get_backvalue(int id) {
+        if(_back_array.size() > id)
+            return _back_array[id];
+        else
+            return false;
+    }
+
+
 // may be useless
-/*void SbPDG_Node::inc_inputs_wait(bool _back_array[]) {
+void SbPDG_Node::inc_inputs_wait(bool _back_array[]) {
     for (int i=0; i<_sbpdg->num_inputs(); ++i) {
         if(_back_array[i] == 1){
            set_value(0,false,1); // how did it chose the node? no i sent (some issue): mat not come here?
