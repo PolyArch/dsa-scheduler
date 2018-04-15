@@ -155,6 +155,14 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
 
   while(total_msec() < _reslim * 1000) {
     bool success = schedule_internal(sbPDG,schedule);
+    
+    int lat,latmis;
+    schedule->calcLatency(lat,latmis);
+
+    success = success && (latmis == 0);
+
+    printf("BIG ITER DONE: lat %d, latmis %d\n",lat,latmis);
+
     iters++;
     if(success || iters > 20) {
       return success;

@@ -768,8 +768,6 @@ class SbPDG {
     std::vector<SbPDG_Inst*> _orderedInsts;
     std::vector<std::vector<SbPDG_Inst*>> _orderedInstsGroup;
 
-
-
     std::vector<SbPDG_VecInput*> _vecInputs;
     std::vector<SbPDG_VecOutput*> _vecOutputs;
 

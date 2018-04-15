@@ -5,7 +5,12 @@
 
 class SchedulerStochasticGreedy : public HeuristicScheduler {
 public:
-  SchedulerStochasticGreedy(SB_CONFIG::SbModel* sbModel) : HeuristicScheduler(sbModel) {}
+  SchedulerStochasticGreedy(SB_CONFIG::SbModel* sbModel) : 
+    HeuristicScheduler(sbModel) {  }
+
+  void initialize(SbPDG*, Schedule*&);
+
+
   bool schedule(SbPDG*, Schedule*&);
   bool schedule_internal(SbPDG*, Schedule*&);
   bool scheduleNode(Schedule* sched, SbPDG_Node* pdgnode);
@@ -24,6 +29,10 @@ public:
   void set_max_iters_zero_vio(int i) {_max_iters_zero_vio=i;}
 
 protected:
+  std::vector<std::pair<int,int>> _sd_in; //TONY: port length pair? 
+  std::vector<std::pair<int,int>> _sd_out; //TONY: port length pair? 
+
+
   int _max_iters_zero_vio=1000000000;
   bool _integrate_timing = true;
   int _best_latmis, _best_lat, _best_violation;
