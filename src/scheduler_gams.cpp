@@ -190,11 +190,11 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     heur_scheduler.set_max_iters_zero_vio(20000);
     heur_scheduler.setTimeout(_reslim - (total_msec()/1000));
 
-    if(mrt_heur) {
+    //if(mrt_heur) {
       heur_scheduler.set_integrate_timing(true);
-    } else if(mr_heur) {
-      heur_scheduler.set_integrate_timing(false);
-    }
+    //} else if(mr_heur) {
+    //  heur_scheduler.set_integrate_timing(false);
+    //}
     heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
     heur_sched->calcAssignEdgeLink();
   }
