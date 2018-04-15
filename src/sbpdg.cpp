@@ -76,6 +76,7 @@ int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
  
     int num_computed = 0;
     for (unsigned int i=0; i<vec_in->num_inputs(); ++i){
+      std::cout << "Trigger computation for each input in this vector: "<<i<<"\n";
       num_computed += vec_in->getInput(i)->compute_backcgra(print, verif);
     } 
 
@@ -546,17 +547,30 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     } else {
       SbPDG_Node*  n =  _ops[i]->def();
       _input_vals[i] = n->get_value();
-      if(n->discard()) {
-        _discard=true;
+      if(n->get_value()==1000000) {
+          return 0;//check!
       }
+      /*if(n->discard()) {
+        _discard=true;
+        std::cout<< "discard of this input value is true?\n";
+      }*/
     }
+    // adding new lines
+    if(_input_vals[i]==1000000)
+        return 0;
+
     if(print) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
 
-  if(_discard)
-    return 0;
+  // if discard of i/p is true, compute but set the output also discard:
+  // shouldn't be the case for intermediate inputs, right?
+  
+  
+  
+  //if(_discard)
+  //   return 0;
   
   // std::cout << "comes in this my special compute function\n"; 
   
@@ -570,11 +584,16 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // Read in some temp value and set _val after inst_lat cycles
   int temp = 0;
   temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
+  // for testing only
+  if(temp<0 || temp>1000000)
+      exit(EXIT_FAILURE);
+  std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
+  std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
 
   // setting the output node (current node)
   SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); 
   this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
-  _discard = true;
+  // _discard = true;
 
 
   // pop the inputs after inst_thr+back_press here
@@ -587,12 +606,12 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
      // std::cout << "Let's print the value of back array: " <<  _back_array[i] << "\n";
         if(_back_array[i]==1){
-           n->set_value(1000000,false, inst_throughput*2);
+           n->set_value(1000000,true, inst_throughput*2); //decide to keep 1000*2 away from discard
            // n->set_value(1000000,true, inst_throughput*2);
            // _back_array[i] = 0; (temporary array)
         }
         else {
-           n->set_value(1000000, false, inst_throughput);
+           n->set_value(1000000, true, inst_throughput);
            // n->set_value(1000000, true, inst_throughput); // set to invalid: considering 0 as default value, -1 because it is input: no need
         }
     }
@@ -620,12 +639,42 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // should be recursively called here?
   // update_next_nodes for that
   return num_computed;
+  // return 1;
 }
 
 
 
 
 // Virtual function-------------------------------------------------
+
+
+void SbPDG_Inst::update_next_nodes(bool print, bool verif){
+  
+  // if it is popping input from input node--don't do anything: done while
+  // calling
+  //if(_val==1000000)
+  //   return;
+
+  int t = 0;
+  SbPDG_Node* use;
+
+  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SbPDG_Node* use = (*iter)->use();
+    t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
+    std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
+    if(t==1) { // t=1 for output nodes: I don't know
+        use->set_value(_val, use->discard()); // assuming no discard now    
+    }
+  }
+
+  
+}
+
+
+
+
+
+/*
 void SbPDG_Inst::update_next_nodes(bool print, bool verif){
   // cout << "SHOULD COME HERE IN SECOND CYCLE" << endl;
   int t = 0;
@@ -636,16 +685,16 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
     t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
     // cout << "value of computed nodes: " << t << endl; // this is correct
     if(t==0) {
+        // Why is it called twice? outside the for loop?
+
+
       // cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
       // cout << "SIZE OF INCOMING EDGE OF OUTPUT NODE: " << _ops.size() << endl; 
-      
-      // unset the input node value also: uses should be only 1
-      /*for(auto it = _ops.begin(); it != _ops.end(); it++) {
-         SbPDG_Node* n = (*it)->use();
-         assert(n==use && "instruction and output node cannot be same\n");
-         n->set_value(1000000, false);
-      }*/
-      use->set_value(_val, true); // assuming no discard now    
+   
+      // Why true? should check the discard of previous instruction here??
+        std::cout << "update next output node with value: " << _val << " and discard: " << use->discard() << "\n";
+        // if(_val!=1000000) // nothing computed?
+        use->set_value(_val, use->discard()); // assuming no discard now    
     }
     else {
       // num_computed += t;
@@ -653,7 +702,7 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
     
   }
 }
-
+*/
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
     _sbpdg->push_transient(this, v,valid,cycle);

@@ -77,9 +77,9 @@ class SbPDG_Node {
         return _discard;} //execution-related
 
     // for test---------------------------
-    bool get_discard() {
+    /*bool get_discard() {
         return _discard;
-    }
+    }*/
     //------------------------------------
 
     void setScalar() {_scalar = true;}
@@ -252,9 +252,9 @@ class SbPDG_Node {
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
     uint64_t _val = 1000000; //dynamic var (setting the default value)
-    uint64_t _discard=true;
+    // uint64_t _discard=true;
     // uint64_t _val; //dynamic var (setting the default value)
-    // uint64_t _discard=false; // Why is it set to false?
+    uint64_t _discard=false; // Why is it set to false?
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
 
@@ -743,7 +743,7 @@ class SbPDG {
     void insert_vec_in(SbPDG_VecInput*    in) {
       _vecInputs.push_back(in);
       // add to the group we are creating right now
-      std::cout << "It does come in inserting vec_in" << "\n";
+      // std::cout << "It does come in inserting vec_in" << "\n";
       _vecInputGroups[_vecInputGroups.size()-1].push_back(in);
     }
     void insert_vec_out(SbPDG_VecOutput*    out) {
@@ -816,26 +816,32 @@ class SbPDG {
     
     //Simulator pushes data to vector given by vector_id
     void push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
-      // std::cout<< "pushing data: " << data[0] << "\n";
+      std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* temp = vec_in->getInput(i); 
-        temp->set_value(data[i],true);
+        temp->set_value(data[i],true); //when push, discard is false?
       }
     }
 
     // check if some value present at input node or there is some backpressure or invalid value
     bool can_push_input(SbPDG_VecInput* vec_in){
       // std::cout << "size of input vector: " << vec_in->num_inputs() << "\n";
+      // Assuming elements of vector are being consumed simultaneously?
+      SbPDG_Input* temp = vec_in->getInput(0);
+      if(temp->get_value()!=1000000)
+          return false;
+      else
+          return true;
+      /*
       for (unsigned int i =0 ; i< vec_in->num_inputs(); i++){
         SbPDG_Input* temp = vec_in->getInput(i); 
-        // if(!temp->discard()) // if discard is not true
         if(temp->get_value()!=1000000) {// if value is not default
-          // std::cout << "values of the input nodes while checking: " << temp->get_value() << "\n";
           return false;
         }
       }
       return true;
+      */
     }
 
     //Advances simulation by one cycle  (return whether there was activity)
@@ -895,31 +901,41 @@ class SbPDG {
       unsigned int v=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
         SbPDG_Node* temp = vec_out->getOutput(i); // see the class type (object data type)
-        if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
+        SbPDG_Node* prev_inst = temp->first_operand(); 
+        //if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
+        if(prev_inst->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
         // if(!temp->discard()==true) // value of output valid
           v++;
       }
-      if(v==len)
+      if(v==len){
+        // std::cout << "Let's check the discard value in can_pop: " << temp->discard() <<"\n";
         return true;
+      }
       else
         return false;
     }
 
     //Simulator grabs size elements from vector port (vector_id)
     //assertion failure on insufficient size 
-    void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, unsigned int len){
+    void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, unsigned int len, bool &discard){
       assert(vec_out->num_outputs()==len && "insufficient output available\n");
       
       for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
         SbPDG_Node* temp = vec_out->getOutput(i); 
-        data.push_back(temp->get_value());
+        SbPDG_Node* prev_inst = temp->first_operand(); 
+        data.push_back(prev_inst->get_value());
         // temp->set_value(1000000, false); // pop means set it to invalid?
-        temp->set_value(1000000, false); // pop means set it to invalid?
         // std::cout << "number of incoming edges of this output nodes which should be 1 is: " << temp->num_inc() << "\n"; 
         // I need to find it's previous node and reset it's value
-        SbPDG_Node* prev_inst = temp->first_operand(); 
+    
         assert(temp!=prev_inst && "previous node and this node should not be same in pop_vector\n");
-        prev_inst->set_value(1000000, false);
+        std::cout << "I want to check the discard of prev to output node in index-match: " << prev_inst->discard() << " and value now: " << prev_inst->get_value() << " new discard: " << discard << "\n";
+        // std::cout << "I want to check the discard of output node in index-match: " << temp->discard() << " and value now: " << temp->get_value() << "\n";
+ 
+        // temp->set_value(1000000, prev_inst->discard()); // pop means set it to invalid?: no discard(pop from output)
+        temp->set_value(1000000, discard); // pop means set it to invalid?: no discard(pop from output)
+        prev_inst->set_value(1000000, true);
+
         // setting inst to discard and calling node's discard function:
       }
       // std::cout<< "popped data: " << data[0] << "\n";
@@ -945,6 +961,8 @@ class SbPDG {
                 if((*it1).second->n==(*it2).second->n){ // remove later one
                     // std::cout << "duplicates were present here\n";
                     (*it1).first = (*it1).first + (*it2).first - 1;
+                    // What about discard here?
+                    std::cout << "Check the validity of duplicate nodes here: " << (*it1).second->valid << " " << (*it2).second->valid << "\n";
                     transient_values.erase(it2);
                     --it2;
                     // --it1;
@@ -958,6 +976,7 @@ class SbPDG {
             ((*it).second->n)->update_next_nodes(print, verif);
             transient_values.erase(it);
             it--;
+            //if((*it).second->val!=1000000)
           }
           else{
             // if val is 1000000, make sure it is not already that: change the
@@ -974,6 +993,9 @@ class SbPDG {
         }
      }
 
+    SbPDG_Node* get_scalar_output(SbPDG_VecOutput* vec_out, int id){
+        return vec_out->getOutput(id);
+    }
     /*int get_backvalue2(SbPDG_VecInput* vec_curr){
 
         int id = 0;
