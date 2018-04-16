@@ -16,7 +16,7 @@ using namespace std;
 #include <netinet/in.h>
 #include <netdb.h>
 #include <unistd.h>
-
+#include <algorithm>
 #include "model_parsing.h"
 
 #include "gams_models/softbrain_gams.h"
@@ -153,18 +153,32 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   int iters=0;
 
+  Schedule* best_schedule=NULL;
+  Schedule* cur_schedule=NULL;
+
   while(total_msec() < _reslim * 1000) {
-    bool success = schedule_internal(sbPDG,schedule);
+    bool success = schedule_internal(sbPDG,cur_schedule);
     
     int lat,latmis;
-    schedule->calcLatency(lat,latmis);
+    cur_schedule->calcLatency(lat,latmis);
+
+    printf("BIG ITER DONE: lat %d, latmis %d\n",lat,latmis);
+    if(best_schedule) {
+      printf("Best latmis so far: latmis %d\n",best_schedule->max_lat_mis());
+    }
+
+
+    if(success && (best_schedule==NULL || 
+          cur_schedule->max_lat_mis() < best_schedule->max_lat_mis())) {
+      if(best_schedule) delete best_schedule;
+      best_schedule=cur_schedule;
+    }
 
     success = success && (latmis == 0);
 
-    printf("BIG ITER DONE: lat %d, latmis %d\n",lat,latmis);
-
     iters++;
     if(success || iters > 20) {
+      schedule = best_schedule;
       return success;
     }     
   }
@@ -310,7 +324,8 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_sb_gams.good());
   
-  ofs_sb_gams << "option reslim=" << _reslim - (total_msec()/1000) << ";\n"
+  ofs_sb_gams << "option reslim=" << std::min(_reslim - (total_msec()/1000),300.0) 
+    << ";\n"
                  << "option optcr="  <<  _optcr << ";\n"   
                  << "option optca="  <<  _optca << ";\n";
   if(use_hw) {

@@ -1846,6 +1846,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
   }
 
   _linkOrder = lat_edge;
+
+  _max_lat=max_lat;
+  _max_lat_mis=max_lat_mis; 
+
 }
 
 void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 
