@@ -72,11 +72,10 @@ int SbPDG::cycle_compute(bool print, bool verif) {
 
 // Adding new code for cycle-by-cycle CGRA functionality
 int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
-    // std::cout << "should come here next\n";
  
     int num_computed = 0;
     for (unsigned int i=0; i<vec_in->num_inputs(); ++i){
-      std::cout << "Trigger computation for each input in this vector: "<<i<<"\n";
+      // std::cout << "Trigger computation for each input in this vector: "<<i<<"\n";
       num_computed += vec_in->getInput(i)->compute_backcgra(print, verif);
     } 
 
@@ -517,16 +516,6 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
 // new compute for back cgra-----------------------------
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
-  // std::cout << "major compute at 519\n";
-
-  // if this node already has a value, don't compute this cycle never comes here, do not need this?
-  /*if(this->get_value()!=1000000){
-      std::cout << "output node already has a value which is not consumed! " << this->get_value() << " and discard: " << this->discard() << "\n"; 
-      return 0;
-  }*/
-
-
-
 
   assert(_ops.size() <=3);
 
@@ -544,20 +533,16 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
-    } else {
+    } 
+    else {
       SbPDG_Node*  n =  _ops[i]->def();
       _input_vals[i] = n->get_value();
-      if(n->get_value()==1000000) {
-          return 0;//check!
+      assert(n->get_value()!=1000000 && "Input node didn't have data :/\n");
       }
       /*if(n->discard()) {
         _discard=true;
         std::cout<< "discard of this input value is true?\n";
       }*/
-    }
-    // adding new lines
-    if(_input_vals[i]==1000000)
-        return 0;
 
     if(print) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
@@ -572,23 +557,21 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   //if(_discard)
   //   return 0;
   
-  // std::cout << "comes in this my special compute function\n"; 
   
   // initializing back pressure
-  if(_back_array.size() == 0)
+  if(_back_array.size() == 0){
       _back_array.resize(_ops.size());
-  for(int i=0; i<_ops.size(); ++i) {
-      _back_array[i] = 0;
-  }
+      for(unsigned int i=0; i<_ops.size(); ++i) {
+          _back_array[i] = 0;
+      }
+   }
 
   // Read in some temp value and set _val after inst_lat cycles
   int temp = 0;
   temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
-  // for testing only
-  if(temp<0 || temp>1000000)
-      exit(EXIT_FAILURE);
-  std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
-  std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
+
+  // std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
+  // std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
 
   // setting the output node (current node)
   SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); 
@@ -600,21 +583,47 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   int inst_throughput = inst_thr(pdginst->inst());
   // std::cout << "instruction throughput is " << inst_throughput << "\n";
   // std::cout << "instruction latency is " << inst_lat(pdginst->inst()) << "\n";
-  for(unsigned i = 0; i < _ops.size(); ++i) {
 
-      SbPDG_Node*  n =  _ops[i]->def();
 
-     // std::cout << "Let's print the value of back array: " <<  _back_array[i] << "\n";
-        if(_back_array[i]==1){
-           n->set_value(1000000,true, inst_throughput*2); //decide to keep 1000*2 away from discard
-           // n->set_value(1000000,true, inst_throughput*2);
-           // _back_array[i] = 0; (temporary array)
+  int index=0;
+  
+   for(unsigned i = 0; i < _ops.size(); ++i) {
+
+        SbPDG_Node*  n =  _ops[i]->def();
+
+
+        // only if n is an input node, how do i check?
+        if(_sbpdg->num_vec_input()!=0 && n->num_inc()==0) {
+
+            int vec_id = _sbpdg->find_vec_for_scalar(n, index);
+            SbPDG_VecInput* vec_in = _sbpdg->get_vector_input(vec_id); // check if something available
+
+            if(index==0)
+                vec_in->setBackBit(_back_array[i]); 
+            if(vec_in->getBackBit()==1)
+               n->set_value(_input_vals[i],true, inst_throughput);
+            else
+               n->set_value(1000000, true, inst_throughput);
         }
+
+
         else {
-           n->set_value(1000000, true, inst_throughput);
-           // n->set_value(1000000, true, inst_throughput); // set to invalid: considering 0 as default value, -1 because it is input: no need
+            if(_back_array[i]==1)
+                n->set_value(_input_vals[i],true, inst_throughput);
+            else
+               n->set_value(1000000, true, inst_throughput);
         }
-    }
+   }
+            
+            
+        
+
+
+
+
+
+
+
 
   // wrong: just for test
   print = false; verif = false;
@@ -634,12 +643,12 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     }
   }
 
-  int num_computed=!_discard;
+  // int num_computed=!_discard;
 
   // should be recursively called here?
   // update_next_nodes for that
-  return num_computed;
-  // return 1;
+  // return num_computed;
+  return 1;
 }
 
 
@@ -652,17 +661,17 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
   
   // if it is popping input from input node--don't do anything: done while
   // calling
-  //if(_val==1000000)
-  //   return;
+  if(_val==1000000)
+     return;
 
   int t = 0;
-  SbPDG_Node* use;
+  // SbPDG_Node* use;
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
     t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
-    std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
-    if(t==1) { // t=1 for output nodes: I don't know
+    // std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
+    if(t==0) { // t=1 for output nodes: I don't know
         use->set_value(_val, use->discard()); // assuming no discard now    
     }
   }
@@ -671,60 +680,11 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
 }
 
 
-
-
-
-/*
-void SbPDG_Inst::update_next_nodes(bool print, bool verif){
-  // cout << "SHOULD COME HERE IN SECOND CYCLE" << endl;
-  int t = 0;
-
-
-  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-    SbPDG_Node* use = (*iter)->use();
-    t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
-    // cout << "value of computed nodes: " << t << endl; // this is correct
-    if(t==0) {
-        // Why is it called twice? outside the for loop?
-
-
-      // cout << "SIZE OF OUTGOING EDGE OF OUTPUT NODE: " << _uses.size() << " and value we write is: " << _val << endl;
-      // cout << "SIZE OF INCOMING EDGE OF OUTPUT NODE: " << _ops.size() << endl; 
-   
-      // Why true? should check the discard of previous instruction here??
-        std::cout << "update next output node with value: " << _val << " and discard: " << use->discard() << "\n";
-        // if(_val!=1000000) // nothing computed?
-        use->set_value(_val, use->discard()); // assuming no discard now    
-    }
-    else {
-      // num_computed += t;
-    }
-    
-  }
-}
-*/
-
 void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
     _sbpdg->push_transient(this, v,valid,cycle);
 }
 
-/*bool SbPDG_Node::get_backvalue(int id) {
-        if(_back_array.size() > id)
-            return _back_array[id];
-        else
-            return false;
-    }
 
-
-// may be useless
-void SbPDG_Node::inc_inputs_wait(bool _back_array[]) {
-    for (int i=0; i<_sbpdg->num_inputs(); ++i) {
-        if(_back_array[i] == 1){
-           set_value(0,false,1); // how did it chose the node? no i sent (some issue): mat not come here?
-        }
-    }
-}
-*/
 //------------------------------------------------------------------
 
 

@@ -157,7 +157,6 @@ class SbPDG_Node {
       return 0;
     } 
 
-
     // void inc_inputs_wait(bool _back_array[]);
 
     //-------------------------------------------------------
@@ -237,14 +236,20 @@ class SbPDG_Node {
 
     
     int inc_inputs_ready_backcgra(bool print, bool verif) {
-      _inputs_ready+=1;
-      if(_inputs_ready == _num_inc_edges) {
-        int num_computed = compute_backcgra(print,verif);
+      if(_inputs_ready!=_num_inc_edges)
+          _inputs_ready+=1;
+      // std::cout << "came to increase inputs ready by 1 with inputs_ready: " << _inputs_ready << " and required: " << _num_inc_edges << "\n";
+      // new compute cannot enter when it is already computing some other value
+      // even if the inputs are ready
+      if(_inputs_ready == _num_inc_edges && this->get_value()==1000000) {
+        int num_computed = compute_backcgra(print,verif);//it's 0 or 1
         _inputs_ready=0;
         return num_computed;
       }
-      return 0;
+      // this means that sufficient inputs were not present: not output node
+      return -1;
     }
+
    //---------------------------------------------------------------------------
     
     
@@ -252,9 +257,8 @@ class SbPDG_Node {
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
     uint64_t _val = 1000000; //dynamic var (setting the default value)
-    // uint64_t _discard=true;
-    // uint64_t _val; //dynamic var (setting the default value)
-    uint64_t _discard=false; // Why is it set to false?
+    // uint64_t _val; //dynamic var
+    uint64_t _discard=false;
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
 
@@ -501,6 +505,11 @@ class SbPDG_VecInput : public SbPDG_Vec {
   // scalar input corresponding to index i
   SbPDG_Input* getInput(int i) {return _inputs[i];}
 
+  //---------------------------------
+  int getBackBit() {return back_bit;}
+  void setBackBit(int i) {back_bit=i;}
+  //---------------------------------
+
 	/*bool operator < (const SbPDG_VecInput& s) const
   {
      return (this->num_inputs() > s.num_inputs());
@@ -508,6 +517,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
 
   private:
     std::vector<SbPDG_Input*> _inputs;
+    int back_bit = 0; // new
 };
 
 
@@ -788,6 +798,29 @@ class SbPDG {
       assert(0 && "Vec Output not found");
     }
 
+//------------------------------
+ int find_vec_for_scalar(SbPDG_Node* in, int &index) {
+      for(unsigned int i =0; i < _vecInputs.size(); ++i) {
+          SbPDG_VecInput* vec_in = _vecInputs[i];
+          for(unsigned int j=0; j<vec_in->num_inputs(); ++j) {
+              SbPDG_Node* v = dynamic_cast<SbPDG_Node*>(_vecInputs[i]->getInput(j));
+              // std::cout << "Vector_id: " << i << " and v: " << v << " and in: " << in << "\n";
+              if(v == in) {
+                 index=j;
+                 return i;
+              }
+          }
+    }
+      assert(0 && "Scalar input not found\n");
+}
+
+SbPDG_VecInput* get_vector_input(int i){
+    return _vecInputs[i];
+}
+
+    //------------------
+
+
     SbPDG_VecInput*  vec_in(int i) {return _vecInputs[i];}
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
 
@@ -816,11 +849,12 @@ class SbPDG {
     
     //Simulator pushes data to vector given by vector_id
     void push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
-      std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
+      // std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* temp = vec_in->getInput(i); 
         temp->set_value(data[i],true); //when push, discard is false?
+        // temp->set_value(data[i],true, 1); //when push, discard is false?
       }
     }
 
@@ -833,15 +867,12 @@ class SbPDG {
           return false;
       else
           return true;
-      /*
-      for (unsigned int i =0 ; i< vec_in->num_inputs(); i++){
+      
+      /*for (unsigned int i =0 ; i< vec_in->num_inputs(); i++){
         SbPDG_Input* temp = vec_in->getInput(i); 
-        if(temp->get_value()!=1000000) {// if value is not default
-          return false;
-        }
-      }
-      return true;
-      */
+        temp->set_value()
+        }*/
+      
     }
 
     //Advances simulation by one cycle  (return whether there was activity)
@@ -901,9 +932,9 @@ class SbPDG {
       unsigned int v=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
         SbPDG_Node* temp = vec_out->getOutput(i); // see the class type (object data type)
-        SbPDG_Node* prev_inst = temp->first_operand(); 
-        //if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
-        if(prev_inst->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
+        // SbPDG_Node* prev_inst = temp->first_operand(); 
+        if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
+        //if(prev_inst->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
         // if(!temp->discard()==true) // value of output valid
           v++;
       }
@@ -928,12 +959,13 @@ class SbPDG {
         // std::cout << "number of incoming edges of this output nodes which should be 1 is: " << temp->num_inc() << "\n"; 
         // I need to find it's previous node and reset it's value
     
+        discard = prev_inst->discard();
         assert(temp!=prev_inst && "previous node and this node should not be same in pop_vector\n");
-        std::cout << "I want to check the discard of prev to output node in index-match: " << prev_inst->discard() << " and value now: " << prev_inst->get_value() << " new discard: " << discard << "\n";
+        // std::cout << "I want to check the discard of prev to output node in index-match: " << prev_inst->discard() << " and value now: " << prev_inst->get_value() << " new discard: " << discard << "\n";
         // std::cout << "I want to check the discard of output node in index-match: " << temp->discard() << " and value now: " << temp->get_value() << "\n";
  
         // temp->set_value(1000000, prev_inst->discard()); // pop means set it to invalid?: no discard(pop from output)
-        temp->set_value(1000000, discard); // pop means set it to invalid?: no discard(pop from output)
+        temp->set_value(1000000, true); // pop means set it to invalid?: no discard(pop from output)
         prev_inst->set_value(1000000, true);
 
         // setting inst to discard and calling node's discard function:
@@ -962,7 +994,7 @@ class SbPDG {
                     // std::cout << "duplicates were present here\n";
                     (*it1).first = (*it1).first + (*it2).first - 1;
                     // What about discard here?
-                    std::cout << "Check the validity of duplicate nodes here: " << (*it1).second->valid << " " << (*it2).second->valid << "\n";
+                    // std::cout << "Check the validity of duplicate nodes here: " << (*it1).second->valid << " " << (*it2).second->valid << "\n";
                     transient_values.erase(it2);
                     --it2;
                     // --it1;
