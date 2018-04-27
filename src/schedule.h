@@ -105,9 +105,17 @@ class Schedule {
       _passthroughsOf[edge].insert(pt);
     }
 
+    //Computes maximum throughput both given the latency mismatch &&
+    //functional unit throughput
+    //int maxMismatch(int g) {
+      //int maxgt=_sbPDG->maxGroupThroughput(g);
+      
+    //}
+
     int violation() {return _totalViolation;}
     void add_violation(int violation) {
       _totalViolation += violation;
+      _max_lat_mis = std::max(_max_lat_mis,violation);
     }
 
     int vioOf(SbPDG_Node* n) { return _vioOf[n];}
@@ -442,6 +450,9 @@ class Schedule {
 
   int num_passthroughs(SbPDG_Edge* e) {return _passthroughsOf[e].size();}
 
+  int max_lat() {assert(_max_lat!=-1);  return _max_lat;}
+  int max_lat_mis() {return _max_lat_mis;}
+
   private:
 
     SbDIR sbdir;
@@ -451,6 +462,8 @@ class Schedule {
     SbPDG*   _sbPDG;
 
     int _totalViolation=0;
+
+    int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
 
     std::unordered_set<sbnode*> _passthrough_nodes; //only for _n_configs > 1
     std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; //for stats

@@ -19,8 +19,23 @@ using namespace std;
 #define random 2
 #define mapping random/*0: Randomized(random), 1: Flexible, 2: One-2-One(one2one)*/
 
+void SchedulerStochasticGreedy::initialize(SbPDG* sbPDG, Schedule*& sched) {
+  //Sort the input ports once
+  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
+  sbio_interface& si =  subModel->io_interf();
+  _sd_in.clear();
+  si.sort_in_vports(_sd_in);
+  si.sort_out_vports(_sd_out);
+
+  sbPDG->sort_vec_in();
+  sbPDG->sort_vec_out();
+}
+
+
 bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
-{
+{  
+  initialize(sbPDG,sched);
+
   static int _srand_no=1; 
 
   int max_iters_no_improvement = 100000000;
@@ -81,16 +96,18 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 
     int obj = lat;
     if(_integrate_timing) { 
-//      obj = latmis*256+lat;
-      obj = violation*8192+lat*32+latmis;
+      //obj = latmis*256+lat;
+      //obj = violation*8192+lat*32+latmis;
+      obj = latmis*10000+violation*100+lat;
+
     }
 
     std::pair<int, int> score = make_pair(tot_mapped + succeed_sched + succeed_timing, 
                                           -obj);
     if (score > best_score) {
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
-        //_best_latmis=latmis;
-        _best_violation=violation;
+        _best_latmis=latmis;
+        //_best_violation=violation;
       }
 
       if(remapNeeded) {
@@ -107,7 +124,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
                 progress_getBestNum(Output), sbPDG->num_outputs(),
                 progress_getBestNum(FA), presize, postsize,
                 succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", timing met" : "");
+                succeed_timing ? ", mismatch == 0" : "");
       }
       best_score = score;
       if (sched) {
@@ -148,7 +165,9 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
 //      fprintf(stderr,"DFG Mapped, but Timing not met.  Simulation is still possible, but do not use generated schedule for hardware!");
 //    }
 //  }
-  return best_succeeded;
+
+//  return best_succeeded;
+  return best_mapped;
 }
 
 
@@ -219,10 +238,13 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
     state[n]=2;
 
-
-    if(_integrate_timing && sched->violation() > _best_violation) {
+    if(_integrate_timing && sched->max_lat_mis() > _best_latmis) {
       return false;
     }
+
+    /*if(_integrate_timing && sched->violation() > _best_violation) {
+      return false;
+    }*/
 
     for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
@@ -302,9 +324,15 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
           curRouting->fill_lat(sched, min_node_lat, max_node_lat);
 
           int violation = min_node_lat-max_node_lat;
-          if(_strict_timing && violation > 0) {
+
+          if(_integrate_timing && violation > _best_latmis) {
             curScore=fscore; // FAIL
           }
+
+
+          //if(_strict_timing && violation > 0) {
+          //  curScore=fscore; // FAIL
+          //}
           curScore.second = -violation;
         }
       }
@@ -384,13 +412,9 @@ pair<int,int> SchedulerStochasticGreedy::route(Schedule* sched, SbPDG_Edge* pdge
 
 bool SchedulerStochasticGreedy::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
-  sbio_interface si =  subModel->io_interf();
-  vector<pair<int,int>> sd;
+  sbio_interface& si =  subModel->io_interf();
 
   int n = sbPDG->num_vec_input();
-
-  sbPDG->sort_vec_in();
-  si.sort_in_vports(sd);
 
   for(int j = 0; j < n; ++j) {
     SbPDG_VecInput* vec_in = sbPDG->vec_in(j);
@@ -399,7 +423,7 @@ bool SchedulerStochasticGreedy::assignVectorInputs(SbPDG* sbPDG, Schedule* sched
     bool found_vector_port = false;
 
     unsigned int index = 0;
-    findFirstIndex(sd, si, vec_in->num_inputs(), index, Input);
+    findFirstIndex(_sd_in, si, vec_in->num_inputs(), index, Input);
     unsigned int attempt = 0;
     int curNum = progress_getCurNum(Input);
 
@@ -407,7 +431,8 @@ bool SchedulerStochasticGreedy::assignVectorInputs(SbPDG* sbPDG, Schedule* sched
       progress_updateCurNum(Input, curNum);
       pair<bool, int> vport_id;
       vector<pair<int, vector<int>>> vport_desc;
-      genRandomIndexBW(vport_id, vport_desc, sd, si, sd.size(), index, sched, Input);
+      genRandomIndexBW(vport_id, vport_desc, _sd_in, si, 
+                       _sd_in.size(), index, sched, Input);
 
       //Check if the vetcor port is 2. unassigned
       if (sched->vportOf(vport_id) != NULL) {
@@ -505,7 +530,7 @@ bool SchedulerStochasticGreedy::assignVectorInputs(SbPDG* sbPDG, Schedule* sched
       //Perform the vector assignment
       sched->assign_vport(vec_in,vport_id,mask);
       found_vector_port=true;
-    } while ((attempt++ < sd.size() - index -1) && !found_vector_port);
+    } while ((attempt++ < _sd_in.size() - index -1) && !found_vector_port);
 
     if(!found_vector_port) {
       progress_saveBestNum(Input);  
@@ -554,11 +579,7 @@ void SchedulerStochasticGreedy::genRandomIndexBW(pair<bool, int>& vport_id, vect
 bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   CandidateRouting candRouting;  
-  sbio_interface si =  subModel->io_interf();
-  vector<pair<int,int>> sd;
-
-  sbPDG->sort_vec_out();
-  si.sort_out_vports(sd);
+  sbio_interface& si =  subModel->io_interf();
 
   for(int i = 0; i < sbPDG->num_vec_output(); ++i) {
     SbPDG_VecOutput* vec_out = sbPDG->vec_out(i);
@@ -568,7 +589,7 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
 
     //for (auto& j : sd)
     unsigned int index = 0;
-    findFirstIndex(sd, si, vec_out->num_outputs(), index, Output);
+    findFirstIndex(_sd_out, si, vec_out->num_outputs(), index, Output);
     unsigned int attempt = 0;
     int curNum = progress_getCurNum(Output);
 
@@ -576,7 +597,8 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
       progress_updateCurNum(Output, curNum);
       pair<bool, int> vport_id;
       vector<pair<int, vector<int>>> vport_desc;
-      genRandomIndexBW(vport_id, vport_desc, sd, si, sd.size(), index, sched, Output);
+      genRandomIndexBW(vport_id, vport_desc, _sd_out, si, 
+                       _sd_out.size(), index, sched, Output);
 
       //Check if the vetcor port is 2. unassigned
       if (sched->vportOf(vport_id) != NULL) { 
@@ -679,7 +701,7 @@ bool SchedulerStochasticGreedy::assignVectorOutputs(SbPDG* sbPDG, Schedule* sche
       //Perform the vector assignment
       sched->assign_vport(vec_out,vport_id,mask);
       found_vector_port=true;
-    } while (attempt++ < sd.size() - index - 1 && !found_vector_port);
+    } while (attempt++ < _sd_out.size() - index - 1 && !found_vector_port);
     applyRouting(sched, &candRouting); //Commit the routing
 
     if (!found_vector_port) {

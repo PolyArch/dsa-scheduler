@@ -16,7 +16,7 @@ using namespace std;
 #include <netinet/in.h>
 #include <netdb.h>
 #include <unistd.h>
-
+#include <algorithm>
 #include "model_parsing.h"
 
 #include "gams_models/softbrain_gams.h"
@@ -116,10 +116,6 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     ofs << "Tv.l('" << n->gamsName() << "')=" << l << ";\n";
   }
 
-  ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
-      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) - delta(e) + 1;\n"
-      << ");\n\n";
-
   //Mp.fx(pv,pn) = round(Mp.l(pv,pn));
   //Mn.fx(v,n) = round(Mn.l(v,n));
 
@@ -128,10 +124,18 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
       << "    PTen.l(e,n)=1;\n"
       << "  );\n"
       << ");\n\n";
-  
-  ofs << "loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),\n"
-      << "  minTpv.l(pv)=Tv.l(v);\n"
-      << "  maxTpv.l(pv)=Tv.l(v);\n"
+
+  ofs << "loop((v1,e,v2)$(Gve(v1,e) and Gev(e,v2)),\n"
+      << "extra.l(e) = Tv.l(v2) - Tv.l(v1) - sum(l,Mel.l(e,l)) - delta(e) + 1;\n"
+      << "extra.l(e) = min(extra.l(e),  max_edge_delay * (1 + sum(n, PTen.l(e,n))))"
+      << ");\n\n";
+
+
+  ofs << "minTpv.l(pv)=10000;" 
+      << "maxTpv.l(pv)=0;" 
+      << "loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),\n"
+      << "  minTpv.l(pv)=min(Tv.l(v),minTpv.l(pv));\n"
+      << "  maxTpv.l(pv)=max(Tv.l(v),maxTpv.l(pv));\n"
       << ");\n\n";
 
   //ofs << "Tv.l(v2) = smax((v1,e)$(Gve(v1,e) and Gev(e,v2)),Tv.l(v1) + sum(l,Ml.l(e,l))) + delta.l(e);\n";
@@ -149,10 +153,32 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   int iters=0;
 
+  Schedule* best_schedule=NULL;
+  Schedule* cur_schedule=NULL;
+
   while(total_msec() < _reslim * 1000) {
-    bool success = schedule_internal(sbPDG,schedule);
+    bool success = schedule_internal(sbPDG,cur_schedule);
+    
+    int lat,latmis;
+    cur_schedule->calcLatency(lat,latmis);
+
+    printf("BIG ITER DONE: lat %d, latmis %d\n",lat,latmis);
+    if(best_schedule) {
+      printf("Best latmis so far: latmis %d\n",best_schedule->max_lat_mis());
+    }
+
+
+    if(success && (best_schedule==NULL || 
+          cur_schedule->max_lat_mis() < best_schedule->max_lat_mis())) {
+      if(best_schedule) delete best_schedule;
+      best_schedule=cur_schedule;
+    }
+
+    success = success && (latmis == 0);
+
     iters++;
     if(success || iters > 20) {
+      schedule = best_schedule;
       return success;
     }     
   }
@@ -178,11 +204,11 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     heur_scheduler.set_max_iters_zero_vio(20000);
     heur_scheduler.setTimeout(_reslim - (total_msec()/1000));
 
-    if(mrt_heur) {
+    //if(mrt_heur) {
       heur_scheduler.set_integrate_timing(true);
-    } else if(mr_heur) {
-      heur_scheduler.set_integrate_timing(false);
-    }
+    //} else if(mr_heur) {
+    //  heur_scheduler.set_integrate_timing(false);
+    //}
     heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
     heur_sched->calcAssignEdgeLink();
   }
@@ -298,7 +324,8 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_sb_gams.good());
   
-  ofs_sb_gams << "option reslim=" << _reslim - (total_msec()/1000) << ";\n"
+  ofs_sb_gams << "option reslim=" << std::min(_reslim - (total_msec()/1000),300.0) 
+    << ";\n"
                  << "option optcr="  <<  _optcr << ";\n"   
                  << "option optca="  <<  _optca << ";\n";
   if(use_hw) {

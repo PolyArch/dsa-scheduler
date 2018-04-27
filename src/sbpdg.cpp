@@ -167,6 +167,16 @@ int SbPDG::maxGroupThroughput(int g) {
   return maxgt;
 }
 
+void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
+  assert(g < (int)_vecInputGroups.size());
+  for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
+    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
+      vec->getInput(j)->depInsts(insts);
+    }
+  }
+}
+
 SbPDG::SbPDG() {
   _vecInputGroups.push_back({});
   _vecOutputGroups.push_back({});

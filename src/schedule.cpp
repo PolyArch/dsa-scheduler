@@ -406,11 +406,10 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     cur_slice += 1; // because we skipped the switch
   }
 
-  int max_lat, max_lat_mis;
-  calcLatency(max_lat, max_lat_mis,true);
-  if(0 != max_lat_mis) {
+  calcLatency(_max_lat, _max_lat_mis,true);
+/*  if(0 != _max_lat_mis) {
     cerr << "The FU input latencies don't match, this may or may not be a problem!\n";
-  }
+  }*/
 
   calc_out_lat();
 
@@ -436,7 +435,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }
   }
 
-  int num_vec_groups = _sbPDG->num_vec_in_groups();
+  int num_vec_groups = _sbPDG->num_groups();
   assert(num_vec_groups <= NUM_DFG_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(g);
@@ -447,8 +446,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }
   }
 
-  num_vec_groups = _sbPDG->num_vec_out_groups();
-  assert(num_vec_groups <= NUM_DFG_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SbPDG_VecOutput*>& vec = _sbPDG->vec_out_group(g);
     for(auto* vec_out : vec) {
@@ -1752,7 +1749,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
  
       if (everyone_is_here) {
-        //cout << "--------------------------------------------------------- DONE WITH " 
+        //cout << "----------------------------------- DONE WITH " 
         //     <<  next_fu->name() << "\n";
         // Latency should be the same across all the incoming edges
         for (II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
@@ -1852,6 +1849,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
   }
 
   _linkOrder = lat_edge;
+
+  _max_lat=max_lat;
+  _max_lat_mis=max_lat_mis; 
+
 }
 
 void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 
