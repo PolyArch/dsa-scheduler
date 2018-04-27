@@ -154,7 +154,14 @@ class SbPDG_Node {
     }
       
     virtual int compute_backcgra(bool print, bool verif) {
-      return 0;
+     // if 'this' is a node and not an instruction
+     assert(this->num_inc()==1 && "not an output node?\n");
+     assert(this->num_out()==0 && "not an output node?\n");
+     // std::cout << "OUTPUT NODE\n";
+     auto it = this->ops_begin();
+     SbPDG_Node* n = (*it)->def();
+     this->set_value(n->get_value(), n->discard());
+     return 0;
     } 
 
     // void inc_inputs_wait(bool _back_array[]);
@@ -398,6 +405,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     virtual int compute_backcgra(bool print, bool verif) {
        int num_computed=0;
        for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+         // std::cout << "starts computation for this vector at an input\n";
          SbPDG_Node* use = (*iter)->use();
          num_computed += use->inc_inputs_ready_backcgra(print, verif);
        }
@@ -854,71 +862,58 @@ SbPDG_VecInput* get_vector_input(int i){
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* temp = vec_in->getInput(i); 
         temp->set_value(data[i],true); //when push, discard is false?
-        // temp->set_value(data[i],true, 1); //when push, discard is false?
       }
     }
 
     // check if some value present at input node or there is some backpressure or invalid value
     bool can_push_input(SbPDG_VecInput* vec_in){
-      // std::cout << "size of input vector: " << vec_in->num_inputs() << "\n";
-      // Assuming elements of vector are being consumed simultaneously?
       SbPDG_Input* temp = vec_in->getInput(0);
       if(temp->get_value()!=1000000)
           return false;
       else
           return true;
-      
-      /*for (unsigned int i =0 ; i< vec_in->num_inputs(); i++){
-        SbPDG_Input* temp = vec_in->getInput(i); 
-        temp->set_value()
-        }*/
-      
     }
 
     //Advances simulation by one cycle  (return whether there was activity)
     int cycle_compute(bool print, bool verif);
     int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
 
-    /*bool cycle() {
-      // some issue in print = true
-      int num_computed = 0;
-      num_computed = cycle_compute(false, true); //should be true of expect to print
-      // store every cycle
-      cycle_store(false, true);
-      if (num_computed == 0)
-       return false;
-      else 
-       return true;
-    }
 
-    bool is_busy(){
-        if(transient_values.size()==0)
-            return false;
-        else {
-            // std::cout << "size of transient_values is: " << transient_values.size() << "\n";
-            return true;
-        }
-    }*/
-
+    // bool none_config = false;
     bool backcgra_cycle(SbPDG_VecInput* vec_in) {
-        
-        // check for none config here
-    // std::cout << "none config computation triggered in this case\n";
-       /* for (unsigned int i=0; i<vec_in->num_inputs(); ++i) {
+
+    // if(num_inputs() == num_outputs())
+       //     none_config = true;
+       //     inactive now!
+      /*  
+      if(none_config) {
+        for (unsigned int i=0; i<vec_in->num_inputs(); ++i) {
             SbPDG_Node* n = vec_in->getInput(i);
-            push_transient(n, 1000000, false, 1); // popping the input: assuming througput=latency here
             assert(n->num_out()==1 && "incorrectly detected none config\n");
+            if(n->get_value()==1000000)
+                return false;
+            // assert(n->get_value()!=1000000 && "input not present\n");
+
+            n->update_next_nodes(false, true);
             auto it = n->uses_begin();
             SbPDG_Node* use = (*it)->use();
-            push_transient(use, n->get_value() ,true, 4); // set this value to output in next cycle(2 cycles for this)
-        }*/
+            use->set_value(n->get_value(), true);
+            n->set_value(1000000, true);
+            // push_transient(use, n->get_value() ,true, 2); // set this value to output in next cycle(2 cycles for this)
+            // push_transient(n, 1000000, true, 1); // popping the input: assuming througput=latency here
+        }
+        return true;
+    }*/
+
+
 
       // some issue in print = true
       int num_computed = 0;
       num_computed = compute_backcgra(vec_in, false, true); //should be true of expect to print
-      if (num_computed == 0){
-                return false;
-      }
+
+      // std::cout << "Let's check num_computed for this vector input: " << num_computed << "\n";
+      if (num_computed ==0)
+           return false;
       else 
        return true;
     }
@@ -931,15 +926,11 @@ SbPDG_VecInput* get_vector_input(int i){
 
       unsigned int v=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
-        SbPDG_Node* temp = vec_out->getOutput(i); // see the class type (object data type)
-        // SbPDG_Node* prev_inst = temp->first_operand(); 
-        if(temp->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
-        //if(prev_inst->get_value()!=1000000) // not default value: for seeing the output: validity not working well!
-        // if(!temp->discard()==true) // value of output valid
+        SbPDG_Node* temp = vec_out->getOutput(i); 
+        if(temp->get_value()!=1000000) // not default value: for seeing the output
           v++;
       }
       if(v==len){
-        // std::cout << "Let's check the discard value in can_pop: " << temp->discard() <<"\n";
         return true;
       }
       else
@@ -954,23 +945,18 @@ SbPDG_VecInput* get_vector_input(int i){
       for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
         SbPDG_Node* temp = vec_out->getOutput(i); 
         SbPDG_Node* prev_inst = temp->first_operand(); 
-        data.push_back(prev_inst->get_value());
-        // temp->set_value(1000000, false); // pop means set it to invalid?
-        // std::cout << "number of incoming edges of this output nodes which should be 1 is: " << temp->num_inc() << "\n"; 
-        // I need to find it's previous node and reset it's value
+
+        // CHECK THIS!
+        // data.push_back(prev_inst->get_value());
+        data.push_back(temp->get_value());
     
         discard = prev_inst->discard();
         assert(temp!=prev_inst && "previous node and this node should not be same in pop_vector\n");
-        // std::cout << "I want to check the discard of prev to output node in index-match: " << prev_inst->discard() << " and value now: " << prev_inst->get_value() << " new discard: " << discard << "\n";
-        // std::cout << "I want to check the discard of output node in index-match: " << temp->discard() << " and value now: " << temp->get_value() << "\n";
  
-        // temp->set_value(1000000, prev_inst->discard()); // pop means set it to invalid?: no discard(pop from output)
         temp->set_value(1000000, true); // pop means set it to invalid?: no discard(pop from output)
         prev_inst->set_value(1000000, true);
 
-        // setting inst to discard and calling node's discard function:
       }
-      // std::cout<< "popped data: " << data[0] << "\n";
 
       // Insufficient output size
       // assert(data.size()==len); 
@@ -987,7 +973,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
         std::list<std::pair<int, struct cycle_result*>>::iterator it1;
         std::list<std::pair<int, struct cycle_result*>>::iterator it2;
-        // sum up the duplicates first: very inefficent ask!
+        // sum up the duplicates first: very inefficent!
         for(it1=transient_values.begin(); it1!=transient_values.end(); ++it1){
             for(it2=std::next(it1,1); it2!=transient_values.end(); ++it2){
                 if((*it1).second->n==(*it2).second->n){ // remove later one
@@ -997,7 +983,6 @@ SbPDG_VecInput* get_vector_input(int i){
                     // std::cout << "Check the validity of duplicate nodes here: " << (*it1).second->valid << " " << (*it2).second->valid << "\n";
                     transient_values.erase(it2);
                     --it2;
-                    // --it1;
                 }
             }
         }
@@ -1008,18 +993,9 @@ SbPDG_VecInput* get_vector_input(int i){
             ((*it).second->n)->update_next_nodes(print, verif);
             transient_values.erase(it);
             it--;
-            //if((*it).second->val!=1000000)
           }
           else{
-            // if val is 1000000, make sure it is not already that: change the
-            // value to some other such constant and not update first
-            /*if((*it).second->val == 1000000 && ((*it).second->n)->get_value() == 1000000) {
-                std::cout << "came inside this special case of multiple cycles of backpressure\n";
-                ((*it).second->n)->set_value(2000000, (*it).second->valid); // can we somehow save the previous value??
-            }
-            else {*/
                 (*it).first--;
-            // }
 
           }
         }
@@ -1028,32 +1004,8 @@ SbPDG_VecInput* get_vector_input(int i){
     SbPDG_Node* get_scalar_output(SbPDG_VecOutput* vec_out, int id){
         return vec_out->getOutput(id);
     }
-    /*int get_backvalue2(SbPDG_VecInput* vec_curr){
 
-        int id = 0;
-        SbPDG_VecInput* vec;
-        for (int vector_id=0; vector_id < num_vec_input(); ++vector_id){
-            vec = vec_in(vector_id);
-            if(vec == vec_in) {
-                return id;
-            }
-            id += vec->num_inputs();
-        }
-        return -1;
-    }
-
-    bool get_back(int vector_id) {
-
-        int id = 0;
-        SbPDG_VecInput* vec;
-        for (int i=0; vector_id <= vector_id; ++i){
-           id += vec->num_inputs();
-        }
-        return get_backvalue(id); // returns _back_array[id]
-
-    }*/
-
-    // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
 
@@ -1104,9 +1056,8 @@ SbPDG_VecInput* get_vector_input(int i){
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
 
     int _total_dyn_insts=0;
-    // adding cycle information
     
-        //Dummy Stuffs:
+    //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;
     std::map<SbPDG_Node*,int> dummys_per_port;
     std::set<SbPDG_Inst*> dummies;

@@ -73,10 +73,11 @@ int SbPDG::cycle_compute(bool print, bool verif) {
 // Adding new code for cycle-by-cycle CGRA functionality
 int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
  
+    // std::cout << "now this compute for my vec_in\n";
     int num_computed = 0;
     for (unsigned int i=0; i<vec_in->num_inputs(); ++i){
-      // std::cout << "Trigger computation for each input in this vector: "<<i<<"\n";
-      num_computed += vec_in->getInput(i)->compute_backcgra(print, verif);
+      num_computed = vec_in->getInput(i)->compute_backcgra(print, verif);
+      // std::cout << "Trigger computation for each input in this vector: "<<i<<" and num_computed: " << num_computed << "\n";
     } 
 
   return num_computed;
@@ -517,11 +518,15 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 // new compute for back cgra-----------------------------
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
+   // TODO
+  // std::cout << "did it come here and seg fault here?\n";
+
   assert(_ops.size() <=3);
 
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());
   }
+
   assert(_input_vals.size() <= _ops.size());
 
   if(print) {
@@ -581,9 +586,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // pop the inputs after inst_thr+back_press here
   int inst_throughput = inst_thr(pdginst->inst());
-  // std::cout << "instruction throughput is " << inst_throughput << "\n";
-  // std::cout << "instruction latency is " << inst_lat(pdginst->inst()) << "\n";
-
 
   int index=0;
   
@@ -592,7 +594,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
         SbPDG_Node*  n =  _ops[i]->def();
 
 
-        // only if n is an input node, how do i check?
+        // only if n is an input node
         if(_sbpdg->num_vec_input()!=0 && n->num_inc()==0) {
 
             int vec_id = _sbpdg->find_vec_for_scalar(n, index);
@@ -615,15 +617,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
         }
    }
             
-            
-        
-
-
-
-
-
-
-
 
   // wrong: just for test
   print = false; verif = false;
@@ -644,15 +637,11 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   // int num_computed=!_discard;
-
-  // should be recursively called here?
-  // update_next_nodes for that
   // return num_computed;
+
+  // should be recursively called here? update_next_nodes for that
   return 1;
 }
-
-
-
 
 // Virtual function-------------------------------------------------
 
@@ -665,14 +654,15 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
      return;
 
   int t = 0;
-  // SbPDG_Node* use;
+
+  // std::cout << "start updating next nodes\n";
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
     t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
     // std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
     if(t==0) { // t=1 for output nodes: I don't know
-        use->set_value(_val, use->discard()); // assuming no discard now    
+        use->set_value(_val, use->discard());
     }
   }
 

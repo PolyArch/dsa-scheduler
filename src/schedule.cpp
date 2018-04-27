@@ -88,7 +88,8 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     if(slices().read_slice(IN_ACT_SLICE,i,i)) {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input()); 
       //vec_input->setLocMap(pm);
-      //_sbPDG->insert_vec_in(vec_input);
+      //vidushi: I modified this
+      _sbPDG->insert_vec_in(vec_input);
 
       //cout << "vp" << i << "  ";
 
