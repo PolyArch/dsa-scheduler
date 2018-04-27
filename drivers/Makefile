@@ -16,7 +16,7 @@ CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH)
 
 #all: reschedule stat-config
 
-all: standalone_sim sb_sched sb_dfg_emu
+all: sb_sched sb_dfg_emu
 #reschedul
 
 
