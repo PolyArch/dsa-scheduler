@@ -250,8 +250,6 @@ class SbPDG_Node {
       }
       return 0;
     }
-
-
     
     int inc_inputs_ready_backcgra(bool print, bool verif) {
       if(_inputs_ready!=_num_inc_edges)
@@ -878,7 +876,7 @@ SbPDG_VecInput* get_vector_input(int i){
     
     //Simulator pushes data to vector given by vector_id
     void push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
-      // std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
+      //std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* temp = vec_in->getInput(i); 
@@ -988,9 +986,8 @@ SbPDG_VecInput* get_vector_input(int i){
         transient_values.push_back(std::make_pair(cycle, temp));
     }
 
-    void cycle_store(bool print, bool verif){
+    int cycle_store(bool print, bool verif){ 
         std::list<std::pair<int, struct cycle_result*>>::iterator it;
-
 
         std::list<std::pair<int, struct cycle_result*>>::iterator it1;
         std::list<std::pair<int, struct cycle_result*>>::iterator it2;
@@ -1010,16 +1007,21 @@ SbPDG_VecInput* get_vector_input(int i){
 
         for(it=transient_values.begin(); it!=transient_values.end(); ++it){
           if((*it).first <= 1){
-            ((*it).second->n)->set_value((*it).second->val, (*it).second->valid);
-            ((*it).second->n)->update_next_nodes(print, verif);
+            SbPDG_Node* sb_node = (*it).second->n;
+            sb_node->set_value((*it).second->val, (*it).second->valid);
+            sb_node->update_next_nodes(print, verif);
+            std::cout << "pushing to " << sb_node->gamsName() << " val:"
+              << (*it).second->val << " valid:" << (*it).second->valid << "\n";
             transient_values.erase(it);
             it--;
           }
           else{
                 (*it).first--;
-
           }
         }
+        int temp = _total_dyn_insts;
+        _total_dyn_insts=0;
+        return temp; 
      }
 
     SbPDG_Node* get_scalar_output(SbPDG_VecOutput* vec_out, int id){
@@ -1036,6 +1038,10 @@ SbPDG_VecInput* get_vector_input(int i){
     std::ostream& dbg_stream() {return *_dbg_stream;}
     
     void check_for_errors();
+
+    void inc_total_dyn_insts() {_total_dyn_insts++;}
+    int  total_dyn_insts()     {return _total_dyn_insts;}
+
 
   private:
     // to keep track of number of cycles---------------------

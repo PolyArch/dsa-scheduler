@@ -52,7 +52,6 @@ void order_insts(SbPDG_Inst* inst,
 
 // Adding new code for cycle-by-cycle CGRA functionality
 int SbPDG::cycle_compute(bool print, bool verif) {
- 
   // storing the output every cycles: solving other issues first
   // cycle_store();
 
@@ -527,6 +526,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
 // new compute for back cgra-----------------------------
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
+  _sbpdg->inc_total_dyn_insts();
 
    // TODO
   // std::cout << "did it come here and seg fault here?\n";
@@ -542,6 +542,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
+  cout << name() << " (" << _ID << "): ";
+
 
   _discard=false;
 
@@ -562,6 +564,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     if(print) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
+    cout << std::hex << _input_vals[i] << " ";
   }
 
   // if discard of i/p is true, compute but set the output also discard:
@@ -582,15 +585,28 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
    }
 
   // Read in some temp value and set _val after inst_lat cycles
-  int temp = 0;
+  uint64_t temp = 0;
   temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
+
+  if(print) {
+    _sbpdg->dbg_stream() << " = " << temp << "\n";
+  }
+  
+  cout << " = " << temp;
+  if(_discard) { 
+    cout << " and discard!";
+  }
+  cout << "\n";
 
   // std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
   // std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
 
   // setting the output node (current node)
   SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); 
-  this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
+
+  if(!_discard) {
+    this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
+  }
   // _discard = true;
 
 
@@ -600,6 +616,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   int index=0;
   
    for(unsigned i = 0; i < _ops.size(); ++i) {
+        if(_ops[i]==NULL) continue;
 
         SbPDG_Node*  n =  _ops[i]->def();
 
@@ -629,11 +646,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
             
 
   // wrong: just for test
-  print = false; verif = false;
+  //print = false; verif = false;
 
-  if(print) {
-    _sbpdg->dbg_stream() << " = " << _val << "\n";
-  }
 
   // what is this?
   if(verif) {
@@ -664,13 +678,12 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
      return;
 
   int t = 0;
-
   // std::cout << "start updating next nodes\n";
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
     SbPDG_Node* use = (*iter)->use();
     t = use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
-    // std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
+    std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
     if(t==0) { // t=1 for output nodes: I don't know
         use->set_value(_val, use->discard());
     }
@@ -681,6 +694,8 @@ void SbPDG_Inst::update_next_nodes(bool print, bool verif){
 
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, int cycle) {
+    assert(valid);
+    std::cout << "val:" << v << "cycle:" << cycle << " " << this->gamsName() << "\n";
     _sbpdg->push_transient(this, v,valid,cycle);
 }
 
