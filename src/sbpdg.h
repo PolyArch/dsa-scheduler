@@ -688,14 +688,15 @@ class SbPDG {
       _vecOutputGroups[_vecOutputGroups.size()-1].push_back(out);
     }
 
-
     void insert_vec_in_group(SbPDG_VecInput* in, unsigned group) {
+      _vecInputs.push_back(in);
       if(_vecInputGroups.size() <= group) {
        _vecInputGroups.resize(group+1);
       }
       _vecInputGroups[group].push_back(in);
     }
     void insert_vec_out_group(SbPDG_VecOutput* out, unsigned group) {
+      _vecOutputs.push_back(out);
       if(_vecOutputGroups.size() <= group) {
        _vecOutputGroups.resize(group+1);
       }
