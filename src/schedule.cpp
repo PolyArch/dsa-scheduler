@@ -140,6 +140,8 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
           pdg_out->setVPort(_sbPDG->num_vec_output());
           pdgnode_for[out]=pdg_out;
           _sbPDG->addOutput(pdg_out);
+          vec_output->addOutput(pdg_out); //add output to vector
+
         }
       }
       assign_vport(vec_output,make_pair(false/*input*/,i),mask);
