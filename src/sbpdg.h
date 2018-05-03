@@ -151,18 +151,30 @@ class SbPDG_Node {
     } 
 
     //Extra function-----------------------------------------
-    virtual void update_next_nodes(bool print, bool verif) {
-        return;
+    virtual int update_next_nodes(bool print, bool verif) {
+        // comes here if we set some value of i/p node
+        int num_computed = 0;
+        if(get_avail()){
+          SbPDG_Node* n = this->first_use();
+          num_computed = n->inc_inputs_ready_backcgra(print, verif);
+        }
+        return num_computed;
     }
+    
       
     virtual int compute_backcgra(bool print, bool verif) {
      // if 'this' is a node and not an instruction
      assert(this->num_inc()==1 && "not an output node?\n");
      assert(this->num_out()==0 && "not an output node?\n");
-     // std::cout << "OUTPUT NODE\n";
      auto it = this->ops_begin();
      SbPDG_Node* n = (*it)->def();
-     this->set_value(n->get_value(), n->discard());
+     // std::cout << "In virtual function: val: "<< n->get_value() << " and avail: " << n->get_avail() << "\n";
+     if(!n->discard()){
+       this->set_node(n->get_value(), n->discard(), n->get_avail());
+     }
+     // unset the prev_inst
+     n->set_node(0, true, false);
+     _inputs_ready=0; // hopefully if it comes from inc_inputs_ready
      return 0;
     } 
 
@@ -224,16 +236,22 @@ class SbPDG_Node {
       _discard=!valid;
     }
 
+
+    void set_node(uint64_t v, bool valid, bool avail) {
+      _val=v; 
+      _discard=!valid;
+      _avail = avail;
+    }
+
      // sets value at this cycle
-     void set_value(uint64_t v, bool valid, int cycle);
+     void set_value(uint64_t v, bool valid, bool avail, int cycle);
     //--------------------------------------------
 
     uint64_t get_value() {return _val;}
+    bool get_avail() {return _avail;}
     bool input = false;
     bool output = false;
     int _iter;
-    //bool back_array = false; Vignesh
-    //uint64_t backPressure_result; //Vignesh
 
     int min_lat() {return _min_lat;}
     void set_min_lat(int i) {_min_lat = i;}
@@ -252,18 +270,27 @@ class SbPDG_Node {
     }
     
     int inc_inputs_ready_backcgra(bool print, bool verif) {
-      if(_inputs_ready!=_num_inc_edges)
+      if(_inputs_ready!=_num_inc_edges){
           _inputs_ready+=1;
-      // std::cout << "came to increase inputs ready by 1 with inputs_ready: " << _inputs_ready << " and required: " << _num_inc_edges << "\n";
+      }
+      // std::cout << "came to increase inputs ready by 1 " << name() << "with inputs_ready: " << _inputs_ready << " and required: " << _num_inc_edges << "\n";
       // new compute cannot enter when it is already computing some other value
       // even if the inputs are ready
-      if(_inputs_ready == _num_inc_edges && this->get_value()==1000000) {
+      // if(_inputs_ready == _num_inc_edges && this->get_value()==1000000) {
+      if(_inputs_ready == _num_inc_edges && !this->get_avail()) {
         int num_computed = compute_backcgra(print,verif);//it's 0 or 1
-        _inputs_ready=0;
+        // _inputs_ready=0;
         return num_computed;
       }
       // this means that sufficient inputs were not present: not output node
-      return -1;
+      return 0;
+    }
+
+    int inc_reset_req(){
+        return ++reset_req_times;
+    }
+    void reset_reset_req(){
+        reset_req_times=0;
     }
 
    //---------------------------------------------------------------------------
@@ -272,8 +299,10 @@ class SbPDG_Node {
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
-    uint64_t _val = 1000000; //dynamic var (setting the default value)
+    uint64_t _val = 0; //dynamic var (setting the default value)
+    bool _avail = false; // new variable
     // uint64_t _val; //dynamic var
+    int reset_req_times=0;
     uint64_t _discard=false;
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
@@ -288,8 +317,6 @@ class SbPDG_Node {
     int _sched_lat=0;
     int _max_thr=0;
 
-    // newly added 
-    // std::list<std::pair<int,struct cycle_result>> transient_values;
 
   private:
     static int ID_SOURCE;
@@ -326,7 +353,7 @@ class SbPDG_Inst : public SbPDG_Node {
     SB_CONFIG::sb_inst_t inst() { return _sbinst; }
 
     //Adding new function in the header file
-    void update_next_nodes(bool print, bool verif);
+    int update_next_nodes(bool print, bool verif);
 
     virtual int maxThroughput() {
        if(_max_thr==0) {
@@ -389,6 +416,9 @@ class SbPDG_Inst : public SbPDG_Node {
     std::vector<uint64_t> _reg;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
+    // newly added: for now size of 1 
+    // std::pair<std::vector<int>,int> _input_bufs;
+
 };
 
 class SbPDG_IO : public SbPDG_Node {
@@ -534,7 +564,9 @@ class SbPDG_VecInput : public SbPDG_Vec {
 
   //---------------------------------
   int getBackBit() {return back_bit;}
-  void setBackBit(int i) {back_bit=i;}
+  void setBackBit(int i) {
+      std::cout << "came to set back bit here as: " << i << "\n";
+      back_bit=i;}
   //---------------------------------
 
 	/*bool operator < (const SbPDG_VecInput& s) const
@@ -875,22 +907,38 @@ SbPDG_VecInput* get_vector_input(int i){
 
     
     //Simulator pushes data to vector given by vector_id
-    void push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
+    bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data) {
       //std::cout<< "pushing data: " << data[0] << " and " << data[1] << "\n";
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
+      // int num_computed = 0;
+      int t=0;
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* temp = vec_in->getInput(i); 
-        temp->set_value(data[i],true); //when push, discard is false?
-      }
-    }
+        // temp->set_value(data[i],true); //when push, discard is false?
+        temp->set_node(data[i],true, true); //when push, discard is false?
+        // change if this works
+        // temp->update_next_nodes(false, false);
+        // num_computed += temp->compute_backcgra(false, false);
+        t = temp->update_next_nodes(false, false);
+
+     }
+      if(t>0)
+          return true;
+      else
+          return false;
+
+   }
 
     // check if some value present at input node or there is some backpressure or invalid value
     bool can_push_input(SbPDG_VecInput* vec_in){
-      SbPDG_Input* temp = vec_in->getInput(0);
-      if(temp->get_value()!=1000000)
+      // can push if whole vector is available
+      for(unsigned int i=0; i<vec_in->num_inputs(); ++i) {
+        SbPDG_Input* temp = vec_in->getInput(i);
+        // std::cout << "Is there data already? " << temp->get_avail() << "\n";
+        if(temp->get_avail())
           return false;
-      else
-          return true;
+      }
+      return true;
     }
 
     //Advances simulation by one cycle  (return whether there was activity)
@@ -926,11 +974,10 @@ SbPDG_VecInput* get_vector_input(int i){
 
 
 
-      // some issue in print = true
+    
       int num_computed = 0;
-      num_computed = compute_backcgra(vec_in, false, true); //should be true of expect to print
+      // num_computed = compute_backcgra(vec_in, false, true); //should be true of expect to print
 
-      // std::cout << "Let's check num_computed for this vector input: " << num_computed << "\n";
       if (num_computed ==0)
            return false;
       else 
@@ -942,12 +989,15 @@ SbPDG_VecInput* get_vector_input(int i){
     bool can_pop_output(SbPDG_VecOutput* vec_out, unsigned int len){
         
       assert(len>0 && "Cannot pop 0 length output\n");
+      assert(vec_out->num_outputs()==len && "asked for different number of outputs than the supposed length\n");
 
       unsigned int v=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
         SbPDG_Node* temp = vec_out->getOutput(i); 
-        if(temp->get_value()!=1000000) // not default value: for seeing the output
+        if(temp->get_avail()) {
+          // std::cout << "data: " << temp->get_value() << " and is it data: " << temp->get_avail() << "\n";
           v++;
+        }
       }
       if(v==len){
         return true;
@@ -961,6 +1011,7 @@ SbPDG_VecInput* get_vector_input(int i){
     void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, unsigned int len, bool &discard){
       assert(vec_out->num_outputs()==len && "insufficient output available\n");
       
+      // we don't need discard now!
       for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
         SbPDG_Node* temp = vec_out->getOutput(i); 
         SbPDG_Node* prev_inst = temp->first_operand(); 
@@ -972,8 +1023,10 @@ SbPDG_VecInput* get_vector_input(int i){
         discard = prev_inst->discard();
         assert(temp!=prev_inst && "previous node and this node should not be same in pop_vector\n");
  
-        temp->set_value(1000000, true); // pop means set it to invalid?: no discard(pop from output)
-        prev_inst->set_value(1000000, true);
+        // temp->set_value(1000000, true); // pop means set it to invalid?: no discard(pop from output)
+        temp->set_node(0, true, false); // pop means set it to invalid?: no discard(pop from output)
+        // prev_inst->set_value(1000000, true);
+        // prev_inst->set_node(0, true, false);
 
       }
 
@@ -981,44 +1034,57 @@ SbPDG_VecInput* get_vector_input(int i){
       // assert(data.size()==len); 
     }
 
-    void push_transient(SbPDG_Node* n, uint64_t v, bool valid, int cycle){
-        struct cycle_result* temp = new cycle_result(n, v, valid);
+    void push_transient(SbPDG_Node* n, uint64_t v, bool valid, bool avail, int cycle){
+        struct cycle_result* temp = new cycle_result(n, v, valid, avail);
+        std::cout << "pushing into transient, name:  " << n->name() << " and val: " << v << " avail: " << avail << "\n";
         transient_values.push_back(std::make_pair(cycle, temp));
     }
 
-    int cycle_store(bool print, bool verif){ 
-        std::list<std::pair<int, struct cycle_result*>>::iterator it;
+    int cycle(bool print, bool verif){ 
+        // std::list<std::pair<int, struct cycle_result*>>::iterator it;
 
-        std::list<std::pair<int, struct cycle_result*>>::iterator it1;
-        std::list<std::pair<int, struct cycle_result*>>::iterator it2;
+        // std::list<std::pair<int, struct cycle_result*>>::iterator it1;
+        // std::list<std::pair<int, struct cycle_result*>>::iterator it2;
         // sum up the duplicates first: very inefficent!
-        for(it1=transient_values.begin(); it1!=transient_values.end(); ++it1){
-            for(it2=std::next(it1,1); it2!=transient_values.end(); ++it2){
+        for(auto it1=transient_values.begin(); it1!=transient_values.end(); ++it1){
+            for(auto it2=std::next(it1,1); it2!=transient_values.end(); ++it2){
                 if((*it1).second->n==(*it2).second->n){ // remove later one
                     // std::cout << "duplicates were present here\n";
                     (*it1).first = (*it1).first + (*it2).first - 1;
                     // What about discard here?
                     // std::cout << "Check the validity of duplicate nodes here: " << (*it1).second->valid << " " << (*it2).second->valid << "\n";
+                    // std::cout << "Check the availability of duplicate nodes here: " << (*it1).second->avail << " " << (*it2).second->avail << "\n";
                     transient_values.erase(it2);
                     --it2;
                 }
             }
         }
 
-        for(it=transient_values.begin(); it!=transient_values.end(); ++it){
-          if((*it).first <= 1){
+        for(auto it=transient_values.begin(); it!=transient_values.end(); ++it){
+          // if((*it).first <= 1){
+          if((*it).first < 1){
             SbPDG_Node* sb_node = (*it).second->n;
-            sb_node->set_value((*it).second->val, (*it).second->valid);
+            // sb_node->set_value((*it).second->val, (*it).second->valid);
+            if(!((*it).second->avail==0 && sb_node->inc_reset_req()!=sb_node->num_out())){
+            // reset_req_times=0;
+            sb_node->reset_reset_req();
+            sb_node->set_node((*it).second->val, (*it).second->valid,(*it).second->avail);
+            std::cout << "pushing in transient to " << sb_node->name() << " val:" << (*it).second->val << " avail: " << (*it).second->avail << "\n";
             sb_node->update_next_nodes(print, verif);
-            std::cout << "pushing to " << sb_node->gamsName() << " val:"
-              << (*it).second->val << " valid:" << (*it).second->valid << "\n";
             transient_values.erase(it);
             it--;
+            }
+            else {
+                std::cout << "came to reset the node for multiple output edges\n";
+            }
           }
           else{
                 (*it).first--;
           }
         }
+
+
+
         int temp = _total_dyn_insts;
         _total_dyn_insts=0;
         return temp; 
@@ -1049,11 +1115,13 @@ SbPDG_VecInput* get_vector_input(int i){
        SbPDG_Node* n;
        uint64_t val;
        bool valid;
+       bool avail;
 
-       cycle_result(SbPDG_Node* node, uint64_t value, bool valid_in){
+       cycle_result(SbPDG_Node* node, uint64_t value, bool valid_in, bool a){
           n = node;
           val = value;
           valid = valid_in;
+          avail = a;
        }
     };
 
