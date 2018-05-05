@@ -51,26 +51,8 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-// Adding new code for cycle-by-cycle CGRA functionality
-/*int SbPDG::cycle_compute(bool print, bool verif) {
-  // storing the output every cycles: solving other issues first
-  // cycle_store();
 
-  int num_computed = 0;
-  SbPDG_VecInput* vec;
-
-  for (int vector_id=0; vector_id<num_vec_input(); ++vector_id){
-    vec = _vecInputs[vector_id];
-    for (unsigned int i=0; i<vec->num_inputs(); ++i){
-      // should call compute only if the data is available: that's correct
-      num_computed += vec->getInput(i)->compute_backcgra(print, verif);
-    } 
-  }
-
-  return num_computed;
-}*/
-
-// Adding new code for cycle-by-cycle CGRA functionality
+// Adding new code for cycle-by-cycle CGRA functionality: this is used .h not used
 int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
  
     // std::cout << "now this compute for my vec_in\n";
@@ -554,31 +536,14 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _input_vals[i]=imm();
     } 
     else {
-      SbPDG_Node*  n =  _ops[i]->def();
-      _input_vals[i] = n->get_value();
-      if(!n->get_avail())
-          return 0;
-      // assert(n->get_avail() && "Input node didn't have data :/\n");
-      }
-      /*if(n->discard()) {
-        _discard=true;
-        std::cout<< "discard of this input value is true?\n";
-      }*/
+        _input_vals[i] = _ops[i]->get_buffer_val();
+    } 
 
     if(print) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
     // cout << std::hex << _input_vals[i] << " ";
   }
-
-  // if discard of i/p is true, compute but set the output also discard:
-  // shouldn't be the case for intermediate inputs, right?
-  
-  
-  
-  //if(_discard)
-  //   return 0;
-  
   
   // initializing back pressure
   if(_back_array.size() == 0){
@@ -621,7 +586,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // pop the inputs after inst_thr+back_press here
   int inst_throughput = inst_thr(pdginst->inst());
 
-  int index=0;
+  // int index=0;
   
    for(unsigned i = 0; i < _ops.size(); ++i) {
         if(_ops[i]==NULL) {
@@ -629,56 +594,18 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
             continue;
         }
 
-
-        // just doing this for the control node (change later:TODO)
-        /*
-        if(i==2){
-            break;
-        }
-        */
-
-        SbPDG_Node*  n =  _ops[i]->def();
-
         if(_back_array[i]==1){
-          n->set_value(_input_vals[i], true, true, inst_throughput);
+          // n->set_value(_input_vals[i], true, true, inst_throughput);
+          _inputs_ready += 1;
+          
         }
         else{
-          n->set_value(0, true, false, inst_throughput);
+          // n->set_value(0, true, false, inst_throughput);
+          _sbpdg->push_buf_transient(_ops[i],inst_throughput);
+
+          // _ops[i]->pop_buffer_val();
         }
 
-/*
-
-        // only if n is an input node
-        if(_sbpdg->num_vec_input()!=0 && n->num_inc()==0) {
-
-            int vec_id = _sbpdg->find_vec_for_scalar(n, index);
-            SbPDG_VecInput* vec_in = _sbpdg->get_vector_input(vec_id); // check if something available
-
-            if(index==0)
-               vec_in->setBackBit(_back_array[i]); 
-            if(vec_in->getBackBit()==1) {
-               // std::cout << "Backpressure on this input is 1\n";
-               // required only for inputs--update_next_nodes doesn't work for
-               // inputs
-               n->set_value(_input_vals[i], true, true, inst_throughput);
-               // n->set_value(0, true, false, inst_throughput);
-            }
-            else{
-               // std::cout << "Backpressure on this input is not 1\n";
-               n->set_value(0, true, false, inst_throughput);
-            }
-        }
-
-
-        else {
-            if(_back_array[i]==1){
-               n->set_value(_input_vals[i],true, true, inst_throughput);
-               // n->set_value(0, true, false, inst_throughput);
-            }
-            else
-               n->set_value(0, true, false, inst_throughput);
-        }
-*/
    }
             
 
@@ -709,54 +636,19 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
 int SbPDG_Inst::update_next_nodes(bool print, bool verif){
   
-    int num_computed = 0;
-  // if it is popping input from input node--don't do anything: done while
-  // calling
-  // check previous nodes
-  if(!_avail){
-      // in node class
-      // std::cout << "In update next node name: " << _name << " and _inputs_ready: " << _inputs_ready << " and _num_inc_edges: " << _num_inc_edges << "\n";
-      if(_inputs_ready==_num_inc_edges){
-        // std::cout << "node name: " << _name << " and _inputs_ready: " << _inputs_ready << " and _num_inc_edges: " << _num_inc_edges << "\n";
-        num_computed = compute_backcgra(print, verif); 
-      }
-  }
-  else {
-
-    // std::cout << "start updating next nodes\n";
-
-      /*
-      if(_input_bufs[0].size()==0){
-          _input_bufs[0].resize(_ops.size());
-      }
-      */
-    for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-      std::cout << "calls for this use\n";
-      SbPDG_Node* use = (*iter)->use();
-      // I need operand index here!
-     // int op_index = 0;
-     // _input_bufs[0][op_index].push_back(_val);
-      
-      num_computed += use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
-      // std::cout << "update next node with t: " << t << " value: " << _val << " and discard: " << use->discard() << "\n";
-    /* 
-      if(t==0) { 
-          use->set_node(_val, use->discard(), true);
-      }
-     */ 
+   int num_computed = 0;
+   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+     SbPDG_Node* use = (*iter)->use();
+     num_computed += use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
     }
-  }
-  return num_computed;
+    return num_computed;
 }
 
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
     assert(valid);
-    // std::cout << "val:" << v << " cycle:" << cycle << " " << this->gamsName() << " avail: " << avail << "\n";
-    // _sbpdg->push_transient(this, v,valid,cycle);
     _sbpdg->push_transient(this, v,valid, avail, cycle);
 }
-
 
 //------------------------------------------------------------------
 
