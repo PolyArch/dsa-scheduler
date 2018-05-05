@@ -44,16 +44,10 @@ class SbPDG_Edge {
 
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
-    //uint64_t data; //Vignesh
-    //bool back_array[1] = {false}; //Vignesh
     void push_in_buffer(uint64_t v){
       assert(_data_buffer.size()<buf_len && "Trying to push in full buffer\n");
       _data_buffer.push(v);
-      std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
-      /*if(_data_buffer.size()==buf_len)
-          return false;
-      return true;
-      */
+      // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
     }
     bool is_buffer_full(){
         return (_data_buffer.size()==buf_len);
@@ -165,7 +159,6 @@ class SbPDG_Node {
     //-----------------------------------------
     virtual int update_next_nodes(bool print, bool verif) {
         // called from push_vector: i/p node
-        std::cout << "Comes here for i/p node and it's avail is: " << get_avail() << "\n";
         int num_computed = 0;
         SbPDG_Node* n = this->first_use();
         num_computed = n->inc_inputs_ready_backcgra(print, verif);
@@ -183,16 +176,8 @@ class SbPDG_Node {
      assert(this->num_out()==0 && "not an output node?\n");
      auto it = this->ops_begin();
      SbPDG_Edge* e = *it;
-     std::cout << "SHOULD COME HERE FOR OUTPUT NODE PUSHES VALUE: " << e->get_buffer_val()<<"\n";
      this->set_node(e->get_buffer_val(),true, true);
      e->pop_buffer_val();
-     // this->set_bp(false);
-     /*SbPDG_Node* n = (*it)->def();
-     if(!n->discard()){
-       this->set_node(n->get_value(), n->discard(), n->get_avail());
-     }
-     n->set_node(0, true, false);
-     */
      _inputs_ready=0; // hopefully if it comes from inc_inputs_ready
      return 0;
     } 
@@ -265,23 +250,21 @@ class SbPDG_Node {
         // return _backPressure;
     }
 
+    /*
     void set_bp(bool v){
         _backPressure=v;
     }
+    */
 
     void set_node(uint64_t v, bool valid, bool avail) {
       _val=v; 
       _discard=!valid;
-      // this should always be 1 now
       _avail = avail;
     
-      //---------------------NEW BUFFER THING
-      std::cout << "came here to set the node to value: "<<v<<" and avail: "<<avail<<"\n";
+      // std::cout << "came here to set the node to value: "<<v<<" and avail: "<<avail<<"\n";
       // no need to do anything for output node
       if(this->num_out()==0) { return; }
       if(avail){
-      // bool can_push = !get_bp();
-      // bool temp = false;
       if(!get_bp()){
       for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
           (*iter)->push_in_buffer(_val);
@@ -291,9 +274,6 @@ class SbPDG_Node {
           }
           */
       }
-      // available this cycle only or next? next?
-        // this->set_value(v, valid, 0, 1);
-        // this->set_value(1, true, 0, 0);
         this->set_node(0, true, false);
       }
       else{
@@ -302,7 +282,6 @@ class SbPDG_Node {
       }
       }
       
-      //-------------------------------------
     }
 
      // sets value at this cycle
@@ -334,21 +313,13 @@ class SbPDG_Node {
 
     int inc_inputs_ready_backcgra(bool print, bool verif) {
           _inputs_ready+=1;
-          std::cout<<"Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
+      // std::cout<<"Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
       if(_inputs_ready == _num_inc_edges) {
         int num_computed = compute_backcgra(print,verif);//it's 0 or 1
         return num_computed;
       }
       return 0;
-    }
-/*
-    int inc_reset_req(){
-        return ++reset_req_times;
-    }
-    void reset_reset_req(){
-        reset_req_times=0;
-    }
-*/
+    } 
    //---------------------------------------------------------------------------
     
     
@@ -356,10 +327,8 @@ class SbPDG_Node {
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
     uint64_t _val = 0; //dynamic var (setting the default value)
-    bool _avail = false; // new variable
-    // uint64_t _val; //dynamic var
-    bool _backPressure=false;
-    // int reset_req_times=0;
+    bool _avail = false; // if their is data in the output buffer
+    // bool _backPressure=false;
     uint64_t _discard=false;
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
@@ -619,21 +588,13 @@ class SbPDG_VecInput : public SbPDG_Vec {
   // scalar input corresponding to index i
   SbPDG_Input* getInput(int i) {return _inputs[i];}
 
-  //---------------------------------
-  int getBackBit() {return back_bit;}
-  void setBackBit(int i) {
-      std::cout << "came to set back bit here as: " << i << "\n";
-      back_bit=i;}
-  //---------------------------------
-
-	/*bool operator < (const SbPDG_VecInput& s) const
+  /*bool operator < (const SbPDG_VecInput& s) const
   {
      return (this->num_inputs() > s.num_inputs());
   }*/
 
   private:
     std::vector<SbPDG_Input*> _inputs;
-    int back_bit = 0; // new
 };
 
 

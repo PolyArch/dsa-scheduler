@@ -569,8 +569,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
   cout << "\n";
 
-  std::cout << "Print bp values: " << _back_array[0] << " " << _back_array[1] << "\n";
-  std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
+  // std::cout << "Print bp values: " << _back_array[0] << " " << _back_array[1] << "\n";
+  // std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
   // std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
 
   // setting the output node (current node)
@@ -590,7 +590,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   
    for(unsigned i = 0; i < _ops.size(); ++i) {
         if(_ops[i]==NULL) {
-            std::cout << "input edge is null for this input: " << i << "\n";
+            // std::cout << "input edge is null for this input: " << i << "\n";
             continue;
         }
 
@@ -605,7 +605,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
           // _ops[i]->pop_buffer_val();
         }
-
    }
             
 
