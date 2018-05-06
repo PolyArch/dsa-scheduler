@@ -238,7 +238,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   ss << "softbrain.gams";
   string gams_file_name = ss.str();
   
-  system(("rm -f " + gams_out_file).c_str());
+  System(("rm -f " + gams_out_file).c_str());
   
   // New schedule to work on
   schedule = new Schedule(_sbModel,sbPDG);
@@ -401,7 +401,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
        ss_cmd << " -o=/dev/null -lo=2"; 
     }
     cout << ss_cmd.str().c_str() << "\n";
-    system(ss_cmd.str().c_str());
+    System(ss_cmd.str().c_str());
   }
 
   // ----------------- parse output -----------------------------------------

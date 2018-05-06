@@ -7,6 +7,7 @@
 #include <string>
 #include <list>
 #include "schedule.h"
+#include "dfg-parser.tab.h"
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -150,7 +151,7 @@ void CINF(std::ostream& os, bool& first) {
     os << ", " ;
   }
 }
-
+#if 0
 //Parse the string and add the vector
 void SbPDG::parse_and_add_vec(string name, string line, map<string,SbPDG_Node*>& syms, bool input) {
    //parse string that looks like this: [1 2, 1 4, 2 6  3]
@@ -185,6 +186,7 @@ void SbPDG::parse_and_add_vec(string name, string line, map<string,SbPDG_Node*>&
      addVecOutput(name,pm,syms);
    }
 }
+#endif
 
 bool conv_to_int(std::string s, uint64_t& ival){ 
   try {
@@ -202,6 +204,7 @@ bool conv_to_double(std::string s, double& dval){
   return false;
 }
 
+#if asdf
 void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_Node*>& syms,
                                vector<string> inc_strings) {
 
@@ -247,22 +250,15 @@ void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_N
 
   addInst(pdg_inst);
 } 
-
-vector<vector<int>> simple_pm(string& s) {
-  int vec_len;
-  istringstream(s)>>vec_len;
-  vector<vector<int>> pm;
-  for(int i = 0; i < vec_len; ++i) {
-    std::vector<int> m;
-    m.push_back(i);
-    pm.push_back(m);
-  }
-  return pm;
-}
+#endif 
 
 SbPDG::SbPDG(string filename) : SbPDG() {
-
   string line;
+  
+  parse_dfg(filename.c_str(),this);
+  exit(1);
+
+#ifdef asdf
   ifstream ifs(filename.c_str());
 
   if(ifs.fail()) {
@@ -380,6 +376,7 @@ SbPDG::SbPDG(string filename) : SbPDG() {
 
 
   }
+#endif
 
   calc_minLats();
   check_for_errors();

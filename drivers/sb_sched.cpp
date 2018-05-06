@@ -128,9 +128,9 @@ int main(int argc, char* argv[])
   }
   string viz_dir = pdg_dir + "viz/";
   string verif_dir = pdg_dir + "verif/";
-  system(("mkdir -p " + viz_dir).c_str());
-  system(("mkdir -p " + verif_dir).c_str());
-  system("mkdir -p gams/"); // gams will remain at top level
+  System(("mkdir -p " + viz_dir).c_str());
+  System(("mkdir -p " + verif_dir).c_str());
+  System("mkdir -p gams/"); // gams will remain at top level
 
   //sbpdg object based on the dfg
   SbPDG sbpdg(pdg_filename);

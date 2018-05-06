@@ -8,29 +8,30 @@ CXX = g++
 
 CXXFLAGS := $(OPT) -Wall -g -std=c++11 
 
-LIB_PATH=$(SS_TOOLS)/lib
+LIB_PATH=$(SS_TOOLS)/lib 
 INC_SBMODEL_PATH=$(SS_TOOLS)/include/ss-config
 INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
+
+LIBS=-ly -ll -lsbscheduler -lsbconfig
 
 #all: reschedule stat-config
 
 all: sb_sched sb_dfg_emu
 #reschedul
 
-
 reschedule : reschedule.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  
 
 stat-config : stat-config.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS) 
 
 sb_sched : sb_sched.cpp $(INC_SBMODEL_PATH)/*.h
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 
 clean:

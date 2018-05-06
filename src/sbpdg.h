@@ -420,9 +420,24 @@ class SbPDG_Vec {
     int _ID;
 };
 
+static std::vector<std::vector<int>> simple_pm(int vec_len) {
+  std::vector<std::vector<int>> pm;
+  for(int i = 0; i < vec_len; ++i) {
+    std::vector<int> m;
+    m.push_back(i);
+    pm.push_back(m);
+  }
+  return pm;
+}
+//static std::vector<std::vector<int>> simple_pm(std::string& s) {
+//  int vec_len;
+//  std::istringstream(s)>>vec_len;
+//  return simple_pm(vec_len);
+//}
+
 class SbPDG_VecInput : public SbPDG_Vec {
   public:
-
+    
   SbPDG_VecInput(std::string name, int id) : SbPDG_Vec(name,id) {}
 
   virtual std::string gamsName() {
@@ -478,8 +493,69 @@ class SbPDG_VecOutput : public SbPDG_Vec {
     std::vector<SbPDG_Output*> _outputs;
 };
 
+struct SymEntry {
+  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE};
+  enum enum_type type;
+  union union_data {
+    uint64_t i;
+    double d;	 
+    SbPDG_Node* node;
+  } data;
+  SymEntry() {
+    
+  }
+  SymEntry(uint64_t i) {
+    type=SYM_INT;
+    data.i=i;
+  }
+  SymEntry(double d) {
+    type=SYM_INT;
+    data.d=d;
+  }
+  SymEntry(SbPDG_Node* node) {
+    type=SYM_INT;
+    data.node=node;
+  }
+};
+
+class SymTab {
+  std::map<std::string, SymEntry> _sym_tab;
+  void assert_exists(std::string& s) {
+    if(_sym_tab.count(s)==0) {
+       std::cerr << "Could not find" + s + "\n";
+       assert("0");
+    }
+  }
+public:
+  SbPDG_Node* get_node(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_NODE) {
+      std::cerr << "symbol \"" + s +"\" is not a node\"";
+    }
+    return _sym_tab[s].data.node;
+  }
+  void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, float n)       {_sym_tab[s]=SymEntry(n);}
+
+  int get_int(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_INT) {
+      std::cerr << "symbol \"" + s +"\" is not an int\"";
+    }
+    return _sym_tab[s].data.i;
+  }
+  int get_float(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_DUB) {
+      std::cerr << "symbol \"" + s +"\" is not a double\"";
+    }
+    return _sym_tab[s].data.d;
+  }
+};
 
 class SbPDG {
+
   public:
     SbPDG();
     SbPDG(std::string filename);
@@ -539,12 +615,12 @@ class SbPDG {
         _nodes.push_back(output);
     }
 
-    void addScalarInput(std::string name, std::map<std::string, SbPDG_Node*>& syms) {
+    void addScalarInput(std::string name, SymTab& syms) {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
       insert_vec_in(vec_input);
  
       SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
-      syms[name]=pdg_in;
+      syms.set(name,pdg_in);
       pdg_in->setName(name);
       pdg_in->setVPort(_vecInputs.size());
       pdg_in->setScalar();
@@ -553,21 +629,16 @@ class SbPDG {
     } 
 
     //scalar output node
-    void addScalarOutput(std::string name, std::map<std::string,SbPDG_Node*>& syms) {
-
-      SbPDG_Node* out_node = syms[name];
-      if(out_node==NULL) {
-        std::cerr << "Could not find" + name + "\n";
-        assert("0");
-      }
-
+    void addScalarOutput(std::string name, SymTab& syms) {
+      SbPDG_Node* out_node = syms.get_node(name);
+ 
       //new vector output
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output(this);
       std::string out_name=name+"_out";
-      syms[out_name]=pdg_out;
+      syms.set(out_name,pdg_out);
       pdg_out->setName(out_name);
       pdg_out->setVPort(_vecOutputs.size());
       pdg_out->setScalar();
@@ -577,11 +648,9 @@ class SbPDG {
       connect(out_node, pdg_out,0,SbPDG_Edge::data);
     } 
 
-
-    //Need to confirm the functionality here
     void addVecOutput(std::string name,
                      std::vector<std::vector<int> >& pm,
-                     std::map<std::string,SbPDG_Node*>& syms ) {
+                     SymTab& syms ) {
         
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       vec_output->setLocMap(pm);
@@ -596,15 +665,10 @@ class SbPDG {
         //std::cout << "name: " << name << "\n";
         std::string dep_name = ss.str();
 
-        SbPDG_Node* out_node = syms[dep_name];
-        if(out_node==NULL) {
-          std::cerr << "Could not find \"" + dep_name + "\"\n";
-          assert(0);
-        }
-
+        SbPDG_Node* out_node = syms.get_node(dep_name);
         SbPDG_Output* pdg_out = new SbPDG_Output(this);
         std::string out_name = dep_name + "_out";
-        syms[out_name]=pdg_out;
+        syms.set(out_name,pdg_out); 
         pdg_out->setName(out_name);
         pdg_out->setVPort(_vecOutputs.size());
         addOutput(pdg_out);
@@ -616,10 +680,14 @@ class SbPDG {
 
       //assert(0 && "addVecOutput not implemented");
     }
+    void addVecOutput(std::string name, int len, SymTab& syms ) {
+       std::vector<std::vector<int>> pm = simple_pm(len);
+       addVecOutput(name,pm,syms);
+    }
 
     void addVecInput(std::string name,
                      std::vector<std::vector<int> >& pm,
-                     std::map<std::string,SbPDG_Node*>& syms ) {
+                     SymTab& syms ) {
 
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name,_vecInputs.size()); 
       vec_input->setLocMap(pm);
@@ -635,23 +703,26 @@ class SbPDG {
         //std::cout << "name: " << name << "\n";
         SbPDG_Input* pdg_in = new SbPDG_Input(this);
         std::string name = ss.str();
-        syms[name]=pdg_in;
+        syms.set(name,pdg_in);
         pdg_in->setName(name);
         pdg_in->setVPort(_vecInputs.size());
         addInput(pdg_in);
         vec_input->addInput(pdg_in);
       }
     }
-
-    void parse_and_add_vec(std::string name, std::string line,
-                           std::map<std::string,SbPDG_Node*>& syms ,bool input);
+    void addVecInput(std::string name, int len, SymTab& syms) {
+      std::vector<std::vector<int>> pm = simple_pm(len);
+      this->addVecInput(name,pm,syms);
+    }
+    //void parse_and_add_vec(std::string name, std::string line,
+    //                       std::map<std::string,SbPDG_Node*>& syms ,bool input);
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
-    void parse_and_add_inst(std::string var_out, std::string opcode, 
+    /*void parse_and_add_inst(std::string var_out, std::string opcode, 
                             std::map<std::string,SbPDG_Node*>& syms,
-                            std::vector<std::string> inc_nodes);
+                            std::vector<std::string> inc_nodes);*/
     
     typedef std::vector<SbPDG_Node*>::const_iterator   const_node_iterator;
     typedef std::vector<SbPDG_Inst*>::const_iterator   const_inst_iterator;
