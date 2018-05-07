@@ -41,7 +41,7 @@ static void yyerror(parse_param*, const char *);
         io_pair_t* io_pair;
  	SbPDG_Node* node;
 	std::vector<SymEntry>* sym_vec;
-	SymEntry* sym_ent;
+	SymEntry sym_ent;
 }
 
 
@@ -74,7 +74,8 @@ statement
           printf("output %s, %d\n",$3->first.c_str(),$3->second);
           delete $3;
           }
-	| IDENT '=' rhs eol {printf("assignment\n");}
+	| IDENT '=' rhs eol 
+              printf("assignment\n");}
 	| eol {printf("empty\n");}
 	;
 
@@ -93,13 +94,13 @@ rhs
 	;
 
 arg_expr 
-	: rhs
-	| I_CONST 
+	: rhs {$$ = $1}
+	| I_CONST {$$ = new SymEntry($1)}
 	| F_CONST {$$ = new SymEntry($1)}
 	;
 
-arg_list : arg_expr
-	 | arg_list ',' arg_expr
+arg_list : arg_expr {$$ = new std::vector<SymEntry>(); $$.push_back($1)} 
+	 | arg_list ',' arg_expr {$1->push_back($3); $$ = $1;}
 	 ;
 
 %%

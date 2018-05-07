@@ -527,6 +527,10 @@ class SymTab {
     }
   }
 public:
+  SymEntry get_node(std::string& s) { 
+    assert_exists(s);
+    return _sym_tab[s];
+  }
   SbPDG_Node* get_node(std::string& s) { 
     assert_exists(s);
     if(_sym_tab[s].type!=SymEntry::SYM_NODE) {
@@ -583,11 +587,6 @@ class SbPDG {
 
     void printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbModel);
 
-
-
-    SbPDG_Inst* CreateInst() {
-      return new SbPDG_Inst(this);
-    }
 
     void addInst(SbPDG_Inst* inst) {
         _insts.push_back(inst); 
@@ -719,6 +718,8 @@ class SbPDG {
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
+
+    SymEntry* createInst(std::string opcode, std::vector<SymEntry>* args);
 
     /*void parse_and_add_inst(std::string var_out, std::string opcode, 
                             std::map<std::string,SbPDG_Node*>& syms,

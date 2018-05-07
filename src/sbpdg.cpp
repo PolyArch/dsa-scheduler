@@ -204,6 +204,13 @@ bool conv_to_double(std::string s, double& dval){
   return false;
 }
 
+SymEntry* SbPDG::createInst(std::string opcode, 
+                            std::vector<SymEntry>* args){
+  
+}
+
+
+
 #if asdf
 void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_Node*>& syms,
                                vector<string> inc_strings) {
