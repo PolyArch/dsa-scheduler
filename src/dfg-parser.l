@@ -38,9 +38,11 @@ CP  (u|U|L)
 SP  (u8|u|U|L)
 ES  (\\(['"\?\\abfnrtv]|[0-7]{1,3}|x[a-fA-F0-9]+))
 WS  [ \t\v\f]
+M   [-]
 
 %%
 [#][^\n]*                               { /* consume //-comment */ }
+"---"[^\n]*                         { return NEW_DFG; }
 
 "Input"                                 { return(INPUT); }
 "Output"                                { return(OUTPUT); }

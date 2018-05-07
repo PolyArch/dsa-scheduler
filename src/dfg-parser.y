@@ -28,7 +28,7 @@ static void yyerror(parse_param*, const char *);
 
 %parse-param {struct parse_param* p}
 
-%token	 INPUT OUTPUT EOLN
+%token	 INPUT OUTPUT EOLN NEW_DFG
 %token<s> IDENT STRING_LITERAL 
 %token<d> F_CONST
 %token<i> I_CONST
@@ -42,13 +42,15 @@ static void yyerror(parse_param*, const char *);
  	SbPDG_Node* node;
 	std::vector<SymEntry>* sym_vec;
 	SymEntry sym_ent;
+        YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
+        ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
 }
 
 
 %type <io_pair> io_def
-%type <arg_list> sym_vec
-%type <arg_entry> sym_ent 
-%type <rhs> sym_ent
+%type <sym_vec> arg_list  
+%type <sym_ent> arg_expr
+%type <sym_ent> rhs
 
 %start statement_list
 %debug
@@ -65,17 +67,28 @@ statement
 	: INPUT ':' io_def  eol {
           if($3->second==0) p->dfg->addScalarInput($3->first.c_str(),p->syms);
           else p->dfg->addVecInput($3->first.c_str(),$3->second,p->syms);
-          printf("input  %s, %d\n",$3->first.c_str(),$3->second);
+          //printf("input  %s, %d\n",$3->first.c_str(),$3->second);
           delete $3;
           }
 	| OUTPUT ':' io_def eol {
           if($3->second==0) p->dfg->addScalarOutput($3->first.c_str(),p->syms);
           else p->dfg->addVecOutput($3->first.c_str(),$3->second,p->syms);
-          printf("output %s, %d\n",$3->first.c_str(),$3->second);
+          //printf("output %s, %d\n",$3->first.c_str(),$3->second);
           delete $3;
           }
-	| IDENT '=' rhs eol { syms.set_sym(*$1,$3);}
-	| eol {printf("empty\n");}
+	| IDENT '=' rhs eol {
+             SymEntry& s = $3;
+             if(s.type == SymEntry::SYM_NODE) {
+               SbPDG_Node* n = s.data.node; 
+               n->setName(*$1);
+               //printf("%s assigned to instruction\n",$1->c_str());
+             } 
+             //else printf("%s assigned to constant\n",$1->c_str());
+             p->syms.set(*$1,s); 
+             delete $1;
+           }
+	| eol
+        | NEW_DFG eol { p->dfg->start_new_dfg_group();}
 	;
 
 eol     : ';'
@@ -88,18 +101,21 @@ io_def
 	;
 
 rhs
-	: IDENT                  { $$ = p->syms->get_sym(*$1); delete $1;}
-	| IDENT '(' arg_list ')' {createInst(*$1, $3); delete $1; delete $3;}
+	: IDENT                  {$$ = p->syms.get_sym(*$1); delete $1;}
+	| IDENT '(' arg_list ')' {$$ = p->dfg->createInst(*$1,*$3); 
+                                  delete $1; delete $3;}
 	;
 
 arg_expr 
-	: rhs     {$$ = $1}
-	| I_CONST {$$ = new SymEntry($1)}
-	| F_CONST {$$ = new SymEntry($1)}
+	: rhs     {$$ = $1;}
+	| I_CONST {$$ = SymEntry($1);}
+	| F_CONST {$$ = SymEntry($1);}
 	;
 
-arg_list : arg_expr {$$ = new std::vector<SymEntry>(); $$.push_back($1)} 
-	 | arg_list ',' arg_expr {$1->push_back($3); $$ = $1;}
+arg_list : arg_expr {$$ = new std::vector<SymEntry>(); 
+	             $$->push_back($1);} 
+	 | arg_list ',' arg_expr {$1->push_back($3); 
+                                  $$ = $1;}
 	 ;
 
 %%

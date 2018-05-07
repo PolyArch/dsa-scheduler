@@ -1,7 +1,6 @@
 #include "model_parsing.h"
 #include "sbpdg.h"
 #include <vector>
-#include <regex>
 #include <set>
 #include <iomanip>
 #include <string>
@@ -204,191 +203,54 @@ bool conv_to_double(std::string s, double& dval){
   return false;
 }
 
-SymEntry* SbPDG::createInst(std::string opcode, 
-                            std::vector<SymEntry>* args){
-  
-}
-
-
-
-#if asdf
-void SbPDG::parse_and_add_inst(string var_out, string opcode, map<string,SbPDG_Node*>& syms,
-                               vector<string> inc_strings) {
-
-  uint64_t ival;
-  double dval;
-  bool is_int = conv_to_int(var_out,ival);
-
-  if(is_int) {
-    assert(0 && "variable name cannot be a valid integer");
-  }
+SymEntry SbPDG::createInst(std::string opcode, 
+                            std::vector<SymEntry>& args){
 
   SbPDG_Inst* pdg_inst = new SbPDG_Inst(this);
-  pdg_inst->setName(var_out);
-  syms[var_out]=pdg_inst;
   pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
 
-  int imm_offset=0;
-  for(unsigned i = 0; i < inc_strings.size(); ++i) {
-    string var_in = inc_strings[i];
-
-    bool is_int    = conv_to_int(var_in,ival);
-    bool is_double = conv_to_double(var_in,dval);
-
-    if(is_int && (ival!=0 || dval==0) ) { //some tricky logic here, tread lightly
+  for(unsigned i = 0; i < args.size(); ++i) {
+ 
+    int imm_offset=0;
+    if(args[i].type==SymEntry::SYM_INT) { 
       assert(imm_offset==0 && "only one immediate per instr. is allowed");
-      pdg_inst->setImm(ival);
+      pdg_inst->setImm(args[i].data.i);
       pdg_inst->setImmSlot(i); 
       imm_offset=1;
-    } else if (is_double) {
+    } else if (args[i].type==SymEntry::SYM_DUB) {
       assert(imm_offset==0 && "only one immediate per instr. is allowed");
-      pdg_inst->setImm(SB_CONFIG::as_uint64(dval));
+      pdg_inst->setImm(args[i].data.d);
       pdg_inst->setImmSlot(i);
       imm_offset=1;
-    } else {
-      SbPDG_Node* inc_node = syms[var_in];
+    } else if (args[i].type==SymEntry::SYM_NODE) {
+      SbPDG_Node* inc_node = args[i].data.node;
       if(inc_node==NULL) {
-        cerr << "Could not find variable \"" + var_in + "\" \n";
+        cerr << "Could not find argument " << i << " for \"" 
+             <<  opcode + "\" inst \n";
         assert("0");
       } 
       connect(inc_node, pdg_inst,i,SbPDG_Edge::data);
+    } else {
+      assert(0 && "Invalide Node type");
     }
   }
 
-  addInst(pdg_inst);
-} 
-#endif 
+  addInst(pdg_inst);     
+
+  return SymEntry(pdg_inst);
+}
+
+void SbPDG::start_new_dfg_group() {
+  _vecInputGroups.push_back({});
+  _vecOutputGroups.push_back({});
+}
 
 SbPDG::SbPDG(string filename) : SbPDG() {
   string line;
-  
   parse_dfg(filename.c_str(),this);
-  exit(1);
-
-#ifdef asdf
-  ifstream ifs(filename.c_str());
-
-  if(ifs.fail()) {
-    cerr << "Could Not Open: " << filename << "\n";
-    exit(1);
-  }
-
-  regex re_input_vec("InputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); //bits num id
-  regex re_output_vec("OutputVec:\\s*(\\w+)\\s*\\[\\s*((:?(:?\\d+\\s*)+\\s*)\\,?\\s*)+\\]\\s*"); 
-  regex re_input_len("Input:\\s*(\\w+)\\s*\\[\\s*(\\d+)\\s*\\]\\s*");  //bits num id
-  regex re_output_len("Output:\\s*(\\w+)\\s*\\[\\s*(\\d+)\\s*\\]\\s*");  
-  regex re_input("Input:\\s*(\\w+)\\s*"); //bits id  
-  regex re_output("Output:\\s*(\\w+)\\s*");                          //out
-  regex re_Op3("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep   -- 3 ip
-  regex re_Op2("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*,\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep -- 2 ip
-  regex re_Op1("(\\w+)\\s*=\\s*(\\w+)\\(\\s*(\\w+|\\d*\\.?\\d*)\\s*\\)");//id dep dep -- 1 ip
-  regex re_rename("(\\w+)\\s*=\\s*(\\w+)\\s*");//rename
-
-  smatch m;
-
-  int cur_line=0;
-
-  //Mapping of string to sbpdg node
-  map<string, SbPDG_Node*> syms;
-
-  while(ifs.good()) {  
-    getline(ifs,line);
-    ModelParsing::trim_comments(line);
-    ModelParsing::trim(line);
-    cur_line++;
-    
-    if(ModelParsing::StartsWith(line,"#") || line.empty()) {
-      continue;
-    } 
-    if(ModelParsing::StartsWith(line,"---")) {
-      //need to skip
-      _vecInputGroups.push_back({});
-      _vecOutputGroups.push_back({});
-    } else if (regex_search(line, m, re_input_len)) {
-      string name = m[1];
-      string vec_len = m[2];
-      vector<vector<int>> pm = simple_pm(vec_len);
-      //cout << "input_len:" << name << " " << vec_len << " " << pm.size() << "\n";
-      addVecInput(name,pm,syms);
-
-    } else if (regex_search(line, m, re_output_len)) {
-      string name = m[1];
-      string vec_len = m[2];
-      vector<vector<int>> pm = simple_pm(vec_len);
-      addVecOutput(name,pm,syms);
-
-    } else if (regex_search(line, m, re_input)) {
-      //cout << m[1] << " " << m[2] << " " << m[3] << "\n";
-      string name = m[1];
-      addScalarInput(name,syms);
-
-    } else if (regex_search(line,m,re_input_vec)) {
-      string name = m[1];
-      string vec = m[2];
-      parse_and_add_vec(name, line, syms, true /*input*/);
-
-    } else if (regex_search(line,m,re_output_vec)) {
-      string name = m[1];
-      string vec = m[2];
-      parse_and_add_vec(name, line, syms, false /*output*/);   
-    
-    } else if (regex_search(line,m,re_Op1)) {
-      //cout << "o1:" << m[1] << " " << m[2] << " " << m[3] << "\n";
-      string var_out = m[1];
-      string opcode  = m[2];
-      string var_in  = m[3];
-
-      parse_and_add_inst(var_out,opcode,syms,{var_in});
-
-    } else if (regex_search(line,m,re_Op2)) {     
-      //cout << "o2:" << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << "\n";
-
-      string var_out = m[1];
-      string opcode  = m[2];
-      string var_in1 = m[3];
-      string var_in2 = m[4];
-
-      parse_and_add_inst(var_out,opcode,syms,{var_in1,var_in2});
-
-     } else if (regex_search(line,m,re_Op3)) {
-      //cout << "o2:" << m[1] << " " << m[2] << " " << m[3] << " " << m[4] << "\n";
-      string var_out = m[1];
-      string opcode  = m[2];
-      string var_in1 = m[3];
-      string var_in2 = m[4];
-      string var_in3 = m[5];
-      parse_and_add_inst(var_out,opcode,syms,{var_in1,var_in2,var_in3});
-
-
-    } else if (regex_search(line,m,re_output)) {  //SCALAR OUTPUT ONLY
-      //cout << "out:" << m[1] << "\n";    
-      string var_out = m[1];
-      addScalarOutput(var_out,syms);
-    } else if (regex_search(line,m,re_rename)) {
-      string var_out = m[1];
-      string var_in  = m[2];
-      SbPDG_Node* inc_node = syms[var_in];
-
-      if(inc_node==NULL) {
-        cerr << "Could not find \"" + var_in + "\" (rename) \n";
-        assert("0");
-      } 
-
-      syms[var_out] = inc_node;
-
-    } else {
-      cout << "Line: \"" << line << "\"\n";
-      assert(0&&"I don't know what this line is for\n");
-    }
-
-
-  }
-#endif
-
   calc_minLats();
   check_for_errors();
 }
-
 
 std::string SbPDG_Edge::name() {
   std::stringstream ss;
