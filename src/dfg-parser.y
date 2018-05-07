@@ -74,8 +74,7 @@ statement
           printf("output %s, %d\n",$3->first.c_str(),$3->second);
           delete $3;
           }
-	| IDENT '=' rhs eol 
-              printf("assignment\n");}
+	| IDENT '=' rhs eol { syms.set_sym(*$1,$3);}
 	| eol {printf("empty\n");}
 	;
 
@@ -89,12 +88,12 @@ io_def
 	;
 
 rhs
-	: IDENT {}
-	| IDENT '(' arg_list ')' {}
+	: IDENT                  { $$ = p->syms->get_sym(*$1); delete $1;}
+	| IDENT '(' arg_list ')' {createInst(*$1, $3); delete $1; delete $3;}
 	;
 
 arg_expr 
-	: rhs {$$ = $1}
+	: rhs     {$$ = $1}
 	| I_CONST {$$ = new SymEntry($1)}
 	| F_CONST {$$ = new SymEntry($1)}
 	;

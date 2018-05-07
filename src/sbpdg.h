@@ -527,7 +527,11 @@ class SymTab {
     }
   }
 public:
-  SymEntry get_node(std::string& s) { 
+  void set(std::string& s, SymEntry n) {_sym_tab[s]=n;}
+  void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, float n)       {_sym_tab[s]=SymEntry(n);}
+  SymEntry get_sym(std::string& s) { 
     assert_exists(s);
     return _sym_tab[s];
   }
@@ -538,10 +542,6 @@ public:
     }
     return _sym_tab[s].data.node;
   }
-  void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
-  void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
-  void set(std::string& s, float n)       {_sym_tab[s]=SymEntry(n);}
-
   int get_int(std::string& s) { 
     assert_exists(s);
     if(_sym_tab[s].type!=SymEntry::SYM_INT) {
