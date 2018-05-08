@@ -49,8 +49,7 @@ static void yyerror(parse_param*, const char *);
 
 %type <io_pair> io_def
 %type <sym_vec> arg_list  
-%type <sym_ent> arg_expr
-%type <sym_ent> rhs
+%type <sym_ent> arg_expr  rhs expr
 
 %start statement_list
 %debug
@@ -100,16 +99,21 @@ io_def
 	| IDENT '[' I_CONST ']'  {$$ = new io_pair_t(*$1,$3); delete $1;}
 	;
 
-rhs
-	: IDENT                  {$$ = p->syms.get_sym(*$1); delete $1;}
-	| IDENT '(' arg_list ')' {$$ = p->dfg->createInst(*$1,*$3); 
-                                  delete $1; delete $3;}
+rhs     : expr {$$ = $1;}
 	;
 
-arg_expr 
-	: rhs     {$$ = $1;}
-	| I_CONST {$$ = SymEntry($1);}
+
+expr    : I_CONST {$$ = SymEntry($1);}
+        | I_CONST I_CONST {$$ = SymEntry($1,$2);}
+        | I_CONST I_CONST I_CONST I_CONST {$$ = SymEntry($1,$2,$3,$4);}
 	| F_CONST {$$ = SymEntry($1);}
+        | F_CONST F_CONST {$$ = SymEntry($1,$2);}
+	| IDENT                  {$$ = p->syms.get_sym(*$1); delete $1;}
+	| IDENT '(' arg_list ')' {$$ = p->dfg->createInst(*$1,*$3); 
+                                  delete $1; delete $3;}
+arg_expr 
+	: expr {$$ = $1;}
+	| IDENT '=' expr { $$ = $3; $$.set_flag(*$1); }
 	;
 
 arg_list : arg_expr {$$ = new std::vector<SymEntry>(); 
@@ -140,7 +144,8 @@ int parse_dfg(const char* filename, SbPDG* _dfg) {
 
 static void yyerror(struct parse_param* p, char const* s)
 {
-	fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
+  fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
+  assert(0);
 }
 
 

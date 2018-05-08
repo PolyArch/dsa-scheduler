@@ -494,11 +494,13 @@ class SbPDG_VecOutput : public SbPDG_Vec {
 };
 
 struct SymEntry {
-  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE};
-  enum enum_type type;
+  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
+  enum enum_flag {FLAG_NONE, FLAG_PRED, FLAG_INV_PRED, FLAG_BGATE} flag;
+  int width;
   union union_data {
     uint64_t i;
     double d;	 
+    struct struct_data {float f1, f2;} f;
     SbPDG_Node* node;
   } data;
   SymEntry() {
@@ -507,14 +509,46 @@ struct SymEntry {
   SymEntry(uint64_t i) {
     type=SYM_INT;
     data.i=i;
+    width=1;
+  }
+  SymEntry(uint64_t i1, uint64_t i2) {
+    type=SYM_INT;
+    data.i= ((i2&0xFFFFFFFF) << 32) | ((i1&0xFFFFFFFF) <<0);
+    width=2;
+  }
+  SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
+    type=SYM_INT;
+    data.i= ((i4&0xFFFF) << 48) | ((i3&0xFFFF) <<32) | 
+            ((i2&0xFFFF) << 16) | ((i1&0xFFFF) << 0);
+    width=4;
   }
   SymEntry(double d) {
-    type=SYM_INT;
+    type=SYM_DUB;
     data.d=d;
+    width=1;
+  }
+  SymEntry(double d1, double d2) {
+    float f1=d1, f2=d2;
+    type=SYM_DUB;
+    data.f.f1=f1;
+    data.f.f2=f2;
+    width=2;
   }
   SymEntry(SbPDG_Node* node) {
     type=SYM_NODE;
     data.node=node;
+    width=1;
+  }
+  void set_flag(std::string& s) {
+    if(s==std::string("pred")) {
+      flag=FLAG_PRED;
+    } else if (s==std::string("inv_pred")) {
+      flag=FLAG_INV_PRED;
+    } else if (s==std::string("bgate")) {
+      flag=FLAG_BGATE;
+    } else {
+      assert(0 && "Invalid argument qualifier");
+    }
   }
 };
 
@@ -530,7 +564,7 @@ public:
   void set(std::string& s, SymEntry n) {_sym_tab[s]=n;}
   void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
-  void set(std::string& s, float n)       {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, double n)      {_sym_tab[s]=SymEntry(n);}
   SymEntry get_sym(std::string& s) { 
     assert_exists(s);
     return _sym_tab[s];

@@ -150,42 +150,6 @@ void CINF(std::ostream& os, bool& first) {
     os << ", " ;
   }
 }
-#if 0
-//Parse the string and add the vector
-void SbPDG::parse_and_add_vec(string name, string line, map<string,SbPDG_Node*>& syms, bool input) {
-   //parse string that looks like this: [1 2, 1 4, 2 6  3]
-   
-   unsigned first = line.find("[");
-   string cur_cap = line.substr (first,line.find("]")-first);
-   stringstream ss(cur_cap);
-   
-   vector<vector<int>> pm;
-
-   //Parse the vector string from the dfg
-   while (getline(ss, cur_cap, ',')) {
-
-     if(cur_cap.empty()) {continue;} 
-     istringstream ssc(cur_cap);
-     std::vector<int> m;
-    
-     //vector of ints seperated by ' '
-     while (getline(ssc, cur_cap, ' ')) {
-       if(cur_cap.empty()) {continue;} 
-       int val;
-       istringstream(cur_cap)>>val;
-       m.push_back(val);
-     }
-
-     pm.push_back(m);
-   }
-
-   if(input) {
-     addVecInput(name,pm,syms);
-   } else {
-     addVecOutput(name,pm,syms);
-   }
-}
-#endif
 
 bool conv_to_int(std::string s, uint64_t& ival){ 
   try {
@@ -209,18 +173,12 @@ SymEntry SbPDG::createInst(std::string opcode,
   SbPDG_Inst* pdg_inst = new SbPDG_Inst(this);
   pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
 
-  for(unsigned i = 0; i < args.size(); ++i) {
- 
-    int imm_offset=0;
-    if(args[i].type==SymEntry::SYM_INT) { 
+  int imm_offset=0;
+  for(unsigned i = 0; i < args.size(); ++i) { 
+    if(args[i].type==SymEntry::SYM_INT || args[i].type==SymEntry::SYM_DUB) { 
       assert(imm_offset==0 && "only one immediate per instr. is allowed");
       pdg_inst->setImm(args[i].data.i);
       pdg_inst->setImmSlot(i); 
-      imm_offset=1;
-    } else if (args[i].type==SymEntry::SYM_DUB) {
-      assert(imm_offset==0 && "only one immediate per instr. is allowed");
-      pdg_inst->setImm(args[i].data.d);
-      pdg_inst->setImmSlot(i);
       imm_offset=1;
     } else if (args[i].type==SymEntry::SYM_NODE) {
       SbPDG_Node* inc_node = args[i].data.node;
