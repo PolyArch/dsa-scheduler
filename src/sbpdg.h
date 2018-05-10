@@ -44,22 +44,44 @@ class SbPDG_Edge {
 
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
+    // void compute_next();
+    void compute_after_push();
+    void compute_after_pop();
+    void print_buf_state(){
+        /*std::cout << _data_buffer.front() << " ";
+        if(_data_buffer.size()>1)
+          std::cout << _data_buffer.back() << "\n";
+          */
+    }
     void push_in_buffer(uint64_t v){
+      // std::cout << "data already in the buffer: " << _data_buffer.size() << " and max_size allowed is: " << buf_len << "\n";
+      // std::cout << "val I was trying to push: " << v << "\n";
       assert(_data_buffer.size()<buf_len && "Trying to push in full buffer\n");
+      // std::cout << "Before push state: \n";
+      print_buf_state();
+
       _data_buffer.push(v);
       // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
+      compute_after_push();      
     }
     bool is_buffer_full(){
         return (_data_buffer.size()==buf_len);
     }
     bool is_buffer_empty(){
       return _data_buffer.empty();
+      // return (_data_buffer.size()!=0);
     }
     uint64_t get_buffer_val() {
       return _data_buffer.front();
     }
     void pop_buffer_val() {
+      assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
+      // std::cout << "came here to pop data: " << _data_buffer.front() << " from input buffer with buffer size now: " << _data_buffer.size() << "\n";
+      // std::cout << "Before pop state: \n";
+      print_buf_state();
       _data_buffer.pop();
+      compute_after_pop();      
+     
     }
 
   private:
@@ -68,7 +90,9 @@ class SbPDG_Edge {
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
     std::queue<uint64_t> _data_buffer;
-    unsigned int buf_len = 1;
+    // unsigned int buf_len = 1;
+    // using 2 since 1st entry is used for bp
+    unsigned int buf_len = 2;
     //-------------
 
     int _delay =0;
@@ -158,17 +182,22 @@ class SbPDG_Node {
 
     //-----------------------------------------
     virtual int update_next_nodes(bool print, bool verif) {
+        return 0;
+    }
+    /*
+    virtual int update_next_nodes(bool print, bool verif) {
         // called from push_vector: i/p node
         int num_computed = 0;
         SbPDG_Node* n = this->first_use();
         num_computed = n->inc_inputs_ready_backcgra(print, verif);
-        /*auto it = this->uses_begin();
-        if(!(*it)->is_buffer_full()){
-          num_computed = n->inc_inputs_ready_backcgra(print, verif);
-        }*/
+
         return num_computed;
     }
-    
+        auto it = this->uses_begin();
+        if(!(*it)->is_buffer_full()){
+          num_computed = n->inc_inputs_ready_backcgra(print, verif);
+        }
+   */ 
       
     virtual int compute_backcgra(bool print, bool verif) {
      //for an output node
@@ -261,19 +290,24 @@ class SbPDG_Node {
       _discard=!valid;
       _avail = avail;
     
-      // std::cout << "came here to set the node to value: "<<v<<" and avail: "<<avail<<"\n";
+      // std::cout << "came here to set the node: " << name() <<" to value: "<<v<<" and avail: "<<avail<<"\n";
       // no need to do anything for output node
       if(this->num_out()==0) { return; }
       if(avail){
       if(!get_bp()){
-      for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
-          (*iter)->push_in_buffer(_val);
-          /*std::cout << "Is backpressure on on this node? " << !temp << "\n";
-          if(!temp){
-            set_bp(true);
+        for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
+         /* SbPDG_Node* n = (*iter)->use(); // hopefully this is dest
+          if((*iter)->is_buffer_empty()){
+            n->set_is_new_val(1);
           }
-          */
-      }
+          else
+          {
+            n->set_is_new_val(0);
+            // computation not required if didn't push at the head of buffer
+          }
+        */
+          (*iter)->push_in_buffer(v);
+        }
         this->set_node(0, true, false);
       }
       else{
@@ -312,14 +346,26 @@ class SbPDG_Node {
     
 
     int inc_inputs_ready_backcgra(bool print, bool verif) {
-          _inputs_ready+=1;
+      _inputs_ready+=1;
       // std::cout<<"Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
-      if(_inputs_ready == _num_inc_edges) {
+      if(_inputs_ready == _num_inc_edges && _avail==0) {
         int num_computed = compute_backcgra(print,verif);//it's 0 or 1
         return num_computed;
       }
       return 0;
     } 
+
+    int get_inputs_ready() {
+        return _inputs_ready;
+    }
+    /*bool get_is_new_val() {
+        return _is_new_val;
+    }
+    
+    void set_is_new_val(bool a) {
+        _is_new_val = a;
+    }
+    */
    //---------------------------------------------------------------------------
     
     
@@ -330,6 +376,7 @@ class SbPDG_Node {
     bool _avail = false; // if their is data in the output buffer
     // bool _backPressure=false;
     uint64_t _discard=false;
+    //bool _is_new_val = 0; // new variable
     int _inputs_ready=0; //dynamic inputs ready
     int _num_inc_edges=0; //number of incomming edges, not including immmediates
 
@@ -936,9 +983,11 @@ SbPDG_VecInput* get_vector_input(int i){
         // i could also have pushed in current cycle
         // sb_node->set_value(data[i],true, true, 0);
         sb_node->set_node(data[i],true, true);
+        // only if it pushed at the top of the buffers
         if(!sb_node->get_avail()){
           t = sb_node->update_next_nodes(false, false);
         }
+        
 
      }
       if(t>0)
@@ -953,8 +1002,10 @@ SbPDG_VecInput* get_vector_input(int i){
       for(unsigned int i=0; i<vec_in->num_inputs(); ++i) {
         SbPDG_Input* temp = vec_in->getInput(i);
         // std::cout << "Is there data already? " << temp->get_avail() << "\n";
-        if(temp->get_avail())
+        if(temp->get_avail()){
+          // std::cout << "DATA AVAIL AT PORT: " << temp->name() << " is: " << temp->get_value() << "\n";
           return false;
+        }
       }
       return true;
     }
@@ -1028,32 +1079,54 @@ SbPDG_VecInput* get_vector_input(int i){
     
     void push_buf_transient(SbPDG_Edge* e, int cycle){
       buf_transient_values[(cycle+cur_buf_ptr)%get_max_lat()].push_back(e);
+      // std::cout << "POP FROM BUFFER AT: " << (cycle+cur_buf_ptr)%get_max_lat() << "\n";
     }
 
     int cycle(bool print, bool verif){ 
+
+      int num_computed=0;
        
+      for(auto it=buf_transient_values[cur_buf_ptr].begin();it!= buf_transient_values[cur_buf_ptr].end();++it){
+        // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
+        // set the values
+        SbPDG_Edge* e = *it;
+        e->pop_buffer_val();
+        /*if(!e->is_buffer_empty()){
+            SbPDG_Node* n = e->use();
+            n->set_is_new_val(1);
+            n->inc_inputs_ready_backcgra(false, false);
+        }
+        */
+        buf_transient_values[cur_buf_ptr].erase(it);
+        it--;
+      }
+
+
       for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end();++it){
         struct cycle_result* temp = *it;
         SbPDG_Node* sb_node = temp->n;
         sb_node->set_node(temp->val, temp->valid, temp->avail);
         // update next nodes?: call only when it could push
-        if(!sb_node->get_avail()){
-          sb_node->update_next_nodes(print, verif);
+        // if avail==0, check if (i/ps ready?) else check update_next_nodes.
+        /*if(temp->avail==0){
+            // update previous nodes
+            std::cout << "Incoming: " << sb_node->num_inc() << " and ready are: " << sb_node->get_inputs_ready() << "\n";
+            if(sb_node->num_inc() == sb_node->get_inputs_ready()){
+                sb_node->compute_backcgra(false, false);
+            }
         }
+        */
+        // std::cout << "update next nodes of: " << sb_node->name() << " and set the value: " << temp->val << " and next nodes? " << !sb_node->get_avail() << "\n";
+        if(!sb_node->get_avail()){
+          num_computed += sb_node->update_next_nodes(print, verif);
+        }
+        
         transient_values[cur_buf_ptr].erase(it);
         it--;
        }
        
-       cur_node_ptr = (cur_node_ptr+1)%get_max_lat();
-       for(auto it=buf_transient_values[cur_buf_ptr].begin();it!= buf_transient_values[cur_buf_ptr].end();++it){
-         // set the values
-         SbPDG_Edge* e = *it;
-         e->pop_buffer_val();
-         buf_transient_values[cur_buf_ptr].erase(it);
-         it--;
-       }
        cur_buf_ptr = (cur_buf_ptr+1)%get_max_lat();
-
+       cur_node_ptr = (cur_node_ptr+1)%get_max_lat();
        int temp = _total_dyn_insts;
        _total_dyn_insts=0;
        return temp; 

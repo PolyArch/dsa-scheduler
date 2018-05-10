@@ -18,9 +18,25 @@ bool SbPDG_VecInput::backPressureOn() {
     // return getBackBit();
     return false;
 }
+/*
+void SbPDG_Edge::compute_next(){
+  if(_data_buffer.size()==1){
+        _use->inc_inputs_ready_backcgra(false, false);
+  }
+}*/
+void SbPDG_Edge::compute_after_push(){
 
-
-
+  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
+  if(_data_buffer.size()==1){
+        _use->inc_inputs_ready_backcgra(false, false);
+  }
+}
+void SbPDG_Edge::compute_after_pop(){
+  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
+  if(_data_buffer.size()>0){
+        _use->inc_inputs_ready_backcgra(false, false);
+  }
+}
 void order_insts(SbPDG_Inst* inst,
                  std::set<SbPDG_Inst*>& done_nodes,         //done insts
                  std::vector<SbPDG_Inst*>& ordered_insts) {
@@ -522,12 +538,12 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   assert(_input_vals.size() <= _ops.size());
-
+/*
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
-  cout << name() << " (" << _ID << "): ";
-
+   cout << name() << " (" << _ID << "): ";
+*/
 
   _discard=false;
 
@@ -547,27 +563,30 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   
   // initializing back pressure
   if(_back_array.size() == 0){
-      _back_array.resize(_ops.size());
+     _back_array.resize(_ops.size());
+  }
       for(unsigned int i=0; i<_ops.size(); ++i) {
           _back_array[i] = 0;
       }
-   }
+   
 
   // Read in some temp value and set _val after inst_lat cycles
   uint64_t temp = 0;
   temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
   _inputs_ready=0;
 
+
   if(print) {
     _sbpdg->dbg_stream() << " = " << temp << "\n";
   }
   
-  
+ /* 
   cout << " = " << temp;
   if(_discard) { 
     cout << " and discard!";
   }
   cout << "\n";
+*/
 
   // std::cout << "Print bp values: " << _back_array[0] << " " << _back_array[1] << "\n";
   // std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
@@ -585,6 +604,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // pop the inputs after inst_thr+back_press here
   int inst_throughput = inst_thr(pdginst->inst());
+  // std::cout << "thr: " << inst_throughput << "\n";
 
   // int index=0;
   
@@ -634,12 +654,19 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
 
 int SbPDG_Inst::update_next_nodes(bool print, bool verif){
-  
+   // std::cout << "Node name: " << this->name() << " Incoming: " << this->num_inc() << " and ready are: " << this->get_inputs_ready() << "\n";
+   if(this->num_inc() == this->get_inputs_ready()){
+     compute_backcgra(false, false);
+   }
    int num_computed = 0;
-   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+   /*
+    * for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
      SbPDG_Node* use = (*iter)->use();
-     num_computed += use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
+     if(use->get_is_new_val()){
+       num_computed += use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
+     }
     }
+   */
     return num_computed;
 }
 
