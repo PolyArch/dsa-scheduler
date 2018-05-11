@@ -28,7 +28,7 @@ static void yyerror(parse_param*, const char *);
 
 %parse-param {struct parse_param* p}
 
-%token	 INPUT OUTPUT EOLN NEW_DFG
+%token	 INPUT OUTPUT EOLN NEW_DFG PRAGMA
 %token<s> IDENT STRING_LITERAL 
 %token<d> F_CONST
 %token<i> I_CONST
@@ -86,8 +86,10 @@ statement
              p->syms.set(*$1,s); 
              delete $1;
            }
-	| eol
         | NEW_DFG eol { p->dfg->start_new_dfg_group();}
+        | PRAGMA IDENT IDENT eol {p->dfg->set_pragma(*$2,*$3); 
+                                  delete $2; delete $3; }
+	| eol
 	;
 
 eol     : ';'

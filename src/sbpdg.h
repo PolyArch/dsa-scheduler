@@ -595,6 +595,10 @@ public:
   }
 };
 
+struct GroupProp {
+  bool is_temporal=false;
+};
+
 class SbPDG {
 
   public:
@@ -619,6 +623,7 @@ class SbPDG {
     }
     
     void start_new_dfg_group();
+    void set_pragma(std::string& c, std::string& s);
 
     void printGams(std::ostream& os, std::unordered_map<std::string,SbPDG_Node*>&,
                                      std::unordered_map<std::string,SbPDG_Edge*>&,
@@ -833,7 +838,9 @@ class SbPDG {
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
 
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
-    std::vector<SbPDG_VecOutput*>&  vec_out_group(int i) {return _vecOutputGroups[i];}
+    std::vector<SbPDG_VecOutput*>& vec_out_group(int i) {return _vecOutputGroups[i];}
+    GroupProp&  prop_group(int i) {return _propGroups[i];}
+
     int num_groups() {return _vecInputGroups.size();}
 
     void sort_vec_in() {
@@ -881,6 +888,8 @@ class SbPDG {
 
     std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
+    std::vector<GroupProp> _propGroups;
+
 
     int _total_dyn_insts=0;
 

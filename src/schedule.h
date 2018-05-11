@@ -358,7 +358,6 @@ class Schedule {
 
         }//end for sizex
       }//end for sizey
-
     }
 
   //NOTE/WARN: If you call interpretConfigBits, this will create an

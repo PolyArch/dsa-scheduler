@@ -7,6 +7,7 @@
   #include <string.h>
   #include <cstdint>
   #include "sbpdg.h"
+  #include <string>
 
   int yyparse();
   
@@ -41,8 +42,12 @@ WS  [ \t\v\f]
 M   [-]
 
 %%
-[#][^\n]*                               { /* consume //-comment */ }
-"---"[^\n]*                         { return NEW_DFG; }
+"/*"                                    { comment(); }
+"#"[^\n]*                               { if(strlen(yytext) >6 && 
+                                             strncmp(&yytext[1],"pragma",6)==0) {
+                                             REJECT; }
+                                          /* consume //-comment */ }
+"---"[^\n]*                             { return NEW_DFG; }
 
 "Input"                                 { return(INPUT); }
 "Output"                                { return(OUTPUT); }
@@ -66,6 +71,8 @@ M   [-]
 
 ({SP}?\"([^"\\\n]|{ES})*\"{WS}*)+	{ return STRING_LITERAL; }
 
+"#pragma"                               { return PRAGMA; }
+
 ";"					{ return ';'; }
 ("{")					{ return '{'; }
 ("}")					{ return '}'; }
@@ -84,6 +91,20 @@ M   [-]
   exit(1);}
 
 %%
+
+static void comment(void)
+{
+  int c;
+  while ((c = yyinput()) != 0) {
+    if (c == '*') {
+        while ((c = yyinput()) == '*');
+  
+        if (c == '/') return;
+        if (c == 0)   break;
+    }
+  }
+  fprintf(stderr, "unterminated comment\n");
+}
 
 void si(YYSTYPE* lval,  char* yytext) {
   if(yyleng>2 && yytext[0]=='0' && yytext[1]!='x') {

@@ -137,8 +137,7 @@ void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
 }
 
 SbPDG::SbPDG() {
-  _vecInputGroups.push_back({});
-  _vecOutputGroups.push_back({});
+  start_new_dfg_group(); 
 } 
 
 
@@ -197,10 +196,23 @@ SymEntry SbPDG::createInst(std::string opcode,
 
   return SymEntry(pdg_inst);
 }
+void SbPDG::set_pragma(std::string& c, std::string& s) {
+
+  if(c==string("dfg")) {
+    cout << "No pragmas yet for dfg\n";
+  } else if (c==string("group")) {
+    if(s=="temporal") { 
+      _propGroups.end()->is_temporal=true;
+    } 
+  } else {
+    cout << "Context \"" << c << "\" not recognized.";
+  }
+}
 
 void SbPDG::start_new_dfg_group() {
   _vecInputGroups.push_back({});
   _vecOutputGroups.push_back({});
+  _propGroups.push_back(GroupProp());
 }
 
 SbPDG::SbPDG(string filename) : SbPDG() {

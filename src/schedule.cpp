@@ -418,7 +418,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
-  //print_bit_loc();
+  print_bit_loc();
 
   //Step 1: Place bits into fields
 
@@ -667,7 +667,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }//end for switch x
   }//end for switch y 
 
-  //cout << "cur slice: " << cur_slice << "\n";
   //--------------------------------------- ENCODE CONSTANTS ------------------------
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {    
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
@@ -685,7 +684,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       }
     }
   } 
-  //cout << "cur slice: " << cur_slice << "\n";
 
   //Step 2: Write to output stream
   os << "#ifndef " << "__" << cfg_name << "_H__\n";
