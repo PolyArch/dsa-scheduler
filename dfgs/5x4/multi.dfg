@@ -1,5 +1,7 @@
 #R = A . B + carry
 
+#pragma group temporal
+
 Input: A [4] 
 Input: B [4] 
 Input: carry
