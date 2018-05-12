@@ -398,7 +398,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     // cout << std::hex << _input_vals[i] << " ";
   }
 
-  std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
 
 
   // initializing back pressure
