@@ -630,9 +630,24 @@ class SbPDG_Vec {
     int _ID;
 };
 
+static std::vector<std::vector<int>> simple_pm(int vec_len) {
+  std::vector<std::vector<int>> pm;
+  for(int i = 0; i < vec_len; ++i) {
+    std::vector<int> m;
+    m.push_back(i);
+    pm.push_back(m);
+  }
+  return pm;
+}
+//static std::vector<std::vector<int>> simple_pm(std::string& s) {
+//  int vec_len;
+//  std::istringstream(s)>>vec_len;
+//  return simple_pm(vec_len);
+//}
+
 class SbPDG_VecInput : public SbPDG_Vec {
   public:
-
+    
   SbPDG_VecInput(std::string name, int id) : SbPDG_Vec(name,id) {}
 
   virtual std::string gamsName() {
@@ -688,10 +703,114 @@ class SbPDG_VecOutput : public SbPDG_Vec {
     std::vector<SbPDG_Output*> _outputs;
 };
 
+struct SymEntry {
+  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
+  enum enum_flag {FLAG_NONE, FLAG_PRED, FLAG_INV_PRED, FLAG_BGATE} flag;
+  int width;
+  union union_data {
+    uint64_t i;
+    double d;	 
+    struct struct_data {float f1, f2;} f;
+    SbPDG_Node* node;
+  } data;
+  SymEntry() {
+    type=SYM_INV; 
+  }
+  SymEntry(uint64_t i) {
+    type=SYM_INT;
+    data.i=i;
+    width=1;
+  }
+  SymEntry(uint64_t i1, uint64_t i2) {
+    type=SYM_INT;
+    data.i= ((i2&0xFFFFFFFF) << 32) | ((i1&0xFFFFFFFF) <<0);
+    width=2;
+  }
+  SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
+    type=SYM_INT;
+    data.i= ((i4&0xFFFF) << 48) | ((i3&0xFFFF) <<32) | 
+            ((i2&0xFFFF) << 16) | ((i1&0xFFFF) << 0);
+    width=4;
+  }
+  SymEntry(double d) {
+    type=SYM_DUB;
+    data.d=d;
+    width=1;
+  }
+  SymEntry(double d1, double d2) {
+    float f1=d1, f2=d2;
+    type=SYM_DUB;
+    data.f.f1=f1;
+    data.f.f2=f2;
+    width=2;
+  }
+  SymEntry(SbPDG_Node* node) {
+    type=SYM_NODE;
+    data.node=node;
+    width=1;
+  }
+  void set_flag(std::string& s) {
+    if(s==std::string("pred")) {
+      flag=FLAG_PRED;
+    } else if (s==std::string("inv_pred")) {
+      flag=FLAG_INV_PRED;
+    } else if (s==std::string("bgate")) {
+      flag=FLAG_BGATE;
+    } else {
+      assert(0 && "Invalid argument qualifier");
+    }
+  }
+};
+
+class SymTab {
+  std::map<std::string, SymEntry> _sym_tab;
+  void assert_exists(std::string& s) {
+    if(_sym_tab.count(s)==0) {
+       std::cerr << "Could not find" + s + "\n";
+       assert("0");
+    }
+  }
+public:
+  void set(std::string& s, SymEntry n) {_sym_tab[s]=n;}
+  void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, double n)      {_sym_tab[s]=SymEntry(n);}
+  SymEntry get_sym(std::string& s) { 
+    assert_exists(s);
+    return _sym_tab[s];
+  }
+  SbPDG_Node* get_node(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_NODE) {
+      std::cerr << "symbol \"" + s +"\" is not a node\"";
+      assert(0);
+    }
+    return _sym_tab[s].data.node;
+  }
+  int get_int(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_INT) {
+      std::cerr << "symbol \"" + s +"\" is not an int\"";
+      assert(0);
+    }
+    return _sym_tab[s].data.i;
+  }
+  int get_float(std::string& s) { 
+    assert_exists(s);
+    if(_sym_tab[s].type!=SymEntry::SYM_DUB) {
+      std::cerr << "symbol \"" + s +"\" is not a double\"";
+      assert(0);
+    }
+    return _sym_tab[s].data.d;
+  }
+};
+
+struct GroupProp {
+  bool is_temporal=false;
+};
 
 class SbPDG {
-
-    public:
+  public:
     SbPDG();
     SbPDG(std::string filename);
 
@@ -712,17 +831,15 @@ class SbPDG {
       printGraphviz(os, sched);
     }
     
+    void start_new_dfg_group();
+    void set_pragma(std::string& c, std::string& s);
+
     void printGams(std::ostream& os, std::unordered_map<std::string,SbPDG_Node*>&,
                                      std::unordered_map<std::string,SbPDG_Edge*>&,
                                      std::unordered_map<std::string, SbPDG_Vec*>&);
 
     void printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbModel);
 
-
-
-    SbPDG_Inst* CreateInst() {
-      return new SbPDG_Inst(this);
-    }
 
     void addInst(SbPDG_Inst* inst) {
         _insts.push_back(inst); 
@@ -750,12 +867,12 @@ class SbPDG {
         _nodes.push_back(output);
     }
 
-    void addScalarInput(std::string name, std::map<std::string, SbPDG_Node*>& syms) {
+    void addScalarInput(std::string name, SymTab& syms) {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
       insert_vec_in(vec_input);
  
       SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
-      syms[name]=pdg_in;
+      syms.set(name,pdg_in);
       pdg_in->setName(name);
       pdg_in->setVPort(_vecInputs.size());
       pdg_in->setScalar();
@@ -764,21 +881,16 @@ class SbPDG {
     } 
 
     //scalar output node
-    void addScalarOutput(std::string name, std::map<std::string,SbPDG_Node*>& syms) {
-
-      SbPDG_Node* out_node = syms[name];
-      if(out_node==NULL) {
-        std::cerr << "Could not find" + name + "\n";
-        assert("0");
-      }
-
+    void addScalarOutput(std::string name, SymTab& syms) {
+      SbPDG_Node* out_node = syms.get_node(name);
+ 
       //new vector output
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output(this);
       std::string out_name=name+"_out";
-      syms[out_name]=pdg_out;
+      syms.set(out_name,pdg_out);
       pdg_out->setName(out_name);
       pdg_out->setVPort(_vecOutputs.size());
       pdg_out->setScalar();
@@ -788,11 +900,9 @@ class SbPDG {
       connect(out_node, pdg_out,0,SbPDG_Edge::data);
     } 
 
-
-    //Need to confirm the functionality here
     void addVecOutput(std::string name,
                      std::vector<std::vector<int> >& pm,
-                     std::map<std::string,SbPDG_Node*>& syms ) {
+                     SymTab& syms ) {
         
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
       vec_output->setLocMap(pm);
@@ -807,15 +917,10 @@ class SbPDG {
         //std::cout << "name: " << name << "\n";
         std::string dep_name = ss.str();
 
-        SbPDG_Node* out_node = syms[dep_name];
-        if(out_node==NULL) {
-          std::cerr << "Could not find \"" + dep_name + "\"\n";
-          assert(0);
-        }
-
+        SbPDG_Node* out_node = syms.get_node(dep_name);
         SbPDG_Output* pdg_out = new SbPDG_Output(this);
         std::string out_name = dep_name + "_out";
-        syms[out_name]=pdg_out;
+        syms.set(out_name,pdg_out); 
         pdg_out->setName(out_name);
         pdg_out->setVPort(_vecOutputs.size());
         addOutput(pdg_out);
@@ -827,10 +932,14 @@ class SbPDG {
 
       //assert(0 && "addVecOutput not implemented");
     }
+    void addVecOutput(std::string name, int len, SymTab& syms ) {
+       std::vector<std::vector<int>> pm = simple_pm(len);
+       addVecOutput(name,pm,syms);
+    }
 
     void addVecInput(std::string name,
                      std::vector<std::vector<int> >& pm,
-                     std::map<std::string,SbPDG_Node*>& syms ) {
+                     SymTab& syms ) {
 
       SbPDG_VecInput* vec_input = new SbPDG_VecInput(name,_vecInputs.size()); 
       vec_input->setLocMap(pm);
@@ -846,24 +955,23 @@ class SbPDG {
         //std::cout << "name: " << name << "\n";
         SbPDG_Input* pdg_in = new SbPDG_Input(this);
         std::string name = ss.str();
-        syms[name]=pdg_in;
+        syms.set(name,pdg_in);
         pdg_in->setName(name);
         pdg_in->setVPort(_vecInputs.size());
         addInput(pdg_in);
         vec_input->addInput(pdg_in);
       }
     }
-
-    void parse_and_add_vec(std::string name, std::string line,
-                           std::map<std::string,SbPDG_Node*>& syms ,bool input);
+    void addVecInput(std::string name, int len, SymTab& syms) {
+      std::vector<std::vector<int>> pm = simple_pm(len);
+      this->addVecInput(name,pm,syms);
+    }
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
-    void parse_and_add_inst(std::string var_out, std::string opcode, 
-                            std::map<std::string,SbPDG_Node*>& syms,
-                            std::vector<std::string> inc_nodes);
-    
+    SymEntry createInst(std::string opcode, std::vector<SymEntry>& args);
+
     typedef std::vector<SbPDG_Node*>::const_iterator   const_node_iterator;
     typedef std::vector<SbPDG_Inst*>::const_iterator   const_inst_iterator;
     typedef std::vector<SbPDG_Input*>::const_iterator  const_input_iterator;
@@ -916,8 +1024,6 @@ class SbPDG {
       _vecOutputGroups[group].push_back(out);
     }
 
-
-
     int find_group_for_vec(SbPDG_VecInput* in) {
       for(unsigned i =0; i < _vecInputGroups.size(); ++i) {
         for(SbPDG_VecInput* v : _vecInputGroups[i]) {
@@ -967,7 +1073,9 @@ SbPDG_VecInput* get_vector_input(int i){
     SbPDG_VecOutput* vec_out(int i) {return _vecOutputs[i];}
 
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
-    std::vector<SbPDG_VecOutput*>&  vec_out_group(int i) {return _vecOutputGroups[i];}
+    std::vector<SbPDG_VecOutput*>& vec_out_group(int i) {return _vecOutputGroups[i];}
+    GroupProp&  prop_group(int i) {return _propGroups[i];}
+
     int num_groups() {return _vecInputGroups.size();}
 
     void sort_vec_in() {
@@ -1006,7 +1114,7 @@ SbPDG_VecInput* get_vector_input(int i){
         
         //std::cout << (valid[i] ? "input valid " : " input invalid ") << "\n";
       }
-      std::cout <<"\n";
+    //  std::cout <<"\n";
 
       if(t>0)
           return true;
@@ -1076,7 +1184,7 @@ SbPDG_VecInput* get_vector_input(int i){
         SbPDG_Edge* e = *vec_out->getOutput(i)->ops_begin(); 
         data.push_back(e->get_buffer_val());
         data_valid.push_back(e->get_buffer_valid());
-        std::cout << e->get_buffer_valid();
+        //std::cout << e->get_buffer_valid();
         e->pop_buffer_val();
       }
 
@@ -1117,7 +1225,7 @@ SbPDG_VecInput* get_vector_input(int i){
       for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end();++it){
         struct cycle_result* temp = *it;
         SbPDG_Node* sb_node = temp->n;
-        std::cout << "transient_value update valid: " << temp->valid << "\n";
+        //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
         sb_node->set_node(temp->val, temp->valid, temp->avail);
         // update next nodes?: call only when it could push
@@ -1208,6 +1316,8 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
+    std::vector<GroupProp> _propGroups;
+
 
     int _total_dyn_insts=0;
     

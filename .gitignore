@@ -9,4 +9,6 @@ dfgs/*/*.h
 gams/
 verif/
 viz/
+julia/
 remap.dot
+compile_commands.json

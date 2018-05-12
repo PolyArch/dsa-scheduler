@@ -21,6 +21,8 @@ using usec = std::chrono::microseconds;
 using get_time = std::chrono::steady_clock;
 
 
+void System(const char* command);
+
 
 template <typename T,typename U>                           
 std::pair<T,U> operator+(const std::pair<T,U> & l,

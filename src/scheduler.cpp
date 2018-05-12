@@ -20,6 +20,16 @@ using namespace std;
 #include <unistd.h>
 #include <list>
 
+
+void System(const char* command) {
+  int ret = system(command);
+  if(ret) {
+    std::cout << "Command: \"" << command 
+              << "\" failed with return value: " << ret << "\n";
+  }
+}
+
+
 /*
 class proposedPaths {
   public:
