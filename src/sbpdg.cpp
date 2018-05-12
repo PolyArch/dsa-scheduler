@@ -478,7 +478,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
-  _discard=false;
+  _invalid=false;
 
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
@@ -486,17 +486,16 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     } else {
       SbPDG_Node*  n =  _ops[i]->def();
       _input_vals[i] = n->get_value();
-      if(n->discard()) {
-        _discard=true;
+      if(n->invalid()) {
+        _invalid=true;
       }
     }
     if(print) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
-
-  
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
+ 
+  _val=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_invalid,_back_array);
 
    if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
@@ -512,7 +511,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
 
-  int num_computed=!_discard;
+  int num_computed=!_invalid;
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
       SbPDG_Node* use = (*iter)->use();
@@ -525,7 +524,6 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 
 // new compute for back cgra-----------------------------
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
-  _sbpdg->inc_total_dyn_insts();
   // std::cout << "came to compute for the node: " << this->gamsName() << " and the name: " << name() << "\n";
 
    // TODO
@@ -545,14 +543,17 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
    cout << name() << " (" << _ID << "): ";
 */
 
-  _discard=false;
+  uint64_t discard=0;
+  uint64_t output = 0;
 
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
-    } 
-    else {
-        _input_vals[i] = _ops[i]->get_buffer_val();
+    } else {
+      _input_vals[i] = _ops[i]->get_buffer_val();
+      if(!_ops[i]->get_buffer_valid()) {
+        _invalid=true;
+      }
     } 
 
     if(print) {
@@ -560,50 +561,50 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     }
     // cout << std::hex << _input_vals[i] << " ";
   }
-  
+
+  std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+
+
   // initializing back pressure
   if(_back_array.size() == 0){
      _back_array.resize(_ops.size());
   }
-      for(unsigned int i=0; i<_ops.size(); ++i) {
-          _back_array[i] = 0;
-      }
-   
 
-  // Read in some temp value and set _val after inst_lat cycles
-  uint64_t temp = 0;
-  temp=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_discard,_back_array);
-  _inputs_ready=0;
-
-
-  if(print) {
-    _sbpdg->dbg_stream() << " = " << temp << "\n";
+  for(unsigned int i=0; i<_ops.size(); ++i) {
+      _back_array[i] = 0;
   }
+
+
+  if(!_invalid) { //IF VALID
+     _sbpdg->inc_total_dyn_insts();
+   
+    // Read in some temp value and set _val after inst_lat cycles
+    output=SB_CONFIG::execute(_sbinst,_input_vals,_reg,discard,_back_array);
   
+    if(print) {
+      _sbpdg->dbg_stream() << " = " << output << "\n";
+    }
+  } 
+
+  _inputs_ready=0;
+ 
  /* 
   cout << " = " << temp;
-  if(_discard) { 
+  if(_invalid) { 
     cout << " and discard!";
   }
   cout << "\n";
 */
 
-  // std::cout << "Print bp values: " << _back_array[0] << " " << _back_array[1] << "\n";
-  // std::cout << "Print input values: " << _input_vals[0] << " " << _input_vals[1] << "\n";
-  // std::cout << "Intermediate vals calculated each cycle: " << temp << " and their discard values: " << _discard << "\n";
-
-  // setting the output node (current node)
-  SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(this); 
-
-  if(!_discard) {
-    // this->set_value(temp, !_discard, inst_lat(pdginst->inst()));
-    this->set_value(temp, !_discard, true, inst_lat(pdginst->inst()));
+  if(!discard) {
+    // this->set_value(temp, !_invalid, inst_lat(pdginst->inst()));
+    this->set_value(output, !_invalid, true, inst_lat(inst()));
   }
-  // _discard = true;
+  // _invalid = true;
 
 
   // pop the inputs after inst_thr+back_press here
-  int inst_throughput = inst_thr(pdginst->inst());
+  int inst_throughput = inst_thr(inst());
   // std::cout << "thr: " << inst_throughput << "\n";
 
   // int index=0;
@@ -643,7 +644,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     }
   }
 
-  // int num_computed=!_discard;
+  // int num_computed=!discard;
   // return num_computed;
 
   // should be recursively called here? update_next_nodes for that
@@ -672,7 +673,6 @@ int SbPDG_Inst::update_next_nodes(bool print, bool verif){
 
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
-    assert(valid);
     _sbpdg->push_transient(this, v,valid, avail, cycle);
 }
 
