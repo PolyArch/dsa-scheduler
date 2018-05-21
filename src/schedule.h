@@ -407,10 +407,10 @@ class Schedule {
   static const int FU_DIR_LOC = SWITCH_LOC + SWITCH_BITS;
   static const int FU_DIR_BITS = BITS_PER_FU_DIR * NUM_IN_FU_DIRS;
 
-  //static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
-  //static const int FU_PRED_INV_BITS = 1;
+  static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
+  static const int FU_PRED_INV_BITS = 1;
 
-  static const int OPCODE_LOC = FU_DIR_LOC + FU_DIR_BITS;
+  static const int OPCODE_LOC = FU_PRED_INV_LOC + FU_PRED_INV_BITS;
   static const int OPCODE_BITS = 6;
 
   static const int IN_DELAY_LOC = OPCODE_LOC + OPCODE_BITS;
@@ -425,11 +425,18 @@ class Schedule {
   static const int COL_BITS=4;
 
   void print_bit_loc() {
-    std::cout << "Row: " << ROW_LOC << ":" << ROW_LOC+ROW_BITS-1 << "\n";
-    std::cout << "Switches: " << SWITCH_LOC  << ":" << SWITCH_LOC + SWITCH_BITS-1 << "\n";
-    std::cout << "FU Dir: " << FU_DIR_LOC << ":" << FU_DIR_LOC + FU_DIR_BITS-1 << "\n";
-    std::cout << "Opcode: " << OPCODE_LOC << ":" << OPCODE_LOC + OPCODE_BITS-1 << "\n";
-    std::cout << "In Del.: "<< IN_DELAY_LOC<<":"<< IN_DELAY_LOC + IN_DELAY_BITS-1 << "\n";
+    std::cout << "Row: " << ROW_LOC 
+                         << ":" << ROW_LOC+ROW_BITS-1 << "\n";
+    std::cout << "Switches: " << SWITCH_LOC  << ":" 
+                              << SWITCH_LOC + SWITCH_BITS-1 << "\n";
+    std::cout << "FU Dir: " << FU_DIR_LOC << ":" 
+                            << FU_DIR_LOC + FU_DIR_BITS-1 << "\n";
+    std::cout << "FU Pred Inv: " << FU_PRED_INV_LOC << ":" 
+                                 << FU_PRED_INV_LOC + FU_PRED_INV_BITS-1 << "\n";
+    std::cout << "Opcode: " << OPCODE_LOC << ":" 
+                            << OPCODE_LOC + OPCODE_BITS-1 << "\n";
+    std::cout << "In Del.: "<< IN_DELAY_LOC<<":"
+                            << IN_DELAY_LOC + IN_DELAY_BITS-1 << "\n";
   }
 
 

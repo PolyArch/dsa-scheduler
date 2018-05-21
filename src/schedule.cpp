@@ -331,9 +331,9 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
         }//end for input fu dirs
   
         //predictate inverse
-        //uint64_t p=_bitslices.read_slice(cur_slice,FU_PRED_INV_LOC,
-        //                                           FU_PRED_INV_LOC+FU_PRED_INV_BITS-1);
-        //pdg_inst->setPredInv(p);
+        uint64_t p=_bitslices.read_slice(cur_slice,FU_PRED_INV_LOC,
+                                                   FU_PRED_INV_LOC+FU_PRED_INV_BITS-1);
+        pdg_inst->setPredInv(p);
       } else {
         //cout << i << " " << j << " not mapped\n";
       }
@@ -417,7 +417,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
 
 //Write to a header file
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
-  print_bit_loc();
+  //print_bit_loc();
 
   //Step 1: Place bits into fields
 
@@ -647,14 +647,12 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             } else {
               assert(n!=0 && "can't be no slot for first input");
             }
-
           }
           
           //print predicate
-          //if(pdg_node->predInv()) {
-          //  _bitslices.write(cur_slice,FU_PRED_INV_LOC,
-          //                             FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,1);
-          //} 
+          _bitslices.write(cur_slice,FU_PRED_INV_LOC,
+                                     FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,
+                                     pdg_node->predInv());
          
           //opcode encdoing
           unsigned op_encode = sbfu_node->fu_def()->encoding_of(pdg_node->inst());
@@ -1928,18 +1926,16 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
           //cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
           //     << "    (" << fu_node->x() << " " << fu_node->y() << " .. FU)" << "\n";
 
-
-          //auto* pdgnode = pdgnode_for[fu_node];
-          //cout << pdgnode->name() << "\n";
-
           SbPDG_Inst* dest_pdgnode = dynamic_cast<SbPDG_Inst*>(pdgnode_for[fu_node]);
           assert(dest_pdgnode);
-          
+
+          int n_ops = SB_CONFIG::num_ops[dest_pdgnode->inst()];
+
           for(int slot = 0; slot < NUM_IN_FU_DIRS; ++slot) { 
             if(posMap[dest_pdgnode][slot] == outLink->dir()) {
               auto edge_type = SbPDG_Edge::data;
-              if(slot==2) edge_type = dest_pdgnode->predInv()? 
-                             SbPDG_Edge::ctrl_true : SbPDG_Edge::ctrl_false;
+              if(slot==n_ops) edge_type = dest_pdgnode->predInv()? 
+                             SbPDG_Edge::ctrl_false : SbPDG_Edge::ctrl_true;
 
               _sbPDG->connect(pdgnode,dest_pdgnode,slot, edge_type); 
             }
