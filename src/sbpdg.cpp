@@ -218,18 +218,27 @@ SymEntry SbPDG::createInst(std::string opcode,
       pdg_inst->setImm(args[i].data.i);
       pdg_inst->setImmSlot(i); 
       imm_offset=1;
+      assert(args[i].flag==SymEntry::FLAG_NONE);
     } else if (args[i].type==SymEntry::SYM_NODE) {
       SbPDG_Node* inc_node = args[i].data.node;
       if(inc_node==NULL) {
         cerr << "Could not find argument " << i << " for \"" 
              <<  opcode + "\" inst \n";
         assert("0");
-      } 
-      connect(inc_node, pdg_inst,i,SbPDG_Edge::data);
+      }
+      SbPDG_Edge::EdgeType etype = SbPDG_Edge::EdgeType::data; 
+      if(args[i].flag==SymEntry::FLAG_PRED) {
+        etype = SbPDG_Edge::EdgeType::ctrl_true;
+      } else if(args[i].flag==SymEntry::FLAG_INV_PRED) {
+        etype = SbPDG_Edge::EdgeType::ctrl_false;
+      }
+      
+      connect(inc_node, pdg_inst,i, etype);
     } else {
       assert(0 && "Invalide Node type");
     }
   }
+  
 
   addInst(pdg_inst);     
 
@@ -776,19 +785,22 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
     new_edge = new SbPDG_Edge(orig, dest, etype, this);
   }
 
+
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
     if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
+      assert(slot==SB_CONFIG::num_ops[inst->inst()]);       
       //std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
-      slot = 2;
+      //slot = 2;
       inst->setPredInv(false);
     } else {
       assert(0 && "not a Inst dest"); 
     }
   } else if (etype==SbPDG_Edge::ctrl_false) {
     if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
+      assert(slot==SB_CONFIG::num_ops[inst->inst()]);
       //std::cout << "false edge" << orig->name() << "->" << dest->name() << "\n";
-      slot = 2;
+      //slot = 2;
       inst->setPredInv(true);
     } else {
       assert(0 && "not an Inst dest"); 

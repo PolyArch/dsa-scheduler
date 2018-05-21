@@ -416,15 +416,11 @@ class SbPDG_Inst : public SbPDG_Node {
       _reg.resize(8,0);
     }
 
-
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     void setImm( uint64_t val ) { _imm=val; }
-//    void setImm( float val ) { _imm=*reinterpret_cast<int32_t*>(&val); }
-
-//    float getImmFloat() { return *reinterpret_cast<float*>(&_imm); } 
-    int   getImmInt() { return _imm; }
+    int  getImmInt() { return _imm; }
 
     uint64_t   imm() { return _imm; }
 
