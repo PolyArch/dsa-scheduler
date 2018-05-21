@@ -226,6 +226,14 @@ SymEntry SbPDG::createInst(std::string opcode,
         assert("0");
       } 
       connect(inc_node, pdg_inst,i,SbPDG_Edge::data);
+    } else if (args[i].flag==SymEntry::FLAG_PRED) {
+      SbPDG_Node* inc_node = args[i].data.node;
+      if(inc_node==NULL) {
+        cerr << "Could not find argument " << i << " for \"" 
+             <<  opcode + "\" inst \n";
+        assert("0");
+      }
+      connect(inc_node, pdg_inst, i, SbPDG_Edge::ctrl_true);
     } else {
       assert(0 && "Invalide Node type");
     }
@@ -362,16 +370,22 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // std::cout << "came to compute for the node: " << this->gamsName() << " and the name: " << name() << "\n";
 
-   // TODO
-  // std::cout << "did it come here and seg fault here?\n";
 
   assert(_ops.size() <=3);
+  // assert(num_inc <= 3);
 
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());
   }
 
   assert(_input_vals.size() <= _ops.size());
+
+
+  int pred = 1; // valid by default
+  if(!predInv()) {
+    _input_vals.resize(_ops.size()-1);
+      // slot 2 in this instruction is predicate
+  }
 /*
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
@@ -385,6 +399,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
+    } else if (i==2 && !predInv()) { // slot=2
+        pred = _ops[i]->get_buffer_val();
     } else {
       _input_vals[i] = _ops[i]->get_buffer_val();
       if(!_ops[i]->get_buffer_valid()) {
@@ -396,6 +412,10 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
     // cout << std::hex << _input_vals[i] << " ";
+  }
+
+  if(pred==0) {
+    _invalid=true;
   }
 
   //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
@@ -779,7 +799,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
     if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
-      //std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
+      std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
       slot = 2;
       inst->setPredInv(false);
     } else {
@@ -798,6 +818,10 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
       //assert(slot >=0);
       //assert(slot <=1);
   }
+  // else if (etype==SbPDG_Edge::pred) {
+  //
+  //
+  // }
   
   dest->addIncEdge(slot,new_edge);
   orig->addOutEdge(orig->num_out(),new_edge);
