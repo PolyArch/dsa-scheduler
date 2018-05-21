@@ -801,14 +801,10 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
     if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
-<<<<<<< HEAD
-      std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
-      slot = 2;
-=======
+
       assert(slot==SB_CONFIG::num_ops[inst->inst()]);       
       //std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
       //slot = 2;
->>>>>>> 7df2d6ce5e4816c0a5dea952c710665c246b4dcd
       inst->setPredInv(false);
     } else {
       assert(0 && "not a Inst dest"); 
