@@ -700,7 +700,8 @@ class SbPDG_VecOutput : public SbPDG_Vec {
 
 struct SymEntry {
   enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
-  enum enum_flag {FLAG_NONE, FLAG_PRED, FLAG_INV_PRED, FLAG_BGATE} flag;
+  enum enum_flag {FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED, FLAG_BGATE} 
+    flag = FLAG_NONE;
   int width;
   union union_data {
     uint64_t i;
@@ -710,6 +711,7 @@ struct SymEntry {
   } data;
   SymEntry() {
     type=SYM_INV; 
+    flag=FLAG_INV;
   }
   SymEntry(uint64_t i) {
     type=SYM_INT;
