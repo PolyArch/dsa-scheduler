@@ -14,6 +14,8 @@ using namespace SB_CONFIG;
 int SbPDG_Node::ID_SOURCE=0;
 int SbPDG_Edge::ID_SOURCE=0;
 
+CtrlMap CtrlBits::ctrl_map;
+
 bool SbPDG_VecInput::backPressureOn() {
     // return getBackBit();
     return false;
@@ -234,6 +236,7 @@ SymEntry SbPDG::createInst(std::string opcode,
       }
       
       connect(inc_node, pdg_inst,i, etype);
+      pdg_inst->set_ctrl_bits(args[i].ctrl_bits);
     } else {
       assert(0 && "Invalide Node type");
     }

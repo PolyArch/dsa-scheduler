@@ -15,6 +15,7 @@
 #include <sstream>
 #include <algorithm>
 #include "model.h"
+#include <bitset>
 
 class Schedule;
 class SbPDG_Node;
@@ -282,14 +283,7 @@ class SbPDG_Node {
             }
         }
         return bp;
-        // return _backPressure;
     }
-
-    /*
-    void set_bp(bool v){
-        _backPressure=v;
-    }
-    */
 
     void set_outputnode(uint64_t v, bool valid, bool avail) {
       _val=v; 
@@ -370,17 +364,8 @@ class SbPDG_Node {
     int get_inputs_ready() {
         return _inputs_ready;
     }
-    /*bool get_is_new_val() {
-        return _is_new_val;
-    }
-    
-    void set_is_new_val(bool a) {
-        _is_new_val = a;
-    }
-    */
    //---------------------------------------------------------------------------
-    
-    
+   
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
@@ -407,6 +392,165 @@ class SbPDG_Node {
     static int ID_SOURCE;
 };
 
+
+//Control map defines the set of control signals which will be passed into
+//the configuration if any of these bits are set.
+class CtrlMap {
+public:
+  enum ctrl_flag {BACKP1, BACKP2, DISCARD, RESET, ABSTAIN, NUM_CTRL};
+
+  CtrlMap() {
+    add_ctrl("b1", BACKP1);
+    add_ctrl("b2", BACKP2);
+    add_ctrl("d" , DISCARD);
+    add_ctrl("r" , RESET);
+    add_ctrl("a" , ABSTAIN);
+  }
+
+  std::string decode_control(ctrl_flag c) {
+    if(_decode_map.count(c)) {
+      return _decode_map[c];
+    } else {
+      assert(0);
+    }
+  }
+
+  ctrl_flag encode_control(std::string s) {
+    if(_encode_map.count(s)) {
+      return _encode_map[s];
+    } else {
+      std::cout << "Bad Control Symobol: " << s <<"\n";
+      assert("Bad Control Symbol" && 0); 
+    }
+  }
+
+private:
+  std::map<std::string,ctrl_flag> _encode_map;
+  std::map<ctrl_flag,std::string> _decode_map; //this could be an array i suppose
+
+  void add_ctrl(const char* s, ctrl_flag c) {
+    _encode_map[std::string(s)]=c;
+    _decode_map[c]=std::string(s);
+  }
+};
+ 
+typedef std::vector<std::string> string_vec_t;
+
+//post-parsing control signal definitions 
+typedef std::map<int,string_vec_t> ctrl_def_t; 
+
+
+class CtrlBits {
+public:
+  static int bit_loc(int c_val, CtrlMap::ctrl_flag flag) {
+    return c_val * CtrlMap::NUM_CTRL + flag; 
+  }
+  CtrlBits(ctrl_def_t d) {
+    for(auto i : d) {
+      int key = i.first;
+      auto vec = i.second;
+      for(auto s : vec) {
+        CtrlMap::ctrl_flag  local_bit_pos = ctrl_map.encode_control(s);
+        int final_pos = bit_loc(key,local_bit_pos);
+        _bits.set(final_pos);
+      }
+    }
+  }
+  CtrlBits(uint64_t b) {
+    _bits = b;
+  }
+  CtrlBits(){}
+
+  void print_rep() {
+    for(int i = 0; i < 4; ++i) {
+      printf("ctrl input %d:", i);
+      for(int c = 0; c<CtrlMap::NUM_CTRL;++c) {
+        if(isSet(i,(CtrlMap::ctrl_flag)c)) {
+          printf(" %s",ctrl_map.decode_control((CtrlMap::ctrl_flag)c).c_str()); 
+        } 
+      }
+      printf("\n");
+    }
+  }
+
+  uint64_t bits() {return _bits.to_ullong();}
+
+  bool isSet(int c_val, CtrlMap::ctrl_flag flag) {
+    return _bits.test(bit_loc(c_val,flag));
+  }
+  
+private:
+  static CtrlMap ctrl_map;
+  std::bitset<32> _bits;
+};
+
+struct SymEntry {
+  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
+  enum enum_flag {FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED, 
+                  FLAG_BGATE, FLAG_CONTROL} 
+    flag = FLAG_NONE;
+  CtrlBits ctrl_bits;
+  int width;
+  union union_data {
+    uint64_t i;
+    double d;	 
+    struct struct_data {float f1, f2;} f;
+    SbPDG_Node* node;
+  } data;
+  SymEntry() {
+    type=SYM_INV; 
+    flag=FLAG_INV;
+  }
+  SymEntry(uint64_t i) {
+    type=SYM_INT;
+    data.i=i;
+    width=1;
+  }
+  SymEntry(uint64_t i1, uint64_t i2) {
+    type=SYM_INT;
+    data.i= ((i2&0xFFFFFFFF) << 32) | ((i1&0xFFFFFFFF) <<0);
+    width=2;
+  }
+  SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
+    type=SYM_INT;
+    data.i= ((i4&0xFFFF) << 48) | ((i3&0xFFFF) <<32) | 
+            ((i2&0xFFFF) << 16) | ((i1&0xFFFF) << 0);
+    width=4;
+  }
+  SymEntry(double d) {
+    type=SYM_DUB;
+    data.d=d;
+    width=1;
+  }
+  SymEntry(double d1, double d2) {
+    float f1=d1, f2=d2;
+    type=SYM_DUB;
+    data.f.f1=f1;
+    data.f.f2=f2;
+    width=2;
+  }
+  SymEntry(SbPDG_Node* node) {
+    type=SYM_NODE;
+    data.node=node;
+    width=1;
+  }
+  void set_flag(std::string& s) {
+    if(s==std::string("pred")) {
+      flag=FLAG_PRED;
+    } else if (s==std::string("inv_pred")) {
+      flag=FLAG_INV_PRED;
+    } else if (s==std::string("control")) {
+      flag=FLAG_CONTROL;
+    } else {
+      printf("qualifier: %s unknown",s.c_str());
+      assert(0 && "Invalid argument qualifier");
+    }
+  }
+
+  void set_control_list(ctrl_def_t& d) {
+    ctrl_bits = CtrlBits(d);
+  }
+};
 
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
@@ -485,6 +629,13 @@ class SbPDG_Inst : public SbPDG_Node {
         return _invalid;
     }
 
+   void set_ctrl_bits(CtrlBits c) {
+     _ctrl_bits=c;
+     //if(_ctrl_bits.bits() != 0) {
+     //  _ctrl_bits.print_rep();
+     //} 
+   }
+   uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
   private:
     std::ofstream _verif_stream;
@@ -494,6 +645,8 @@ class SbPDG_Inst : public SbPDG_Node {
     bool _isDummy;
     int _imm_slot;
     int _subFunc;
+    CtrlBits _ctrl_bits;
+
     std::vector<uint64_t> _reg;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
@@ -697,67 +850,6 @@ class SbPDG_VecOutput : public SbPDG_Vec {
 
   private:
     std::vector<SbPDG_Output*> _outputs;
-};
-
-struct SymEntry {
-  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
-  enum enum_flag {FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED, FLAG_BGATE} 
-    flag = FLAG_NONE;
-  int width;
-  union union_data {
-    uint64_t i;
-    double d;	 
-    struct struct_data {float f1, f2;} f;
-    SbPDG_Node* node;
-  } data;
-  SymEntry() {
-    type=SYM_INV; 
-    flag=FLAG_INV;
-  }
-  SymEntry(uint64_t i) {
-    type=SYM_INT;
-    data.i=i;
-    width=1;
-  }
-  SymEntry(uint64_t i1, uint64_t i2) {
-    type=SYM_INT;
-    data.i= ((i2&0xFFFFFFFF) << 32) | ((i1&0xFFFFFFFF) <<0);
-    width=2;
-  }
-  SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
-    type=SYM_INT;
-    data.i= ((i4&0xFFFF) << 48) | ((i3&0xFFFF) <<32) | 
-            ((i2&0xFFFF) << 16) | ((i1&0xFFFF) << 0);
-    width=4;
-  }
-  SymEntry(double d) {
-    type=SYM_DUB;
-    data.d=d;
-    width=1;
-  }
-  SymEntry(double d1, double d2) {
-    float f1=d1, f2=d2;
-    type=SYM_DUB;
-    data.f.f1=f1;
-    data.f.f2=f2;
-    width=2;
-  }
-  SymEntry(SbPDG_Node* node) {
-    type=SYM_NODE;
-    data.node=node;
-    width=1;
-  }
-  void set_flag(std::string& s) {
-    if(s==std::string("pred")) {
-      flag=FLAG_PRED;
-    } else if (s==std::string("inv_pred")) {
-      flag=FLAG_INV_PRED;
-    } else if (s==std::string("bgate")) {
-      flag=FLAG_BGATE;
-    } else {
-      assert(0 && "Invalid argument qualifier");
-    }
-  }
 };
 
 class SymTab {

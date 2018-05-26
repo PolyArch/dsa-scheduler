@@ -73,6 +73,10 @@ M   [-]
 
 "#pragma"                               { return PRAGMA; }
 
+"->"                                    { return ARROW;}
+
+"|"                                     { return '|'; }
+
 ";"					{ return ';'; }
 ("{")					{ return '{'; }
 ("}")					{ return '}'; }

@@ -28,10 +28,11 @@ static void yyerror(parse_param*, const char *);
 
 %parse-param {struct parse_param* p}
 
-%token	 INPUT OUTPUT EOLN NEW_DFG PRAGMA
+%token	 INPUT OUTPUT EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL 
 %token<d> F_CONST
 %token<i> I_CONST
+
 
 
 %union {
@@ -41,6 +42,10 @@ static void yyerror(parse_param*, const char *);
         io_pair_t* io_pair;
  	SbPDG_Node* node;
 	std::vector<SymEntry>* sym_vec;
+
+        string_vec_t* str_vec;
+	ctrl_def_t* ctrl_def;
+
 	SymEntry sym_ent;
         YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
         ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -50,6 +55,9 @@ static void yyerror(parse_param*, const char *);
 %type <io_pair> io_def
 %type <sym_vec> arg_list  
 %type <sym_ent> arg_expr  rhs expr
+%type <ctrl_def> ctrl_list  
+%type <str_vec> ident_list  
+
 
 %start statement_list
 %debug
@@ -116,6 +124,8 @@ expr    : I_CONST {$$ = SymEntry($1);}
 arg_expr 
 	: expr {$$ = $1;}
 	| IDENT '=' expr { $$ = $3; $$.set_flag(*$1); }
+	| IDENT '=' expr '{' ctrl_list  '}' { $$ = $3; $$.set_flag(*$1); 
+                                       $$.set_control_list(*$5); delete $5;}
 	;
 
 arg_list : arg_expr {$$ = new std::vector<SymEntry>(); 
@@ -123,6 +133,18 @@ arg_list : arg_expr {$$ = new std::vector<SymEntry>();
 	 | arg_list ',' arg_expr {$1->push_back($3); 
                                   $$ = $1;}
 	 ;
+
+ctrl_list
+        : I_CONST ':' ident_list {$$ = new ctrl_def_t(); 
+                                    (*$$)[$1]=*$3; delete $3;}
+        | ctrl_list ',' I_CONST ':' ident_list {$$ = $1; 
+                                    (*$$)[$3]=*$5; delete $5;}
+        ;
+
+ident_list
+        : IDENT {$$ = new string_vec_t(); $$->push_back(std::string(*$1));}
+        | ident_list '|' IDENT {$1->push_back(*$3); $$ = $1;}
+        ;
 
 %%
 
