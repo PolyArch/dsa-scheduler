@@ -348,19 +348,35 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   while((unsigned)cur_slice < _bitslices.size()) {
     int row = _bitslices.read_slice(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1);
     int col = _bitslices.read_slice(cur_slice,COL_LOC,COL_LOC+COL_BITS-1);
-    ++cur_slice;
-    uint64_t imm = _bitslices.read_slice(cur_slice,0,63);
-    ++cur_slice;
+
     assert(row <  _sbModel->subModel()->sizey());
     assert(col <  _sbModel->subModel()->sizex());
     sbfu* sbfu_node = &fus[col][row];
     assert(sbfu_node);
+    
     //cout << "row,col" << row << " " << col << "\n";
     SbPDG_Node* node = pdgnode_for[sbfu_node];
     assert(node);
     SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(node);
-    assert(inst->immSlot() != -1);
-    inst->setImm(imm);
+
+
+    uint64_t ctrl_bits=_bitslices.read_slice(cur_slice,CTRL_LOC,
+                                                       CTRL_LOC+CTRL_BITS-1);
+
+    inst->set_ctrl_bits(CtrlBits(ctrl_bits));
+
+    bool has_imm = _bitslices.read_slice(cur_slice,IS_IMM_LOC,
+                                                   IS_IMM_LOC+IS_IMM_BITS-1);
+
+    ++cur_slice;
+
+    if(has_imm) {
+      uint64_t imm = _bitslices.read_slice(cur_slice,0,63);
+      assert(inst->immSlot() != -1);
+      inst->setImm(imm);
+
+      ++cur_slice;
+    }
   }
 
   //routemap -- for each sbnode - inlink and outlinks
@@ -670,11 +686,18 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       sbfu* sbfu_node = &fus[i][j];
       if(_assignNode.count(sbfu_node)!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
-        if(pdg_node->immSlot()!=-1) {
+        bool has_imm_slot = pdg_node->immSlot()!=-1;
+        uint64_t ctrl_bits = pdg_node->ctrl_bits();
+        if(has_imm_slot || ctrl_bits) {
            //cout << i << " " << j << " " << pdg_node->immSlot() << "\n";
            _bitslices.write(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1,j);
            _bitslices.write(cur_slice,COL_LOC,COL_LOC+COL_BITS-1,i);
+           _bitslices.write(cur_slice,IS_IMM_LOC,
+                                      IS_IMM_LOC+IS_IMM_BITS-1,has_imm_slot);
+           _bitslices.write(cur_slice,CTRL_LOC,CTRL_LOC+CTRL_BITS-1,ctrl_bits);
            ++cur_slice;
+        }
+        if(has_imm_slot) {
            _bitslices.write(cur_slice,0,63,pdg_node->imm());
            ++cur_slice;
         }

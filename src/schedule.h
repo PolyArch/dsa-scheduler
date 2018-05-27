@@ -424,7 +424,14 @@ class Schedule {
   static const int COL_LOC=ROW_LOC+ROW_BITS;
   static const int COL_BITS=4;
 
+  static const int IS_IMM_LOC=COL_LOC+COL_BITS;
+  static const int IS_IMM_BITS=1;
+
+  static const int CTRL_LOC=IS_IMM_LOC+IS_IMM_BITS;
+  static const int CTRL_BITS=32;
+
   void print_bit_loc() {
+    std::cout << "Primary Config\n";
     std::cout << "Row: " << ROW_LOC 
                          << ":" << ROW_LOC+ROW_BITS-1 << "\n";
     std::cout << "Switches: " << SWITCH_LOC  << ":" 

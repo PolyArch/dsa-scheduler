@@ -50,7 +50,9 @@ M   [-]
 "---"[^\n]*                             { return NEW_DFG; }
 
 "Input"                                 { return(INPUT); }
+"InputVec"                              { return(INPUT); }
 "Output"                                { return(OUTPUT); }
+"OutputVec"                             { return(OUTPUT); }
 \n 					{ return EOLN; }
 
 
@@ -72,6 +74,10 @@ M   [-]
 ({SP}?\"([^"\\\n]|{ES})*\"{WS}*)+	{ return STRING_LITERAL; }
 
 "#pragma"                               { return PRAGMA; }
+
+"->"                                    { return ARROW;}
+
+"|"                                     { return '|'; }
 
 ";"					{ return ';'; }
 ("{")					{ return '{'; }
