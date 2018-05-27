@@ -440,6 +440,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // if(this->gamsName() == "Phi") mimic the functionality here
   // std::cout << "Final invalid of inst: " << name() << " is: " << _invalid << endl;
+  
+
 
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
@@ -451,17 +453,38 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
-  // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
+
+  // std::cout << this->gamsName() << " ";
+  // std::cout << this->name() << " ";
+  /*if(this->name() == ":Hold"){
+    std::cout << _input_vals[0] << " " << _input_vals[1] << " output: " << output << "\n";
+  }
+  */
+
+  
+  if(this->name() == ":Phi") {
+    assert(_input_vals.size()==3 && "Not enough input in phi node");
+    for(unsigned i = 0; i < _ops.size(); ++i) {
+      if(_ops[i]->get_buffer_valid()) {
+         output = _ops[i]->get_buffer_val();
+      }
+    } 
+    discard=false;
+    _invalid=false;
+  }
+
+  
+  std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
+
  
- /* 
-  cout << " = " << temp;
-  if(_invalid) { 
+  cout << " with input: " << _input_vals[0] << " = " << output;
+  if(_invalid || discard) { 
     cout << " and discard!";
   }
   cout << "\n";
-*/
+  
 
   if(!discard) {
     this->set_value(output, !_invalid, true, inst_lat(inst()));
@@ -514,22 +537,17 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
 // Virtual function-------------------------------------------------
 
-
+/*
 int SbPDG_Inst::update_next_nodes(bool print, bool verif){
    // std::cout << "Node name: " << this->name() << " Incoming: " << this->num_inc() << " and ready are: " << this->get_inputs_ready() << "\n";
    if(this->num_inc() == this->get_inputs_ready()){
      compute_backcgra(false, false);
    }
-   int num_computed = 0;
-   /*
-    * for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-     SbPDG_Node* use = (*iter)->use();
-     if(use->get_is_new_val()){
-       num_computed += use->inc_inputs_ready_backcgra(print, verif); //recursively call compute
-     }
-    }
-   */
-    return num_computed;
+   return 0;
+}
+*/
+int SbPDG_Inst::update_next_nodes(bool print, bool verif){
+    return 0;
 }
 
 

@@ -23,7 +23,6 @@ class SbPDG;
 class SbPDG_Edge {
   public:
     enum EdgeType { data, ctrl_true, ctrl_false };
-    // enum EdgeType { data, ctrl_true, ctrl_false, pred };
     
     EdgeType etype() {return _etype;}
     
@@ -99,7 +98,8 @@ class SbPDG_Edge {
     std::queue<std::pair<uint64_t,bool>> _data_buffer;
     // unsigned int buf_len = 1;
     // using 2 since 1st entry is used for bp
-    unsigned int buf_len = 2;
+    // unsigned int buf_len = 3;
+    unsigned int buf_len = 1024;
     //-------------
 
     int _delay =0;
@@ -309,26 +309,14 @@ class SbPDG_Node {
       if(avail){
         if(!get_bp()){
           for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
-           /* SbPDG_Node* n = (*iter)->use(); // hopefully this is dest
-            if((*iter)->is_buffer_empty()){
-              n->set_is_new_val(1);
-            }
-            else
-            {
-              n->set_is_new_val(0);
-              // computation not required if didn't push at the head of buffer
-            }
-          */
             (*iter)->push_in_buffer(v, valid);
           }
           _avail=false;
         }
         else{
             this->set_value(v, valid, avail, 1); // after 1 cycle
-            // set_bp(false);
         }
       }
-      
     }
 
      // sets value at this cycle
@@ -1098,25 +1086,27 @@ SbPDG_VecInput* get_vector_input(int i){
     bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid) {
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
       // int num_computed = 0;
-      int t=0;
+      // int t=0;
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* sb_node = vec_in->getInput(i); 
-        // i could also have pushed in current cycle
-        // sb_node->set_value(data[i],true, true, 0);
         sb_node->set_node(data[i],valid[i], true);
-        // only if it pushed at the top of the buffers
+        /*
         if(!sb_node->get_avail()){
           t = sb_node->update_next_nodes(false, false);
         }
+        */
         
         //std::cout << (valid[i] ? "input valid " : " input invalid ") << "\n";
       }
     //  std::cout <<"\n";
 
+      return true;
+      /*
       if(t>0)
           return true;
       else
           return false;
+      */
 
    }
 
@@ -1201,7 +1191,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     int cycle(bool print, bool verif){ 
 
-      int num_computed=0;
+      // int num_computed=0;
        
       for(auto it=buf_transient_values[cur_buf_ptr].begin();it!= buf_transient_values[cur_buf_ptr].end();++it){
         // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
@@ -1225,20 +1215,11 @@ SbPDG_VecInput* get_vector_input(int i){
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
         sb_node->set_node(temp->val, temp->valid, temp->avail);
-        // update next nodes?: call only when it could push
-        // if avail==0, check if (i/ps ready?) else check update_next_nodes.
-        /*if(temp->avail==0){
-            // update previous nodes
-            std::cout << "Incoming: " << sb_node->num_inc() << " and ready are: " << sb_node->get_inputs_ready() << "\n";
-            if(sb_node->num_inc() == sb_node->get_inputs_ready()){
-                sb_node->compute_backcgra(false, false);
-            }
-        }
-        */
-        // std::cout << "update next nodes of: " << sb_node->name() << " and set the value: " << temp->val << " and next nodes? " << !sb_node->get_avail() << "\n";
+        /*
         if(!sb_node->get_avail()){
           num_computed += sb_node->update_next_nodes(print, verif);
         }
+        */ 
         
         transient_values[cur_buf_ptr].erase(it);
         it--;
@@ -1250,11 +1231,7 @@ SbPDG_VecInput* get_vector_input(int i){
        _total_dyn_insts=0;
        return temp; 
     }
-/*
-    SbPDG_Node* get_scalar_output(SbPDG_VecOutput* vec_out, int id){
-        return vec_out->getOutput(id);
-    }
-*/
+
 
 // ---------------------------------------------------------------------------
 
@@ -1288,11 +1265,11 @@ SbPDG_VecInput* get_vector_input(int i){
        }
     };
 
-    int MAX_LAT = 10;
-    std::list<struct cycle_result*> transient_values[10];
+    int MAX_LAT = 1000;
+    std::list<struct cycle_result*> transient_values[1000];
     int cur_node_ptr=0;
     int cur_buf_ptr=0;
-    std::list<SbPDG_Edge*> buf_transient_values[10];
+    std::list<SbPDG_Edge*> buf_transient_values[1000];
     //--------------------------------------
 
     std::vector<SbPDG_Node*> _nodes;
