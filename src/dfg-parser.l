@@ -50,7 +50,9 @@ M   [-]
 "---"[^\n]*                             { return NEW_DFG; }
 
 "Input"                                 { return(INPUT); }
+"InputVec"                              { return(INPUT); }
 "Output"                                { return(OUTPUT); }
+"OutputVec"                             { return(OUTPUT); }
 \n 					{ return EOLN; }
 
 
