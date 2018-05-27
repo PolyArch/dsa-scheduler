@@ -374,16 +374,34 @@ int SbPDG_Inst::compute(bool print, bool verif) {
 int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // std::cout << "came to compute for the node: " << this->gamsName() << " and the name: " << name() << "\n";
 
-   // TODO
-  // std::cout << "did it come here and seg fault here?\n";
 
   assert(_ops.size() <=3);
+  // assert(num_inc <= 3);
 
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());
   }
 
   assert(_input_vals.size() <= _ops.size());
+
+
+  uint64_t pred;
+  pred = 1; // valid by default
+
+  // initializing back pressure
+  if(_back_array.size() == 0){
+     _back_array.resize(_ops.size());
+  }
+
+  for(unsigned int i=0; i<_ops.size(); ++i) {
+      _back_array[i] = 0;
+  }
+  /*
+  if(!predInv()) {
+    _input_vals.resize(_ops.size()-1);
+      // slot 2 in this instruction is predicate
+  }
+  */
 /*
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
@@ -394,9 +412,13 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   uint64_t discard=0;
   uint64_t output = 0;
 
+  _invalid=false;
+
   for(unsigned i = 0; i < _ops.size(); ++i) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
+    } else if (_ops[i]->etype() == SbPDG_Edge::ctrl_true) {
+        pred = _ops[i]->get_buffer_val();
     } else {
       _input_vals[i] = _ops[i]->get_buffer_val();
       if(!_ops[i]->get_buffer_valid()) {
@@ -410,18 +432,17 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     // cout << std::hex << _input_vals[i] << " ";
   }
 
+  // we set this instruction to invalid
+  if(pred==0) {
+    _invalid=true;
+  }
+
   //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
 
 
-  // initializing back pressure
-  if(_back_array.size() == 0){
-     _back_array.resize(_ops.size());
-  }
 
-  for(unsigned int i=0; i<_ops.size(); ++i) {
-      _back_array[i] = 0;
-  }
-
+  // if(this->gamsName() == "Phi") mimic the functionality here
+  // std::cout << "Final invalid of inst: " << name() << " is: " << _invalid << endl;
 
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
@@ -433,6 +454,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
+  // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
  
@@ -445,7 +467,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 */
 
   if(!discard) {
-    // this->set_value(temp, !_invalid, inst_lat(pdginst->inst()));
     this->set_value(output, !_invalid, true, inst_lat(inst()));
   }
   // _invalid = true;
@@ -477,19 +498,14 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
    }
             
 
-  // wrong: just for test
-  //print = false; verif = false;
-
-
-  // what is this?
-  if(verif) {
-    if (_verif_stream.is_open()) {
-      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
-      _verif_stream.flush();
-    } else {
-      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
-      assert(_verif_stream.is_open());
-    }
+    if(verif) {
+      if (_verif_stream.is_open()) {
+        _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+        _verif_stream.flush();
+      } else {
+        _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
+        assert(_verif_stream.is_open());
+      }
   }
 
   // int num_computed=!discard;
@@ -792,6 +808,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
     if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
+
       assert(slot==SB_CONFIG::num_ops[inst->inst()]);       
       //std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
       //slot = 2;
@@ -813,7 +830,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
       //assert(slot >=0);
       //assert(slot <=1);
   }
-  
+ 
   dest->addIncEdge(slot,new_edge);
   orig->addOutEdge(orig->num_out(),new_edge);
   _edges.push_back(new_edge);

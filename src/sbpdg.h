@@ -24,6 +24,7 @@ class SbPDG;
 class SbPDG_Edge {
   public:
     enum EdgeType { data, ctrl_true, ctrl_false };
+    // enum EdgeType { data, ctrl_true, ctrl_false, pred };
     
     EdgeType etype() {return _etype;}
     
@@ -650,8 +651,6 @@ class SbPDG_Inst : public SbPDG_Node {
     std::vector<uint64_t> _reg;
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
-    // newly added: for now size of 1 
-    // int is_compute=false;
 
 };
 
