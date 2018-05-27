@@ -477,17 +477,18 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   
-  std::cout << "Final value of inst: " << name() << " is: " << output << endl;
+  // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
 
- 
+
+  /*
   cout << " with input: " << _input_vals[0] << " = " << output;
   if(_invalid || discard) { 
     cout << " and discard!";
   }
   cout << "\n";
-  
+  */
 
   if(!discard) {
     this->set_value(output, !_invalid, true, inst_lat(inst()));
