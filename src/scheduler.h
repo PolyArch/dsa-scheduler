@@ -43,7 +43,6 @@ class CandidateRouting {
 
   std::unordered_map< SbPDG_Edge*, std::pair<int,int> > edge_prop;
 
-
   void fill_lat(Schedule* sched,
                 int& min_node_lat, int& max_node_lat, bool print=false) {
     min_node_lat = 0; //need minimax, so that's why this is odd

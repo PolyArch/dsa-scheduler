@@ -27,15 +27,6 @@ void Schedule::clear_sbpdg() {
   } 
 }
 
-void Schedule::stat_printLinkCount(){
-	cout<<"============="<<endl;
-	 cout<<"Link . . . . . Freq." << endl;
-   for (auto& i: linkCount) {
-     cout << (i.first)->name() << " . . . . . " << i.second << endl;
-   }
-	cout<<"============="<<endl;
-}
-
 //For a given pdgnode
 //return the input or ouput port num if the pdfgnode is a
 //sbinput ot sboutput
@@ -391,7 +382,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
       sbfu* sbfu_node = &fus[i][j];
       if (_assignNode.count(sbfu_node) != 0) {
-        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
  
         for (int n = 0; n < NUM_IN_FU_DIRS; ++n) {
           if (pdg_node->immSlot() == n) {
@@ -624,7 +615,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
         //get the pdg node assigned to that FU  
         if(_assignNode.count(sbfu_node)!=0) {
           SbPDG_Inst* pdg_node = 
-            dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
+            dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
           
           int cur_bit_pos=FU_DIR_LOC;
 
@@ -643,7 +634,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
                 sblink* inlink=*Ie;
                 if(_assignLink.count(inlink)!=0
-                  &&_assignLink[inlink]==inc_pdg_node) {
+                  &&pdgNodeOf(inlink)==inc_pdg_node) {
                   assert(inlink->dir() != SbDIR::END_DIR);
                   int in_encode = sbdir.encode_fu_dir(inlink->dir()); //get the encoding of the dir
                   _bitslices.write(cur_slice,p1,p2,in_encode);      //input direction for each FU in
@@ -685,7 +676,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* sbfu_node = &fus[i][j];
       if(_assignNode.count(sbfu_node)!=0) {
-        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
         bool has_imm_slot = pdg_node->immSlot()!=-1;
         uint64_t ctrl_bits = pdg_node->ctrl_bits();
         if(has_imm_slot || ctrl_bits) {
@@ -809,7 +800,7 @@ void Schedule::printConfigText(ostream& os)
       }
 
       if(_assignNode.count(sbfu_node)!=0) {
-        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(_assignNode[sbfu_node]);
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
         os << i << "," << j << ": ";
         os << config_name_of_inst(pdg_node->inst()); //returns sb_inst
         os << "\t";
@@ -833,7 +824,7 @@ void Schedule::printConfigText(ostream& os)
             for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
               sblink* inlink=*Ie;
               if(_assignLink.count(inlink)!=0
-                &&_assignLink[inlink]==inc_pdg_node) {
+                &&pdgNodeOf(inlink)==inc_pdg_node) {
                 os << SbDIR::dirName(inlink->dir(),true);           //reverse the direction of inlink
                 break;
               }
@@ -1939,8 +1930,9 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
           SbPDG_Node* dest_pdgnode = pdgnode_for[sbout];
           assert(dest_pdgnode);
           
-          _assignNode[sbout]=dest_pdgnode;  //perform the assignment
-          _sbnodeOf[dest_pdgnode]=sbout;
+          //_assignNode[sbout]=dest_pdgnode;  //perform the assignment
+          //_sbnodeOf[dest_pdgnode]=sbout;
+          assign_node(dest_pdgnode,sbout);
 
           _sbPDG->connect(pdgnode,dest_pdgnode,0, SbPDG_Edge::data); 
 

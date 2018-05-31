@@ -13,7 +13,7 @@ OPT ?= -O3
 LEX = lex
 YACC = yacc -d
 
-CXXFLAGS :=  -Wall -g -std=c++11 $(OPT) -ggdb -gdwarf-3 -ly -ll -lm $(FLAGS)
+CXXFLAGS :=  -Wall -g -std=c++11 $(OPT) -ggdb -gdwarf-3 -ly -ll -lm -ltcmalloc $(FLAGS)
 SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bkt.cpp scheduler_greedy.cpp scheduler_mlg.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
 
 GAMS_DIR=gams_models
@@ -41,7 +41,7 @@ $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
     
 $(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^     
+	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^ $(LIBS)
 
 $(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp $(GAMS_INC) dfg-parser.tab.h
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
