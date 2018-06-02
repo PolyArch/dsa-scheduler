@@ -40,7 +40,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   //Mapping Variables
   for(auto I = sched->assign_node_begin(), E= sched->assign_node_end();I!=E;++I) {
     sbnode* spot = I->first;
-    SbPDG_Node* pdgnode = I->second;
+    SbPDG_Node* pdgnode = *I->second.begin();
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
   }
@@ -48,7 +48,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   for(auto Il = sched->assign_link_begin(), 
       El= sched->assign_link_end();Il!=El;++Il) {
     sblink* link = Il->first;
-    SbPDG_Node* pdgnode = Il->second;
+    SbPDG_Node* pdgnode = *Il->second.begin();
     ofs << "Mvl.l('" << pdgnode->gamsName() 
         << "','" << link->gams_name(config) << "')=1;\n";
   }

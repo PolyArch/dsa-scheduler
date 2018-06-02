@@ -331,10 +331,6 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   priority_queue<sbnode*,vector<sbnode*>,mycomparison> openset;
 
   _sbModel->subModel()->clear_node_dist();
-
-  //unordered_map<sbnode*,int> node_dist;
-  unordered_map<sbnode*,sblink*> came_from;
-  unordered_map<sbnode*,sblink*> prior_came_from;
   bool found_dest = false;
   
   openset.push(source);
@@ -349,11 +345,14 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     sblink* link = *I;
     sbnode* dest = link->dest();
     sbfu* fu = dynamic_cast<sbfu*>(dest);
-    if(!fu || sched->pdgNodeOf(fu) == NULL) { // don't start at some other instruction's fu
-      //node_dist[dest]=0;
+
+    dest->set_done(1);
+
+    // don't start at some other instruction's fu
+    if(!fu || sched->pdgNodeOf(fu) == NULL) { 
       dest->set_node_dist(0);
       openset.push(dest);
-      prior_came_from[dest]=link;
+      dest->set_came_from(link);
     }
   }
 
@@ -361,6 +360,10 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     sbnode* node = openset.top();
     openset.pop();
 
+    if(node == dest) {found_dest = true; break;}
+
+    node->set_done(1);
+    
     int cur_dist = node->node_dist();
     if(cur_dist >= scoreLeft.first) {
       continue;
@@ -368,44 +371,48 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     
     for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
       sblink* link = *I;
-      
-      //check if connection is closed..
-      if(sched->pdgNodeOf(link) || candRouting.routing.count(link)) continue;
-      
+ 
       sbnode* next = link->dest();
+    
+      //check if next is done or connection is closed..
+      if(next->done() || sched->pdgNodeOf(link) || 
+          candRouting.routing.count(link)) continue;
       
-      if(next->node_dist()!=-1) continue; //has or will be looked at
+      bool is_dest=(next==dest);
+      sbfu* fu = dynamic_cast<sbfu*>(next);
 
-      found_dest=(next==dest);
-      bool passthrough = (dynamic_cast<sbfu*>(next) && !found_dest);
+      if(fu && ((sched->pdgNodeOf(fu) && !is_dest) 
+                  || sched->isPassthrough(fu))) 
+        continue; //node is taken
+
+      bool passthrough = (fu && !is_dest);
+
       int new_dist = cur_dist+1+passthrough*1000;
 
       int next_dist = next->node_dist();
       if(next_dist==-1 || new_dist < next_dist) {
-         came_from[next] = link;
+         next->set_came_from(link);
          next->set_node_dist(new_dist);
-
-        if(found_dest) break; 
-        openset.push(next);
+         openset.push(next);
       }
     }
-    if(found_dest) break;
-  } 
+  }
   if(!found_dest) return fscore;  //routing failed, no routes exist!
   
   pair<int,int> score;
   score = make_pair(0,dest->node_dist());
  
   sbnode* x = dest;
-  while(came_from.count(x)!=0) {
-    sblink* link = came_from[x];
+  while(x->node_dist()!=0) {
+    sblink* link = x->came_from();
+    assert(link);
     candRouting.routing[link]=pdgedge;
     x=link->orig();
   }
 
   int count = 0; 
-  while(prior_came_from.count(x)!=0) {
-    sblink* link = prior_came_from[x];
+  while(x != source) {
+    sblink* link = x->came_from();
     count++;
     x=link->orig();
   }

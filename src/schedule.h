@@ -129,10 +129,23 @@ class Schedule {
       //std::cout << snode->name() << " assigned to " 
       //          << pdgnode->gamsName() << "\n";
       assert(_assignNode.count(snode)==0);
-      assert(pdgnode && (uint64_t)pdgnode != 0x1); //don't ask
+      assert(pdgnode); 
+      assert(_passthrough_nodes.count(snode)==0);
       _assignNode[snode].insert(pdgnode);
       _sbnodeOf[pdgnode] = snode;
     }
+
+    //Un assign the sbnode to pdgnode and vice verse 
+    void unassign_node(SbPDG_Node* pdgnode, sbnode* snode) {
+      assert(_assignNode.count(snode)==1);
+      assert(pdgnode); 
+      _assignNode[snode].erase(pdgnode);
+      if(_assignNode[snode].size()==0) {
+        _assignNode.erase(snode);
+      }
+      _sbnodeOf[pdgnode] = snode;
+    }
+
 
     void calc_out_lat() {
       for(int i = 0; i < _sbPDG->num_vec_output(); ++i) {
@@ -186,22 +199,25 @@ class Schedule {
 
     //sblink to pdgnode
     void assign_link(SbPDG_Node* pdgnode, sblink* slink) {
-      //This ensures no 2-way cyclic links -- but this is okay now
-      //sbnode* src = slink->orig();
-      //for(auto I = src->ibegin(), E = src->iend(); I!=E; ++I) {
-      //   sblink* opp_link = *I;
-      //   if(opp_link->orig() == slink->dest()) {
-      //     if(pdgNodeOf(opp_link) == pdgnode) {
-      //       std::cout << pdgnode->name() << " " 
-      //            << slink->name() << " " << opp_link->name() << "\n";
-      //       assert(0);
-      //     }
-      //   }
-      //}
+      sbnode* src = slink->orig();
+      sbfu* src_fu = dynamic_cast<sbfu*>(src);
+      assert(!src_fu || pdgNodeOf(src_fu)==NULL || 
+             pdgNodeOf(src_fu) == pdgnode); 
+
        assert(slink);
       _assignLink[slink].insert(pdgnode);
       _linksOf[pdgnode].push_back(slink);
     }
+
+    void unassign_link(SbPDG_Node* pdgnode, sblink* slink) {
+       _assignLink[slink].erase(pdgnode);
+     
+       if(_assignLink[slink].size()==0) {
+        _assignLink.erase(slink);
+       }
+       std::remove(_linksOf[pdgnode].begin(),_linksOf[pdgnode].end(),slink);
+    }
+
 
     //pdf edge to sblink 
     void assign_edgelink(SbPDG_Edge* pdgedge,sblink* slink) {
@@ -287,16 +303,18 @@ class Schedule {
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
     
-    typedef std::unordered_map<sbnode*,SbPDG_Node*>::iterator assign_node_iterator;
-    typedef std::unordered_map<sblink*,SbPDG_Node*>::iterator assign_link_iterator;
+    typedef std::unordered_map<sbnode*,
+              std::unordered_set<SbPDG_Node*>>::iterator assign_node_iterator;
+    typedef std::unordered_map<sblink*,
+              std::unordered_set<SbPDG_Node*>>::iterator assign_link_iterator;
     typedef std::unordered_map<sblink*,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
     
-    //assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
-    //assign_node_iterator assign_node_end() { return _assignNode.end(); }
-//    assign_node_iterator assign_vport_begin() { return _assignVPort.begin(); }
-//    assign_node_iterator assign_vport_end() { return _assignVPort.end(); }
-    //assign_link_iterator assign_link_begin() { return _assignLink.begin(); }
-    //assign_link_iterator assign_link_end() { return _assignLink.end(); }
+    assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
+    assign_node_iterator assign_node_end() { return _assignNode.end(); }
+    //assign_node_iterator assign_vport_begin() { return _assignVPort.begin(); }
+    //assign_node_iterator assign_vport_end() { return _assignVPort.end(); }
+    assign_link_iterator assign_link_begin() { return _assignLink.begin(); }
+    assign_link_iterator assign_link_end() { return _assignLink.end(); }
     assign_edgelink_iterator assign_edgelink_begin() { return _assignEdgeLink.begin(); }
     assign_edgelink_iterator assign_edgelink_end() { return _assignEdgeLink.end(); }
     
@@ -372,8 +390,11 @@ class Schedule {
   bitslices<uint64_t>& slices() {return _bitslices;}
 
   void add_passthrough_node(sbnode* passthrough) {
+    assert(_assignNode.count(passthrough)==0);
     _passthrough_nodes.insert(passthrough);
   }
+
+  bool isPassthrough(sbnode* n) {return _passthrough_nodes.count(n);}
 
   static const int IN_ACT_SLICE=0;
   static const int OUT_ACT_SLICE=1;
