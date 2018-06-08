@@ -297,21 +297,12 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
                               vector<sbnode*>& spots) {
   spots.clear();
   
-  for(int i = 2; i < _sbModel->subModel()->sizex(); ++i) {
-    sbfu* cand_fu = _sbModel->subModel()->fuAt(i,0);
-    
-    if((cand_fu->fu_def()==NULL || cand_fu->fu_def()->is_cap(pdginst->inst()))
-       && sched->pdgNodeOf(cand_fu)==NULL) {
-       spots.push_back(cand_fu);
-    }
-  }
-  
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
       
       if((cand_fu->fu_def()==NULL||cand_fu->fu_def()->is_cap(pdginst->inst()))
-         && sched->pdgNodeOf(cand_fu)==NULL) {
+       && !sched->pdgNodeOf(cand_fu) && !sched->isPassthrough(cand_fu)) {
          spots.push_back(cand_fu);
       }
     }
@@ -319,85 +310,80 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
 }
 
 struct mycomparison {
-  bool operator() (sbnode* lhs, sbnode* rhs) const {
-    return lhs->node_dist() > rhs->node_dist();
+  bool operator() (std::pair<sbnode*,int> lhs, std::pair<sbnode*,int> rhs) const {
+    return lhs.second > rhs.second;
   }
 };
 
 //Dijkstra's Algorithm
 pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-  //deque<sbnode*> openset;
-  //deque<sbnode*> openset_long;
-  priority_queue<sbnode*,vector<sbnode*>,mycomparison> openset;
+  priority_queue<std::pair<sbnode*,int>,vector<std::pair<sbnode*,int>>,mycomparison> openset;
 
   _sbModel->subModel()->clear_node_dist();
-  bool found_dest = false;
-  
-  openset.push(source);
+
   source->set_node_dist(0);
+  openset.push(make_pair(source,0));
   
   SbPDG_Node* pdgnode = pdgedge->def();
-  
-  //fill up worklist with nodes reachable 
-  //Todo: add candidate routing links? FIXME
-  Schedule::link_iterator I,E;
-  for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    sblink* link = *I;
-    sbnode* dest = link->dest();
-    sbfu* fu = dynamic_cast<sbfu*>(dest);
 
-    dest->set_done(1);
-
-    // don't start at some other instruction's fu
-    if(!fu || sched->pdgNodeOf(fu) == NULL) { 
-      dest->set_node_dist(0);
-      openset.push(dest);
-      dest->set_came_from(link);
-    }
-  }
+  //cout << "*** ROUTING Problem; source: " << source->name() << " dest: " << dest->name() 
+  //     << " pdgedge: " << pdgedge->name() << " *** \n";
 
   while(!openset.empty()) {
-    sbnode* node = openset.top();
+    sbnode* node = openset.top().first;
+    //cout << "pop node: " << node->name() << " dist: " << node->node_dist() << " " << openset.top().second << "\n";
     openset.pop();
-
-    if(node == dest) {found_dest = true; break;}
+    if(node->done()) continue;
 
     node->set_done(1);
+
+    if(node == dest) break;
     
     int cur_dist = node->node_dist();
-    if(cur_dist >= scoreLeft.first) {
-      continue;
-    }
-    
+    if(cur_dist >= scoreLeft.first) continue;
+
     for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
       sblink* link = *I;
  
       sbnode* next = link->dest();
     
       //check if next is done or connection is closed..
-      if(next->done() || sched->pdgNodeOf(link) || 
-          candRouting.routing.count(link)) continue;
+      if(next->done()) continue;
+
+      //check if connection is closed..
+      SbPDG_Node* sched_node = sched->pdgNodeOf(link);
+      if(sched_node!=NULL && sched_node!=pdgnode) continue;
       
+      SbPDG_Node* cand_node = candRouting.routing.count(link)==0 ? NULL :
+                                  candRouting.routing[link]->def();
+      if(cand_node!=NULL && cand_node!=pdgnode) continue;
+
+      int new_dist=0;
       bool is_dest=(next==dest);
+
       sbfu* fu = dynamic_cast<sbfu*>(next);
+      if(fu && sched->pdgNodeOf(fu) && !is_dest) continue;  //stop if run into fu
 
-      if(fu && ((sched->pdgNodeOf(fu) && !is_dest) 
-                  || sched->isPassthrough(fu))) 
-        continue; //node is taken
+      if(sched_node!=pdgnode && cand_node!=pdgnode) { //if not free link
 
-      bool passthrough = (fu && !is_dest);
-
-      int new_dist = cur_dist+1+passthrough*1000;
-
+        if(fu && sched->isPassthrough(fu)) continue; //someone else's pass through
+    
+        bool passthrough = (fu && !is_dest);
+        new_dist =  cur_dist+1+passthrough*1000;
+      } else {
+        assert(cur_dist==0);
+      }
+     
       int next_dist = next->node_dist();
       if(next_dist==-1 || new_dist < next_dist) {
          next->set_came_from(link);
          next->set_node_dist(new_dist);
-         openset.push(next);
+         openset.emplace(next,new_dist);
+         //cout << "push node at " << link->name() << " with " << new_dist << "\n";
       }
     }
   }
-  if(!found_dest) return fscore;  //routing failed, no routes exist!
+  if(!dest->done()) return fscore;  //routing failed, no routes exist!
   
   pair<int,int> score;
   score = make_pair(0,dest->node_dist());
@@ -462,13 +448,13 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
       sblink* link = *I;
       
       //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
-      //if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
+      SbPDG_Node* sched_node = sched->pdgNodeOf(link);
+      //if(sched_node!=NULL && sched_node!=pdgnode) continue;
       
       sblink* p = link;
-      SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
+      SbPDG_Node* cand_node = candRouting.routing.count(p)==0 ? NULL :
                                   candRouting.routing[p]->def();
-      //if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
+      //if(cand_node!=NULL && cand_node!=pdgnode) continue;
       
       sbnode* next = link->dest();
       
@@ -482,8 +468,8 @@ pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbP
 
       came_from[next] = link;
       node_dist[next] = node_dist[node]+1;
-      if ((sched_exist_pdg != NULL && sched_exist_pdg != pdgnode) 
-        || (cand_exist_pdg != NULL && cand_exist_pdg != pdgnode)) {
+      if ((sched_node != NULL && sched_node != pdgnode) 
+        || (cand_node != NULL && cand_node != pdgnode)) {
         node_overlap[next]=node_overlap[node]+1;
       }
  
@@ -520,7 +506,7 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
   int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
 
   if(ninsts > nfus) {
-    cerr << "\n\nError: Too many instructions in SbPDG for given SBCONIG\n\n";
+    cerr << "\n\nError: Too many instructions in SbPDG for given SBCONFIG\n\n";
     exit(1);
   }
 
