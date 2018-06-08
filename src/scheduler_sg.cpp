@@ -99,7 +99,6 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched)
       //obj = latmis*256+lat;
       //obj = violation*8192+lat*32+latmis;
       obj = latmis*10000+violation*100+lat;
-
     }
 
     std::pair<int, int> score = make_pair(tot_mapped + succeed_sched + succeed_timing, 

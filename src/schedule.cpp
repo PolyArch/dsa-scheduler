@@ -396,7 +396,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
             // delay for each input
             int d1 = IN_DELAY_LOC + BITS_PER_DELAY * n;
             int d2 = d1 + BITS_PER_DELAY - 1;
-            _extraLatOfEdge[inc_edge] = _bitslices.read_slice(cur_slice, d1, d2);
+            set_edge_delay(_bitslices.read_slice(cur_slice, d1, d2),inc_edge);
  
             //_bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
             //  cout <<  i << " " << j << " slice: " << cur_slice 
@@ -647,7 +647,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               //delay for each input
               int d1=IN_DELAY_LOC+BITS_PER_DELAY*n;
               int d2=d1+BITS_PER_DELAY-1;
-              _bitslices.write(cur_slice, d1, d2, _extraLatOfEdge[inc_edge]);
+              _bitslices.write(cur_slice, d1, d2, edge_delay(inc_edge));
               //cout <<  i << " " << j << " slice: " << cur_slice 
               //   << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
 
@@ -1487,11 +1487,19 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   bool succ = true;
-  _extraLatOfEdge.clear();
+  for(auto& i : _edgeProp) {
+    i.second.extra_lat=0;
+  }
 
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
   if (succ) succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
   calcLatency(max_lat, max_lat_mis); //fwd pass
+
+  int max_lat2=0,max_lat_mis2=0;
+  cheapCalcLatency(max_lat2, max_lat_mis2);
+  cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
+  cout << "max_lat_mis:" << max_lat_mis << " " << max_lat_mis2 << "\n";
+
   checkOutputMatch(max_lat_mis);
   return succ;
 }
@@ -1544,8 +1552,8 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
   for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
     if(*I == NULL) { continue; } //could be immediate, constant within FU
     SbPDG_Edge* source_pdgedge = (*I);
-    _extraLatOfEdge[source_pdgedge] += ed;
-    if (_extraLatOfEdge[source_pdgedge] > _sbModel->maxEdgeDelay()) {
+    _edgeProp[source_pdgedge].extra_lat += ed;
+    if (_edgeProp[source_pdgedge].extra_lat > _sbModel->maxEdgeDelay()) {
       return false;
     }
   }
@@ -1630,18 +1638,12 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
             if(lat_edge[inlink]<latency) {
               int diff = latency - lat_edge[inlink]; //latency per edge
               assert(edge);
-              if(!((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff))) {
-                std::string config_header = "fail";
-                printConfigText(config_header.c_str());
-                   
-              }
-              assert(((_extraLatOfEdge.count(edge)==0) || (_extraLatOfEdge[edge]==diff)) && "Error: Someone else set this edge before!");
               if(diff > _sbModel->maxEdgeDelay()) {
 
                 //cout << diff  << " > " << _sbModel->maxEdgeDelay() << "\n";
                 return false;
               }
-              _extraLatOfEdge[edge]=diff;
+              set_edge_delay(diff,edge);
             }
             //cout<<"Edge Name: "<<edge->name()<< " extra lat:" << _extraLatOfEdge[edge] << endl;
             //cout << "(fwdPass) Edge "<<edge->name()<<"  maxLat: " << latency << "  lat_edge: "<<lat_edge[inlink]<<"  extralat: " << _extraLatOfEdge[edge] << "\n";
@@ -1685,6 +1687,56 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
     }
   }
   return true;
+}
+
+void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
+  unordered_map<SbPDG_Node*,int> lat_node;
+
+  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
+  for(SbPDG_Inst* inst : ordered_insts) {
+    int low_lat=10000000, up_lat=0;
+
+    for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+      SbPDG_Edge* edge=*i;
+      if(edge == NULL) continue;
+      
+      SbPDG_Node* origNode = edge->def();
+      if (origNode != NULL) {
+        int lat = lat_node[origNode] + edge_delay(edge) + edge_links(edge);
+
+        if(lat>up_lat) up_lat=lat;
+        if(lat<low_lat) low_lat=lat;
+      }
+    }
+    
+    int diff = up_lat - low_lat - _sbModel->maxEdgeDelay();
+    if(diff>max_lat_mis) max_lat_mis=diff;
+
+    lat_node[inst] = inst_lat(inst->inst()) + up_lat;
+    if(max_lat < lat_node[inst]) max_lat=lat_node[inst];
+
+    cout << "C " << inst->name() << " " << lat_node[inst] 
+         << " up:" << up_lat << " low:" << low_lat << "\n";
+  }
+
+  for (int i=0; i<_sbPDG->num_vec_output(); i++) {
+    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+    int low_lat=1000000, up_lat=0;
+    for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
+      SbPDG_Output* pdgout = vec_out->getOutput(m);
+      SbPDG_Edge* edge = pdgout->first_inc_edge();
+
+      int lat = lat_node[edge->def()] + edge_delay(edge) + edge_links(edge);
+
+      if(lat>up_lat) up_lat=lat;
+      if(lat<low_lat) low_lat=lat;
+    }
+
+    int diff = up_lat - low_lat - _sbModel->maxEdgeDelay();
+    if(diff>max_lat_mis) max_lat_mis=diff;
+
+    if(max_lat < up_lat) max_lat=up_lat;
+  }
 }
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, 
@@ -1770,8 +1822,8 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
             if(!_passthrough_nodes.count(node)) {
               SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
               assert(edge);
-              if(_extraLatOfEdge.count(edge)) {
-                curLat +=  _extraLatOfEdge[edge];
+              if(edge_delay(edge)) {
+                curLat += edge_delay(edge);
               }
             }
 
@@ -1788,14 +1840,14 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
                     << ", link:" << inlink->name() << "\n";
                if(!_passthrough_nodes.count(node)) {
                  SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
-                 cout << "(calcLat) Edge "<<edge->name()<< "  lat_edge: "<<lat_edge[inlink] << "  extralat:" << _extraLatOfEdge[edge] << "\n";
+                 cout << "(calcLat) Edge "<<edge->name()<< "  lat_edge: "<<lat_edge[inlink] << "  extralat:" << edge_delay(edge) << "\n";
                } else {
                  cout << "passthrough\n";
                }
 
             }
           }
-        }
+        }        
       }
 
       if (everyone_is_here) {
@@ -1808,6 +1860,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
           _latOf[next_pdgnode]=l;
         }
 
+        if(next_pdginst) {
+          cout << "L " << next_pdginst->name() << " " << _latOf[next_pdgnode] 
+               << " up:" << max_latency << " low:" << low_latency << "\n";
+
+        }
 
         openset.push_back(new_link);
 

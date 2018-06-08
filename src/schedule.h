@@ -143,7 +143,7 @@ class Schedule {
       if(_assignNode[snode].size()==0) {
         _assignNode.erase(snode);
       }
-      _sbnodeOf[pdgnode] = snode;
+      _sbnodeOf.erase(pdgnode);
     }
 
 
@@ -197,27 +197,31 @@ class Schedule {
       return _vportOf[p];
     } 
 
+    void unassign_link(SbPDG_Node* pdgnode, sblink* slink) {
+      unassign_link_internal(pdgnode, slink);
+      std::remove(_linksOf[pdgnode].begin(),_linksOf[pdgnode].end(),slink);
+    }
+
+    void unassign_pdgnode_completely(SbPDG_Node* pdgnode) {
+      sbnode* node = _sbnodeOf[pdgnode];
+      unassign_node(pdgnode,node);
+      for(sblink* slink : _linksOf[pdgnode]) {
+        unassign_link_internal(pdgnode, slink);
+      }
+      _linksOf[pdgnode].clear();
+    }
+
     //sblink to pdgnode
     void assign_link(SbPDG_Node* pdgnode, sblink* slink) {
       sbnode* src = slink->orig();
       sbfu* src_fu = dynamic_cast<sbfu*>(src);
       assert(!src_fu || pdgNodeOf(src_fu)==NULL || 
              pdgNodeOf(src_fu) == pdgnode); 
-
+  
        assert(slink);
       _assignLink[slink].insert(pdgnode);
       _linksOf[pdgnode].push_back(slink);
     }
-
-    void unassign_link(SbPDG_Node* pdgnode, sblink* slink) {
-       _assignLink[slink].erase(pdgnode);
-     
-       if(_assignLink[slink].size()==0) {
-        _assignLink.erase(slink);
-       }
-       std::remove(_linksOf[pdgnode].begin(),_linksOf[pdgnode].end(),slink);
-    }
-
 
     //pdf edge to sblink 
     void assign_edgelink(SbPDG_Edge* pdgedge,sblink* slink) {
@@ -230,10 +234,17 @@ class Schedule {
       _assignEdgeLink[slink].insert(pdgedge);
       _assignLinkEdge[pdgedge].insert(slink);
     }
-  
-    int link_count(SbPDG_Edge* pdgedge) {
-      return _assignLinkEdge[pdgedge].size();
-    }
+ 
+    //void print_links(SbPDG_Edge* pdgedge) {
+    //  for(auto& i : _assignLinkEdge[pdgedge]) {
+    //    cout << i->name() << " ";
+    //  }
+    //  cout << "\n";
+    //}
+ 
+//    int link_count(SbPDG_Edge* pdgedge) {
+//      return _assignLinkEdge[pdgedge].size();
+//    }
 
     void setLatOfLink(sblink* link, int l) {_latOfLink[link] = l;}
     int  latOfLink(sblink* link) {return _latOfLink[link];}
@@ -294,6 +305,8 @@ class Schedule {
     SbModel* sbModel() {return _sbModel;}
     
     void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
+    void  cheapCalcLatency(int& lat, int& latmis);
+
     bool  fixLatency(int& lat, int& latmis);
     bool  fixLatency_fwd(int& lat, int& latmis);
     bool  fixLatency_bwd(int& lat, int& latmis);
@@ -336,7 +349,7 @@ class Schedule {
       _linksOf.clear();
       _assignEdgeLink.clear();
       _assignLinkEdge.clear();
-      _extraLatOfEdge.clear();
+      _edgeProp.clear();
       _linkOrder.clear();
     }
 
@@ -471,15 +484,11 @@ class Schedule {
                             << IN_DELAY_LOC + IN_DELAY_BITS-1 << "\n";
   }
 
+  void set_edge_delay(int i, SbPDG_Edge* e) { _edgeProp[e].extra_lat=i; }
+  int edge_delay(SbPDG_Edge* e) { return _edgeProp[e].extra_lat;}
 
-  void set_edge_delay(int i, SbPDG_Edge* e) { _extraLatOfEdge[e]=i; }
-  int edge_delay(SbPDG_Edge* e) { 
-    if(_extraLatOfEdge.count(e)) {
-      return _extraLatOfEdge[e]; 
-    }
-    return 0;
-  }
-
+  void set_num_links(int i, SbPDG_Edge* e) { _edgeProp[e].links=i; }
+  int edge_links(SbPDG_Edge* e) { return _edgeProp[e].links;}
 
   void set_link_order(sblink* l, int i) { _linkOrder[l]=i; }
   int link_order(sblink* l) { return _linkOrder[l]; }
@@ -492,6 +501,15 @@ class Schedule {
   int max_lat_mis() {return _max_lat_mis;}
 
   private:
+  void unassign_link_internal(SbPDG_Node* pdgnode, sblink* slink) {
+    _assignLink[slink].erase(pdgnode);
+   
+    if(_assignLink[slink].size()==0) {
+     _assignLink.erase(slink);
+    }
+  }
+
+
   //called by reconstructSchedule to trace link assignment
   void tracePath(sbnode* ,SbPDG_Node* , 
                  std::map<sbnode*, std::map<SbDIR::DIR,SbDIR::DIR>>&,
@@ -516,6 +534,11 @@ class Schedule {
 
     int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
 
+    struct EdgeProp {
+      int links;
+      int extra_lat;
+    };
+
     std::unordered_set<sbnode*> _passthrough_nodes; 
     std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; //for stats
     std::unordered_map<SbPDG_Node*, int> _vioOf; //for stats
@@ -526,17 +549,16 @@ class Schedule {
     std::unordered_map<SbPDG_Node*, int> _latOf; 
     std::unordered_map<SbPDG_Node*, std::pair<int,int>> _latBounds;  //min, max bounds
 
-    std::unordered_map<SbPDG_Edge*, int> _latOfEdge; 
     std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
     std::unordered_map<sblink*, std::unordered_set<SbPDG_Node*>> _assignLink;   //sblink to pdgnode
     std::unordered_map<SbPDG_Node*, std::vector<sblink*> > _linksOf; //pdgnode to sblink 
+
+    std::unordered_map< SbPDG_Edge*, EdgeProp > _edgeProp;
+
     std::unordered_map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
     std::unordered_map<SbPDG_Edge*, std::set<sblink*>> _assignLinkEdge; //
 
-
-    std::unordered_map<SbPDG_Edge*, int> _extraLatOfEdge; 
     std::vector< std::vector<int> > _wide_ports;
-
     std::unordered_map<sblink*,int> _linkOrder;
 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec

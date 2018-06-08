@@ -30,13 +30,6 @@ void System(const char* command) {
 }
 
 
-/*
-class proposedPaths {
-  public:
-  //vector<pair<PDG_ID,
-  //vector<pair<int,vector<int> > path;
-  std::map<int,int>;
-}*/
 bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   sbio_interface si =  subModel->io_interf();
@@ -214,8 +207,8 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
 void HeuristicScheduler::applyRouting(Schedule* sched, 
                              CandidateRouting* candRouting) {
 
-  std::unordered_map<SB_CONFIG::sblink*,SbPDG_Edge* >::iterator I,E;
-  for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
+  for(auto I = candRouting->routing.begin(), 
+           E = candRouting->routing.end(); I!=E; ++I) {
     sblink* link = I->first;
     sbnode* dest = link->dest();
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
@@ -228,8 +221,12 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
     //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
     sched->assign_edgelink(I->second,I->first);
   }
-  //TODO: Apply forwarding
 
+  for(auto I : candRouting->edge_prop) {
+    SbPDG_Edge* edge = I.first;
+    int links = I.second.first;
+    sched->set_num_links(links,edge);  
+  } 
 }
 
 void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
@@ -309,6 +306,35 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
   }
 }
 
+void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
+                        SB_CONFIG::sbnode* source) {
+ 
+  std::queue<sbnode*> openset;
+  openset.push(source);
+
+  _sbModel->subModel()->clear_all_runtime_vals();
+  
+  SbPDG_Node* pdgnode = pdgedge->def();
+
+  while(!openset.empty()) {
+    sbnode* node = openset.front();
+    openset.pop();
+    node->set_done(1);
+
+    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
+      sblink* link = *I;
+      sbnode* next = link->dest();
+   
+      if(sched->pdgNodeOf(link) == pdgnode) {
+        sched->unassign_link(pdgnode,link);
+        if(next->done()!=1) {
+          openset.push(next);
+        }
+      } 
+    }
+  }
+}
+
 struct mycomparison {
   bool operator() (std::pair<sbnode*,int> lhs, std::pair<sbnode*,int> rhs) const {
     return lhs.second > rhs.second;
@@ -319,7 +345,7 @@ struct mycomparison {
 pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
   priority_queue<std::pair<sbnode*,int>,vector<std::pair<sbnode*,int>>,mycomparison> openset;
 
-  _sbModel->subModel()->clear_node_dist();
+  _sbModel->subModel()->clear_all_runtime_vals();
 
   source->set_node_dist(0);
   openset.push(make_pair(source,0));

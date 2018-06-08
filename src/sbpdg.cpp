@@ -39,7 +39,7 @@ void SbPDG_Edge::compute_after_pop(){
         _use->inc_inputs_ready_backcgra(false, false);
   }
 }
-void order_insts(SbPDG_Inst* inst,
+void SbPDG::order_insts(SbPDG_Inst* inst,
                  std::set<SbPDG_Inst*>& done_nodes,         //done insts
                  std::vector<SbPDG_Inst*>& ordered_insts) {
 

@@ -251,6 +251,9 @@ class Scheduler {
 
   void setTimeout(float timeout) {_reslim=timeout;}
 
+  virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
+                       SB_CONFIG::sbnode* source);
+
   protected:
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
@@ -277,10 +280,10 @@ public:
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
 
- std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
+  std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
+  std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
 

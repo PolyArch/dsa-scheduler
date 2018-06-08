@@ -249,6 +249,10 @@ class SbPDG_Node {
       }  
     }
 
+    SbPDG_Edge* first_inc_edge() {
+      return _ops[0];
+    }
+
     SbPDG_Node* first_operand() {
       return (_ops[0]->def());
     }
@@ -899,6 +903,21 @@ class SbPDG {
     void rememberDummies(std::set<SbPDG_Output*> d);
     void removeDummies();
 
+    static void order_insts(SbPDG_Inst* inst,
+                 std::set<SbPDG_Inst*>& done_nodes,         //done insts
+                 std::vector<SbPDG_Inst*>& ordered_insts);
+
+    std::vector<SbPDG_Inst*>& ordered_insts() {
+      if(_orderedInsts.size()==0) {
+        std::set<SbPDG_Inst*> done_nodes;
+        for(SbPDG_Output* out : _outputs) {
+          if(SbPDG_Inst* producing_node = out->out_inst()) {
+            order_insts(producing_node, done_nodes, _orderedInsts);
+          }
+        } 
+      }
+      return _orderedInsts;
+    }
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
@@ -1323,7 +1342,6 @@ SbPDG_VecInput* get_vector_input(int i){
        _total_dyn_insts=0;
        return temp; 
     }
-
 
 // ---------------------------------------------------------------------------
 
