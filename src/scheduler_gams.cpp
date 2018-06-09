@@ -38,29 +38,25 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 
   int config=0;
   //Mapping Variables
-  for(auto I = sched->assign_node_begin(), E= sched->assign_node_end();I!=E;++I) {
-    sbnode* spot = I->first;
-    SbPDG_Node* pdgnode = *I->second.begin();
+  for(auto I = sbPDG->nodes_begin(), E=sbPDG->nodes_end(); I!=E; ++I) {
+    SbPDG_Node* pdgnode = *I;
+    sbnode* spot = sched->locationOf(pdgnode);
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
   }
- 
-  for(auto Il = sched->assign_link_begin(), 
-      El= sched->assign_link_end();Il!=El;++Il) {
-    sblink* link = Il->first;
-    SbPDG_Node* pdgnode = *Il->second.begin();
-    ofs << "Mvl.l('" << pdgnode->gamsName() 
-        << "','" << link->gams_name(config) << "')=1;\n";
-  }
-  
-  for(auto Ile = sched->assign_edgelink_begin(), 
-      Ele= sched->assign_edgelink_end();Ile!=Ele;++Ile) {
+
+  auto links = sched->get_link_prop();
+  for(auto i : links) {
+    sblink* link = i.first;
+    SbPDG_Node* pdgnode = sched->pdgNodeOf(link);
+    if(pdgnode) {
+      ofs << "Mvl.l('" << pdgnode->gamsName() 
+          << "','" << link->gams_name(config) << "')=1;\n";
+    }
     
-    sblink* link = Ile->first;
-    set<SbPDG_Edge*>& edgelist= Ile->second;
+    auto& edgelist= sched->edge_list(link);
     
-    set<SbPDG_Edge*>::const_iterator Ie,Ee;
-    for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
+    for(auto Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
       SbPDG_Edge* pdgedge = *Ie;
       ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
           << link->gams_name(config) << "')=1;\n";
@@ -97,11 +93,13 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   }
 
   //Ordering
-  auto link_order = sched->get_link_order();
+  auto link_order = sched->get_link_prop();
   for(auto i : link_order) {
     sblink* l = i.first;
-    int order = i.second;
-    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
+    int order = i.second.order;
+    if(order!=-1) {
+      ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
+    }
   }
 
   //Timing

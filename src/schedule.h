@@ -87,22 +87,25 @@ class Schedule {
     }
 
     void assign_lat(SbPDG_Node* pdgnode, int lat) {
-      _latOf[pdgnode]=lat;
+      _vertexProp[pdgnode].lat=lat;
     }
     int latOf(SbPDG_Node* pdgnode) {
-      return _latOf[pdgnode];
+      return _vertexProp[pdgnode].lat;
     }
 
     void assign_lat_bounds(SbPDG_Node* pdgnode, int min, int max) {
-      _latBounds[pdgnode]=std::make_pair(min,max);
+      auto& vertex_prop = _vertexProp[pdgnode];
+      vertex_prop.min_lat=min;
+      vertex_prop.max_lat=max;
     }
     std::pair<int,int> lat_bounds(SbPDG_Node* pdgnode) {
-      return _latBounds[pdgnode];
+      auto& vertex_prop = _vertexProp[pdgnode];
+      return std::make_pair(vertex_prop.min_lat, vertex_prop.max_lat);
     }
 
     void assign_edge_pt(SbPDG_Edge* edge, sbnode* pt) {
       add_passthrough_node(pt);
-      _passthroughsOf[edge].insert(pt);
+      _edgeProp[edge].passthroughs.insert(pt);
     }
 
     //Computes maximum throughput both given the latency mismatch &&
@@ -118,9 +121,9 @@ class Schedule {
       _max_lat_mis = std::max(_max_lat_mis,violation);
     }
 
-    int vioOf(SbPDG_Node* n) { return _vioOf[n];}
+    int vioOf(SbPDG_Node* n) { return _vertexProp[n].vio;}
     void record_violation(SbPDG_Node* n, int violation) {
-      _vioOf[n]=violation; 
+      _vertexProp[n].vio=violation; 
     }
 
 
@@ -128,22 +131,16 @@ class Schedule {
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
       //std::cout << snode->name() << " assigned to " 
       //          << pdgnode->gamsName() << "\n";
-      assert(_assignNode.count(snode)==0);
       assert(pdgnode); 
-      assert(_passthrough_nodes.count(snode)==0);
-      _assignNode[snode].insert(pdgnode);
-      _sbnodeOf[pdgnode] = snode;
+      _nodeProp[snode].vertices.insert(pdgnode);
+      _vertexProp[pdgnode].node = snode;
     }
 
     //Un assign the sbnode to pdgnode and vice verse 
     void unassign_node(SbPDG_Node* pdgnode, sbnode* snode) {
-      assert(_assignNode.count(snode)==1);
       assert(pdgnode); 
-      _assignNode[snode].erase(pdgnode);
-      if(_assignNode[snode].size()==0) {
-        _assignNode.erase(snode);
-      }
-      _sbnodeOf.erase(pdgnode);
+      _nodeProp[snode].vertices.erase(pdgnode);
+      _vertexProp[pdgnode].node=NULL;
     }
 
 
@@ -158,7 +155,7 @@ class Schedule {
       for(auto Io=pdgvec_out->output_begin(),Eo=pdgvec_out->output_end();Io!=Eo;++Io) {
         SbPDG_Output* pdgout = *Io;
         //sbnode* out_sbnode = locationOf(pdgout).first;
-        int lat_of_out_sbnode = _latOf[pdgout];
+        int lat_of_out_sbnode = _vertexProp[pdgout].lat;
         std::cout << pdgvec_out->gamsName() << " lat:" << lat_of_out_sbnode << "\n";
         max_lat=std::max(max_lat,lat_of_out_sbnode);
       }
@@ -199,16 +196,28 @@ class Schedule {
 
     void unassign_link(SbPDG_Node* pdgnode, sblink* slink) {
       unassign_link_internal(pdgnode, slink);
-      std::remove(_linksOf[pdgnode].begin(),_linksOf[pdgnode].end(),slink);
+      auto& links = _vertexProp[pdgnode].links;
+      std::remove(links.begin(),links.end(),slink);
     }
 
-    void unassign_pdgnode_completely(SbPDG_Node* pdgnode) {
-      sbnode* node = _sbnodeOf[pdgnode];
-      unassign_node(pdgnode,node);
-      for(sblink* slink : _linksOf[pdgnode]) {
+    //Delete all scheduling data associated with pdgnode, including its
+    //mapped locations, and mapping information and metadata for edges
+    void unassign_pdgnode_completely(SbPDG_Node* pdgnode) { 
+//      for(auto it=pdgnode->uses_begin(); it!=pdgnode->uses_end(); ++it){
+//        SbPDG_Edge* edge = *it;
+//        SbPDG_Node* inc_node = edge->def();
+//      }
+
+      sbnode* node = locationOf(pdgnode);
+      assert(node);
+      for(sblink* slink : _vertexProp[pdgnode].links) {
         unassign_link_internal(pdgnode, slink);
       }
-      _linksOf[pdgnode].clear();
+      _vertexProp[pdgnode].links.clear();
+
+      unassign_node(pdgnode,node);
+
+      //TODO: need to reset things like lat bound, etc
     }
 
     //sblink to pdgnode
@@ -219,8 +228,12 @@ class Schedule {
              pdgNodeOf(src_fu) == pdgnode); 
   
        assert(slink);
-      _assignLink[slink].insert(pdgnode);
-      _linksOf[pdgnode].push_back(slink);
+      _linkProp[slink].vertices.insert(pdgnode);
+      _vertexProp[pdgnode].links.push_back(slink);
+    }
+
+    std::unordered_set<SbPDG_Edge*>& edge_list(sblink* link) {
+      return _linkProp[link].edges;
     }
 
     //pdf edge to sblink 
@@ -231,8 +244,8 @@ class Schedule {
       
       assign_link(pdgedge->def(),slink);
 
-      _assignEdgeLink[slink].insert(pdgedge);
-      _assignLinkEdge[pdgedge].insert(slink);
+      _linkProp[slink].edges.insert(pdgedge);
+      _edgeProp[pdgedge].links.insert(slink);
     }
  
     //void print_links(SbPDG_Edge* pdgedge) {
@@ -242,58 +255,47 @@ class Schedule {
     //  cout << "\n";
     //}
  
-//    int link_count(SbPDG_Edge* pdgedge) {
-//      return _assignLinkEdge[pdgedge].size();
-//    }
+    int link_count(SbPDG_Edge* pdgedge) {
+      return _edgeProp[pdgedge].links.size();
+    }
 
-    void setLatOfLink(sblink* link, int l) {_latOfLink[link] = l;}
-    int  latOfLink(sblink* link) {return _latOfLink[link];}
+    void setLatOfLink(sblink* link, int l) {_linkProp[link].lat = l;}
+    int  latOfLink(sblink* link) {return _linkProp[link].lat;}
 
     bool linkAssigned(sblink* link) {
-      return _assignLink.count(link);
+      return _linkProp[link].vertices.size();
     }
 
     //find first node for
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);
-      if(_assignLink.count(link)==0) {
-        return NULL;
-      } else {
-        return *_assignLink[link].begin();
-      }
+      auto& vec = _linkProp[link].vertices;
+      return vec.size()==0 ? NULL : *vec.begin();
     }
 
     bool nodeAssigned(sbnode* node) {
-      return _assignNode.count(node);
+      return _nodeProp[node].vertices.size()>0;
     }
 
     //find first node for
     SbPDG_Node* pdgNodeOf(sbnode* node) {
-      if(_assignNode.count(node)==0) {
-        return NULL;
-      } else {
-        return *_assignNode[node].begin();
-      }
+      auto& vec = _nodeProp[node].vertices;
+      return vec.size()==0 ? NULL : *vec.begin();
     }
     
     sbnode* locationOf(SbPDG_Node* pdgnode) {
-      if(_sbnodeOf.count(pdgnode)==0) {
-        return NULL;
-      } else {
-        return _sbnodeOf[pdgnode]; 
-      }
+      return _vertexProp[pdgnode].node;
     }
     
     bool isScheduled(SbPDG_Node* pdgnode) {
-      return _sbnodeOf.count(pdgnode)!=0;
+      return _vertexProp[pdgnode].node!=NULL;
     }
    
     void stat_printOutputLatency();
 
-    typedef std::vector<sblink*>::const_iterator link_iterator;
-    
-    link_iterator links_begin(SbPDG_Node* n) {return _linksOf[n].begin();}
-    link_iterator links_end(SbPDG_Node* n)   {return _linksOf[n].end();}
+    //typedef std::vector<sblink*>::const_iterator link_iterator;
+    //link_iterator links_begin(SbPDG_Node* n) {return _linksOf[n].begin();}
+    //link_iterator links_end(SbPDG_Node* n)   {return _linksOf[n].end();}
     
     
     //wide vector ports
@@ -315,42 +317,32 @@ class Schedule {
     
     void calcAssignEdgeLink_single(SbPDG_Node* pdgnode);
     void calcAssignEdgeLink();
-    
+   
     typedef std::unordered_map<sbnode*,
               std::unordered_set<SbPDG_Node*>>::iterator assign_node_iterator;
     typedef std::unordered_map<sblink*,
               std::unordered_set<SbPDG_Node*>>::iterator assign_link_iterator;
-    typedef std::unordered_map<sblink*,std::set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
-    
-    assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
-    assign_node_iterator assign_node_end() { return _assignNode.end(); }
-    //assign_node_iterator assign_vport_begin() { return _assignVPort.begin(); }
-    //assign_node_iterator assign_vport_end() { return _assignVPort.end(); }
-    assign_link_iterator assign_link_begin() { return _assignLink.begin(); }
-    assign_link_iterator assign_link_end() { return _assignLink.end(); }
-    assign_edgelink_iterator assign_edgelink_begin() { return _assignEdgeLink.begin(); }
-    assign_edgelink_iterator assign_edgelink_end() { return _assignEdgeLink.end(); }
+    typedef std::unordered_map<sblink*,
+            std::unordered_set<SbPDG_Edge*>>::iterator assign_edgelink_iterator;
+
+    //assign_node_iterator assign_node_begin() { return _assignNode.begin(); }
+    //assign_node_iterator assign_node_end() { return _assignNode.end(); }
+    //auto assign_vport_begin() { return _assignVPort.begin(); }
+    //auto assign_vport_end() { return _assignVPort.end(); }
+    //assign_link_iterator assign_link_begin() { return _assignLink.begin(); }
+    //assign_link_iterator assign_link_end() { return _assignLink.end(); }
+    //assign_edgelink_iterator assign_edgelink_begin() { 
+    //  return _assignEdgeLink.begin(); }
+    //assign_edgelink_iterator assign_edgelink_end() { 
+    //  return _assignEdgeLink.end(); }
     
     void clearAll() {
       _totalViolation=0;
       _assignSwitch.clear();
       _assignVPort.clear();
       _vportOf.clear();
-      _assignNode.clear();
-      _sbnodeOf.clear();
-      _latOf.clear();
-      _latBounds.clear();
-      _passthrough_nodes.clear();
-      _vioOf.clear();
-      _passthroughsOf.clear();
       _latOfVPort.clear();
-      _latOfLink.clear();
-      _assignLink.clear();
-      _linksOf.clear();
-      _assignEdgeLink.clear();
-      _assignLinkEdge.clear();
       _edgeProp.clear();
-      _linkOrder.clear();
     }
 
     //assign outlink to inlink for a switch
@@ -374,7 +366,7 @@ class Schedule {
           for(I=sbsw->ibegin(), E=sbsw->iend(); I!=E; ++I) {
             sblink* inlink = *I;
 
-            if(_assignLink.count(inlink)!=0) {
+            if(linkAssigned(inlink)) {
               //inlink to sw associated with a pdg node
               SbPDG_Node* innode = pdgNodeOf(inlink);
               
@@ -383,7 +375,7 @@ class Schedule {
                 sblink* outlink = *II;
                
                 //check if the pdgnode has same outlink and inlink
-                if(_assignLink.count(outlink)!=0 && innode ==pdgNodeOf(outlink)) {
+                if(linkAssigned(outlink)!=0 && innode ==pdgNodeOf(outlink)) {
                   _assignSwitch[sbsw][outlink]=inlink;
                 }
               }//end for out links
@@ -403,11 +395,12 @@ class Schedule {
   bitslices<uint64_t>& slices() {return _bitslices;}
 
   void add_passthrough_node(sbnode* passthrough) {
-    assert(_assignNode.count(passthrough)==0);
-    _passthrough_nodes.insert(passthrough);
+    assert(pdgNodeOf(passthrough)==NULL);
+
+    _nodeProp[passthrough].is_passthrough=true;
   }
 
-  bool isPassthrough(sbnode* n) {return _passthrough_nodes.count(n);}
+  bool isPassthrough(sbnode* n) {return _nodeProp[n].is_passthrough;}
 
   static const int IN_ACT_SLICE=0;
   static const int OUT_ACT_SLICE=1;
@@ -487,26 +480,23 @@ class Schedule {
   void set_edge_delay(int i, SbPDG_Edge* e) { _edgeProp[e].extra_lat=i; }
   int edge_delay(SbPDG_Edge* e) { return _edgeProp[e].extra_lat;}
 
-  void set_num_links(int i, SbPDG_Edge* e) { _edgeProp[e].links=i; }
-  int edge_links(SbPDG_Edge* e) { return _edgeProp[e].links;}
+  void set_num_links(int i, SbPDG_Edge* e) { _edgeProp[e].num_links=i; }
+  int edge_links(SbPDG_Edge* e) { return _edgeProp[e].num_links;}
 
-  void set_link_order(sblink* l, int i) { _linkOrder[l]=i; }
-  int link_order(sblink* l) { return _linkOrder[l]; }
+  void set_link_order(sblink* l, int i) { _linkProp[l].order=i; }
+  int link_order(sblink* l) { return _linkProp[l].order; }
 
-  std::unordered_map<sblink*,int>& get_link_order() {return _linkOrder;}
+  struct LinkProp;
+  std::unordered_map<sblink*,LinkProp>& get_link_prop() {return _linkProp;}
 
-  int num_passthroughs(SbPDG_Edge* e) {return _passthroughsOf[e].size();}
+  int num_passthroughs(SbPDG_Edge* e) {return _edgeProp[e].passthroughs.size();}
 
   int max_lat() {assert(_max_lat!=-1);  return _max_lat;}
   int max_lat_mis() {return _max_lat_mis;}
 
   private:
   void unassign_link_internal(SbPDG_Node* pdgnode, sblink* slink) {
-    _assignLink[slink].erase(pdgnode);
-   
-    if(_assignLink[slink].size()==0) {
-     _assignLink.erase(slink);
-    }
+    _linkProp[slink].vertices.erase(pdgnode); 
   }
 
 
@@ -534,40 +524,52 @@ class Schedule {
 
     int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
 
+  public:
     struct EdgeProp {
-      int links;
-      int extra_lat;
+      int num_links=0;
+      int extra_lat=0;
+      std::unordered_set<sblink*> links;
+      std::unordered_set<sbnode*> passthroughs;
     };
 
-    std::unordered_set<sbnode*> _passthrough_nodes; 
-    std::unordered_map<SbPDG_Edge*, std::set<sbnode*>> _passthroughsOf; //for stats
-    std::unordered_map<SbPDG_Node*, int> _vioOf; //for stats
+    struct VertexProp {
+      int min_lat=0, max_lat=0, lat=0, vio=0;
+      sbnode* node=NULL;
+      std::vector<sblink*> links;
+    };
 
-    std::unordered_map<sblink*, int> _latOfLink;
-    std::unordered_map<sbnode*, std::unordered_set<SbPDG_Node*>> _assignNode;  //sbnode to pdgnode
-    std::unordered_map<SbPDG_Node*, sbnode* > _sbnodeOf;    //pdgnode to sbnode
-    std::unordered_map<SbPDG_Node*, int> _latOf; 
-    std::unordered_map<SbPDG_Node*, std::pair<int,int>> _latBounds;  //min, max bounds
+    struct NodeProp {
+      bool is_passthrough=false;
+      std::unordered_set<SbPDG_Node*> vertices;
+    };
 
-    std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
-    std::unordered_map<sblink*, std::unordered_set<SbPDG_Node*>> _assignLink;   //sblink to pdgnode
-    std::unordered_map<SbPDG_Node*, std::vector<sblink*> > _linksOf; //pdgnode to sblink 
+    struct LinkProp {
+      int lat=0, order=-1;
+      std::unordered_set<SbPDG_Node*> vertices;
+      std::unordered_set<SbPDG_Edge*> edges;
+    };
+  private:
 
-    std::unordered_map< SbPDG_Edge*, EdgeProp > _edgeProp;
+    //std::unordered_map<sblink*, std::unordered_set<SbPDG_Node*>> _assignLink;   
+    //std::unordered_map<sblink*, std::unordered_set<SbPDG_Edge*>> _assignEdgeLink; 
 
-    std::unordered_map<sblink*, std::set<SbPDG_Edge*>> _assignEdgeLink; //sblink to pdgedgelinks
-    std::unordered_map<SbPDG_Edge*, std::set<sblink*>> _assignLinkEdge; //
+
 
     std::vector< std::vector<int> > _wide_ports;
-    std::unordered_map<sblink*,int> _linkOrder;
 
+    std::unordered_map<SbPDG_Vec*, int> _latOfVPort; 
     std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
     std::map<SbPDG_Vec*, std::pair<bool,int> > _vportOf;
     std::map<SbPDG_Vec*, std::vector<bool> > _maskOf;
 
 
-    std::map<sbswitch*,
-             std::map<sblink*,sblink*>> _assignSwitch; //out to in   
+    std::unordered_map< SbPDG_Edge*, EdgeProp > _edgeProp;
+    std::unordered_map< SbPDG_Node*, VertexProp > _vertexProp;
+    std::unordered_map< sbnode*, NodeProp > _nodeProp;
+    std::unordered_map< sblink*, LinkProp > _linkProp;
+
+
+    std::map<sbswitch*, std::map<sblink*,sblink*>> _assignSwitch; //out to in
 };
 
 

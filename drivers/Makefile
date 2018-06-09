@@ -6,7 +6,7 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS := $(OPT) -Wall -g -std=c++11 
+CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
 LIB_PATH=$(SS_TOOLS)/lib 
 INC_SBMODEL_PATH=$(SS_TOOLS)/include/ss-config

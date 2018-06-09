@@ -168,7 +168,7 @@ pair<int,int> SchedulerMultipleLinkGreedy::scheduleHere(Schedule* sched, SbPDG_N
 pair<int,int> SchedulerMultipleLinkGreedy::route(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
 	pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
 	if (score == fscore) {
-		score = route_minimizeOverlapping(sched, pdgedge, source, dest, candRouting, scoreLeft);
+//		score = route_minimizeOverlapping(sched, pdgedge, source, dest, candRouting, scoreLeft);
 	}
 	return score;
 }

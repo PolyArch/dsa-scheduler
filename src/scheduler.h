@@ -38,10 +38,16 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 class CandidateRouting {
   public:
+  struct EdgeProp {
+    int num_links=0;
+    int num_passthroughs=0; 
+    std::unordered_set<sblink*> links;
+  };
+
   std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
-  std::unordered_map< SbPDG_Edge*, std::pair<int,int> > edge_prop;
+  std::unordered_map< SbPDG_Edge*, EdgeProp> edge_prop;
 
   void fill_lat(Schedule* sched,
                 int& min_node_lat, int& max_node_lat, bool print=false) {
@@ -53,8 +59,8 @@ class CandidateRouting {
     for(auto I=edge_prop.begin(), E=edge_prop.end();I!=E;++I) {
       SbPDG_Edge* source_pdgedge = (*I).first;
       auto i = edge_prop[source_pdgedge];
-      int num_links = i.first;
-      int num_passthroughs = i.second;
+      int num_links = i.num_links;
+      int num_passthroughs = i.num_passthroughs;
   
       auto p = sched->lat_bounds(source_pdgedge->def());
 
@@ -281,9 +287,6 @@ public:
             CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
 
   std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
-  std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
