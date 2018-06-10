@@ -62,6 +62,8 @@ class SbPDG_Edge {
       print_buf_state();
 
       _data_buffer.push(std::make_pair(v,valid));
+      // std::cout <<  " and the size of buffer after push: " << _data_buffer.size() << "\n";
+
       // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
       compute_after_push();      
     }
@@ -83,9 +85,11 @@ class SbPDG_Edge {
 
     void pop_buffer_val() {
       assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
-      // std::cout << "came here to pop data: " << _data_buffer.front() << " from input buffer with buffer size now: " << _data_buffer.size() << "\n";
+      // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
       // std::cout << "Before pop state: \n";
       print_buf_state();
+
+      // std::cout <<  " and will it lead to compute? " << (_data_buffer.size()>0) << "\n";
       _data_buffer.pop();
       compute_after_pop();      
      
@@ -342,10 +346,16 @@ class SbPDG_Node {
 
     int inc_inputs_ready_backcgra(bool print, bool verif) {
       _inputs_ready+=1;
-      // std::cout<<"Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
-      if(_inputs_ready == _num_inc_edges && _avail==0) {
-        int num_computed = compute_backcgra(print,verif);//it's 0 or 1
-        return num_computed;
+      // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
+      if(_inputs_ready == _num_inc_edges) {
+        if(_avail==0) {
+          int num_computed = compute_backcgra(print,verif);//it's 0 or 1
+          return num_computed;
+        } else {
+          // add some code here
+          std::cout << "I NEED AN OUTPUT BUFFER\n";
+          return 0;
+        }
       }
       return 0;
     } 
@@ -1177,11 +1187,13 @@ SbPDG_VecInput* get_vector_input(int i){
     //Simulator pushes data to vector given by vector_id
     bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid) {
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
+      // std::cout << "name of the vector we pushed: " << vec_in->name() << " and gams_name: " << vec_in->gamsName() << "\n";
       // int num_computed = 0;
       // int t=0;
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* sb_node = vec_in->getInput(i); 
         sb_node->set_node(data[i],valid[i], true);
+        // std::cout << "Did I propogate the input to all it's uses? " << !sb_node->get_avail() << "\n";
         /*
         if(!sb_node->get_avail()){
           t = sb_node->update_next_nodes(false, false);
@@ -1217,7 +1229,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     //Advances simulation by one cycle  (return whether there was activity)
     int cycle_compute(bool print, bool verif);
-    int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
+    // int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
 
 
     // bool none_config = false;

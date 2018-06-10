@@ -27,16 +27,13 @@ void SbPDG_Edge::compute_next(){
   }
 }*/
 void SbPDG_Edge::compute_after_push(){
-
-  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
   if(_data_buffer.size()==1){
-        _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(false, false);
   }
 }
 void SbPDG_Edge::compute_after_pop(){
-  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
   if(_data_buffer.size()>0){
-        _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(false, false);
   }
 }
 void order_insts(SbPDG_Inst* inst,
@@ -69,7 +66,7 @@ void order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-
+/*
 // Adding new code for cycle-by-cycle CGRA functionality: this is used .h not used
 int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
  
@@ -82,6 +79,7 @@ int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
 
   return num_computed;
 }
+*/
 // --------------------------------------------------
 
 
@@ -402,12 +400,10 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       // slot 2 in this instruction is predicate
   }
   */
-/*
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
-   cout << name() << " (" << _ID << "): ";
-*/
+  // cout << name() << " (" << _ID << "): ";
 
   uint64_t discard=0;
   uint64_t output = 0;
@@ -457,14 +453,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     }
   } 
 
-  // std::cout << this->gamsName() << " ";
-  // std::cout << this->name() << " ";
-  /*if(this->name() == ":Hold"){
-    std::cout << _input_vals[0] << " " << _input_vals[1] << " output: " << output << "\n";
-  }
-  */
-
-  
   if(this->name() == ":Phi") {
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
@@ -480,7 +468,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
-
 
   /*
   cout << " with input: " << _input_vals[0] << " = " << output;
@@ -498,27 +485,18 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // pop the inputs after inst_thr+back_press here
   int inst_throughput = inst_thr(inst());
-  // std::cout << "thr: " << inst_throughput << "\n";
 
-  // int index=0;
   
    for(unsigned i = 0; i < _ops.size(); ++i) {
-        if(_ops[i]==NULL) {
-            // std::cout << "input edge is null for this input: " << i << "\n";
-            continue;
-        }
-
-        if(_back_array[i]==1){
-          // n->set_value(_input_vals[i], true, true, inst_throughput);
-          _inputs_ready += 1;
-          
-        }
-        else{
-          // n->set_value(0, true, false, inst_throughput);
-          _sbpdg->push_buf_transient(_ops[i],inst_throughput);
-
-          // _ops[i]->pop_buffer_val();
-        }
+     if(_ops[i]==NULL) {
+       continue;
+     }
+     if(_back_array[i]==1){
+       _inputs_ready += 1;
+     }
+     else{
+       _sbpdg->push_buf_transient(_ops[i],inst_throughput);
+     }
    }
             
 
