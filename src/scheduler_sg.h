@@ -7,9 +7,7 @@ class SchedulerStochasticGreedy : public HeuristicScheduler {
 public:
   SchedulerStochasticGreedy(SB_CONFIG::SbModel* sbModel) : 
     HeuristicScheduler(sbModel) {  }
-
   void initialize(SbPDG*, Schedule*&);
-
 
   bool schedule(SbPDG*, Schedule*&);
   bool schedule_internal(SbPDG*, Schedule*&);
@@ -20,8 +18,8 @@ public:
       SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
       CandidateRouting&,std::pair<int,int> scoreLeft);
   
-  void findFirstIndex(std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int numIO, unsigned int& index, StatType s);
-  void genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, StatType s);
+  void findFirstIndex(std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int numIO, unsigned int& index, bool s);
+  void genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool s);
   bool assignVectorOutputs(SbPDG* sbPDG, Schedule* sched);
   bool assignVectorInputs(SbPDG* sbPDG, Schedule* sched);
 
@@ -29,9 +27,8 @@ public:
   void set_max_iters_zero_vio(int i) {_max_iters_zero_vio=i;}
 
 protected:
-  std::vector<std::pair<int,int>> _sd_in; //TONY: port length pair? 
-  std::vector<std::pair<int,int>> _sd_out; //TONY: port length pair? 
-
+  std::vector<std::pair<int,int>> _sd_in;  //port, length pair 
+  std::vector<std::pair<int,int>> _sd_out; //port, length pair
 
   int _max_iters_zero_vio=1000000000;
   bool _integrate_timing = true;

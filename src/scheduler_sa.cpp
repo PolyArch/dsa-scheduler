@@ -13,9 +13,11 @@ using namespace std;
 #include <string.h>
 #include <sys/types.h>
 
-bool SchedulerSimulatedAnnealing::schedule(SbPDG*, Schedule*&) {
-	return false;
+bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {  
+  return false;
 }
+
+
 
 bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
 	return false;
@@ -26,8 +28,13 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule*, SbPDG_No
 	return make_pair(0,0);
 }
 
-std::pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
-            CandidateRouting&,std::pair<int,int> scoreLeft) {
-	return make_pair(0,0);
+pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, 
+    SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
+    CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+  pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
+    return score;
 }
+
+
+

@@ -1309,10 +1309,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
           openset.push_back(make_pair(from_link,cur_edge));
         }
     }
-   
   }
-  
-  
 
 }
 
@@ -1493,13 +1490,21 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
   if (succ) succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
   calcLatency(max_lat, max_lat_mis); //fwd pass
+  checkOutputMatch(max_lat_mis);
 
   int max_lat2=0,max_lat_mis2=0;
   cheapCalcLatency(max_lat2, max_lat_mis2);
-  //cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
-  //cout << "max_lat_mis:" << max_lat_mis << " " << max_lat_mis2 << "\n";
 
-  checkOutputMatch(max_lat_mis);
+
+  if(max_lat2 != max_lat || max_lat_mis2 != max_lat_mis) {
+     cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
+     cout << "max_lat_mis:" << max_lat_mis << " " << max_lat_mis2 << "\n";
+
+    _sbPDG->printGraphviz("viz/remap-fail.dot");
+    assert(max_lat2 == max_lat);
+    assert(max_lat_mis2 == max_lat_mis);
+  }  
+
   return succ;
 }
 
@@ -1694,13 +1699,17 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
   for(SbPDG_Inst* inst : ordered_insts) {
     int low_lat=10000000, up_lat=0;
 
+    inst->validate();
+
     for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
       if(edge == NULL) continue;
       
       SbPDG_Node* origNode = edge->def();
       if (origNode != NULL) {
-        int lat = lat_node[origNode] + edge_delay(edge) + edge_links(edge);
+        int edge_lat = edge_delay(edge) + link_count(edge)-1;
+        assert(edge_lat >= 0);
+        int lat = lat_node[origNode] + edge_lat; 
 
         if(lat>up_lat) up_lat=lat;
         if(lat<low_lat) low_lat=lat;
@@ -1712,6 +1721,10 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
 
     lat_node[inst] = inst_lat(inst->inst()) + up_lat;
     if(max_lat < lat_node[inst]) max_lat=lat_node[inst];
+
+    //cout << "  C " << inst->name() << " " << lat_node[inst]  
+    //  << " inst: " << inst << " " << inst->name() 
+    //     << " up:" << up_lat << " low:" << low_lat << "\n";
   }
 
   for (int i=0; i<_sbPDG->num_vec_output(); i++) {
@@ -1721,16 +1734,25 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
       SbPDG_Output* pdgout = vec_out->getOutput(m);
       SbPDG_Edge* edge = pdgout->first_inc_edge();
 
-      int lat = lat_node[edge->def()] + edge_delay(edge) + edge_links(edge);
+      edge->def()->validate();
+
+      int lat = lat_node[edge->def()] + edge_delay(edge) + link_count(edge)-1;
+      //cout << "C " << vec_out->name() << m << " " << lat << " -- " 
+      //     << " def_lat:" << lat_node[edge->def()] << " ed:" << edge_delay(edge) 
+      //     << " link_count:" << link_count(edge) << "inst: " 
+      //     << edge->def() << " " << edge->def()->name() << "\n";
 
       if(lat>up_lat) up_lat=lat;
       if(lat<low_lat) low_lat=lat;
     }
 
-    int diff = up_lat - low_lat - _sbModel->maxEdgeDelay();
+    int diff = up_lat - low_lat;// - _sbModel->maxEdgeDelay();
     if(diff>max_lat_mis) max_lat_mis=diff;
 
     if(max_lat < up_lat) max_lat=up_lat;
+
+    //cout << "C " << vec_out->name() << " up:" << up_lat << " low:" << low_lat << "\n";
+
   }
 }
 
@@ -1816,7 +1838,15 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
             if(!isPassthrough(node)) {
               SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
-              assert(edge);
+              if(!edge) {
+                cout << "Edge: " << origNode->name() << " has no link towards "
+                     << next_pdgnode->name() << "\n";
+                cout << "dummy:" << next_pdginst->isDummy() << "\n";
+
+                _sbPDG->printGraphviz("viz/remap-fail2.dot");
+              
+                assert(edge);
+              }
               if(edge_delay(edge)) {
                 curLat += edge_delay(edge);
               }
@@ -1855,6 +1885,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
           assign_lat(next_pdgnode,l);
         }
 
+        //if(next_pdginst) {
+        //  cout << "L " << next_pdginst->name() << " " << latOf(next_pdgnode) 
+        //       << " up:" << max_latency << " low:" << low_latency << "\n";
+        //}
+
         openset.push_back(new_link);
 
         //cout << "lat of " << next_pdgnode->name() 
@@ -1875,7 +1910,8 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
       pdgnode->set_sched_lat(l); //for graphviz printing
 
-      //cout<<"(Output) link: "<<inc_link->name()<<" lat: "<<lat_edge[inc_link]<<endl; 
+      //cout<<"L " << pdgnode->name() << " "
+      //       <<inc_link->name()<<" lat: "<<lat_edge[inc_link]<<endl; 
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }
@@ -2012,9 +2048,6 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
         }
       }
     }
-
-
   }
-  
 }
 

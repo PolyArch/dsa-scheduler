@@ -44,7 +44,7 @@ class CandidateRouting {
     std::unordered_set<sblink*> links;
   };
 
-  std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
+  std::unordered_map< SB_CONFIG::sblink*, std::unordered_set<SbPDG_Edge*> > routing;
   std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
   std::unordered_map< SbPDG_Edge*, EdgeProp> edge_prop;
@@ -130,99 +130,6 @@ class Scheduler {
   void set_max_iters(int i) {_max_iters=i;}
 
   std::string str_subalg;
-
-  enum StatType {FA, Input, Output};
-
-  void progress_updateCurNum(StatType s, int init = 0){
-    if (s == FA) {
-      numFASched = init;
-    } else if (s == Input) {
-      numInputSched = init;
-    } else if (s == Output) {
-      numOutputSched = init;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  
-  void progress_updateBestNum(StatType s, int init = 0){
-    if (s == FA) {
-      bestFASched = init;
-    } else if (s == Input) {
-      bestInputSched = init;
-    } else if (s == Output) {
-      bestOutputSched = init;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  void progress_saveBestNum(StatType s) {
-    int progress_cur = progress_getCurNum(s);
-    int progress_best =  progress_getBestNum(s);
-    if ( progress_cur > progress_best) {
-      progress_updateBestNum(s, progress_cur);
-    }
-  }
-
-  void progress_incCurNum(StatType s) {
-    if (s == FA) {
-      numFASched++;
-    } else if (s == Input) {
-      numInputSched++;
-    } else if (s == Output) {
-      numOutputSched++;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  int progress_getCurNum(StatType s) {
-    int ret = 0;
-    if (s == FA) {
-      ret = numFASched;
-    } else if (s == Input) {
-      ret = numInputSched;
-    } else if (s == Output) {
-      ret = numOutputSched;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-    return ret;
-  }
-
-  int progress_getBestNum(StatType s) {
-    int ret = 0;
-    if (s == FA) {
-      ret = bestFASched;
-    } else if (s == Input) {
-      ret = bestInputSched;
-    } else if (s == Output) {
-      ret = bestOutputSched;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-    return ret;
-  }
-
-  void progress_initCurNums(){
-    progress_updateCurNum(FA,0);
-    progress_updateCurNum(Input,0);
-    progress_updateCurNum(Output,0);
-  }
-
-  void progress_initBestNums(){
-    progress_updateBestNum(FA,-1);
-    progress_updateBestNum(Input,-1);
-    progress_updateBestNum(Output,-1);
-  }
-
   std::string AUX(int x) {
     return (x==-1 ? "-" : std::to_string(x));
   }  
@@ -231,11 +138,6 @@ class Scheduler {
     auto end = get_time::now();
     auto diff = end - _start;
     return ((double)std::chrono::duration_cast<usec>(diff).count())/1000.0;
-  }
-
-  void progress_printBests(){
-    std::cout<<"Progress: ("<<AUX(bestInputSched)
-             <<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
   }
 
   virtual bool schedule_timed(SbPDG* sbPDG, Schedule*& sched) {
@@ -257,8 +159,8 @@ class Scheduler {
 
   void setTimeout(float timeout) {_reslim=timeout;}
 
-  virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
-                       SB_CONFIG::sbnode* source);
+  //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
+  //                     SB_CONFIG::sbnode* source);
 
   protected:
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
@@ -285,6 +187,8 @@ public:
   virtual std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
+
+  virtual int routing_cost(SbPDG_Edge*, sblink*, Schedule*, CandidateRouting&, sbnode* dest);
 
   std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 

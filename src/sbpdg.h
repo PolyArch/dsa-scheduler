@@ -116,6 +116,8 @@ class SbPDG_Inst;
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
+    enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
+
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
@@ -125,8 +127,7 @@ class SbPDG_Node {
     bool getScalar() {return _scalar;}
 
     int findDepth(std::ostream& os, std::string dfg_name, int level);
-    SbPDG_Node(SbPDG* sbpdg) {
-        _sbpdg=sbpdg;
+    SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : _sbpdg(sbpdg), _vtype(v) {
         _ID=ID_SOURCE++;
     }
     
@@ -161,14 +162,25 @@ class SbPDG_Node {
        
        _uses[pos]=edge;
     }
-    
+
+    void validate() {
+      for (unsigned i = 0; i < _ops.size(); ++i) {
+        SbPDG_Edge* edge = _ops[i];
+        assert(edge == NULL || edge->use() == this);
+      }
+      for (unsigned i = 0; i < _uses.size(); ++i) {
+        SbPDG_Edge* edge = _uses[i];
+        assert(edge->def() == this);
+      }
+    }
+
     void removeIncEdge(SbPDG_Node* orig) { 
       _num_inc_edges--;
       for (unsigned i = 0; i < _ops.size(); ++i) {
         SbPDG_Edge* edge = _ops[i];
         if (edge->def() == orig) {
-            _ops[i]=0;
-            return;
+          _ops[i]=NULL;
+          return;
         }
       }
       assert(false && "edge was not found");
@@ -358,7 +370,9 @@ class SbPDG_Node {
         return _inputs_ready;
     }
    //---------------------------------------------------------------------------
-   
+  
+    V_TYPE type() {return _vtype;} 
+
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
@@ -380,7 +394,7 @@ class SbPDG_Node {
     int _sched_lat=0;
     int _max_thr=0;
 
-
+    V_TYPE _vtype;
   private:
     static int ID_SOURCE;
 };
@@ -548,7 +562,8 @@ struct SymEntry {
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
-    SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg), _predInv(false), _isDummy(false),
+    SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg, V_INST), 
+                     _predInv(false), _isDummy(false),
                      _imm_slot(-1), _subFunc(0) {
       _reg.resize(8,0);
     }
@@ -651,7 +666,7 @@ class SbPDG_IO : public SbPDG_Node {
   void setVPort(int vport) { _vport = vport; } 
   int vport() {return _vport;}
 
-  SbPDG_IO(SbPDG* sbpdg) : SbPDG_Node(sbpdg) {}
+  SbPDG_IO(SbPDG* sbpdg, V_TYPE v) : SbPDG_Node(sbpdg, v) {}
 
   protected:
     SbPDG* _sbpdg;
@@ -664,7 +679,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
-    SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+    SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg,V_INPUT) {}
 
     std::string name() {
         std::stringstream ss;
@@ -708,7 +723,7 @@ class SbPDG_Output : public SbPDG_IO {
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
-    SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+    SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg, V_OUTPUT) {}
 
     std::string name() {
         std::stringstream ss;
@@ -856,6 +871,9 @@ public:
   void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, double n)      {_sym_tab[s]=SymEntry(n);}
+  bool has_sym(std::string& s) {
+    return _sym_tab.count(s);
+  }
   SymEntry get_sym(std::string& s) { 
     assert_exists(s);
     return _sym_tab[s];
@@ -1357,7 +1375,6 @@ SbPDG_VecInput* get_vector_input(int i){
     void inc_total_dyn_insts() {_total_dyn_insts++;}
     int  total_dyn_insts()     {return _total_dyn_insts;}
     int get_max_lat() { return MAX_LAT; }
-
 
   private:
     // to keep track of number of cycles---------------------

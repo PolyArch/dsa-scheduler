@@ -48,10 +48,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 
     //for(auto& i : subModel->io_interf().in_vports) {
 
-    int curNum = progress_getCurNum(Input);
-
     for(auto& i : sd) {
-      progress_updateCurNum(Input, curNum);
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/,vport_num);
       vector<pair<int, vector<int>>>& vport_desc = si.getDesc_I(vport_num);
@@ -74,9 +71,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
                   ports_okay_to_use=false;
                   break;
                 } 
-                progress_incCurNum(Input);
               }
-              progress_saveBestNum(Input);
               if(!ports_okay_to_use) {
                 //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
@@ -102,13 +97,10 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
       }
     }
     if(!found_vector_port) {
-      progress_saveBestNum(Input);  
       //cout << "Could not find Input hardware vector port\n";
       return false;
     }
-    //progress_incCurNum(Input);
   }
-  progress_saveBestNum(Input);  
   return true;
 }
 
@@ -131,10 +123,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
     
     bool found_vector_port = false;
 
-    int curNum = progress_getCurNum(Output);
-
     for(auto& i : sd) {
-      progress_updateCurNum(Output, curNum);
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/,vport_num);
       vector<pair<int, vector<int>>>& vport_desc = si.getDesc_I(vport_num);
@@ -163,9 +152,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
                   ports_okay_to_use=false;
                   break;
                 }
-                progress_incCurNum(Output);
               }
-              progress_saveBestNum(Output);
               if(!ports_okay_to_use) {
                 //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
@@ -192,15 +179,10 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
       }
     }
     if(!found_vector_port) {
-
-      progress_saveBestNum(Output);  
       //cout << "Could not find output hardware vector port\n";
       return false;
     }
-    //progress_incCurNum(Output);
   }
-
-  progress_saveBestNum(Output);  
   return true;
 }
 
@@ -215,11 +197,15 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
       if(!dest_pdgnode) {
         //sched->add_passthrough_node(dest);
-        sched->assign_edge_pt(I->second,dest);
+        for(auto& e : I->second) { 
+          sched->assign_edge_pt(e,dest);
+        }
       }
     }
-    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
-    sched->assign_edgelink(I->second,I->first);
+    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl; 
+    for(auto& e : I->second)  {
+      sched->assign_edgelink(e,I->first);
+    }
   }
 
   for(auto I : candRouting->edge_prop) {
@@ -306,34 +292,34 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
   }
 }
 
-void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
-                        SB_CONFIG::sbnode* source) {
- 
-  std::queue<sbnode*> openset;
-  openset.push(source);
-
-  _sbModel->subModel()->clear_all_runtime_vals();
-  
-  SbPDG_Node* pdgnode = pdgedge->def();
-
-  while(!openset.empty()) {
-    sbnode* node = openset.front();
-    openset.pop();
-    node->set_done(1);
-
-    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
-      sblink* link = *I;
-      sbnode* next = link->dest();
-   
-      if(sched->pdgNodeOf(link) == pdgnode) {
-        sched->unassign_link(pdgnode,link);
-        if(next->done()!=1) {
-          openset.push(next);
-        }
-      } 
-    }
-  }
-}
+//void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
+//                        SB_CONFIG::sbnode* source) {
+// 
+//  std::queue<sbnode*> openset;
+//  openset.push(source);
+//
+//  _sbModel->subModel()->clear_all_runtime_vals();
+//  
+//  SbPDG_Node* pdgnode = pdgedge->def();
+//
+//  while(!openset.empty()) {
+//    sbnode* node = openset.front();
+//    openset.pop();
+//    node->set_done(1);
+//
+//    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
+//      sblink* link = *I;
+//      sbnode* next = link->dest();
+//   
+//      if(sched->pdgNodeOf(link) == pdgnode) {
+//        sched->unassign_link(pdgnode,link);
+//        if(next->done()!=1) {
+//          openset.push(next);
+//        }
+//      } 
+//    }
+//  }
+//}
 
 struct mycomparison {
   bool operator() (std::pair<sbnode*,int> lhs, std::pair<sbnode*,int> rhs) const {
@@ -341,8 +327,40 @@ struct mycomparison {
   }
 };
 
+int HeuristicScheduler::routing_cost(SbPDG_Edge* edge, sblink* link, 
+      Schedule* sched, CandidateRouting& candRouting, sbnode* dest) {
+
+    SbPDG_Node* pdgnode = edge->def();
+    sbnode* next = link->dest();
+
+    //check if connection is closed..
+    SbPDG_Node* sched_node = sched->pdgNodeOf(link);
+    if(sched_node!=NULL && sched_node!=pdgnode) return -1;
+    
+    SbPDG_Node* cand_node = candRouting.routing.count(link)==0 ? NULL :
+                            (*candRouting.routing[link].begin())->def();
+    if(cand_node!=NULL && cand_node!=pdgnode) return -1;
+
+    bool is_dest=(next==dest);
+
+    sbfu* fu = dynamic_cast<sbfu*>(next);
+    if(fu && sched->pdgNodeOf(fu) && !is_dest) return -1;  //stop if run into fu
+
+    if(sched_node==pdgnode || cand_node==pdgnode) { 
+      return 0; //free link because schedule or candidate routing already maps
+    } else {
+      if(fu && sched->isPassthrough(fu)) return -1; //someone else's pass through
+    
+      bool passthrough = (fu && !is_dest);
+      return 1+passthrough*1000;
+    }
+}
+
 //Dijkstra's Algorithm
-pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, 
+    SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
+    CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+  
   priority_queue<std::pair<sbnode*,int>,vector<std::pair<sbnode*,int>>,mycomparison> openset;
 
   _sbModel->subModel()->clear_all_runtime_vals();
@@ -350,8 +368,6 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   source->set_node_dist(0);
   openset.push(make_pair(source,0));
   
-  SbPDG_Node* pdgnode = pdgedge->def();
-
   //cout << "*** ROUTING Problem; source: " << source->name() << " dest: " << dest->name() 
   //     << " pdgedge: " << pdgedge->name() << " *** \n";
 
@@ -360,7 +376,6 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
     //cout << "pop node: " << node->name() << " dist: " << node->node_dist() << " " << openset.top().second << "\n";
     openset.pop();
     if(node->done()) continue;
-
     node->set_done(1);
 
     if(node == dest) break;
@@ -372,34 +387,13 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
       sblink* link = *I;
  
       sbnode* next = link->dest();
-    
-      //check if next is done or connection is closed..
       if(next->done()) continue;
 
-      //check if connection is closed..
-      SbPDG_Node* sched_node = sched->pdgNodeOf(link);
-      if(sched_node!=NULL && sched_node!=pdgnode) continue;
-      
-      SbPDG_Node* cand_node = candRouting.routing.count(link)==0 ? NULL :
-                                  candRouting.routing[link]->def();
-      if(cand_node!=NULL && cand_node!=pdgnode) continue;
+      int route_cost = routing_cost(pdgedge,link,sched,candRouting,dest);
+      if(route_cost ==-1) continue; // didn't work
+       
+      int new_dist = cur_dist + route_cost;
 
-      int new_dist=0;
-      bool is_dest=(next==dest);
-
-      sbfu* fu = dynamic_cast<sbfu*>(next);
-      if(fu && sched->pdgNodeOf(fu) && !is_dest) continue;  //stop if run into fu
-
-      if(sched_node!=pdgnode && cand_node!=pdgnode) { //if not free link
-
-        if(fu && sched->isPassthrough(fu)) continue; //someone else's pass through
-    
-        bool passthrough = (fu && !is_dest);
-        new_dist =  cur_dist+1+passthrough*1000;
-      } else {
-        assert(cur_dist==0);
-      }
-     
       int next_dist = next->node_dist();
       if(next_dist==-1 || new_dist < next_dist) {
          next->set_came_from(link);
@@ -417,7 +411,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   sbnode* x = dest;
   while(x->node_dist()!=0) {
     sblink* link = x->came_from();
-    candRouting.routing[link]=pdgedge;
+    candRouting.routing[link].insert(pdgedge);
     x=link->orig();
   }
 
@@ -425,7 +419,7 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_
   while(x != source) {
     sblink* link = x->came_from();
     count++;
-    candRouting.routing[link]=pdgedge;
+    candRouting.routing[link].insert(pdgedge);
     x=link->orig();
   }
 

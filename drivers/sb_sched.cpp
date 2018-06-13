@@ -8,7 +8,6 @@
 #include "scheduler.h"
 #include "scheduler_greedy.h"
 #include "scheduler_bkt.h"
-#include "scheduler_mlg.h"
 #include "scheduler_gams.h"
 #include "scheduler_sg.h"
 #include "scheduler_sa.h"
@@ -162,8 +161,6 @@ int main(int argc, char* argv[])
     scheduler = scheduler_gams;
   } else if(str_schedType == "greedy") { /*original*/
     scheduler = new SchedulerGreedy(&sbmodel);
-  } else if(str_schedType == "mlg") { /*multiple-link greedy*/
-    scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
     auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
     scheduler_sg->set_integrate_timing(!no_int_time);

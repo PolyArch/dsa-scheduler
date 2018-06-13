@@ -811,7 +811,8 @@ void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, in
 }
 
 //Connect two nodes in PDG
-SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype) {
+SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
+                           SbPDG_Edge::EdgeType etype) {
  
   assert(orig != dest && "we only allow acyclic pdgs");
 
@@ -822,7 +823,6 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   } else { 
     new_edge = new SbPDG_Edge(orig, dest, etype, this);
   }
-
 
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
@@ -901,6 +901,8 @@ int SbPDG::remappingNeeded(int num_HW_FU) {
 }
 
 void SbPDG::removeDummies() {
+  _orderedInsts.clear(); //invalidate dummies
+
   for (auto Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {
     SbPDG_Inst* inst = *Ii;
     if(inst->isDummy()) {

@@ -72,6 +72,10 @@ statement_list
 
 statement
 	: INPUT ':' io_def  eol {
+          if(p->syms.has_sym($3->first)) {
+            printf("Symbol \"%s\" already exists\n",$3->first.c_str());
+            assert(0);
+          }
           if($3->second==0) p->dfg->addScalarInput($3->first.c_str(),p->syms);
           else p->dfg->addVecInput($3->first.c_str(),$3->second,p->syms);
           //printf("input  %s, %d\n",$3->first.c_str(),$3->second);

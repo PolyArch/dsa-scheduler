@@ -16,8 +16,6 @@ using namespace std;
 bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG);
 
-  progress_initBestNums();
-  progress_initCurNums();
   bool vec_in_assigned = assignVectorInputs(sbPDG,sched);
   if(!vec_in_assigned) {
     return false;
@@ -49,12 +47,9 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     openset.pop_front();
     
     schedule_okay&=scheduleNode(sched,n);
-		if (schedule_okay) {
-			progress_incCurNum(FA);
-		} else {
-			progress_saveBestNum(FA);
-			return false;
-		}
+    if(!schedule_okay) {
+      return false;
+    }
     SbPDG_Node::const_edge_iterator I,E;
     for(I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
       SbPDG_Inst* use_pdginst = dynamic_cast<SbPDG_Inst*>((*I)->use());
@@ -64,8 +59,6 @@ bool SchedulerGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
       }
     }
   }
-
-	progress_saveBestNum(FA);
 
   bool vec_out_assigned = assignVectorOutputs(sbPDG,sched);
   if(!vec_out_assigned) {

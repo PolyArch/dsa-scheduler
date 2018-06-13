@@ -14,7 +14,7 @@ LEX = lex
 YACC = yacc -d
 
 CXXFLAGS :=  -Wall -g -std=c++11 $(OPT) -ggdb -gdwarf-3 -ly -ll -lm -ltcmalloc $(FLAGS)
-SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bkt.cpp scheduler_greedy.cpp scheduler_mlg.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
+SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_bkt.cpp scheduler_greedy.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
 
 GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
