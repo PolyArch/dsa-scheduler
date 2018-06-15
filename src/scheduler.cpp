@@ -360,7 +360,16 @@ int HeuristicScheduler::routing_cost(SbPDG_Edge* edge, sblink* link,
 pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, 
     SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+  if(sched->link_count(pdgedge)!=0) {
+     cerr << "Edge: " << pdgedge->name() << " is already routed!\n"; 
+     assert(0);
+  }
   
+  //TODO: change for multi-link
+  assert(sched->pdgNodeOf(dest)==0 || sched->pdgNodeOf(dest)==pdgedge->use()); 
+  assert(sched->pdgNodeOf(source)==0 || sched->pdgNodeOf(source)==pdgedge->def()); 
+
   priority_queue<std::pair<sbnode*,int>,vector<std::pair<sbnode*,int>>,mycomparison> openset;
 
   _sbModel->subModel()->clear_all_runtime_vals();
@@ -368,7 +377,8 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched,
   source->set_node_dist(0);
   openset.push(make_pair(source,0));
   
-  //cout << "*** ROUTING Problem; source: " << source->name() << " dest: " << dest->name() 
+  //cout << "*** ROUTING Problem; source: " 
+  //     << source->name() << " dest: " << dest->name() 
   //     << " pdgedge: " << pdgedge->name() << " *** \n";
 
   while(!openset.empty()) {

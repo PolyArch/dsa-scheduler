@@ -20,11 +20,11 @@ loop((iv),
     );
     put /
 );
-put "[vertex-link-map]" /
-loop(v,
-    put v.tl ":"
-    loop((l)$(Mvl.l(v,l)<>0),
-        put l.tl
+put "[edge-link-map]" /
+loop(e,
+    put e.tl ":"
+    loop((l)$(Mel.l(e,l)<>0),
+        put e.tl
     );
     put /
 );

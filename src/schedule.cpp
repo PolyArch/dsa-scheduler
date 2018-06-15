@@ -1592,7 +1592,6 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   while (!openset.empty()) {
     sblink* inc_link = openset.front(); 
     openset.pop_front();
-    //cout << "Link: "<<inc_link->name() << "\n";   
 
     //dest node
     sbnode* node = inc_link->dest();
@@ -1602,10 +1601,11 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
       SbPDG_Node* next_pdgnode = pdgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
       if(!next_pdgnode && !isPassthrough(node)) {
-        assert(next_pdgnode);
         cout << "problem with latency calculation!\n";
+        cout << node->name() << " has no mapping\n"; 
         max_lat=-1;
         max_lat_mis=-1;
+        assert(next_pdgnode);
         return false;
       }
 
@@ -1722,9 +1722,21 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
     lat_node[inst] = inst_lat(inst->inst()) + up_lat;
     if(max_lat < lat_node[inst]) max_lat=lat_node[inst];
 
-    //cout << "  C " << inst->name() << " " << lat_node[inst]  
+    //cout << "C-inst " << inst->name() << " " << lat_node[inst]  
     //  << " inst: " << inst << " " << inst->name() 
     //     << " up:" << up_lat << " low:" << low_lat << "\n";
+    //if(lat_node[inst] > 10) {
+
+    //  for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+    //    SbPDG_Edge* edge=*i;
+    //    cout << edge->name() << ": ";
+    //    if(edge == NULL) continue;
+    //    for(auto& i : _edgeProp[edge].links) {
+    //      cout << i->name() << " "; 
+    //    }
+    //    cout << "\n";
+    //  }
+    //}
   }
 
   for (int i=0; i<_sbPDG->num_vec_output(); i++) {
@@ -1950,6 +1962,9 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
 }
 
+//Trace the path of a schedule to help re-create the PDG
+//This is not a high-performance implementation, but shouldn't have to be
+//because its not called often
 void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 
     map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
     map<sbnode*, SbPDG_Node* >& pdgnode_for, 
@@ -1957,14 +1972,16 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
   
   assign_node(pdgnode,sbspot);
   
-  vector<pair<sbnode*, SbDIR::DIR> > worklist;
+  vector<tuple<sbnode*, SbDIR::DIR,std::vector<sblink*>> > worklist;
 
   sblink* firstLink = sbspot->getFirstOutLink();
-  assign_link(pdgnode,firstLink);
-  
+  //FIXME: assign_link(pdgnode,firstLink); //TODO: Check if broke anything
+  std::vector<sblink*> lvec;
+  lvec.push_back(firstLink);
+
   sbnode* startItem = firstLink->dest();
   SbDIR::DIR initialDir = firstLink->dir();
-  worklist.push_back(make_pair(startItem,initialDir));
+  worklist.push_back(make_tuple(startItem,initialDir,lvec));
 
   //cerr << "---   tracing " << sbspot->name() << "   ---\n"; 
   
@@ -1978,9 +1995,11 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
     //  cerr << " | ";
     //}
     //cerr << "\n";
-    
-    sbnode* curItem = worklist.back().first;
-    SbDIR::DIR inDir = worklist.back().second;
+   
+    auto& item = worklist.back();
+    sbnode* curItem = std::get<0>(item);
+    SbDIR::DIR inDir = std::get<1>(item);
+
     worklist.pop_back();
     
     map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
@@ -1993,7 +2012,9 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
         //sblink* inLink = curItem->getInLink(newInDir);
         
         sblink* outLink = curItem->getOutLink(newOutDir);
-        assign_link(pdgnode,outLink);
+        //FIXME: assign_link(pdgnode,outLink);
+        std::vector<sblink*> links = std::get<2>(item);
+        links.push_back(outLink);
         
         if(outLink==NULL) {
           cerr << "outlink is null: ";
@@ -2037,12 +2058,16 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
               if(slot==n_ops) edge_type = dest_pdgnode->predInv()? 
                              SbPDG_Edge::ctrl_false : SbPDG_Edge::ctrl_true;
 
-              _sbPDG->connect(pdgnode,dest_pdgnode,slot, edge_type); 
+              SbPDG_Edge * edge = _sbPDG->connect(pdgnode,dest_pdgnode,
+                                                  slot, edge_type); 
+              for(auto& i : links) {
+                assign_edgelink(edge,i);
+              }
             }
           }
         
         } else if(dynamic_cast<sbswitch*>(nextItem)){ //must be switch
-          worklist.push_back(make_pair(nextItem,newOutDir));
+          worklist.push_back(make_tuple(nextItem,newOutDir,links));
         } else {
           assert(0);
         }

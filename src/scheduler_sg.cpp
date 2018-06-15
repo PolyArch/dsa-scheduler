@@ -76,7 +76,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     }
 
     bool succeed_sched = schedule_internal(sbPDG, cur_sched);
-    int tot_mapped = cur_sched->num_mapped(); 
+    int num_left = cur_sched->num_left(); 
 
     bool succeed_timing = false;
     int lat = MAX_ROUTE, latmis = MAX_ROUTE;
@@ -96,7 +96,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     }
 
     std::pair<int, int> score = 
-      make_pair(tot_mapped + succeed_sched + succeed_timing, -obj);
+      make_pair(succeed_sched + succeed_timing-num_left, -obj);
     if (score > best_score) {
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
         _best_latmis=latmis;
@@ -109,10 +109,10 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
       }
 
       if (verbose) {
-        fprintf(stdout, "Iter: %4d, time:%0.2f, mapped: %3d, " 
+        fprintf(stdout, "Iter: %4d, time:%0.2f, remaining: %3d, " 
                 "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
                 " insts: %d/%d,%d%s%s\n", iter, total_msec()/1000.f, 
-                tot_mapped, lat, violation, latmis, obj,
+                num_left, lat, violation, latmis, obj,
                 cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
                 cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
                 cur_sched->num_insts_mapped(),  presize, postsize,
@@ -300,7 +300,6 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
                                             *curRouting, bestScore);
       curScore.first = curScore.second;
 
-
       if(curScore < fscore) { //if not failing score
         if(_integrate_timing) {
 
@@ -344,15 +343,12 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
 }
 
 std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched, 
-    SbPDG_Node* n, SB_CONFIG::sbnode* here,
-    CandidateRouting& candRouting, 
+    SbPDG_Node* n, SB_CONFIG::sbnode* here, CandidateRouting& candRouting, 
     std::pair<int,int> bestScore) {
 
   pair<int,int> score=make_pair(0,0);
 
-  SbPDG_Node::const_edge_iterator I,E;
-
-  for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
+  for(auto I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
     if(*I == NULL) { continue; } //could be immediate
     SbPDG_Edge* source_pdgedge = (*I);
     SbPDG_Node* source_pdgnode = source_pdgedge->def();     //could be input node also
@@ -367,12 +363,11 @@ std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched,
       //cout << source_pdgedge->name() << " " 
       //  << source_pdgedge << " " << here->name() << " " 
       //     << score.first << "," << score.second << "\n";
-      if(score>bestScore) return fscore;
+      if(score>bestScore) return fscore; //fail if score is worse (higher)
     }
   }
 
-  SbPDG_Node::const_edge_iterator Iu,Eu;
-  for(Iu=n->uses_begin(), Eu=n->uses_end();Iu!=Eu;++Iu) {
+  for(auto Iu=n->uses_begin(), Eu=n->uses_end();Iu!=Eu;++Iu) {
     SbPDG_Edge* use_pdgedge = (*Iu);
     SbPDG_Node* use_pdgnode = use_pdgedge->use();
 
@@ -383,7 +378,7 @@ std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched,
       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc,candRouting,bestScore-score);
       score = score + tempScore;
       //cout << n->name() << " " << here->name() << " " << score << "\n";
-      if(score>bestScore) return score;
+      if(score>bestScore) return score; //fail if score is worse (higher)
     }
   }
 

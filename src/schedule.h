@@ -130,8 +130,8 @@ class Schedule {
     //Assign the sbnode to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
       _num_mapped[pdgnode->type()]++;
-      //std::cout << snode->name() << " assigned to " 
-      //          << pdgnode->gamsName() << "\n";
+      //std::cout << "node " << pdgnode->name() << " assigned to " 
+      //          << snode->name() << "\n";
       assert(pdgnode); 
       _nodeProp[snode].vertices.insert(pdgnode);
       _vertexProp[pdgnode].node = snode;
@@ -185,6 +185,10 @@ class Schedule {
       vp.mask=mask;
     }
 
+    bool vecMapped(SbPDG_Vec* p) {
+      return _vecProp[p].vport.second!=-1;
+    }
+
     std::pair<bool,int> vecPortOf(SbPDG_Vec* p) {
       return _vecProp[p].vport;
     } 
@@ -195,7 +199,7 @@ class Schedule {
         SbPDG_Input* in = *i;
         unassign_pdgnode(in);
       }
-
+      
       auto& vp = _vecProp[pdgvec];
       std::pair<bool,int> pn = vp.vport;
       _assignVPort.erase(pn);
@@ -218,16 +222,26 @@ class Schedule {
     void unassign_edge(SbPDG_Edge* edge) {
       auto& ep = _edgeProp[edge];
 
+      //std::cout << "unassign: " <<edge->name() << "\n";
+
+      _edge_links_mapped-=ep.links.size();
+      assert(_edge_links_mapped >=0);
+
       //Remove all the edges for each of links
       for(auto& link : ep.links) {
         auto& lp = _linkProp[link];
         lp.edges.erase(edge);
+        if(lp.edges.size()==0) {
+          _links_mapped--;
+          assert(_links_mapped >=0);
+        }
       }
 
       //Remove all passthroughs associated with this edge
       for(auto& pt : ep.passthroughs) {
         auto& np = _nodeProp[pt];
         np.is_passthrough-=1; //take one passthrough edge away
+        assert(np.is_passthrough>=0);
       }
 
       _edgeProp.erase(edge);
@@ -236,7 +250,7 @@ class Schedule {
     //Delete all scheduling data associated with pdgnode, including its
     //mapped locations, and mapping information and metadata for edges
     void unassign_pdgnode(SbPDG_Node* pdgnode) { 
-      _num_mapped[pdgnode->type()]++;
+      _num_mapped[pdgnode->type()]--;
       for(auto it=pdgnode->ops_begin(); it!=pdgnode->ops_end(); ++it){
         SbPDG_Edge* edge = *it;
         unassign_edge(edge);
@@ -249,21 +263,34 @@ class Schedule {
       auto& vp=_vertexProp[pdgnode];
       sbnode* node = vp.node;
       assert(node);
+      vp.node=NULL;
       _nodeProp[node].vertices.erase(pdgnode);
-    }
-
-    //sblink to pdgnode
-    void assign_link(SbPDG_Node* pdgnode, sblink* slink) {
-      sbnode* src = slink->orig();
-      sbfu* src_fu = dynamic_cast<sbfu*>(src);
-      assert(!src_fu || pdgNodeOf(src_fu)==NULL || 
-             pdgNodeOf(src_fu) == pdgnode); 
-  
-       assert(slink);
     }
 
     std::unordered_set<SbPDG_Edge*>& edge_list(sblink* link) {
       return _linkProp[link].edges;
+    }
+
+    void print_all_mapped() {
+      std::cout << "Vertices: ";
+      for(auto& v : _vertexProp) {
+        if(v.first && v.second.node) {
+          std::cout << v.first->name() << "->" << v.second.node->name() << " ";
+        }
+      }
+      std::cout << "\nEdges: ";
+      for(auto& e : _edgeProp) {
+        if(e.first && e.second.links.size()) {
+          std::cout << e.first->name() << " ";
+        }
+      }
+      std::cout << "\nVec: ";
+      for(auto& v : _vecProp) {
+        if(v.first && vecMapped(v.first)) {
+          std::cout << v.first->name() << " ";
+        }
+      }
+      std::cout << "\n";
     }
 
     //pdf edge to sblink 
@@ -271,10 +298,13 @@ class Schedule {
       assert(slink);
       assert(pdgedge);
       //assert(_assignLink[slink]==NULL || _assignLink[slink] == pdgedge->def());
-      
-      assign_link(pdgedge->def(),slink);
+      //std::cout << pdgedge->name() << " assigned to " 
+      //          << slink->name() << "\n";
 
-      _linkProp[slink].edges.insert(pdgedge);
+      _edge_links_mapped++;
+      auto& lp = _linkProp[slink];
+      if(lp.edges.size()==0) _links_mapped++;
+      lp.edges.insert(pdgedge);
       _edgeProp[pdgedge].links.insert(slink);
     }
  
@@ -534,7 +564,6 @@ class Schedule {
     SbPDG*   _sbPDG;
 
     int _totalViolation=0;
-
     int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
 
   public:
@@ -562,7 +591,7 @@ class Schedule {
 
     struct VecProp{ 
       int lat;
-      std::pair<bool,int> vport;
+      std::pair<bool,int> vport = {false,-1};
       std::vector<bool> mask;
     };
 
@@ -574,8 +603,20 @@ class Schedule {
              _num_mapped[SbPDG_Node::V_INPUT] +
              _num_mapped[SbPDG_Node::V_OUTPUT];
     }
+    int inputs_complete() {return num_inputs_mapped() == _sbPDG->num_inputs();}
+    int outputs_complete() {return num_outputs_mapped() == _sbPDG->num_outputs();}
+    int insts_complete() {return num_insts_mapped() == _sbPDG->num_insts();}
+
+    int isComplete() {return num_mapped() == _sbPDG->num_nodes();}
+
+    int num_links_mapped() {return _links_mapped;}
+    int num_edge_links_mapped() {return _edge_links_mapped;}
+
+    int num_left() {return _sbPDG->num_nodes() - num_mapped();}
+
   private:
     int _num_mapped[SbPDG_Node::V_NUM_TYPES] = {0}; //init all to zero
+    int _links_mapped = 0, _edge_links_mapped = 0;
 
     std::vector< std::vector<int> > _wide_ports;
 

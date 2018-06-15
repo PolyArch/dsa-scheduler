@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <map>
 #include <chrono>
+#include <random>
+#include <stdlib.h>
 
 #define MAX_ROUTE 100000000
 
@@ -53,6 +55,9 @@ class CandidateRouting {
                 int& min_node_lat, int& max_node_lat, bool print=false) {
     min_node_lat = 0; //need minimax, so that's why this is odd
     max_node_lat = MAX_ROUTE;
+
+    if(edge_prop.size() ==0) return;
+
     SbPDG_Node* n = (*edge_prop.begin()).first->use();
     bool output = dynamic_cast<SbPDG_Output*>(n);
 
@@ -68,21 +73,14 @@ class CandidateRouting {
       int max_inc_lat = p.second + num_links +
               sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs);
 
-    if(print) {
-      std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
-      std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
-      std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs) << "\n";
-    }
-
-
-      //earliest starting time is *latest* incomming edge
-      if(min_inc_lat > min_node_lat) {
-        min_node_lat = min_inc_lat;
+      if(print) {
+        std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
+        std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
+        std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs) << "\n";
       }
-      //latest starting time is *earliest* incomming edge
-      if(max_inc_lat < max_node_lat) {
-        max_node_lat = max_inc_lat;
-      }
+
+      if(min_inc_lat > min_node_lat) min_node_lat = min_inc_lat;
+      if(max_inc_lat < max_node_lat) max_node_lat = max_inc_lat;
     }
     if(print) {
       std::cout << "  min_inc_lat" << min_node_lat << " " << max_node_lat << "\n";
@@ -208,6 +206,10 @@ protected:
                      std::vector<SB_CONFIG::sbnode*>& spots);
 
   const std::pair<int,int> fscore;
+
+  int rand_bt(int s, int e) {
+    return rand()%(e-s)+s;
+  }
 };
 
 #endif

@@ -407,7 +407,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
-  enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
+  enum {VtoN,EtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
   bool message_start=false, message_fus_ok=false, 
        message_ports_ok=false, message_complete=false;
@@ -425,8 +425,8 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       parse_stage = Parse_None; 
       if(ModelParsing::StartsWith(line,"[vertex-node-map]")) {
         parse_stage = VtoN; continue;
-      } else if(ModelParsing::StartsWith(line,"[vertex-link-map]")) {
-        parse_stage = VtoL; continue;
+      } else if(ModelParsing::StartsWith(line,"[edge-link-map]")) {
+        parse_stage = EtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[switch-map]")) {
         parse_stage = LtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
@@ -603,23 +603,25 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
       }
       
-    } else if (parse_stage==VtoL) {
+    } else if (parse_stage==EtoL) {
 //      if(_assignSwitch.size()!=0) {
 //        continue;
 //      }
 
       stringstream ss(line);
-      getline(ss, vertex_name, ':');
+      getline(ss, edge_name, ':');
       //getline(ss, list_of_links);
       
-      ModelParsing::trim(vertex_name);
-      if(vertex_name.empty()) continue;
+      ModelParsing::trim(edge_name);
+      if(edge_name.empty()) continue;
       
-      SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
+      SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
+      SbPDG_Node* pdgnode = pdgedge->def(); 
       if(pdgnode==NULL) {
         cerr << "null pdgnode:\"" << vertex_name << "\"\n";
       }
-      
+     
+      //TODO:FIXME check if I broke anything 
       while(ss.good()) {
         getline(ss, link_name, ' ');
         ModelParsing::trim(link_name);
@@ -630,7 +632,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
           cerr << "null slink:\"" << link_name << "\"\n";
         }
         
-        schedule->assign_link(pdgnode,slink);
+        schedule->assign_edgelink(pdgedge,slink);
         
         if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
           schedule->assign_node(pdgnode,sbin); 
