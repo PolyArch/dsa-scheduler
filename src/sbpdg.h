@@ -435,19 +435,21 @@ private:
  
 typedef std::vector<std::string> string_vec_t;
 
-//post-parsing control signal definitions 
+//post-parsing control signal definitions (mapping of string of flag to it's value?)
 typedef std::map<int,string_vec_t> ctrl_def_t; 
 
 
 class CtrlBits {
 public:
   static int bit_loc(int c_val, CtrlMap::ctrl_flag flag) {
-    return c_val * CtrlMap::NUM_CTRL + flag; 
+    return c_val * CtrlMap::NUM_CTRL + flag; // should have returned NUM_CTRL should be 5 and flag should be 0? 
   }
   CtrlBits(ctrl_def_t d) {
     for(auto i : d) {
       int key = i.first;
       auto vec = i.second;
+      // for debug
+      // std::cout << "key: " << key << "\n";
       for(auto s : vec) {
         CtrlMap::ctrl_flag  local_bit_pos = ctrl_map.encode_control(s);
         int final_pos = bit_loc(key,local_bit_pos);
@@ -474,7 +476,10 @@ public:
 
   uint64_t bits() {return _bits.to_ullong();}
 
+  // What is c_val? bits is the control lost, c_val is the value you read here
   bool isSet(int c_val, CtrlMap::ctrl_flag flag) {
+    // std::cout << "In in set, c_val: " << c_val << "\n";
+    // std::cout << "num_ctrl: " << (int)CtrlMap::NUM_CTRL << " and flag: " << (int)flag << "\n";
     return _bits.test(bit_loc(c_val,flag));
   }
   
@@ -629,10 +634,11 @@ class SbPDG_Inst : public SbPDG_Node {
     }
 
    void set_ctrl_bits(CtrlBits c) {
+     // std::cout << "Should come here in set_ctrl_bits to set bits to: " << c << "\n";
      _ctrl_bits=c;
-     //if(_ctrl_bits.bits() != 0) {
-     //  _ctrl_bits.print_rep();
-     //} 
+     // if(_ctrl_bits.bits() != 0) {
+     //   _ctrl_bits.print_rep();
+     // } 
    }
    uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
@@ -645,6 +651,7 @@ class SbPDG_Inst : public SbPDG_Node {
     int _imm_slot;
     int _subFunc;
     CtrlBits _ctrl_bits;
+    // CtrlMap _ctrl_map;
 
     std::vector<uint64_t> _reg;
     uint64_t _imm;

@@ -232,6 +232,11 @@ SymEntry SbPDG::createInst(std::string opcode,
       } else if(args[i].flag==SymEntry::FLAG_INV_PRED) {
         etype = SbPDG_Edge::EdgeType::ctrl_false;
       }
+      // flag should not work if it is control: vidushi
+      else if(args[i].flag==SymEntry::FLAG_CONTROL) {
+        // std::cout << "came here to set edge type to control\n";
+        etype = SbPDG_Edge::EdgeType::ctrl_true;
+      }
       
       connect(inc_node, pdg_inst,i, etype);
       pdg_inst->set_ctrl_bits(args[i].ctrl_bits);
@@ -414,7 +419,16 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
     } else if (_ops[i]->etype() == SbPDG_Edge::ctrl_true) {
-        pred = _ops[i]->get_buffer_val();
+        // pred = _ops[i]->get_buffer_val();
+        // pred is not supported
+        int c_val = _ops[i]->get_buffer_val();
+        // std::cout << "for control type, input value is: " << c_val << "\n";
+        // 65 means 0 is 10000 and 1 is 01000 => 1000001000 (num_ctrl should be 2 here?)
+        _back_array[0] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP1); // 2*5+0 = 10th pos in bitmap?
+        _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
+        discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
+        pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
+        bool reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
     } else {
       _input_vals[i] = _ops[i]->get_buffer_val();
       if(!_ops[i]->get_buffer_valid()) {
@@ -429,18 +443,15 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   // we set this instruction to invalid
+  pred = 1; // for now--check why is it here?
   if(pred==0) {
     _invalid=true;
   }
 
   //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
 
-
-
-  // if(this->gamsName() == "Phi") mimic the functionality here
-  // std::cout << "Final invalid of inst: " << name() << " is: " << _invalid << endl;
-  
-
+  // std::cout << "init values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
+  // std::cout << "init values of discard: " << discard << " pred: " << pred << "\n";
 
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
@@ -452,6 +463,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
+  // if(reset) { _reg = 0; }
 
   if(this->name() == ":Phi") {
     assert(_input_vals.size()==3 && "Not enough input in phi node");
@@ -464,13 +476,18 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     _invalid=false;
   }
 
+  // only foe debugging purposes, may give seg fault later on?
+  // printf("Let's print the final backarray info: b1: %d and b2: %d",_back_array[0],_back_array[1]);
+  std::cout << "final values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
+  std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
+
   
   // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
 
   /*
-  cout << " with input: " << _input_vals[0] << " = " << output;
+  cout << " with input: " << std::hex << _input_vals[0] << " and the other input: " << std::hex << _input_vals[1] << " = " << std::hex << output;
   if(_invalid || discard) { 
     cout << " and discard!";
   }
