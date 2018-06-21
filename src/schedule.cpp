@@ -1194,9 +1194,7 @@ Debugging code to print out maps
   }
 */
 
-
-return;
-  
+  return;
 }
 
 //reconstruct the schedule
@@ -1232,6 +1230,7 @@ void Schedule::reconstructSchedule(
         
     }
   }
+  allocate_space();
 }
 
 /*

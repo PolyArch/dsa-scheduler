@@ -30,6 +30,8 @@ class SbPDG_Edge {
     SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
                EdgeType etype, SbPDG* sbpdg);
 
+    int id() {return _ID;}
+
     SbPDG_Node* def() const {
       return _def;
     }
@@ -1414,8 +1416,8 @@ SbPDG_VecInput* get_vector_input(int i){
 
     int _total_dyn_insts=0;
    
-    int _num_node_ids;
-    int _num_edge_ids;
+    int _num_node_ids=0;
+    int _num_edge_ids=0;
 
     //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;

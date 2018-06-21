@@ -9,6 +9,8 @@
 #include <iostream>
 #include <fstream>
 #include "bitslice.h"
+#include "config_defs.h"
+
 using namespace SB_CONFIG;
 
 //How do you choose which switch in each row and FU to pass ??
@@ -35,8 +37,12 @@ class Schedule {
   public:
     Schedule(std::string filename); //Read in schedule (both sbmodel, sbpdg, and schedule from file)
 
-    Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {}
-    Schedule(SbModel* model) : _sbModel(model), _sbPDG(NULL) {}
+    Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {
+      allocate_space();  
+    }
+    Schedule(SbModel* model) : _sbModel(model), _sbPDG(NULL) {
+      allocate_space(); 
+    }
 
     //Scheduling Interface:
     bool spilled(SbPDG_Node*);
@@ -92,10 +98,10 @@ class Schedule {
     }
 
     void assign_lat(SbPDG_Node* pdgnode, int lat) {
-      _vertexProp[pdgnode].lat=lat;
+      _vertexProp[pdgnode->id()].lat=lat;
     }
     int latOf(SbPDG_Node* pdgnode) {
-      return _vertexProp[pdgnode].lat;
+      return _vertexProp[pdgnode->id()].lat;
     }
 
     void assign_lat_bounds(SbPDG_Vec* vec, int min, int max) {
@@ -105,13 +111,13 @@ class Schedule {
     }
 
     void assign_lat_bounds(SbPDG_Node* pdgnode, int min, int max) {
-      auto& vertex_prop = _vertexProp[pdgnode];
+      auto& vertex_prop = _vertexProp[pdgnode->id()];
       vertex_prop.min_lat=min;
       vertex_prop.max_lat=max;
     }
 
     std::pair<int,int> lat_bounds(SbPDG_Node* pdgnode) {
-      auto& vertex_prop = _vertexProp[pdgnode];
+      auto& vertex_prop = _vertexProp[pdgnode->id()];
       return std::make_pair(vertex_prop.min_lat, vertex_prop.max_lat);
     }
 
@@ -133,9 +139,9 @@ class Schedule {
       _max_lat_mis = std::max(_max_lat_mis,violation);
     }
 
-    int vioOf(SbPDG_Node* n) { return _vertexProp[n].vio;}
+    int vioOf(SbPDG_Node* n) { return _vertexProp[n->id()].vio;}
     void record_violation(SbPDG_Node* n, int violation) {
-      _vertexProp[n].vio=violation; 
+      _vertexProp[n->id()].vio=violation; 
     }
 
 
@@ -146,7 +152,7 @@ class Schedule {
       //          << snode->name() << "\n";
       assert(pdgnode); 
       _nodeProp[snode].vertices.insert(pdgnode);
-      _vertexProp[pdgnode].node = snode;
+      _vertexProp[pdgnode->id()].node = snode;
     }
 
 
@@ -161,7 +167,7 @@ class Schedule {
       for(auto Io=pdgvec_out->output_begin(),Eo=pdgvec_out->output_end();Io!=Eo;++Io) {
         SbPDG_Output* pdgout = *Io;
         //sbnode* out_sbnode = locationOf(pdgout).first;
-        int lat_of_out_sbnode = _vertexProp[pdgout].lat;
+        int lat_of_out_sbnode = _vertexProp[pdgout->id()].lat;
         std::cout << pdgvec_out->gamsName() << " lat:" << lat_of_out_sbnode << "\n";
         max_lat=std::max(max_lat,lat_of_out_sbnode);
       }
@@ -272,7 +278,7 @@ class Schedule {
         unassign_edge(edge);
       }
 
-      auto& vp=_vertexProp[pdgnode];
+      auto& vp=_vertexProp[pdgnode->id()];
       sbnode* node = vp.node;
       assert(node);
       vp.node=NULL;
@@ -285,9 +291,11 @@ class Schedule {
 
     void print_all_mapped() {
       std::cout << "Vertices: ";
-      for(auto& v : _vertexProp) {
-        if(v.first && v.second.node) {
-          std::cout << v.first->name() << "->" << v.second.node->name() << " ";
+      //TODO: can't get vertex/edge from id, need to modify pdg to maintain
+      for(unsigned i = 0; i <_vertexProp.size(); ++i) {
+        auto& v = _vertexProp[i];
+        if(v.node) {
+          std::cout << i << "->" << v.node->name() << " ";
         }
       }
       std::cout << "\nEdges: ";
@@ -356,11 +364,11 @@ class Schedule {
     }
     
     sbnode* locationOf(SbPDG_Node* pdgnode) {
-      return _vertexProp[pdgnode].node;
+      return _vertexProp[pdgnode->id()].node;
     }
     
     bool isScheduled(SbPDG_Node* pdgnode) {
-      return _vertexProp[pdgnode].node!=NULL;
+      return _vertexProp[pdgnode->id()].node!=NULL;
     }
    
     void stat_printOutputLatency();
@@ -461,65 +469,6 @@ class Schedule {
   }
 
   bool isPassthrough(sbnode* n) {return _nodeProp[n].is_passthrough;}
-
-  static const int IN_ACT_SLICE=0;
-  static const int OUT_ACT_SLICE=1;
-  //static const int DELAY_SLICE_1=2;
-  //static const int DELAY_SLICE_2=3;
-  //static const int DELAY_SLICE_3=4;
-  //static const int BITS_PER_DELAY=4;
-  static const int VP_MAP_SLICE_1=2;
-  static const int VP_MAP_SLICE_2=3;
-  static const int VP_MAP_SLICE_OUT=4;
-
-  static const int NUM_DFG_GROUPS=6;
-  static const int IN_ACT_GROUP12=5;
-  static const int IN_ACT_GROUP34=6;
-  static const int IN_ACT_GROUP56=7;
-
-  static const int OUT_ACT_GROUP12=8;
-  static const int OUT_ACT_GROUP34=9;
-  static const int OUT_ACT_GROUP56=10;
-
-  static const int SWITCH_SLICE=11;        //the starting slice position in bitslice
-
-  static const int NUM_IN_DIRS=8;
-  static const int NUM_OUT_DIRS=8;
-  static const int NUM_IN_FU_DIRS=3;
-  static const int BITS_PER_DIR=3;
-  static const int BITS_PER_FU_DIR=3;
-
-  static const int ROW_LOC=0;
-  static const int ROW_BITS=4;
-
-  static const int SWITCH_LOC = ROW_LOC + ROW_BITS;
-  static const int SWITCH_BITS = BITS_PER_DIR * NUM_OUT_DIRS;
-
-  static const int FU_DIR_LOC = SWITCH_LOC + SWITCH_BITS;
-  static const int FU_DIR_BITS = BITS_PER_FU_DIR * NUM_IN_FU_DIRS;
-
-  static const int FU_PRED_INV_LOC = FU_DIR_LOC + FU_DIR_BITS;
-  static const int FU_PRED_INV_BITS = 1;
-
-  static const int OPCODE_LOC = FU_PRED_INV_LOC + FU_PRED_INV_BITS;
-  static const int OPCODE_BITS = 6;
-
-  static const int IN_DELAY_LOC = OPCODE_LOC + OPCODE_BITS;
-  static const int BITS_PER_DELAY = 4;
-  static const int NUM_DELAY = 3;
-  static const int IN_DELAY_BITS = BITS_PER_DELAY*NUM_DELAY;
-
-  //Config Message uses same row loc:
-  //static const int ROW_LOC=0;
-  //static const int ROW_BITS=4;
-  static const int COL_LOC=ROW_LOC+ROW_BITS;
-  static const int COL_BITS=4;
-
-  static const int IS_IMM_LOC=COL_LOC+COL_BITS;
-  static const int IS_IMM_BITS=1;
-
-  static const int CTRL_LOC=IS_IMM_LOC+IS_IMM_BITS;
-  static const int CTRL_BITS=32;
 
   void print_bit_loc() {
     std::cout << "Primary Config\n";
@@ -628,16 +577,22 @@ class Schedule {
 
     int num_left() {return _sbPDG->num_nodes() - num_mapped();}
 
+    void allocate_space() {
+      if(_sbPDG) {
+        _vertexProp.resize(_sbPDG->num_node_ids());
+      }
+    }
+
   private:
     int _num_mapped[SbPDG_Node::V_NUM_TYPES] = {0}; //init all to zero
     int _links_mapped = 0, _edge_links_mapped = 0;
 
     std::vector< std::vector<int> > _wide_ports;
 
-    std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort;     //vecport to pdfvec
+    std::map<std::pair<bool,int>, SbPDG_Vec*> _assignVPort; 
 
     std::unordered_map< SbPDG_Vec*, VecProp > _vecProp;
-    std::unordered_map< SbPDG_Node*, VertexProp > _vertexProp;
+    std::vector< VertexProp > _vertexProp;
     std::unordered_map< SbPDG_Edge*, EdgeProp > _edgeProp;
 
     //vport prop missing datastructure, imiplicit pair for now

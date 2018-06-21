@@ -74,6 +74,7 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
       if(remapNeeded) { //remap every so often to try new possible dummy positions
         sbPDG->remap(hw_num_fu);
         postsize = sbPDG->num_insts();
+        cur_sched->allocate_space();
       }
     }
 
