@@ -26,14 +26,14 @@ void SbPDG_Edge::compute_next(){
         _use->inc_inputs_ready_backcgra(false, false);
   }
 }*/
-void SbPDG_Edge::compute_after_push(){
+void SbPDG_Edge::compute_after_push(bool print, bool verif){
   if(_data_buffer.size()==1){
-    _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
-void SbPDG_Edge::compute_after_pop(){
+void SbPDG_Edge::compute_after_pop(bool print, bool verif){
   if(_data_buffer.size()>0){
-    _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
 void order_insts(SbPDG_Inst* inst,
@@ -448,7 +448,9 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     _invalid=true;
   }
 
-  //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  if(print) {
+     std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  }
 
   // std::cout << "init values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
   // std::cout << "init values of discard: " << discard << " pred: " << pred << "\n";
@@ -464,7 +466,10 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     }
   } 
   // if(reset) { _reg = 0; }
-
+  if(print) {
+     std::cout << (_back_array[0] ? "backpressure on 1st input\n" : "");
+     std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
+  }
   if(this->name() == ":Phi") {
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
@@ -478,8 +483,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // only foe debugging purposes, may give seg fault later on?
   // printf("Let's print the final backarray info: b1: %d and b2: %d",_back_array[0],_back_array[1]);
-  std::cout << "final values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
-  std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
+  // std::cout << "final values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
+  // std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
 
   
   // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
@@ -488,11 +493,13 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   /*
   cout << " with input: " << std::hex << _input_vals[0] << " and the other input: " << std::hex << _input_vals[1] << " = " << std::hex << output;
-  if(_invalid || discard) { 
-    cout << " and discard!";
-  }
-  cout << "\n";
   */
+  if(print) {
+    if(_invalid || discard) { 
+      cout << " and discard!\n";
+    }
+    // cout << "\n";
+  }
 
   if(!discard) {
     this->set_value(output, !_invalid, true, inst_lat(inst()));

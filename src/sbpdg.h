@@ -46,15 +46,15 @@ class SbPDG_Edge {
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
     // void compute_next();
-    void compute_after_push();
-    void compute_after_pop();
+    void compute_after_push(bool print, bool verif);
+    void compute_after_pop(bool print, bool verif);
     void print_buf_state(){
         /*std::cout << _data_buffer.front() << " ";
         if(_data_buffer.size()>1)
           std::cout << _data_buffer.back() << "\n";
           */
     }
-    void push_in_buffer(uint64_t v, bool valid) {
+    void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
       // std::cout << "data already in the buffer: " << _data_buffer.size() << " and max_size allowed is: " << buf_len << "\n";
       // std::cout << "val I was trying to push: " << v << "\n";
       assert(_data_buffer.size()<buf_len && "Trying to push in full buffer\n");
@@ -65,7 +65,7 @@ class SbPDG_Edge {
       // std::cout <<  " and the size of buffer after push: " << _data_buffer.size() << "\n";
 
       // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
-      compute_after_push();      
+      compute_after_push(print, verif);      
     }
     bool is_buffer_full(){
         return (_data_buffer.size()==buf_len);
@@ -83,7 +83,7 @@ class SbPDG_Edge {
       return _data_buffer.front().second;
     }
 
-    void pop_buffer_val() {
+    void pop_buffer_val(bool print, bool verif) {
       assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
       // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
       // std::cout << "Before pop state: \n";
@@ -91,7 +91,7 @@ class SbPDG_Edge {
 
       // std::cout <<  " and will it lead to compute? " << (_data_buffer.size()>0) << "\n";
       _data_buffer.pop();
-      compute_after_pop();      
+      compute_after_pop(print, verif);      
      
     }
 
@@ -296,7 +296,7 @@ class SbPDG_Node {
       _avail = avail;
     }
 
-    void set_node(uint64_t v, bool valid, bool avail) {
+    void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif) {
       _val=v; 
       _invalid=!valid;
       _avail = avail;
@@ -307,7 +307,7 @@ class SbPDG_Node {
       if(avail){
         if(!get_bp()){
           for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
-            (*iter)->push_in_buffer(v, valid);
+            (*iter)->push_in_buffer(v, valid, print, verif);
           }
           _avail=false;
         }
@@ -1192,14 +1192,14 @@ SbPDG_VecInput* get_vector_input(int i){
 
     
     //Simulator pushes data to vector given by vector_id
-    bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid) {
+    bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
       // std::cout << "name of the vector we pushed: " << vec_in->name() << " and gams_name: " << vec_in->gamsName() << "\n";
       // int num_computed = 0;
       // int t=0;
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* sb_node = vec_in->getInput(i); 
-        sb_node->set_node(data[i],valid[i], true);
+        sb_node->set_node(data[i],valid[i], true, print, verif);
         // std::cout << "Did I propogate the input to all it's uses? " << !sb_node->get_avail() << "\n";
         /*
         if(!sb_node->get_avail()){
@@ -1274,7 +1274,7 @@ SbPDG_VecInput* get_vector_input(int i){
     //Simulator grabs size elements from vector port (vector_id)
     //assertion failure on insufficient size 
     void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, 
-                           std::vector<bool>& data_valid, unsigned int len){
+                           std::vector<bool>& data_valid, unsigned int len, bool print, bool verif){
       assert(vec_out->num_outputs()==len && "insufficient output available\n");
       
       // we don't need discard now!
@@ -1283,7 +1283,7 @@ SbPDG_VecInput* get_vector_input(int i){
         data.push_back(e->get_buffer_val());
         data_valid.push_back(e->get_buffer_valid());
         //std::cout << e->get_buffer_valid();
-        e->pop_buffer_val();
+        e->pop_buffer_val(print, verif);
       }
 
       // Insufficient output size
@@ -1308,7 +1308,7 @@ SbPDG_VecInput* get_vector_input(int i){
         // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
         // set the values
         SbPDG_Edge* e = *it;
-        e->pop_buffer_val();
+        e->pop_buffer_val(print, verif);
         /*if(!e->is_buffer_empty()){
             SbPDG_Node* n = e->use();
             n->set_is_new_val(1);
@@ -1325,7 +1325,7 @@ SbPDG_VecInput* get_vector_input(int i){
         SbPDG_Node* sb_node = temp->n;
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
-        sb_node->set_node(temp->val, temp->valid, temp->avail);
+        sb_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
         /*
         if(!sb_node->get_avail()){
           num_computed += sb_node->update_next_nodes(print, verif);
