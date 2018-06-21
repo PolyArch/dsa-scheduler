@@ -210,6 +210,8 @@ protected:
   int rand_bt(int s, int e) {
     return rand()%(e-s)+s;
   }
+
+  int _route_times=0;
 };
 
 #endif

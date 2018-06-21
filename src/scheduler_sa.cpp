@@ -112,18 +112,18 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
       }
 
       if (verbose) {
-        fprintf(stdout, "Iter: %4d, time:%0.2f, remaining: %3d, " 
+        fprintf(stdout, "Iter: %4d, time:%0.2f, rt:%d, left: %3d, " 
                 "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d/%d,%d%s%s, links:%d, edge-links:%d\n", 
-                iter, total_msec()/1000.f, 
+                " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s\n", 
+                iter, total_msec()/1000.f, _route_times,
                 num_left, lat, violation, latmis, obj,
                 cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
                 cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
                 cur_sched->num_insts_mapped(),  presize, postsize,
-                succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", mismatch == 0" : "", 
                 cur_sched->num_links_mapped(),
-                cur_sched->num_edge_links_mapped());
+                cur_sched->num_edge_links_mapped(),
+                succeed_sched ? ", all mapped" : "",
+                succeed_timing ? ", mismatch == 0" : "");
       }
       best_score = score;
       *sched = *cur_sched; //shallow copy of sched should work?
@@ -388,6 +388,11 @@ bool SchedulerSimulatedAnnealing::schedule_output(SbPDG_VecOutput* vec_out,
   return found_vector_port;
 }
 
+bool SchedulerSimulatedAnnealing::timingIsStillGood(Schedule* sched) {
+  int max_lat=0, max_lat_mis=0;
+  sched->cheapCalcLatency(max_lat,max_lat_mis);
+  return max_lat_mis < _sbModel->maxEdgeDelay();
+}
 
 bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
   int n = sbPDG->num_vec_input();
@@ -397,8 +402,8 @@ bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
     if(++p ==n) {p=0;}
 
     SbPDG_VecInput* vec_in = sbPDG->vec_in(p);
-    if(sched->vecMapped(vec_in)) continue;
-    return schedule_input(vec_in,sbPDG,sched);
+    if(sched->vecMapped(vec_in)) continue;    
+    return schedule_input(vec_in,sbPDG,sched) && timingIsStillGood(sched);
   }
   return false;
 }
@@ -425,7 +430,7 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     if(++p ==n) {p=0;}
     SbPDG_Inst* inst = inst_vec[p];
     if(sched->isScheduled(inst)) continue;
-    return scheduleNode(sched,inst);
+    return scheduleNode(sched,inst) && timingIsStillGood(sched);
   }
   return false;
 }
@@ -439,14 +444,37 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SbPDG* sbPDG, Schedule* sche
   while(!sched->isComplete()) {
     int r = rand_bt(0,5); //upper limit defines ratio of input/output scheduling
     switch(r) {
-      case 0: input_good = input_good && !sched->inputs_complete() && 
-                             map_one_input(sbPDG,sched);
+      case 0: {
+        if(!input_good) break;
+        bool success = map_one_input(sbPDG,sched);
+        if(!success) {
+          return false;
+        } else {
+          input_good = !sched->inputs_complete();
+        }
+        break;
+      }
       break;
-      case 1: output_good = output_good && !sched->outputs_complete() && 
-                             map_one_output(sbPDG,sched);
-      break;
-      default: inst_good = inst_good && !sched->insts_complete() &&
-                            map_one_inst(sbPDG,sched);
+      case 1: {
+        if(!output_good) break;
+        bool success = map_one_output(sbPDG,sched);
+        if(!success) {
+          return false;
+        } else {
+          output_good = !sched->outputs_complete();
+        }
+        break;
+      }      
+      default: {
+        if(!inst_good) break;
+        bool success = map_one_inst(sbPDG,sched);
+        if(!success) {
+          return false;
+        } else {
+          inst_good = !sched->insts_complete();
+        }
+        break;
+      }      
     }
     if(!input_good && !output_good && !inst_good) break;
   }
@@ -465,6 +493,7 @@ void SchedulerSimulatedAnnealing::unmap_one_input(SbPDG* sbPDG, Schedule* sched)
 
     SbPDG_VecInput* vec_in = sbPDG->vec_in(p);
     if(sched->vecMapped(vec_in)) {
+      //cout << "I" << vec_in->name();
       sched->unassign_input_vec(vec_in);
       return;
     }
@@ -482,6 +511,7 @@ void SchedulerSimulatedAnnealing::unmap_one_output(SbPDG* sbPDG, Schedule* sched
     if(++p ==n) {p=0;}
     SbPDG_VecOutput* vec_out = sbPDG->vec_out(p);
     if(sched->vecMapped(vec_out)) {
+      //cout << "O" << vec_out->name();
       sched->unassign_output_vec(vec_out);
       return;
     }
@@ -500,6 +530,7 @@ void SchedulerSimulatedAnnealing::unmap_one_inst(SbPDG* sbPDG, Schedule* sched) 
     if(++p ==n) {p=0;}
     SbPDG_Inst* inst = inst_vec[p];
     if(sched->isScheduled(inst)) {
+      //cout << "V" << inst->name();
       sched->unassign_pdgnode(inst);
 
       //Error Checking : TODO: make function or remove these two loops
@@ -528,7 +559,7 @@ void SchedulerSimulatedAnnealing::unmap_one_inst(SbPDG* sbPDG, Schedule* sched) 
 }
 
 void SchedulerSimulatedAnnealing::unmap_some(SbPDG* sbPDG, Schedule* sched) {
-  int num_to_unmap=6;
+  int num_to_unmap=3;
 
   while(num_to_unmap && sched->num_mapped()) {
     int r = rand_bt(0,5); //upper limit defines ratio of input/output scheduling
@@ -546,6 +577,7 @@ void SchedulerSimulatedAnnealing::unmap_some(SbPDG* sbPDG, Schedule* sched) {
               }
     }
   }
+  //cout << " ";
 }
 
 
@@ -558,9 +590,11 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SbPDG* sbPDG, Schedule*& sch
 
     map_to_completion(sbPDG,sched);
     if(sched->isComplete()) {
+      //cout << "remppaed after " << t << " tries" << "\n";
       return true;
     } 
   } 
+  //cout << "failed to remap\n";
   return false;
 }
 
@@ -614,8 +648,6 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgn
                                             *curRouting, bestScore);
       curScore.first = curScore.second;
 
-      /*
-      //TODO: Integrate timing better later 
       
       if(curScore < fscore) { //if not failing score
         if(_integrate_timing) {
@@ -632,7 +664,6 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgn
           curScore.second = -violation;
         }
       }
-      */
 
       if(curScore < bestScore) {
         bestScore=curScore;

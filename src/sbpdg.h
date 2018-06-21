@@ -27,13 +27,8 @@ class SbPDG_Edge {
     
     EdgeType etype() {return _etype;}
     
-    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg) {
-       _def=def;
-       _use=use;
-       _etype=etype;
-       _ID=ID_SOURCE++;
-       _sbpdg=sbpdg;
-    }
+    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
+               EdgeType etype, SbPDG* sbpdg);
 
     SbPDG_Node* def() const {
       return _def;
@@ -105,10 +100,6 @@ class SbPDG_Edge {
 
     int _delay =0;
 
-  
-
-  private:
-    static int ID_SOURCE;
 };
 
 class SbPDG_Inst;
@@ -127,10 +118,8 @@ class SbPDG_Node {
     bool getScalar() {return _scalar;}
 
     int findDepth(std::ostream& os, std::string dfg_name, int level);
-    SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : _sbpdg(sbpdg), _vtype(v) {
-        _ID=ID_SOURCE++;
-    }
-    
+    SbPDG_Node(SbPDG* sbpdg, V_TYPE v);
+
     typedef std::vector<SbPDG_Edge*>::const_iterator const_edge_iterator;
      
     void addIncEdge(unsigned pos, SbPDG_Edge *edge) { 
@@ -395,8 +384,6 @@ class SbPDG_Node {
     int _max_thr=0;
 
     V_TYPE _vtype;
-  private:
-    static int ID_SOURCE;
 };
 
 
@@ -1377,6 +1364,11 @@ SbPDG_VecInput* get_vector_input(int i){
     int  total_dyn_insts()     {return _total_dyn_insts;}
     int get_max_lat() { return MAX_LAT; }
 
+    int num_node_ids() {return _num_node_ids;}
+    int num_edge_ids() {return _num_edge_ids;}
+    int inc_node_id() {return _num_node_ids++;}
+    int inc_edge_id() {return _num_edge_ids++;}
+
   private:
     // to keep track of number of cycles---------------------
     struct cycle_result{
@@ -1420,9 +1412,11 @@ SbPDG_VecInput* get_vector_input(int i){
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
     std::vector<GroupProp> _propGroups;
 
-
     int _total_dyn_insts=0;
-    
+   
+    int _num_node_ids;
+    int _num_edge_ids;
+
     //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;
     std::map<SbPDG_Node*,int> dummys_per_port;
@@ -1430,9 +1424,6 @@ SbPDG_VecInput* get_vector_input(int i){
     std::set<SbPDG_Output*> dummiesOutputs;
 
     std::ostream* _dbg_stream;
-
-    int span;
-    int work;
 };
 
 #endif

@@ -361,6 +361,8 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched,
     SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
 
+  _route_times++;
+
   if(sched->link_count(pdgedge)!=0) {
      cerr << "Edge: " << pdgedge->name() << " is already routed!\n"; 
      assert(0);

@@ -217,15 +217,16 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   }
 
   //load up various models?
-  string hw_model          = string((const char*)gams_models_hw_model_gms);
-  string timing_model      = string((const char*)gams_models_timing_model_gms);
-  char* transfer_model = (char*) malloc(gams_models_stage_model_gms_len+1);
-  memcpy((void*) transfer_model, (void*) gams_models_stage_model_gms, gams_models_stage_model_gms_len);
-  transfer_model[gams_models_stage_model_gms_len] = '\0';
-  string stage_model       = string((char*) transfer_model);
-  stage_model = stage_model.substr(0, stage_model.length()-2);
-  string softbrain_gams    = string((const char*)gams_models_softbrain_gams_gms);
-  string softbrain_gams_hw = string((const char*)gams_models_softbrain_gams_hw_gms);
+  string hw_model          = string((char*)gams_models_hw_model_gms,
+                                           gams_models_hw_model_gms_len);
+  string timing_model      = string((char*)gams_models_timing_model_gms,
+                                           gams_models_timing_model_gms_len);
+  string stage_model       = string((char*)gams_models_stage_model_gms,
+                                           gams_models_stage_model_gms_len);
+  string softbrain_gams    = string((char*)gams_models_softbrain_gams_gms,
+                                           gams_models_softbrain_gams_gms_len);
+  string softbrain_gams_hw = string((char*)gams_models_softbrain_gams_hw_gms,
+                                           gams_models_softbrain_gams_hw_gms_len);
 
   //mkfifo("/tmp/gams_fifo",S_IRWXU);
   stringstream ss;
@@ -308,7 +309,6 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     }
 
     ofs_constraints.close();
-    free(transfer_model);
      // Print the kinds of instructions
     ofstream ofs_kinds(_gams_work_dir+"/softbrain_kind.gams", ios::out);
     assert(ofs_kinds.good());

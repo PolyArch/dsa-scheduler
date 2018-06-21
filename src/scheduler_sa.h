@@ -29,6 +29,7 @@ protected:
 
  void genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool s);
 
+  bool timingIsStillGood(Schedule* sched); 
 
   bool map_to_completion(SbPDG* sbPDG, Schedule* sched);
 

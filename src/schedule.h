@@ -29,6 +29,7 @@ using namespace SB_CONFIG;
 //  unsigned   row:2;  //can address only 4 rows -- need to update it
 //};
 
+#define MAX_SCHED_LAT 1000000
 
 class Schedule {
   public:
@@ -86,6 +87,10 @@ class Schedule {
       _assignSwitch[sbsw][slink_out]=slink;     //out to in for a sw      
     }
 
+    void assign_lat(SbPDG_Vec* vec, int lat) {
+      _vecProp[vec].lat=lat;
+    }
+
     void assign_lat(SbPDG_Node* pdgnode, int lat) {
       _vertexProp[pdgnode].lat=lat;
     }
@@ -93,11 +98,18 @@ class Schedule {
       return _vertexProp[pdgnode].lat;
     }
 
+    void assign_lat_bounds(SbPDG_Vec* vec, int min, int max) {
+      auto& vec_prop = _vecProp[vec];
+      vec_prop.min_lat=min;
+      vec_prop.max_lat=max;
+    }
+
     void assign_lat_bounds(SbPDG_Node* pdgnode, int min, int max) {
       auto& vertex_prop = _vertexProp[pdgnode];
       vertex_prop.min_lat=min;
       vertex_prop.max_lat=max;
     }
+
     std::pair<int,int> lat_bounds(SbPDG_Node* pdgnode) {
       auto& vertex_prop = _vertexProp[pdgnode];
       return std::make_pair(vertex_prop.min_lat, vertex_prop.max_lat);
@@ -368,6 +380,8 @@ class Schedule {
     
     void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
     void  cheapCalcLatency(int& lat, int& latmis);
+    void  calcNodeLatency(SbPDG_Inst*, int& lat, int& latmis);
+
 
     bool  fixLatency(int& lat, int& latmis);
     bool  fixLatency_fwd(int& lat, int& latmis);
@@ -590,7 +604,7 @@ class Schedule {
     };
 
     struct VecProp{ 
-      int lat;
+      int min_lat=0, max_lat=0,lat=0;
       std::pair<bool,int> vport = {false,-1};
       std::vector<bool> mask;
     };
@@ -632,6 +646,5 @@ class Schedule {
 
     std::map<sbswitch*, std::map<sblink*,sblink*>> _assignSwitch; //out to in
 };
-
 
 #endif

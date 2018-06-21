@@ -11,15 +11,22 @@
 using namespace std;
 using namespace SB_CONFIG;
 
-int SbPDG_Node::ID_SOURCE=0;
-int SbPDG_Edge::ID_SOURCE=0;
-
 CtrlMap CtrlBits::ctrl_map;
 
 bool SbPDG_VecInput::backPressureOn() {
     // return getBackBit();
     return false;
 }
+
+SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
+               EdgeType etype, SbPDG* sbpdg) {
+  _def=def;
+  _use=use;
+  _etype=etype;
+  _ID=sbpdg->inc_edge_id();
+  _sbpdg=sbpdg;
+}
+
 /*
 void SbPDG_Edge::compute_next(){
   if(_data_buffer.size()==1){
@@ -553,6 +560,9 @@ int SbPDG_Inst::update_next_nodes(bool print, bool verif){
 int SbPDG_Inst::update_next_nodes(bool print, bool verif){
     return 0;
 }
+
+SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
+      _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v) {}
 
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
