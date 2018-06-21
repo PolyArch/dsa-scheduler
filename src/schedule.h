@@ -247,7 +247,7 @@ class Schedule {
 
       //Remove all the edges for each of links
       for(auto& link : ep.links) {
-        auto& lp = _linkProp[link];
+        auto& lp = _linkProp[link->id()];
         lp.edges.erase(edge);
         if(lp.edges.size()==0) {
           _links_mapped--;
@@ -287,7 +287,7 @@ class Schedule {
     }
 
     std::unordered_set<SbPDG_Edge*>& edge_list(sblink* link) {
-      return _linkProp[link].edges;
+      return _linkProp[link->id()].edges;
     }
 
     void print_all_mapped() {
@@ -324,7 +324,7 @@ class Schedule {
       //          << slink->name() << "\n";
 
       _edge_links_mapped++;
-      auto& lp = _linkProp[slink];
+      auto& lp = _linkProp[slink->id()];
       if(lp.edges.size()==0) _links_mapped++;
       lp.edges.insert(pdgedge);
       _edgeProp[pdgedge->id()].links.insert(slink);
@@ -341,17 +341,22 @@ class Schedule {
       return _edgeProp[pdgedge->id()].links.size();
     }
 
-    void setLatOfLink(sblink* link, int l) {_linkProp[link].lat = l;}
-    int  latOfLink(sblink* link) {return _linkProp[link].lat;}
+    std::unordered_set<sblink*>& links_of(SbPDG_Edge* edge) {
+      auto& ep = _edgeProp[edge->id()];
+      return ep.links;
+    }
+
+    void setLatOfLink(sblink* link, int l) {_linkProp[link->id()].lat = l;}
+    int  latOfLink(sblink* link) {return _linkProp[link->id()].lat;}
 
     bool linkAssigned(sblink* link) {
-      return _linkProp[link].edges.size();
+      return _linkProp[link->id()].edges.size();
     }
 
     //find first node for
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);
-      auto& vec = _linkProp[link].edges;
+      auto& vec = _linkProp[link->id()].edges;
       return vec.size()==0 ? NULL : (*vec.begin())->def();
     }
 
@@ -495,11 +500,11 @@ class Schedule {
   void set_num_links(int i, SbPDG_Edge* e) { _edgeProp[e->id()].num_links=i; }
   int edge_links(SbPDG_Edge* e) { return _edgeProp[e->id()].num_links;}
 
-  void set_link_order(sblink* l, int i) { _linkProp[l].order=i; }
-  int link_order(sblink* l) { return _linkProp[l].order; }
+  void set_link_order(sblink* l, int i) { _linkProp[l->id()].order=i; }
+  int link_order(sblink* l) { return _linkProp[l->id()].order; }
 
   struct LinkProp;
-  std::unordered_map<sblink*,LinkProp>& get_link_prop() {return _linkProp;}
+  std::vector<LinkProp>& get_link_prop() {return _linkProp;}
 
   int num_passthroughs(SbPDG_Edge* e) {
     return _edgeProp[e->id()].passthroughs.size();
@@ -595,6 +600,7 @@ class Schedule {
       }
       if(_sbModel) {
         _nodeProp.resize(_sbModel->subModel()->num_node_ids());
+        _linkProp.resize(_sbModel->subModel()->num_link_ids());
       }
     }
 
@@ -612,7 +618,7 @@ class Schedule {
 
     //vport prop missing datastructure, imiplicit pair for now
     std::vector< NodeProp > _nodeProp;
-    std::unordered_map< sblink*, LinkProp > _linkProp;
+    std::vector< LinkProp > _linkProp;
 
     std::map<sbswitch*, std::map<sblink*,sblink*>> _assignSwitch; //out to in
 };

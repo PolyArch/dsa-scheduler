@@ -1295,7 +1295,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     
     //cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
 
-    _linkProp[cur_link].edges.insert(cur_edge);
+    _linkProp[cur_link->id()].edges.insert(cur_edge);
     
     sbnode::const_iterator Il,El;
     for(Il = cur_node->ibegin(), El = cur_node->iend(); Il!=El; ++Il) {
@@ -1313,9 +1313,11 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
 }
 
 void Schedule::calcAssignEdgeLink() {
-  for(auto& i : _linkProp) {
-    i.second.edges.clear();
-  }
+  assert(0);
+
+  //for(auto& i : _linkProp) {
+  //  i.second.edges.clear();
+  //}
   
   SbPDG::const_inst_iterator Ii,Ei;
   for(Ii=_sbPDG->inst_begin(), Ei=_sbPDG->inst_end(); Ii!=Ei; ++Ii) {

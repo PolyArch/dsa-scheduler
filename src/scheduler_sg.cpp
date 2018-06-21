@@ -99,6 +99,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     std::pair<int, int> score = 
       make_pair(succeed_sched + succeed_timing-num_left, -obj);
     if (score > best_score) {
+
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
         _best_latmis=latmis;
         //_best_violation=violation;
@@ -254,7 +255,6 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
 
 bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
-
   std::pair<int,int> bestScore = fscore;
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot = NULL;

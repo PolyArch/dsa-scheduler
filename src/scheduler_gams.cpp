@@ -43,23 +43,24 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     sbnode* spot = sched->locationOf(pdgnode);
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
-  }
 
-  auto links = sched->get_link_prop();
-  for(auto i : links) {
-    sblink* link = i.first;
-    SbPDG_Node* pdgnode = sched->pdgNodeOf(link);
-    if(pdgnode) {
-      ofs << "Mvl.l('" << pdgnode->gamsName() 
-          << "','" << link->gams_name(config) << "')=1;\n";
-    }
+    for(auto II = pdgnode->uses_begin(), EE = pdgnode->uses_end(); II!=EE; ++II) {
+      SbPDG_Edge* pdgedge = *II;
+      auto& link_set = sched->links_of(pdgedge);
     
-    auto& edgelist= sched->edge_list(link);
-    
-    for(auto Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-      SbPDG_Edge* pdgedge = *Ie;
-      ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
-          << link->gams_name(config) << "')=1;\n";
+      for(auto LI = link_set.begin(), LE = link_set.end(); LI != LE; ++LI) {
+        sblink* link = *LI;
+        ofs << "Mvl.l('" << pdgnode->gamsName() 
+            << "','" << link->gams_name(config) << "')=1;\n";
+        ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
+            << link->gams_name(config) << "')=1;\n";
+
+        int order = sched->link_order(link);
+        if(order!=-1) {
+          ofs << "O.l('" << link->gams_name(config) << "')=" << order << ";\n";
+        }
+
+      }
     }
   }
 
@@ -93,14 +94,14 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   }
 
   //Ordering
-  auto link_order = sched->get_link_prop();
-  for(auto i : link_order) {
-    sblink* l = i.first;
-    int order = i.second.order;
-    if(order!=-1) {
-      ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
-    }
-  }
+  //auto link_order = sched->get_link_prop();
+  //for(auto i : link_order) {
+  //  sblink* l = i.first;
+  //  int order = i.second.order;
+  //  if(order!=-1) {
+  //    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
+  //  }
+  //}
 
   //Timing
   int d1,d2;
@@ -208,7 +209,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     //  heur_scheduler.set_integrate_timing(false);
     //}
     heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
-    heur_sched->calcAssignEdgeLink();
+    //heur_sched->calcAssignEdgeLink();
   }
 
   if(str_subalg == "MRT'" || str_subalg == "MR'.T'" || str_subalg == "MR'") {
