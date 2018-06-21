@@ -1483,7 +1483,7 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   bool succ = true;
   for(auto& i : _edgeProp) {
-    i.second.extra_lat=0;
+    i.extra_lat=0;
   }
 
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
@@ -1555,8 +1555,8 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
   for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
     if(*I == NULL) { continue; } //could be immediate, constant within FU
     SbPDG_Edge* source_pdgedge = (*I);
-    _edgeProp[source_pdgedge].extra_lat += ed;
-    if (_edgeProp[source_pdgedge].extra_lat > _sbModel->maxEdgeDelay()) {
+    _edgeProp[source_pdgedge->id()].extra_lat += ed;
+    if (_edgeProp[source_pdgedge->id()].extra_lat > _sbModel->maxEdgeDelay()) {
       return false;
     }
   }
