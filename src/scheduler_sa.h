@@ -15,8 +15,15 @@ public:
     SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
     CandidateRouting&,std::pair<int,int> scoreLeft);
 
+  virtual int routing_cost(SbPDG_Edge*, sblink*, Schedule*, 
+      CandidateRouting&, sbnode* dest);
+
+
 protected:
   bool schedule_internal(SbPDG* sbPDG, Schedule*& sched);
+  std::pair<int, int> obj(Schedule*& sched, int& lat, 
+      int& lat_mis); 
+
 
   bool schedule_input( SbPDG_VecInput*  vec, SbPDG* sbPDG, Schedule* sched);
   bool schedule_output(SbPDG_VecOutput* vec, SbPDG* sbPDG, Schedule* sched);

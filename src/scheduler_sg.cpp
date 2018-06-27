@@ -72,7 +72,6 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
       if( (iter & (16-1)) == 0) {
         sbPDG->remap(hw_num_fu);
         postsize = sbPDG->num_insts();
-        cur_sched->allocate_space();
       }
     }
 

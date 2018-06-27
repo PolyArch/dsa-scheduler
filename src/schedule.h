@@ -353,6 +353,21 @@ class Schedule {
       return _linkProp[link->id()].edges.size();
     }
 
+    //return cost_to_route
+    //0: free
+    //1: empty
+    //2: already there
+    int temporal_cost(sblink* link, SbPDG_Node* node) {
+      assert(link);
+      auto& vec = _linkProp[link->id()].edges;
+      if(vec.size()==0) return 1;
+      for(SbPDG_Edge* edge : vec) {
+        SbPDG_Node* cur_node =edge->def();
+        if(cur_node == node) return 0;
+      }
+      return 2;
+    }
+
     //find first node for
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);

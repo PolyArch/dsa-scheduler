@@ -29,7 +29,24 @@ void SchedulerSimulatedAnnealing::initialize(SbPDG* sbPDG, Schedule*& sched) {
   sched = new Schedule(getSBModel(),sbPDG); //just a dummy one
 }
 
+std::pair<int, int> SchedulerSimulatedAnnealing::obj(
+    Schedule*& sched, int& lat, int& latmis) {  
+    int num_left = sched->num_left(); 
+    bool succeed_sched = (num_left==0);
 
+    bool succeed_timing = false;
+    if (succeed_sched) { 
+      succeed_timing = sched->fixLatency(lat,latmis);
+    } else {
+      latmis = MAX_ROUTE;
+    }
+
+    int violation = sched->violation();
+
+    int obj = latmis*10000+violation*100+lat;
+
+    return make_pair(succeed_sched + succeed_timing-num_left, -obj);
+}
 
 bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {  
   initialize(sbPDG,sched);
@@ -79,28 +96,11 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
     }
 
     bool succeed_sched = schedule_internal(sbPDG, cur_sched);
-    int num_left = cur_sched->num_left(); 
 
-    bool succeed_timing = false;
-    int lat = MAX_ROUTE, latmis = MAX_ROUTE;
-    if (succeed_sched) { 
-      succeed_timing = cur_sched->fixLatency(lat,latmis);
-    } else {
-      latmis = MAX_ROUTE;
-    }
+    int lat=MAX_ROUTE,latmis=MAX_ROUTE;
+    std::pair<int,int> score = obj(cur_sched,lat,latmis);
 
-    int violation = cur_sched->violation();
-
-    int obj = lat;
-    if(_integrate_timing) { 
-      //obj = latmis*256+lat;
-      //obj = violation*8192+lat*32+latmis;
-      obj = latmis*10000+violation*100+lat;
-    }
-
-    std::pair<int, int> score = 
-      make_pair(succeed_sched + succeed_timing-num_left, -obj);
-
+    int succeed_timing = (latmis ==0);
     if (score > best_score) {
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
         _best_latmis=latmis;
@@ -117,7 +117,8 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
                 "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
                 " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s\n", 
                 iter, total_msec()/1000.f, _route_times,
-                num_left, lat, violation, latmis, obj,
+                cur_sched->num_left(), lat, 
+                cur_sched->violation(), latmis, -score.second,
                 cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
                 cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
                 cur_sched->num_insts_mapped(),  presize, postsize,
@@ -143,7 +144,7 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
         && best_succeeded) {
       break;
     }
-    if(violation ==0 && iter > _max_iters_zero_vio) {
+    if(sched->violation() ==0 && iter > _max_iters_zero_vio) {
       break;
     }
   }
@@ -599,7 +600,8 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SbPDG* sbPDG, Schedule*& sch
   return false;
 }
 
-bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode){
+bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, 
+    SbPDG_Node* pdgnode){
   std::pair<int,int> bestScore = fscore;
   CandidateRouting* bestRouting = new CandidateRouting();
   sbnode* bestspot = NULL;
@@ -647,23 +649,12 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgn
       curRouting->clear();
       pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,
                                             *curRouting, bestScore);
-      curScore.first = curScore.second;
 
-      
-      if(curScore < fscore) { //if not failing score
-        if(_integrate_timing) {
-
-          int min_node_lat, max_node_lat;
-          curRouting->fill_lat(sched, min_node_lat, max_node_lat);
-
-          int violation = min_node_lat-max_node_lat;
-
-          if(_integrate_timing && violation > _best_latmis) {
-            curScore=fscore; // FAIL
-          }
-
-          curScore.second = -violation;
-        }
+      if(curScore<fscore) {
+        applyRouting(sched,pdgnode,cand_spot,curRouting);
+        int lat=MAX_ROUTE,latmis=MAX_ROUTE; 
+        curScore = obj(sched,lat,latmis);
+        sched->unassign_pdgnode(pdgnode); //rip it up!
       }
 
       if(curScore < bestScore) {
@@ -671,11 +662,6 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SbPDG_Node* pdgn
         bestspot=cand_spot;
         std::swap(bestRouting,curRouting);
       }
-
-      if(bestScore<=make_pair(0,1))  {
-        applyRouting(sched,pdgnode,bestspot,bestRouting);
-        return true;
-      }//apply routing step
 
     }//for loop -- check for all sbnode spots
 
@@ -693,6 +679,8 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
     SbPDG_Node* n, SB_CONFIG::sbnode* here,
     CandidateRouting& candRouting, std::pair<int,int> bestScore) {
 
+  bestScore.first=MAX_ROUTE;
+  bestScore.second=MAX_ROUTE;
   pair<int,int> score=make_pair(0,0);
 
   //cout << "Schedule Here "  << n->name() << " to here: " << here->name() << "\n";
@@ -715,14 +703,12 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
     if(sched->isScheduled(source_pdgnode)) {
       sbnode* source_loc = sched->locationOf(source_pdgnode); //scheduled location
 
-      //cout << "  routed\n";
-
       //route using source node, sbnode
       pair<int,int> tempScore = route(sched, source_pdgedge, 
           source_loc, here,candRouting,bestScore-score);
       score = score + tempScore;
 
-      if(score>bestScore) return fscore;
+      //if(score>bestScore) return fscore;
     }
   }
 
@@ -745,12 +731,52 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
 
       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc,candRouting,bestScore-score);
       score = score + tempScore;
-      if(score>bestScore) return score;
+      //if(score>bestScore) return score;
     }
   }
 
   return score;
 }
+
+int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link, 
+      Schedule* sched, CandidateRouting& candRouting, sbnode* dest) {
+
+  SbPDG_Node* pdgnode = edge->def();
+  sbnode* next = link->dest();
+
+  //check if connection is closed..
+  int t_cost = sched->temporal_cost(link, pdgnode);
+  if(t_cost==1) { //empty
+    if(candRouting.routing.count(link)) {
+      bool found_match=false;
+      for(SbPDG_Edge* edge : candRouting.routing[link]) {
+        SbPDG_Node* cur_node = edge->def();
+        if(cur_node == pdgnode) {
+          found_match=true;
+          break;
+        }
+      }
+      if(found_match) t_cost=0;
+      else t_cost=2;
+    }
+  }
+  //if(t_cost==2) return -1;
+  bool is_dest=(next==dest);
+
+  sbfu* fu = dynamic_cast<sbfu*>(next);
+  if(fu && sched->pdgNodeOf(fu) && !is_dest) return -1;  //stop if run into fu
+
+  if(t_cost==0) { 
+    return 0; //free link because schedule or candidate routing already maps
+  } else {
+    if(fu && sched->isPassthrough(fu)) return -1; //someone else's pass through
+  
+    bool passthrough = (fu && !is_dest);
+//    int passthrough_cost = 100 / 10; 
+    return 1+passthrough*1000;
+  }
+}
+
 
 pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, 
     SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 

@@ -419,31 +419,32 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched,
   
   pair<int,int> score;
   score = make_pair(0,dest->node_dist());
- 
   sbnode* x = dest;
+
+  int num_links=0, pts=0;
+
+  x = dest;
   while(x->node_dist()!=0) {
     sblink* link = x->came_from();
     candRouting.routing[link].insert(pdgedge);
     x=link->orig();
+    sbnode* next = link->dest();
+    if(dynamic_cast<sbfu*>(next) && num_links!=0) {
+      pts++;
+    }
+    num_links++;
   }
 
-  int count = 0;  //count how many are already routed
   while(x != source) {
     sblink* link = x->came_from();
-    count++;
+    num_links++;
     candRouting.routing[link].insert(pdgedge);
     x=link->orig();
   }
-
-  int tot_lat = dest->node_dist() + count -1;
-  int pts=0;
-  while(tot_lat > 1000) {
-    tot_lat -= 1000;
-    pts++;
-  }
+  num_links--;
 
   auto& prop = candRouting.edge_prop[pdgedge];
-  prop.num_links=tot_lat;
+  prop.num_links=num_links;
   prop.num_passthroughs=pts;
   return score;
 }
