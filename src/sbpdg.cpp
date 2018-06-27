@@ -33,17 +33,14 @@ void SbPDG_Edge::compute_next(){
         _use->inc_inputs_ready_backcgra(false, false);
   }
 }*/
-void SbPDG_Edge::compute_after_push(){
-
-  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
+void SbPDG_Edge::compute_after_push(bool print, bool verif){
   if(_data_buffer.size()==1){
-        _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
-void SbPDG_Edge::compute_after_pop(){
-  // std::cout << "name of the port was: " << ((this->use())->name()) << "\n";
+void SbPDG_Edge::compute_after_pop(bool print, bool verif){
   if(_data_buffer.size()>0){
-        _use->inc_inputs_ready_backcgra(false, false);
+    _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
 void SbPDG::order_insts(SbPDG_Inst* inst,
@@ -76,7 +73,7 @@ void SbPDG::order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-
+/*
 // Adding new code for cycle-by-cycle CGRA functionality: this is used .h not used
 int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
  
@@ -89,6 +86,7 @@ int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
 
   return num_computed;
 }
+*/
 // --------------------------------------------------
 
 
@@ -240,6 +238,11 @@ SymEntry SbPDG::createInst(std::string opcode,
         etype = SbPDG_Edge::EdgeType::ctrl_true;
       } else if(args[i].flag==SymEntry::FLAG_INV_PRED) {
         etype = SbPDG_Edge::EdgeType::ctrl_false;
+      }
+      // flag should not work if it is control: vidushi
+      else if(args[i].flag==SymEntry::FLAG_CONTROL) {
+        // std::cout << "came here to set edge type to control\n";
+        etype = SbPDG_Edge::EdgeType::ctrl_true;
       }
       
       connect(inc_node, pdg_inst,i, etype);
@@ -409,12 +412,10 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       // slot 2 in this instruction is predicate
   }
   */
-/*
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
-   cout << name() << " (" << _ID << "): ";
-*/
+  // cout << name() << " (" << _ID << "): ";
 
   uint64_t discard=0;
   uint64_t output = 0;
@@ -425,7 +426,16 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     if(immSlot() == (int)i) {
       _input_vals[i]=imm();
     } else if (_ops[i]->etype() == SbPDG_Edge::ctrl_true) {
-        pred = _ops[i]->get_buffer_val();
+        // pred = _ops[i]->get_buffer_val();
+        // pred is not supported
+        int c_val = _ops[i]->get_buffer_val();
+        // std::cout << "for control type, input value is: " << c_val << "\n";
+        // 65 means 0 is 10000 and 1 is 01000 => 1000001000 (num_ctrl should be 2 here?)
+        _back_array[0] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP1); // 2*5+0 = 10th pos in bitmap?
+        _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
+        discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
+        pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
+        bool reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
     } else {
       _input_vals[i] = _ops[i]->get_buffer_val();
       if(!_ops[i]->get_buffer_valid()) {
@@ -440,18 +450,17 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   // we set this instruction to invalid
+  pred = 1; // for now--check why is it here?
   if(pred==0) {
     _invalid=true;
   }
 
-  //std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  if(print) {
+     std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  }
 
-
-
-  // if(this->gamsName() == "Phi") mimic the functionality here
-  // std::cout << "Final invalid of inst: " << name() << " is: " << _invalid << endl;
-  
-
+  // std::cout << "init values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
+  // std::cout << "init values of discard: " << discard << " pred: " << pred << "\n";
 
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
@@ -463,15 +472,11 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
-
-  // std::cout << this->gamsName() << " ";
-  // std::cout << this->name() << " ";
-  /*if(this->name() == ":Hold"){
-    std::cout << _input_vals[0] << " " << _input_vals[1] << " output: " << output << "\n";
+  // if(reset) { _reg = 0; }
+  if(print) {
+     std::cout << (_back_array[0] ? "backpressure on 1st input\n" : "");
+     std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
   }
-  */
-
-  
   if(this->name() == ":Phi") {
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
@@ -483,19 +488,25 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     _invalid=false;
   }
 
+  // only foe debugging purposes, may give seg fault later on?
+  // printf("Let's print the final backarray info: b1: %d and b2: %d",_back_array[0],_back_array[1]);
+  // std::cout << "final values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
+  // std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
+
   
   // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
 
   _inputs_ready=0;
 
-
   /*
-  cout << " with input: " << _input_vals[0] << " = " << output;
-  if(_invalid || discard) { 
-    cout << " and discard!";
-  }
-  cout << "\n";
+  cout << " with input: " << std::hex << _input_vals[0] << " and the other input: " << std::hex << _input_vals[1] << " = " << std::hex << output;
   */
+  if(print) {
+    if(_invalid || discard) { 
+      cout << " and discard!\n";
+    }
+    // cout << "\n";
+  }
 
   if(!discard) {
     this->set_value(output, !_invalid, true, inst_lat(inst()));
@@ -505,27 +516,18 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   // pop the inputs after inst_thr+back_press here
   int inst_throughput = inst_thr(inst());
-  // std::cout << "thr: " << inst_throughput << "\n";
 
-  // int index=0;
   
    for(unsigned i = 0; i < _ops.size(); ++i) {
-        if(_ops[i]==NULL) {
-            // std::cout << "input edge is null for this input: " << i << "\n";
-            continue;
-        }
-
-        if(_back_array[i]==1){
-          // n->set_value(_input_vals[i], true, true, inst_throughput);
-          _inputs_ready += 1;
-          
-        }
-        else{
-          // n->set_value(0, true, false, inst_throughput);
-          _sbpdg->push_buf_transient(_ops[i],inst_throughput);
-
-          // _ops[i]->pop_buffer_val();
-        }
+     if(_ops[i]==NULL) {
+       continue;
+     }
+     if(_back_array[i]==1){
+       _inputs_ready += 1;
+     }
+     else{
+       _sbpdg->push_buf_transient(_ops[i],inst_throughput);
+     }
    }
             
 

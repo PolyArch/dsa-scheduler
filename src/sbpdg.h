@@ -43,15 +43,15 @@ class SbPDG_Edge {
     void set_delay(int d) {_delay=d;}
     int delay() {return _delay;}
     // void compute_next();
-    void compute_after_push();
-    void compute_after_pop();
+    void compute_after_push(bool print, bool verif);
+    void compute_after_pop(bool print, bool verif);
     void print_buf_state(){
         /*std::cout << _data_buffer.front() << " ";
         if(_data_buffer.size()>1)
           std::cout << _data_buffer.back() << "\n";
           */
     }
-    void push_in_buffer(uint64_t v, bool valid) {
+    void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
       // std::cout << "data already in the buffer: " << _data_buffer.size() << " and max_size allowed is: " << buf_len << "\n";
       // std::cout << "val I was trying to push: " << v << "\n";
       assert(_data_buffer.size()<buf_len && "Trying to push in full buffer\n");
@@ -59,8 +59,10 @@ class SbPDG_Edge {
       print_buf_state();
 
       _data_buffer.push(std::make_pair(v,valid));
+      // std::cout <<  " and the size of buffer after push: " << _data_buffer.size() << "\n";
+
       // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
-      compute_after_push();      
+      compute_after_push(print, verif);      
     }
     bool is_buffer_full(){
         return (_data_buffer.size()==buf_len);
@@ -78,13 +80,15 @@ class SbPDG_Edge {
       return _data_buffer.front().second;
     }
 
-    void pop_buffer_val() {
+    void pop_buffer_val(bool print, bool verif) {
       assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
-      // std::cout << "came here to pop data: " << _data_buffer.front() << " from input buffer with buffer size now: " << _data_buffer.size() << "\n";
+      // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
       // std::cout << "Before pop state: \n";
       print_buf_state();
+
+      // std::cout <<  " and will it lead to compute? " << (_data_buffer.size()>0) << "\n";
       _data_buffer.pop();
-      compute_after_pop();      
+      compute_after_pop(print, verif);      
      
     }
 
@@ -299,7 +303,7 @@ class SbPDG_Node {
       _avail = avail;
     }
 
-    void set_node(uint64_t v, bool valid, bool avail) {
+    void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif) {
       _val=v; 
       _invalid=!valid;
       _avail = avail;
@@ -310,7 +314,7 @@ class SbPDG_Node {
       if(avail){
         if(!get_bp()){
           for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
-            (*iter)->push_in_buffer(v, valid);
+            (*iter)->push_in_buffer(v, valid, print, verif);
           }
           _avail=false;
         }
@@ -349,10 +353,16 @@ class SbPDG_Node {
 
     int inc_inputs_ready_backcgra(bool print, bool verif) {
       _inputs_ready+=1;
-      // std::cout<<"Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
-      if(_inputs_ready == _num_inc_edges && _avail==0) {
-        int num_computed = compute_backcgra(print,verif);//it's 0 or 1
-        return num_computed;
+      // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
+      if(_inputs_ready == _num_inc_edges) {
+        if(_avail==0) {
+          int num_computed = compute_backcgra(print,verif);//it's 0 or 1
+          return num_computed;
+        } else {
+          // add some code here
+          std::cout << "I NEED AN OUTPUT BUFFER\n";
+          return 0;
+        }
       }
       return 0;
     } 
@@ -432,19 +442,21 @@ private:
  
 typedef std::vector<std::string> string_vec_t;
 
-//post-parsing control signal definitions 
+//post-parsing control signal definitions (mapping of string of flag to it's value?)
 typedef std::map<int,string_vec_t> ctrl_def_t; 
 
 
 class CtrlBits {
 public:
   static int bit_loc(int c_val, CtrlMap::ctrl_flag flag) {
-    return c_val * CtrlMap::NUM_CTRL + flag; 
+    return c_val * CtrlMap::NUM_CTRL + flag; // should have returned NUM_CTRL should be 5 and flag should be 0? 
   }
   CtrlBits(ctrl_def_t d) {
     for(auto i : d) {
       int key = i.first;
       auto vec = i.second;
+      // for debug
+      // std::cout << "key: " << key << "\n";
       for(auto s : vec) {
         CtrlMap::ctrl_flag  local_bit_pos = ctrl_map.encode_control(s);
         int final_pos = bit_loc(key,local_bit_pos);
@@ -471,7 +483,10 @@ public:
 
   uint64_t bits() {return _bits.to_ullong();}
 
+  // What is c_val? bits is the control lost, c_val is the value you read here
   bool isSet(int c_val, CtrlMap::ctrl_flag flag) {
+    // std::cout << "In in set, c_val: " << c_val << "\n";
+    // std::cout << "num_ctrl: " << (int)CtrlMap::NUM_CTRL << " and flag: " << (int)flag << "\n";
     return _bits.test(bit_loc(c_val,flag));
   }
   
@@ -627,10 +642,11 @@ class SbPDG_Inst : public SbPDG_Node {
     }
 
    void set_ctrl_bits(CtrlBits c) {
+     // std::cout << "Should come here in set_ctrl_bits to set bits to: " << c << "\n";
      _ctrl_bits=c;
-     //if(_ctrl_bits.bits() != 0) {
-     //  _ctrl_bits.print_rep();
-     //} 
+     // if(_ctrl_bits.bits() != 0) {
+     //   _ctrl_bits.print_rep();
+     // } 
    }
    uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
@@ -643,6 +659,7 @@ class SbPDG_Inst : public SbPDG_Node {
     int _imm_slot;
     int _subFunc;
     CtrlBits _ctrl_bits;
+    // CtrlMap _ctrl_map;
 
     std::vector<uint64_t> _reg;
     uint64_t _imm;
@@ -1202,13 +1219,15 @@ SbPDG_VecInput* get_vector_input(int i){
 
     
     //Simulator pushes data to vector given by vector_id
-    bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid) {
+    bool push_vector(SbPDG_VecInput* vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
       assert(data.size() == vec_in->num_inputs() && "insufficient data available");
+      // std::cout << "name of the vector we pushed: " << vec_in->name() << " and gams_name: " << vec_in->gamsName() << "\n";
       // int num_computed = 0;
       // int t=0;
       for (unsigned int i =0 ; i<vec_in->num_inputs(); ++i){
         SbPDG_Input* sb_node = vec_in->getInput(i); 
-        sb_node->set_node(data[i],valid[i], true);
+        sb_node->set_node(data[i],valid[i], true, print, verif);
+        // std::cout << "Did I propogate the input to all it's uses? " << !sb_node->get_avail() << "\n";
         /*
         if(!sb_node->get_avail()){
           t = sb_node->update_next_nodes(false, false);
@@ -1244,7 +1263,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     //Advances simulation by one cycle  (return whether there was activity)
     int cycle_compute(bool print, bool verif);
-    int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
+    // int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
 
 
     // bool none_config = false;
@@ -1282,7 +1301,7 @@ SbPDG_VecInput* get_vector_input(int i){
     //Simulator grabs size elements from vector port (vector_id)
     //assertion failure on insufficient size 
     void pop_vector_output(SbPDG_VecOutput* vec_out, std::vector<uint64_t>& data, 
-                           std::vector<bool>& data_valid, unsigned int len){
+                           std::vector<bool>& data_valid, unsigned int len, bool print, bool verif){
       assert(vec_out->num_outputs()==len && "insufficient output available\n");
       
       // we don't need discard now!
@@ -1291,7 +1310,7 @@ SbPDG_VecInput* get_vector_input(int i){
         data.push_back(e->get_buffer_val());
         data_valid.push_back(e->get_buffer_valid());
         //std::cout << e->get_buffer_valid();
-        e->pop_buffer_val();
+        e->pop_buffer_val(print, verif);
       }
 
       // Insufficient output size
@@ -1316,7 +1335,7 @@ SbPDG_VecInput* get_vector_input(int i){
         // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
         // set the values
         SbPDG_Edge* e = *it;
-        e->pop_buffer_val();
+        e->pop_buffer_val(print, verif);
         /*if(!e->is_buffer_empty()){
             SbPDG_Node* n = e->use();
             n->set_is_new_val(1);
@@ -1333,7 +1352,7 @@ SbPDG_VecInput* get_vector_input(int i){
         SbPDG_Node* sb_node = temp->n;
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
-        sb_node->set_node(temp->val, temp->valid, temp->avail);
+        sb_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
         /*
         if(!sb_node->get_avail()){
           num_computed += sb_node->update_next_nodes(print, verif);
