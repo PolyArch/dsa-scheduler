@@ -100,6 +100,7 @@ class Schedule {
     void assign_lat(SbPDG_Node* pdgnode, int lat) {
       _vertexProp[pdgnode->id()].lat=lat;
     }
+
     int latOf(SbPDG_Node* pdgnode) {
       return _vertexProp[pdgnode->id()].lat;
     }
@@ -122,6 +123,9 @@ class Schedule {
     }
 
     void assign_edge_pt(SbPDG_Edge* edge, sbnode* pt) {
+      if((int)_edgeProp.size() <= edge->id()) {
+        _edgeProp.resize(edge->id()+1);
+      }
       add_passthrough_node(pt);
       _edgeProp[edge->id()].passthroughs.insert(pt);
     }
@@ -147,14 +151,20 @@ class Schedule {
 
     //Assign the sbnode to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
+      assert(pdgnode->type()<SbPDG_Node::V_NUM_TYPES);
       _num_mapped[pdgnode->type()]++;
       //std::cout << "node " << pdgnode->name() << " assigned to " 
       //          << snode->name() << "\n";
       assert(pdgnode); 
+      assert(snode->id() < (int)_nodeProp.size());
       _nodeProp[snode->id()].vertices.insert(pdgnode);
-      _vertexProp[pdgnode->id()].node = snode;
-    }
 
+      int vid = pdgnode->id();
+      if(vid >= (int)_vertexProp.size()) {
+          _vertexProp.resize(vid+1);
+      }
+      _vertexProp[vid].node = snode;
+    }
 
     void calc_out_lat() {
       for(int i = 0; i < _sbPDG->num_vec_output(); ++i) {
@@ -327,6 +337,10 @@ class Schedule {
       auto& lp = _linkProp[slink->id()];
       if(lp.edges.size()==0) _links_mapped++;
       lp.edges.insert(pdgedge);
+
+      if((int)_edgeProp.size() <= pdgedge->id()) {
+        _edgeProp.resize(pdgedge->id()+1);
+      }
       _edgeProp[pdgedge->id()].links.insert(slink);
     }
  

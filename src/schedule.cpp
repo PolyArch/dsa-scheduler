@@ -290,7 +290,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j,++cur_slice) {
       sbfu* sbfu_node = &fus[i][j];
-        
+
       //opcode
       uint64_t op=_bitslices.read_slice(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1);
       if(op!=0) { //if O
@@ -1999,6 +1999,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
   vector<tuple<sbnode*, SbDIR::DIR,std::vector<sblink*>> > worklist;
 
   sblink* firstLink = sbspot->getFirstOutLink();
+
   //FIXME: assign_link(pdgnode,firstLink); //TODO: Check if broke anything
   std::vector<sblink*> lvec;
   lvec.push_back(firstLink);
@@ -2023,7 +2024,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
     auto& item = worklist.back();
     sbnode* curItem = std::get<0>(item);
     SbDIR::DIR inDir = std::get<1>(item);
-
+        auto links = std::get<2>(item);
     worklist.pop_back();
     
     map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
@@ -2037,7 +2038,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
         
         sblink* outLink = curItem->getOutLink(newOutDir);
         //FIXME: assign_link(pdgnode,outLink);
-        std::vector<sblink*> links = std::get<2>(item);
+
         links.push_back(outLink);
         
         if(outLink==NULL) {
