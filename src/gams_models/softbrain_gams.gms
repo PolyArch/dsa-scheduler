@@ -24,7 +24,7 @@ put "[edge-link-map]" /
 loop(e,
     put e.tl ":"
     loop((l)$(Mel.l(e,l)<>0),
-        put e.tl
+        put l.tl
     );
     put /
 );
