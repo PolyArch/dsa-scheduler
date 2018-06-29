@@ -81,7 +81,8 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     bool succeed_timing = false;
     int lat = MAX_ROUTE, latmis = MAX_ROUTE;
     if (succeed_sched) { 
-      succeed_timing = cur_sched->fixLatency(lat,latmis);
+      cur_sched->fixLatency(lat,latmis);
+      succeed_timing = latmis==0;
     } else {
       latmis = MAX_ROUTE;
     }

@@ -1040,8 +1040,9 @@ Schedule::Schedule(string filename) {
               
               if (SbDIR::isInputDir(outDir)) {
                   //int n = outDir == SbDIR::OP0 ? 0:1;
-                  d_output=dynamic_cast<sboutput*>(_sbModel->subModel()->switchAt(posX,posY)
-                    ->getOutLink(outDir)->dest());
+                  d_output=dynamic_cast<sboutput*>(
+                      _sbModel->subModel()->switchAt(posX,posY)
+                       ->getOutLink(outDir)->dest());
                     
                   pdg_out = new SbPDG_Output(_sbPDG);
                   pdgnode_for[d_output]=pdg_out;
@@ -1197,12 +1198,141 @@ Debugging code to print out maps
   return;
 }
 
+//<<table border="0" cellspacing="0">
+//       <tr><td port="port1" border="1" bgcolor="red">corpus_language</td></tr>
+//       <tr><td port="port2" border="1">id: en</td></tr>
+//       <tr><td port="port3" border="1">name: Englist</td></tr>
+//       <tr><td port="port4" border="1">sentence_count: 1027686</td></tr>
+//  </table>>
+
+
+void Schedule::printMvnGraphviz(std::ofstream& ofs, sbnode* node) {
+  auto& np = _nodeProp[node->id()];
+
+  if(np.vertices.size() == 0) {
+      ofs << "<tr><td border=\"1\"> " << node->name() << " </td></tr>";
+  } else {
+    for(SbPDG_Node* v : np.vertices) {
+      ofs << "<tr><td port=\"" << v->name() 
+          << "\" border=\"1\" bgcolor=\"#" 
+          << std::hex << colorOf(v) << std::dec << "\">" 
+          << v->name() << "</td></tr>";
+    }
+  }
+
+}
+
+void Schedule::printMelGraphviz(std::ofstream& ofs, sbnode* node) {
+  for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
+    sblink* link = *I;
+    auto& lp = _linkProp[link->id()];
+    for(SbPDG_Node* node : lp.nodes ) {
+      SbPDG_Node* v = node;
+      ofs << link->orig()->name() << "->" << link->dest()->name()
+          << " [color=\"#" << std::hex << colorOf(v) << std::dec 
+          << "\"];";
+    }
+  } 
+ 
+}
+
+
+void Schedule::printFUGraphviz(std::ofstream& ofs, sbfu* fu) {
+  int sy = _sbModel->subModel()->sizey();
+
+  ofs << fu->name() << "[shape=plaintext, ";
+  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
+
+  printMvnGraphviz(ofs,fu);
+
+  ofs << "\n</table>>, pos = \"" << gvsf*fu->x() + gvsf/2.0 << "," 
+                                 << sy-gvsf*fu->y()-1 - gvsf/2.0<< "!\"";
+  ofs << "];\n";  
+}
+
+void Schedule::printSwitchGraphviz(std::ofstream& ofs, sbswitch* sw) {
+  int sy = _sbModel->subModel()->sizey();
+
+  ofs << sw->name() << " [shape=diamond, ";
+  ofs << "pos = \"" << gvsf*sw->x()  << "," << sy-gvsf*sw->y()-1 << "!\"";
+  ofs << "];\n";  
+}
+
+void Schedule::printInputGraphviz(std::ofstream& ofs, sbnode* node) {
+  ofs << node->name() << "[shape=plaintext, ";
+  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
+
+  printMvnGraphviz(ofs,node);
+
+  ofs << "\n</table>>";
+  ofs << "];\n"; 
+}
+void Schedule::printOutputGraphviz(std::ofstream& ofs, sbnode* node) {
+  ofs << node->name() << "[shape=plaintext, ";
+  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
+
+  printMvnGraphviz(ofs,node);
+
+  ofs << "\n</table>>";
+  ofs << "];\n";  
+}
+
+
+
+void Schedule::printGraphviz(const char* name) {
+  ofstream ofs(name);
+  assert(ofs.good());
+  
+  SB_CONFIG::SubModel* sub = _sbModel->subModel();
+
+  ofs << "digraph sched {\n";
+
+  for(sbswitch* sw : sub->switch_list()) printSwitchGraphviz(ofs,sw);
+  for(sbfu* fu : sub->fu_list())         printFUGraphviz(ofs,fu);
+  for(sbinput& in : sub->inputs()) {
+    NodeProp& np = _nodeProp[in.id()];
+    if(np.vertices.size() != 0) {
+      printInputGraphviz(ofs,&in);
+    }
+  }
+  for(sboutput& out : sub->outputs()) {
+    NodeProp& np = _nodeProp[out.id()];
+    if(np.vertices.size() != 0) {
+      printOutputGraphviz(ofs,&out);
+    }
+  }
+ 
+  for(sbnode* node : sub->node_list())    printMelGraphviz(ofs,node); 
+
+  ofs << "}\n\n";
+}
+
+//for(auto& p : _vecProp) {
+//  SbPDG_Vec* vec = p.first;
+//  ofs << "subgraph cluster" << vec->name() << " {\n";
+//  if(SbPDG_VecInput* invec = dynamic_cast<SbPDG_VecInput*>(vec)) {
+//    for(auto I = invec->input_begin(), E = invec->input_end(); I!=E; ++I) {
+//      SbPDG_Input* in = *I;
+//      auto& vp = _vertexProp[in->id()];
+//      printInputGraphviz(ofs,vp.node);
+//    }
+//  }
+//  if(SbPDG_VecOutput* outvec = dynamic_cast<SbPDG_VecOutput*>(vec)) {
+//    for(auto I = outvec->output_begin(), E = outvec->output_end(); I!=E; ++I) {
+//      SbPDG_Output* out = *I;
+//      auto& vp = _vertexProp[out->id()];
+//      printOutputGraphviz(ofs,vp.node);
+//    }
+//  }
+
+
+
 //reconstruct the schedule
 void Schedule::reconstructSchedule(
-                                    map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
-                                    map<sbnode*, SbPDG_Node* >& pdgnode_for, 
-                                    map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap
-                                    ) {
+                  map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
+                  map<sbnode*, SbPDG_Node* >& pdgnode_for, 
+                  map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap
+                  ) {
   //iterate over inputs (sbinputs)
   SubModel::const_input_iterator Iin,Ein;
   for(Iin=_sbModel->subModel()->input_begin(), 
@@ -1483,19 +1613,23 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
-  bool succ = true;
   for(auto& i : _edgeProp) {
     i.extra_lat=0;
   }
 
+
+  bool succ = true;
+
   succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
-  if (succ) succ = fixLatency_bwd(max_lat, max_lat_mis); //bwd pass
-  calcLatency(max_lat, max_lat_mis); //fwd pass
-  checkOutputMatch(max_lat_mis);
+  if (succ) succ = fixLatency_bwd(); //bwd pass
 
   int max_lat2=0,max_lat_mis2=0;
   cheapCalcLatency(max_lat2, max_lat_mis2);
 
+  calcLatency(max_lat, max_lat_mis); //fwd pass
+  checkOutputMatch(max_lat_mis);
+
+  printGraphviz("viz/sched.gv");
 
   if(max_lat2 != max_lat || max_lat_mis2 != max_lat_mis) {
      cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
@@ -1507,9 +1641,38 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   }  
 
   return succ;
+
+
+
+  /*
+  //succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
+  // int max_lat2=0,max_lat_mis2=0;
+  cheapCalcLatency(max_lat, max_lat_mis, true);
+  fixLatency_bwd(); //bwd pass
+
+  max_lat=0;
+  max_lat_mis=0;
+  cheapCalcLatency(max_lat, max_lat_mis, false);
+*/
+
+  //calcLatency(max_lat, max_lat_mis); //fwd pass
+  //checkOutputMatch(max_lat_mis);
+
+  //printGraphviz("viz/sched.gv");
+
+  //if(max_lat2 != max_lat || max_lat_mis2 != max_lat_mis) {
+  //   cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
+  //   cout << "max_lat_mis:" << max_lat_mis << " " << max_lat_mis2 << "\n";
+
+  //  _sbPDG->printGraphviz("viz/remap-fail.dot");
+  //  assert(max_lat2 == max_lat);
+  //  assert(max_lat_mis2 == max_lat_mis);
+  //}  
+
+  return max_lat_mis==0;
 }
 
-bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
+bool Schedule::fixLatency_bwd() {
   int n = _sbPDG->num_vec_output();
   for (int i=0; i<n; i++) { //iterate over output vectors
     SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
@@ -1531,7 +1694,7 @@ bool Schedule::fixLatency_bwd(int &max_lat, int &max_lat_mis) {
         bool succ = fixDelay(pdgout, ed, visited);
         if (!succ) return false;
       }
-    }    
+    }
   }
   return true;
 }
@@ -1693,7 +1856,8 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   return true;
 }
 
-void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis) {
+void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis, 
+    bool set_delay) {
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
   if(isScheduled(inst)) {
@@ -1717,7 +1881,7 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis)
     }
   }
 
-  assign_lat_bounds(inst,low_lat,up_lat);
+  //assign_lat_bounds(inst,low_lat,up_lat);
 
   int diff = up_lat - low_lat - _sbModel->maxEdgeDelay();
   if(diff>max_lat_mis) max_lat_mis=diff;
@@ -1730,29 +1894,30 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis)
     add_violation(diff);
     record_violation(inst,diff);
   }
-  //cout << "C-inst " << inst->name() << " " << lat_node[inst]  
-  //  << " inst: " << inst << " " << inst->name() 
-  //     << " up:" << up_lat << " low:" << low_lat << "\n";
-  //if(lat_node[inst] > 10) {
 
-  //  for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
-  //    SbPDG_Edge* edge=*i;
-  //    cout << edge->name() << ": ";
-  //    if(edge == NULL) continue;
-  //    for(auto& i : _edgeProp[edge].links) {
-  //      cout << i->name() << " "; 
-  //    }
-  //    cout << "\n";
-  //  }
-  //}
+  if(set_delay && isScheduled(inst)) {
+    for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+      SbPDG_Edge* edge=*i;
+      if(edge == NULL) continue;
+      
+      SbPDG_Node* origNode = edge->def();
+      if(isScheduled(origNode)) {
+        if (origNode != NULL) {
+          int lat = latOf(origNode) + link_count(edge)-1; 
+          int diff = std::min(_sbModel->maxEdgeDelay(), new_lat - lat);
+          set_edge_delay(diff,edge);
+        }
+      }
+    }
+  }
 }
 
-void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
+void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) {
   _totalViolation=0;
 
   std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
   for(SbPDG_Inst* inst : ordered_insts) {
-    calcNodeLatency(inst,max_lat,max_lat_mis);
+    calcNodeLatency(inst,max_lat,max_lat_mis,set_delay);
   }
 
   for (int i=0; i<_sbPDG->num_vec_output(); i++) {
@@ -1771,7 +1936,9 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
           //     << " def_lat:" << lat_node[edge->def()] <<" ed:"<< edge_delay(edge) 
           //     << " link_count:" << link_count(edge) << "inst: " 
           //     << edge->def() << " " << edge->def()->name() << "\n";
-         
+        
+          //assign_lat(pdgout,lat);
+
           if(lat>up_lat) up_lat=lat;
           if(lat<low_lat) low_lat=lat;
         }
@@ -1788,6 +1955,21 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis) {
     if(diff > 0) {
       add_violation(diff);
     } 
+
+    if(set_delay && vecMapped(vec_out)) { 
+      for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
+        SbPDG_Output* pdgout = vec_out->getOutput(m);
+        SbPDG_Edge* edge = pdgout->first_inc_edge();
+  
+        if(isScheduled(pdgout)) { 
+          int lat = latOf(edge->def()) + link_count(edge)-1; 
+          int diff = std::min(_sbModel->maxEdgeDelay(), up_lat - lat);
+          set_edge_delay(diff,edge);
+        }
+      }
+    }
+
+
     //cout << "C " <<vec_out->name()<< " up:" << up_lat << " low:" << low_lat << "\n";
   }
 }
@@ -1918,6 +2100,16 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
         } else { //regular inst
           int l = max_latency + inst_lat(next_pdginst->inst());
           lat_edge[new_link] = l;
+
+        //if(next_pdginst) {
+        //  cout << "L " << next_pdginst->name() << " lat:" << l
+        //       << " low:" << low_latency << " up:" << max_latency << " - "
+        //       << " lat:" << latOf(next_pdgnode)
+        //       << " low:" << lat_bounds(next_pdgnode).first << " up:"
+        //       << lat_bounds(next_pdgnode).second << "\n";
+        //}
+
+
           assign_lat(next_pdgnode,l);
         }
 

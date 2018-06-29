@@ -10,6 +10,7 @@
 #include <fstream>
 #include "bitslice.h"
 #include "config_defs.h"
+#include "color_mapper.h"
 
 using namespace SB_CONFIG;
 
@@ -43,6 +44,18 @@ class Schedule {
     Schedule(SbModel* model) : _sbModel(model), _sbPDG(NULL) {
       allocate_space(); 
     }
+
+    constexpr static const float gvsf=4.0f;
+    void printGraphviz(const char* name);
+    void printFUGraphviz(std::ofstream& ofs, sbfu* fu);
+    void printInputGraphviz(std::ofstream& ofs, sbnode* fu);
+    void printMvnGraphviz(std::ofstream& ofs, sbnode* node);
+    void printMelGraphviz(std::ofstream& ofs, sbnode* node);
+
+    void printOutputGraphviz(std::ofstream& ofs, sbnode* node);
+    void printSwitchGraphviz(std::ofstream& ofs, sbswitch* sw);
+
+
 
     //Scheduling Interface:
     bool spilled(SbPDG_Node*);
@@ -260,6 +273,7 @@ class Schedule {
         auto& lp = _linkProp[link->id()];
         lp.edges.erase(edge);
         if(lp.edges.size()==0) {
+          lp.nodes.erase(edge->def());
           _links_mapped--;
           assert(_links_mapped >=0);
         }
@@ -337,6 +351,8 @@ class Schedule {
       auto& lp = _linkProp[slink->id()];
       if(lp.edges.size()==0) _links_mapped++;
       lp.edges.insert(pdgedge);
+      lp.nodes.insert(pdgedge->def());
+
 
       if((int)_edgeProp.size() <= pdgedge->id()) {
         _edgeProp.resize(pdgedge->id()+1);
@@ -373,10 +389,10 @@ class Schedule {
     //2: already there
     int temporal_cost(sblink* link, SbPDG_Node* node) {
       assert(link);
-      auto& vec = _linkProp[link->id()].edges;
+      auto& vec = _linkProp[link->id()].nodes;
       if(vec.size()==0) return 1;
-      for(SbPDG_Edge* edge : vec) {
-        SbPDG_Node* cur_node =edge->def();
+      for(SbPDG_Node* node : vec) {
+        SbPDG_Node* cur_node =node;
         if(cur_node == node) return 0;
       }
       return 2;
@@ -385,8 +401,8 @@ class Schedule {
     //find first node for
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);
-      auto& vec = _linkProp[link->id()].edges;
-      return vec.size()==0 ? NULL : (*vec.begin())->def();
+      auto& vec = _linkProp[link->id()].nodes;
+      return vec.size()==0 ? NULL : (*vec.begin());
     }
 
     bool nodeAssigned(sbnode* node) {
@@ -423,13 +439,13 @@ class Schedule {
     SbModel* sbModel() {return _sbModel;}
     
     void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
-    void  cheapCalcLatency(int& lat, int& latmis);
-    void  calcNodeLatency(SbPDG_Inst*, int& lat, int& latmis);
+    void  cheapCalcLatency(int& lat, int& latmis, bool set_delay=false);
+    void  calcNodeLatency(SbPDG_Inst*, int& lat, int& latmis, bool set_delay=false);
 
 
     bool  fixLatency(int& lat, int& latmis);
     bool  fixLatency_fwd(int& lat, int& latmis);
-    bool  fixLatency_bwd(int& lat, int& latmis);
+    bool  fixLatency_bwd();
     bool  fixDelay(SbPDG_Output* pdgout, int ed, std::unordered_set<SbPDG_Node*>& visited);
     void  checkOutputMatch(int& latmis);
     
@@ -595,6 +611,7 @@ class Schedule {
     struct LinkProp {
       int lat=0, order=-1;
       std::unordered_set<SbPDG_Edge*> edges;
+      std::unordered_set<SbPDG_Node*> nodes;
     };
 
     struct VecProp{ 
@@ -633,7 +650,12 @@ class Schedule {
       }
     }
 
-  private:
+    int colorOf(SbPDG_Node* n) {return _cm.colorOf(n);}
+
+  private:    
+
+    ColorMapper _cm;
+
     int _num_mapped[SbPDG_Node::V_NUM_TYPES] = {0}; //init all to zero
     int _links_mapped = 0, _edge_links_mapped = 0;
 

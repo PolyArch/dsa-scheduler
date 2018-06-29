@@ -650,12 +650,12 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched,
       pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,
                                             *curRouting, bestScore);
 
-      if(curScore<fscore) {
-        applyRouting(sched,pdgnode,cand_spot,curRouting);
-        int lat=MAX_ROUTE,latmis=MAX_ROUTE; 
-        curScore = obj(sched,lat,latmis);
-        sched->unassign_pdgnode(pdgnode); //rip it up!
-      }
+      //if(curScore<fscore) {
+      //  applyRouting(sched,pdgnode,cand_spot,curRouting);
+      //  int lat=MAX_ROUTE,latmis=MAX_ROUTE; 
+      //  curScore = obj(sched,lat,latmis);
+      //  sched->unassign_pdgnode(pdgnode); //rip it up!
+      //}
 
       if(curScore < bestScore) {
         bestScore=curScore;
