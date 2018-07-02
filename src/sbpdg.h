@@ -247,6 +247,10 @@ class SbPDG_Node {
        return _max_thr; 
     }
 
+    virtual int lat_of_inst() {
+      return 0;
+    }
+
     virtual void depInsts(std::vector<SbPDG_Inst*>& insts) {
       for (auto it=_uses.begin(); it!=_uses.end(); it++) {
         SbPDG_Node* use = (*it)->use();
@@ -574,6 +578,10 @@ class SbPDG_Inst : public SbPDG_Node {
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
+
+    virtual int lat_of_inst() {
+      return inst_lat(inst());
+    }
 
     void setImm( uint64_t val ) { _imm=val; }
     int  getImmInt() { return _imm; }

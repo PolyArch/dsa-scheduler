@@ -108,7 +108,12 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
-  SbModel sbmodel(argv[0]);
+  std::string model_filename = argv[0];
+  int lastindex = model_filename.find_last_of(".");
+  string model_rawname = model_filename.substr(0,lastindex);
+  string model_base = basename(model_rawname);
+
+  SbModel sbmodel(model_filename.c_str());
   sbmodel.setMaxEdgeDelay(max_edge_delay);
   sbmodel.maxEdgeDelay();
 
@@ -116,9 +121,10 @@ int main(int argc, char* argv[])
   //                               << sbmodel.subModel()->sizey() <<"\n";
 
   std::string pdg_filename=argv[1];
-  int lastindex = pdg_filename.find_last_of("."); 
+  lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
 
+  
 
   string dfg_base = basename(pdg_filename); // the name without preceeding dirs or file extension
   string pdg_dir = basedir(pdg_filename);   // preceeding directories only
@@ -208,6 +214,10 @@ int main(int argc, char* argv[])
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigBits(osh, dfg_base);
+
+  std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
+  sched->printGraphviz(sched_viz.c_str());
+ 
   std::string verif_header = verif_dir + dfg_base + ".configbits";
   std::ofstream vsh(verif_header);
   assert(vsh.good()); 

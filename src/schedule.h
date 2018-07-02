@@ -11,6 +11,7 @@
 #include "bitslice.h"
 #include "config_defs.h"
 #include "color_mapper.h"
+#include "limits.h"
 
 using namespace SB_CONFIG;
 
@@ -273,10 +274,18 @@ class Schedule {
         auto& lp = _linkProp[link->id()];
         lp.edges.erase(edge);
         if(lp.edges.size()==0) {
-          lp.nodes.erase(edge->def());
           _links_mapped--;
           assert(_links_mapped >=0);
         }
+        bool found_removed_pdgnode=false;
+        for(auto& other_edge : lp.edges) {
+          if(other_edge->def()==edge->def()) {
+            found_removed_pdgnode=true;
+          }
+        }
+        if(!found_removed_pdgnode) {
+          lp.nodes.erase(edge->def());
+        } 
       }
 
       //Remove all passthroughs associated with this edge
@@ -437,7 +446,9 @@ class Schedule {
     
     
     SbModel* sbModel() {return _sbModel;}
-    
+
+    void  iterativeFixLatency();
+
     void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
     void  cheapCalcLatency(int& lat, int& latmis, bool set_delay=false);
     void  calcNodeLatency(SbPDG_Inst*, int& lat, int& latmis, bool set_delay=false);
@@ -558,6 +569,31 @@ class Schedule {
   int max_lat() {assert(_max_lat!=-1);  return _max_lat;}
   int max_lat_mis() {return _max_lat_mis;}
 
+  void reset_lat_bounds() {
+    for(auto I = _sbPDG->input_begin(), E = _sbPDG->input_end(); I!=E;++I) {
+      auto& vp = _vertexProp[(*I)->id()];
+      vp.min_lat=0;
+      vp.max_lat=0;
+    }
+    for(auto I = _sbPDG->inst_begin(), E = _sbPDG->inst_end(); I!=E;++I) {
+      auto& vp = _vertexProp[(*I)->id()];
+      vp.min_lat=0;
+      vp.max_lat=INT_MAX-1000;
+    }
+    for (int i=0; i<_sbPDG->num_vec_output(); i++) {
+      SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+      auto& vecp = _vecProp[vec_out];
+      vecp.min_lat=0;
+      vecp.max_lat=INT_MAX-1000;
+      for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
+        SbPDG_Output* pdgout = vec_out->getOutput(m);
+        auto& vp = _vertexProp[pdgout->id()];
+        vp.min_lat=0;
+        vp.max_lat=INT_MAX-1000;
+      }
+    }
+  }
+
   private:
 
 
@@ -615,7 +651,7 @@ class Schedule {
     };
 
     struct VecProp{ 
-      int min_lat=0, max_lat=0,lat=0;
+      int min_lat=0, max_lat=INT_MAX,lat=0;
       std::pair<bool,int> vport = {false,-1};
       std::vector<bool> mask;
     };
