@@ -111,7 +111,8 @@ int main(int argc, char* argv[])
   std::string model_filename = argv[0];
   int lastindex = model_filename.find_last_of(".");
   string model_rawname = model_filename.substr(0,lastindex);
-  string model_base = basename(model_rawname);
+  string model_base =
+    model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
 
   SbModel sbmodel(model_filename.c_str());
   sbmodel.setMaxEdgeDelay(max_edge_delay);
