@@ -8,6 +8,8 @@
 #include "sbpdg.h"
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+
 #include "bitslice.h"
 #include "config_defs.h"
 #include "color_mapper.h"
@@ -400,9 +402,8 @@ class Schedule {
       assert(link);
       auto& vec = _linkProp[link->id()].nodes;
       if(vec.size()==0) return 1;
-      for(SbPDG_Node* node : vec) {
-        SbPDG_Node* cur_node =node;
-        if(cur_node == node) return 0;
+      for(SbPDG_Node* old_node : vec) {
+        if(old_node == node) return 0;
       }
       return 2;
     }
@@ -687,6 +688,8 @@ class Schedule {
     }
 
     int colorOf(SbPDG_Node* n) {return _cm.colorOf(n);}
+
+    int get_overprov();
 
   private:    
 

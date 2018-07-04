@@ -641,7 +641,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
                   break;
                 }
               }
-              assert(assigned);
+              if(!assigned) {
+                cout << "Could not find mapped input link for mapped edge: " 
+                     << inc_edge->name() << " at loc: " << sbfu_node->name() 
+                     << "\n";
+                printGraphviz("viz/sched-fail-connection.gv");
+                assert(assigned);
+              }
+              //assert(assigned);
 
               //delay for each input
               int d1=IN_DELAY_LOC+BITS_PER_DELAY*n;
@@ -1649,29 +1656,35 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
     i.extra_lat=0;
   }
 
-  //bool succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
-  // int max_lat2=0,max_lat_mis2=0;
-  cheapCalcLatency(max_lat, max_lat_mis, true);
-  fixLatency_bwd(); //bwd pass
-  //iterativeFixLatency();
+  if(num_left()) { //schedule is incomplete!
+    cheapCalcLatency(max_lat, max_lat_mis, true);
+    max_lat_mis=1000; //no point in optimizing for this yet
+    return false;
+  } else {
+    //bool succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
+    //int max_lat2=0,max_lat_mis2=0;
+    //cheapCalcLatency(max_lat, max_lat_mis, true);
+    //fixLatency_bwd(); //bwd pass
+    iterativeFixLatency();
 
-  max_lat=0;
-  max_lat_mis=0;
-  cheapCalcLatency(max_lat, max_lat_mis, false);
+    max_lat=0;
+    max_lat_mis=0;
+    cheapCalcLatency(max_lat, max_lat_mis, false);
 
-  //calcLatency(max_lat, max_lat_mis);
-  //checkOutputMatch(max_lat_mis);
+    //calcLatency(max_lat, max_lat_mis);
+    //checkOutputMatch(max_lat_mis);
 
-  //cout << "max_lat: " << max_lat << " mis:" << max_lat_mis << "\n";
-  //_sbPDG->printGraphviz("viz/remap-fail.dot");
-  //printGraphviz("viz/sched.gv");
-  //cout << "-------------------------------------------------------------------\n";
-  //cout << "-------------------------------------------------------------------\n"; 
-  //exit(1);
+    //cout << "max_lat: " << max_lat << " mis:" << max_lat_mis << "\n";
+    //_sbPDG->printGraphviz("viz/remap-fail.dot");
+    //printGraphviz("viz/sched.gv");
+    //cout << "-------------------------------------------------------------------\n";
+    //cout << "-------------------------------------------------------------------\n"; 
+    //exit(1);
 
-  //printGraphviz("viz/sched.gv");
+    //printGraphviz("viz/sched.gv");
 
-  return max_lat_mis==0;
+    return max_lat_mis==0;
+  }
 }
 
 bool Schedule::fixLatency_bwd() {
@@ -2511,4 +2524,23 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
     }
   }
 }
+
+int Schedule::get_overprov() {
+  int ovr = 0;
+  for(int i = 0; i < (int)_vertexProp.size(); ++i) {
+    sbnode* n = _vertexProp[i].node;
+    if(n) {
+      auto& np = _nodeProp[n->id()];
+      //fixme: make 1 a param
+      ovr = std::max((int)np.vertices.size() - 1,ovr); 
+    }
+  }
+  for(int i = 0; i < (int)_linkProp.size(); ++i) {
+    auto& lp = _linkProp[i];
+    //fixme: make 1 a param
+    ovr = std::max((int)lp.nodes.size()-1,ovr);
+  }
+  return ovr;
+}
+
 

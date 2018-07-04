@@ -22,7 +22,7 @@ public:
 protected:
   bool schedule_internal(SbPDG* sbPDG, Schedule*& sched);
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
-      int& lat_mis); 
+      int& lat_mis, int& ovr); 
 
 
   bool schedule_input( SbPDG_VecInput*  vec, SbPDG* sbPDG, Schedule* sched);
@@ -34,7 +34,7 @@ protected:
   void findFirstIndex(std::vector<std::pair<int,int>>& sd, sbio_interface& si, 
     unsigned int numIO, unsigned int& index, bool is_input);
 
- void genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool s);
+ bool genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool s);
 
   bool timingIsStillGood(Schedule* sched); 
 

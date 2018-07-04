@@ -91,8 +91,7 @@ bool SchedulerGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
   for(unsigned i=0; i < spots.size(); i++) {
     sbnode* cand_spot = spots[i];
     
-    curRouting->routing.clear();
-    curRouting->forwarding.clear();
+    curRouting->clear();
     
     pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot, *curRouting,bestScore);
                 

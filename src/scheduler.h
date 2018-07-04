@@ -46,9 +46,21 @@ class CandidateRouting {
     std::unordered_set<sblink*> links;
   };
 
-  std::unordered_map< SB_CONFIG::sblink*, std::unordered_set<SbPDG_Edge*> > routing;
-  std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
 
+  void take_union(CandidateRouting& r) {
+    for(auto& link_iter : r.routing) {
+      for(SbPDG_Edge* edge : link_iter.second) {
+        routing[link_iter.first].insert(edge);
+      } 
+    }
+    for(auto& edge_iter : r.edge_prop) {
+      SbPDG_Edge* edge = edge_iter.first;
+      assert(edge_prop.count(edge)==0);
+      edge_prop[edge]=edge_iter.second;
+    }
+  }
+
+  std::unordered_map< SB_CONFIG::sblink*, std::unordered_set<SbPDG_Edge*> > routing;
   std::unordered_map< SbPDG_Edge*, EdgeProp> edge_prop;
 
   void fill_lat(Schedule* sched,
@@ -91,7 +103,6 @@ class CandidateRouting {
 
   void clear() {
     routing.clear();
-    forwarding.clear();
     edge_prop.clear();
   }
 };
@@ -207,6 +218,13 @@ protected:
 
   const std::pair<int,int> fscore;
 
+  void random_order(int n, std::vector<int>& order);
+
+  std::vector<bool> rand_node_choose_k(int k, 
+                          std::vector<sbnode*>& input_nodes, 
+                          std::vector<sbnode*>& output_nodes);
+
+  void rand_n_choose_k(int n, int m, std::vector<int>& indices);
   int rand_bt(int s, int e) {
     return rand()%(e-s)+s;
   }

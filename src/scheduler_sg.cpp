@@ -280,8 +280,7 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
       sbnode* cand_spot = spots[r2];
 
       bestspot = cand_spot;;
-      bestRouting->routing.clear();
-      bestRouting->forwarding.clear();
+      bestRouting->clear();
 
       bestScore = scheduleHere(sched, pdgnode, cand_spot,*bestRouting,bestScore);
 

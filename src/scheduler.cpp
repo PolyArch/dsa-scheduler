@@ -29,6 +29,62 @@ void System(const char* command) {
   }
 }
 
+//floyd's unique-number sampling algorithm (ordered)
+//CACM Programming Pearls, 1987
+void HeuristicScheduler::rand_n_choose_k(int n, int k, std::vector<int>& indices) {
+  std::vector<bool> mask; 
+  mask.resize(n);
+  indices.clear();
+  
+  for(int j = n-k; j <n; ++j) {
+    int t = rand_bt(0,j+1);
+    if(mask[t]==false) {
+      mask[t]=true;
+    } else {
+      mask[j]=true;
+    }
+  }
+  for(int i = 0; i < n; ++i) {
+    if(mask[i]) {
+      indices.push_back(i);
+    }
+  }
+}
+
+void HeuristicScheduler::random_order(int n, std::vector<int>& order) {
+  order.clear();
+  for (int i=0; i<n; ++i) order.push_back(i); 
+  std::random_shuffle ( order.begin(), order.end() ); 
+}
+
+
+//could make this a template really!
+vector<bool> HeuristicScheduler::rand_node_choose_k(int k, 
+    std::vector<sbnode*>& poss_nodes, std::vector<sbnode*>& chosen_nodes) {
+  std::vector<bool> mask; 
+  int n = poss_nodes.size();
+  mask.resize(n);
+  chosen_nodes.clear();
+  
+  for(int j = n-k; j <n; ++j) {
+    int t = rand_bt(0,j+1);
+    if(mask[t]==false) {
+      mask[t]=true;
+    } else {
+      mask[j]=true;
+    }
+  }
+
+  for(int i = 0; i < n; ++i) {
+    if(mask[i]) {
+      chosen_nodes.push_back(poss_nodes[i]);
+    }
+  }
+  return mask;
+}
+
+
+
 
 bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
