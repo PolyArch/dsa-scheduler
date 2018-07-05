@@ -1658,6 +1658,7 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
 
   if(num_left()) { //schedule is incomplete!
     cheapCalcLatency(max_lat, max_lat_mis, true);
+    max_lat=1000;
     max_lat_mis=1000; //no point in optimizing for this yet
     return false;
   } else {

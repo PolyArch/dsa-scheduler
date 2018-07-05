@@ -42,7 +42,8 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(
     if (succeed_sched) { 
       succeed_timing = sched->fixLatency(lat,latmis);
     } else {
-      latmis = MAX_ROUTE;
+      latmis = 1000;
+      lat = 1000;
     }
 
     int violation = sched->violation();
@@ -191,6 +192,109 @@ bool SchedulerSimulatedAnnealing::genRandomIndexBW(pair<bool, int>& vport_id, ve
   return success;
 }
 
+#ifdef old_schedule
+bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, 
+    SbPDG* sbPDG, Schedule* sched) {
+
+  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
+  sbio_interface& si =  subModel->io_interf();
+  bool found_vector_port = false;
+  CandidateRouting candRouting;  
+
+
+  unsigned int index = 0;
+  findFirstIndex(_sd_in, si, vec_in->num_inputs(), index, true /*input*/);
+  unsigned int attempt = 0;
+
+  do { 
+    pair<bool, int> vport_id;
+    vector<pair<int, vector<int>>> vport_desc;
+    genRandomIndexBW(vport_id, vport_desc, _sd_in, si, 
+                     _sd_in.size(), index, sched, true /*input*/);
+
+    //Check if the vetcor port is 2. unassigned
+    if (sched->vportOf(vport_id) != NULL) {
+      return false;
+    }
+
+    std::vector<bool> mask; 
+    mask.resize(vport_desc.size());
+    candRouting.clear();
+
+    bool ports_okay_to_use=true;
+
+    unsigned index = 0;
+    std::unordered_map<int,int> num2pos;
+    std::unordered_map<int,int> hw2pdg;
+
+    for (unsigned m=0; m < vport_desc.size(); m++) {
+      int cgra_port_num = vport_desc[m].first;
+      sbinput* cgra_in_port = subModel->get_input(cgra_port_num);
+      if (sched->pdgNodeOf(cgra_in_port) == NULL) {
+        num2pos[index++] = m;
+      }
+    }
+    unsigned fromSize = vec_in->num_inputs();
+    unsigned toSize = index;
+    unsigned start = 0, end = 0;
+
+    if (toSize < fromSize) { 
+      ports_okay_to_use=false;
+      continue;
+    }
+
+    for (unsigned m=0; m < fromSize ; ++m) {
+      end = toSize - (fromSize-1-m);
+      int pn;
+      do {
+        pn = rand() % (end-start) + start;
+      } while (hw2pdg.count(pn) != 0);
+
+      int hwPort = num2pos[pn];
+      start = end;
+      //Get the sbnode corresponding to mask[m]
+      int cgra_port_num = vport_desc[hwPort].first;
+      sbinput* cgra_in_port = subModel->get_input(cgra_port_num);
+      //Get the input pdgnode corresponding to m
+      assert(sched->pdgNodeOf(cgra_in_port) == NULL); 
+      SbPDG_Node* sbpdg_input = vec_in->getInput(m);
+      assert(!sched->isScheduled(sbpdg_input));
+      std::pair<int,int> curScore = scheduleHere(sched, 
+          sbpdg_input, cgra_in_port, candRouting, fscore); 
+      if(curScore>=fscore) { //?????
+        ports_okay_to_use=false;
+        break;
+      }
+
+      hw2pdg[pn]=m;
+    }
+
+    if (!ports_okay_to_use) {
+      continue;
+    }
+
+    for (auto i: hw2pdg) {
+      int hwPort = num2pos[i.first];
+      int pdgPort = i.second;
+      mask[hwPort]=true;
+      //Get the sbnode corresponding to mask[m]
+      int cgra_port_num = vport_desc[hwPort].first;
+      sbinput* cgra_in_port = subModel->get_input(cgra_port_num);
+
+      //Get the input pdgnode corresponding to m
+      SbPDG_Node* sbpdg_input = vec_in->getInput(pdgPort);
+      sched->assign_node(sbpdg_input,cgra_in_port);
+    }
+    //Perform the vector assignment
+    sched->assign_vport(vec_in,vport_id,mask);
+    found_vector_port=true;
+    applyRouting(sched, &candRouting); //Commit the routing
+
+  } while ((attempt++ < _sd_in.size() - index -1) && !found_vector_port);
+
+  return found_vector_port;
+}
+#else
 bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, 
     SbPDG* sbPDG, Schedule* sched) {
 
@@ -207,13 +311,13 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
 
   CandidateRouting* bestRouting = new CandidateRouting();
   vector<bool> bestMask;
-  pair<int,int> bestScore = fscore;
+  pair<int,int> bestScore = std::make_pair(INT_MIN,INT_MIN);
   pair<bool, int> bestVportid;
   std::vector<sbnode*> bestInputs;
 
   CandidateRouting* candRouting = new CandidateRouting();  
 
-  while (num_found < 5 &&  (attempt++ < _sd_in.size())) {
+  while (num_found < 10 &&  (attempt++ < _sd_in.size())) {
     pair<bool, int> vport_id;
     vector<pair<int, vector<int>>> vport_desc;
     if(!genRandomIndexBW(vport_id, vport_desc, _sd_in, si, 
@@ -239,30 +343,38 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
+    int num_links_used=0;
     for(int i : order) {
       sbnode* node = candInputs[i];
       SbPDG_Node* vertex = vec_in->getInput(i);
 
       pair<int,int> n_score = scheduleHere(sched, vertex, node, 
                                            *candRouting, fscore);
-      sched->assign_node(vertex,node);
-
+  
       if(n_score>=fscore) {
         ports_okay_to_use=false;
         break;
       }
+
+      num_links_used+=n_score.second;
     }
 
     if (!ports_okay_to_use) continue;
     num_found++;
 
     applyRouting(sched,candRouting);
-    
+    for(int i = 0; i < n_vertex; ++i) 
+       sched->assign_node(vec_in->getInput(i),candInputs[i]);    
+
     int lat=INT_MAX,latmis=INT_MAX,ovr=INT_MAX;
     pair<int,int> candScore = obj(sched,lat,latmis,ovr);
+    candScore.second-=num_links_used;
     sched->unassign_input_vec(vec_in);
 
-    if(candScore < bestScore) {
+    if(candScore > bestScore) {
+      //cout << candScore.first << " " << candScore.second <<"\n";
+      //cout << "lat: " << lat << " latmis: " << latmis 
+      //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
       bestScore=candScore;
       bestMask=candMask;
       bestInputs=candInputs;
@@ -270,18 +382,19 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
       std::swap(bestRouting,candRouting);
     }
   }
+  //cout << " -- \n";
 
   if(num_found > 0) {
-    for(int i = 0; i < (int)bestInputs.size(); ++i) {
+    for(int i = 0; i < n_vertex; ++i) 
        sched->assign_node(vec_in->getInput(i),bestInputs[i]);    
-    }
-    sched->assign_vport(vec_in,bestVportid,bestMask);
+    sched->assign_vport(vec_in, bestVportid, bestMask);
     applyRouting(sched, bestRouting); //Commit the routing
   }
   return num_found>0;
 }
+#endif
 
-
+#ifdef old_schedule
 bool SchedulerSimulatedAnnealing::schedule_output(SbPDG_VecOutput* vec_out, 
     SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
@@ -380,12 +493,105 @@ bool SchedulerSimulatedAnnealing::schedule_output(SbPDG_VecOutput* vec_out,
 
   return found_vector_port;
 }
+#else
+bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out, 
+    SbPDG* sbPDG, Schedule* sched) {
 
-bool SchedulerSimulatedAnnealing::timingIsStillGood(Schedule* sched) {
-  int max_lat=0, max_lat_mis=0;
-  sched->cheapCalcLatency(max_lat,max_lat_mis);
-  return max_lat_mis < _sbModel->maxEdgeDelay();
+  SB_CONFIG::SubModel* subModel = _sbModel->subModel();
+  sbio_interface& si =  subModel->io_interf();
+  int n_vertex = vec_out->num_outputs();
+
+  unsigned int index = 0;
+  int num_found=0;
+  findFirstIndex(_sd_out, si, n_vertex, index, false /*output*/);
+  unsigned int attempt = 0;
+
+  vector<int> order; //temp variable used for randomly iterating
+
+  CandidateRouting* bestRouting = new CandidateRouting();
+  vector<bool> bestMask;
+  pair<int,int> bestScore = std::make_pair(INT_MIN,INT_MIN);
+  pair<bool, int> bestVportid;
+  std::vector<sbnode*> bestOutputs;
+
+  CandidateRouting* candRouting = new CandidateRouting();  
+
+  while (num_found < 10 &&  (attempt++ < _sd_out.size())) {
+    pair<bool, int> vport_id;
+    vector<pair<int, vector<int>>> vport_desc;
+    if(!genRandomIndexBW(vport_id, vport_desc, _sd_out, si, 
+                     _sd_out.size(), index, sched, false /*output*/)) {
+      return false;
+    }
+
+    candRouting->clear();  
+    std::vector<sbnode*> possOutputs;
+
+    for (unsigned m=0; m < vport_desc.size(); m++) {
+      int cgra_port_num = vport_desc[m].first;
+      sboutput* out = subModel->get_output(cgra_port_num);
+      if (sched->pdgNodeOf(out) == NULL) {
+        possOutputs.push_back(out);
+      }
+    }
+
+    if((int)possOutputs.size() < n_vertex) continue;
+
+    vector<sbnode*> candOutputs;
+    vector<bool> candMask = rand_node_choose_k(n_vertex, possOutputs, candOutputs);
+
+    bool ports_okay_to_use=true;
+    random_order(n_vertex,order);
+    int num_links_used=0;
+    for(int i : order) {
+      sbnode* node = candOutputs[i];
+      SbPDG_Node* vertex = vec_out->getOutput(i);
+
+      pair<int,int> n_score = scheduleHere(sched, vertex, node, 
+                                           *candRouting, fscore);
+      if(n_score>=fscore) {
+        ports_okay_to_use=false;
+        break;
+      }
+
+      num_links_used+=n_score.second;
+    }
+
+    if (!ports_okay_to_use) continue;
+    num_found++;
+
+    applyRouting(sched,candRouting);
+    for(int i = 0; i < n_vertex; ++i) 
+       sched->assign_node(vec_out->getOutput(i),candOutputs[i]);    
+    
+    int lat=INT_MAX,latmis=INT_MAX,ovr=INT_MAX;
+    pair<int,int> candScore = obj(sched,lat,latmis,ovr);
+    candScore.second-=num_links_used;
+    sched->unassign_output_vec(vec_out);
+
+    if(candScore > bestScore) {
+      //cout << candScore.first << " " << candScore.second <<"\n";
+      //cout << "lat: " << lat << " latmis: " << latmis 
+      //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
+      bestScore=candScore;
+      bestMask=candMask;
+      bestOutputs=candOutputs;
+      bestVportid=vport_id;
+      std::swap(bestRouting,candRouting);
+    }
+  }
+  //cout << " -- \n";
+  if(num_found > 0) {
+    for(int i = 0; i < n_vertex; ++i) 
+       sched->assign_node(vec_out->getOutput(i),bestOutputs[i]);    
+
+    sched->assign_vport(vec_out,bestVportid,bestMask);
+    applyRouting(sched, bestRouting); //Commit the routing
+  }
+  return num_found>0;
 }
+
+#endif
 
 bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
   int n = sbPDG->num_vec_input();
@@ -396,7 +602,7 @@ bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
 
     SbPDG_VecInput* vec_in = sbPDG->vec_in(p);
     if(sched->vecMapped(vec_in)) continue;    
-    return schedule_input(vec_in,sbPDG,sched) && timingIsStillGood(sched);
+    return schedule_input(vec_in,sbPDG,sched);
   }
   return false;
 }
@@ -423,56 +629,39 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     if(++p ==n) {p=0;}
     SbPDG_Inst* inst = inst_vec[p];
     if(sched->isScheduled(inst)) continue;
-    return scheduleNode(sched,inst) && timingIsStillGood(sched);
+    return scheduleNode(sched,inst);
   }
   return false;
 }
 
 bool SchedulerSimulatedAnnealing::map_to_completion(SbPDG* sbPDG, Schedule* sched) {
-  bool input_good=true;
-  bool output_good=true;
-  bool inst_good=true;
 
   if(DEBUG_SCHED) cout << "Map to completion! " << sched->num_mapped() << "\n";
   while(!sched->isComplete()) {
     int r = rand_bt(0,5); //upper limit defines ratio of input/output scheduling
     switch(r) {
       case 0: {
-        if(!input_good) break;
+        if(sched->inputs_complete()) break;
         bool success = map_one_input(sbPDG,sched);
-        if(!success) {
-          return false;
-        } else {
-          input_good = !sched->inputs_complete();
-        }
+        if(!success) return false;
         break;
       }
-      break;
       case 1: {
-        if(!output_good) break;
+        if(sched->outputs_complete()) break;
         bool success = map_one_output(sbPDG,sched);
-        if(!success) {
-          return false;
-        } else {
-          output_good = !sched->outputs_complete();
-        }
+        if(!success) return false;
         break;
       }      
       default: {
-        if(!inst_good) break;
+        if(sched->insts_complete()) break;
         bool success = map_one_inst(sbPDG,sched);
-        if(!success) {
-          return false;
-        } else {
-          inst_good = !sched->insts_complete();
-        }
+        if(!success) return false;
         break;
       }      
     }
-    if(!input_good && !output_good && !inst_good) break;
   }
   
-  return sched->isComplete();
+  return true;
 }
 
 void SchedulerSimulatedAnnealing::unmap_one_input(SbPDG* sbPDG, Schedule* sched) {
@@ -593,13 +782,9 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SbPDG* sbPDG, Schedule*& sch
 
 bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, 
     SbPDG_Node* pdgnode){
-  std::pair<int,int> bestScore = fscore;
-  CandidateRouting* bestRouting = new CandidateRouting();
-  sbnode* bestspot = NULL;
+  std::vector<sbnode*> spots;
 
   CandidateRouting* curRouting = new CandidateRouting();  
-
-  std::vector<sbnode*> spots;
 
   if(SbPDG_Inst* pdginst= dynamic_cast<SbPDG_Inst*>(pdgnode))  { 
     fillInstSpots(sched, pdginst, spots);             //all possible candidates based on FU capability 
@@ -618,13 +803,12 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched,
       int r2 = rand() % spots.size();
       sbnode* cand_spot = spots[r2];
 
-      bestspot = cand_spot;;
-      bestRouting->clear();
+      std::pair<int,int> n_score = 
+        scheduleHere(sched, pdgnode, cand_spot,*curRouting,fscore);
+      bool failed = (n_score==fscore);
 
-      bestScore = scheduleHere(sched, pdgnode, cand_spot,*bestRouting,bestScore);
-
-      if(bestScore < fscore) {
-        applyRouting(sched,pdgnode,bestspot,bestRouting);
+      if(!failed) {
+        applyRouting(sched,pdgnode,cand_spot,curRouting);
         return true;
       } else {
         attempt++;
@@ -633,35 +817,44 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched,
     return false; // couldn't find one
 
   } else {  
+    std::pair<int,int> bestScore = make_pair(INT_MIN,INT_MIN);
+    CandidateRouting* bestRouting = new CandidateRouting();
+    sbnode* bestspot = NULL;
+    int num_found=0;
+
     for(unsigned i=0; i < spots.size(); i++) {
       sbnode* cand_spot = spots[i];
 
       curRouting->clear();
-      pair<int,int> curScore = scheduleHere(sched, pdgnode, cand_spot,
-                                            *curRouting, bestScore);
+      std::pair<int,int> n_score = scheduleHere(sched, pdgnode, cand_spot,
+                                                *curRouting, fscore);
+ 
+      bool failed = (n_score==fscore);
+      int routes = n_score.second;
 
-      if(curScore<fscore) {
+      if(!failed) {
+        num_found++;
         applyRouting(sched,pdgnode,cand_spot,curRouting);
         int lat=INT_MAX,latmis=INT_MAX,ovr=INT_MAX;
-        curScore = obj(sched,lat,latmis,ovr);
+        std::pair<int,int> curScore = obj(sched,lat,latmis,ovr);
+        curScore.second-=routes;
         sched->unassign_pdgnode(pdgnode); //rip it up!
+
+        if(curScore > bestScore) {
+          bestScore=curScore;
+          bestspot=cand_spot;
+          std::swap(bestRouting,curRouting);
+          if(routes==0) break; // just quit if there aren't any routes
+        }
       }
 
-      if(curScore < bestScore) {
-        bestScore=curScore;
-        bestspot=cand_spot;
-        std::swap(bestRouting,curRouting);
-      }
+    }
 
-    }//for loop -- check for all sbnode spots
-
-    if(bestScore < fscore) {
+    if(num_found > 0) {
       applyRouting(sched,pdgnode,bestspot,bestRouting);
-    } else {
-      return false;
     }  
 
-    return true;
+    return (num_found > 0);
   }
 }
 
@@ -696,9 +889,9 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       //route using source node, sbnode
       pair<int,int> tempScore = route(sched, source_pdgedge, 
           source_loc, here,candRouting,bestScore-score);
-      score = score + tempScore;
+      if(tempScore==fscore) return fscore;
 
-      //if(score>bestScore) return fscore;
+      score = score + tempScore;
     }
   }
 
@@ -717,13 +910,13 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
     if(sched->isScheduled(use_pdgnode)) {
       sbnode* use_loc = sched->locationOf(use_pdgnode);
 
-      //cout << "  routed\n";
-
       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc,candRouting,bestScore-score);
+      if(tempScore==fscore) return fscore;
       score = score + tempScore;
-      //if(score>bestScore) return score;
     }
   }
+
+  
 
   return score;
 }
@@ -751,7 +944,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
     }
   }
   if(t_cost==2) {
-    return 1500; 
+    return -1; 
   }
   bool is_dest=(next==dest);
 

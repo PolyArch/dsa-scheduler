@@ -169,9 +169,16 @@ class Schedule {
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
       assert(pdgnode->type()<SbPDG_Node::V_NUM_TYPES);
       _num_mapped[pdgnode->type()]++;
+      assert(_num_mapped[SbPDG_Node::V_INPUT] <= _sbPDG->num_inputs());
+      assert(_num_mapped[SbPDG_Node::V_OUTPUT] <= _sbPDG->num_outputs());
+      assert(_num_mapped[SbPDG_Node::V_INST] <= _sbPDG->num_insts());
+
+      assert(num_left()>=0);
       //std::cout << "node " << pdgnode->name() << " assigned to " 
       //          << snode->name() << "\n";
       assert(pdgnode); 
+
+
       assert(snode->id() < (int)_nodeProp.size());
       _nodeProp[snode->id()].vertices.insert(pdgnode);
 
@@ -179,6 +186,8 @@ class Schedule {
       if(vid >= (int)_vertexProp.size()) {
           _vertexProp.resize(vid+1);
       }
+
+      assert(_vertexProp[vid].node == NULL);
       _vertexProp[vid].node = snode;
     }
 
@@ -269,7 +278,6 @@ class Schedule {
       //std::cout << "unassign: " <<edge->name() << "\n";
 
       _edge_links_mapped-=ep.links.size();
-      assert(_edge_links_mapped >=0);
 
       //Remove all the edges for each of links
       for(auto& link : ep.links) {
@@ -303,7 +311,6 @@ class Schedule {
     //Delete all scheduling data associated with pdgnode, including its
     //mapped locations, and mapping information and metadata for edges
     void unassign_pdgnode(SbPDG_Node* pdgnode) { 
-      _num_mapped[pdgnode->type()]--;
       for(auto it=pdgnode->ops_begin(); it!=pdgnode->ops_end(); ++it){
         SbPDG_Edge* edge = *it;
         if(!edge) continue;
@@ -316,9 +323,11 @@ class Schedule {
 
       auto& vp=_vertexProp[pdgnode->id()];
       sbnode* node = vp.node;
-      assert(node);
-      vp.node=NULL;
-      _nodeProp[node->id()].vertices.erase(pdgnode);
+      if(node) {
+        _num_mapped[pdgnode->type()]--;
+        vp.node=NULL;
+        _nodeProp[node->id()].vertices.erase(pdgnode);
+      }
     }
 
     std::unordered_set<SbPDG_Edge*>& edge_list(sblink* link) {
@@ -674,7 +683,11 @@ class Schedule {
     int num_links_mapped() {return _links_mapped;}
     int num_edge_links_mapped() {return _edge_links_mapped;}
 
-    int num_left() {return _sbPDG->num_nodes() - num_mapped();}
+    int num_left() {
+      int num = _sbPDG->num_nodes() - num_mapped();
+      assert(num >=0);
+      return num;
+    }
 
     void allocate_space() {
       if(_sbPDG) {

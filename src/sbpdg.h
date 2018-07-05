@@ -979,10 +979,7 @@ class SbPDG {
     {
       _insts.erase(std::remove(_insts.begin(), _insts.end(), inst), _insts.end());
       _nodes.erase(std::remove(_nodes.begin(), _nodes.end(), inst), _nodes.end());
-  
-      //_insts.erase(inst);
-      //_nodes.erase(inst);
-    }
+     }
 
     //Just for adding single input without keeping track of name/sym-table
     void addInput(SbPDG_Input* input) {
