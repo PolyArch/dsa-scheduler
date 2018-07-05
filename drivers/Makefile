@@ -14,7 +14,7 @@ INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LIBS +=-ly -ll -lsbscheduler -lsbconfig
+LIBS +=-ly -lfl -lsbscheduler -lsbconfig
 
 #all: reschedule stat-config
 
