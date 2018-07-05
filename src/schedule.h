@@ -167,6 +167,16 @@ class Schedule {
 
     //Assign the sbnode to pdgnode and vice verse 
     void assign_node(SbPDG_Node* pdgnode, sbnode* snode) {
+      int vid = pdgnode->id();
+      if(vid >= (int)_vertexProp.size()) {
+          _vertexProp.resize(vid+1);
+      }
+
+      assert(_vertexProp[vid].node == NULL || _vertexProp[vid].node == snode);
+      if(_vertexProp[vid].node == snode) return;
+
+      _vertexProp[vid].node = snode;
+
       assert(pdgnode->type()<SbPDG_Node::V_NUM_TYPES);
       _num_mapped[pdgnode->type()]++;
       assert(_num_mapped[SbPDG_Node::V_INPUT] <= _sbPDG->num_inputs());
@@ -181,14 +191,6 @@ class Schedule {
 
       assert(snode->id() < (int)_nodeProp.size());
       _nodeProp[snode->id()].vertices.insert(pdgnode);
-
-      int vid = pdgnode->id();
-      if(vid >= (int)_vertexProp.size()) {
-          _vertexProp.resize(vid+1);
-      }
-
-      assert(_vertexProp[vid].node == NULL);
-      _vertexProp[vid].node = snode;
     }
 
     void calc_out_lat() {

@@ -6,8 +6,6 @@
 #include <fstream>
 
 #include "scheduler.h"
-#include "scheduler_greedy.h"
-#include "scheduler_bkt.h"
 #include "scheduler_gams.h"
 #include "scheduler_sg.h"
 #include "scheduler_sa.h"
@@ -165,16 +163,12 @@ int main(int argc, char* argv[])
     scheduler_gams->setMipstart(mipstart);
     scheduler_gams->setSll(sll);
     scheduler = scheduler_gams;
-  } else if(str_schedType == "greedy") { /*original*/
-    scheduler = new SchedulerGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
     auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
     scheduler_sg->set_integrate_timing(!no_int_time);
     scheduler = scheduler_sg;
   } else if(str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
-  } else if(str_schedType == "bkt") {
-    scheduler = new SchedulerBacktracking(&sbmodel);
   } else {
     cerr <<  "Something Went Wrong with Default Scheduler String";
     exit(1);
