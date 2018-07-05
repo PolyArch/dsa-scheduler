@@ -22,7 +22,7 @@ public:
 protected:
   bool schedule_internal(SbPDG* sbPDG, Schedule*& sched);
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
-      int& lat_mis, int& ovr); 
+      int& lat_mis, int& ovr, int& max_util); 
 
 
   bool schedule_input( SbPDG_VecInput*  vec, SbPDG* sbPDG, Schedule* sched);

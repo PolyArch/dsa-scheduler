@@ -255,10 +255,11 @@ bool SchedulerStochasticGreedy::schedule_internal(SbPDG* sbPDG, Schedule*& sched
 
 bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnode) {
   std::pair<int,int> bestScore = fscore;
-  CandidateRouting* bestRouting = new CandidateRouting();
+  CandidateRouting route1,route2; //do this so that function scope de-allocates these
+  CandidateRouting* bestRouting = &route1, * curRouting = &route2;  
+
   sbnode* bestspot = NULL;
 
-  CandidateRouting* curRouting = new CandidateRouting();  
 
   std::vector<sbnode*> spots;
 
@@ -337,10 +338,8 @@ bool SchedulerStochasticGreedy::scheduleNode(Schedule* sched, SbPDG_Node* pdgnod
 
     if(bestScore < fscore) {
       applyRouting(sched,pdgnode,bestspot,bestRouting);
-    } else {
-      return false;
-    }  
-    return true;
+    } 
+    return bestScore < fscore;
   }
 }
 

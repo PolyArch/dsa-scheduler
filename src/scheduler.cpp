@@ -302,7 +302,7 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
 }
 
 void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
-                              vector<sbnode*>& spots) {
+                                        vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_input_iterator I,E;
@@ -317,7 +317,7 @@ void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
 }
 
 void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
-                              vector<sbnode*>& spots) {
+                                         vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_output_iterator I,E;
@@ -335,16 +335,36 @@ void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
 void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
                               vector<sbnode*>& spots) {
   spots.clear();
-  
+ 
+  //For Dedicated-required Instructions
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
+
+      if(!(cand_fu->fu_def()==NULL) &&
+        !cand_fu->fu_def()->is_cap(pdginst->inst())) {
+        continue;
+      }
       
-      if((cand_fu->fu_def()==NULL||cand_fu->fu_def()->is_cap(pdginst->inst()))
-       && !sched->pdgNodeOf(cand_fu) && !sched->isPassthrough(cand_fu)) {
-         spots.push_back(cand_fu);
+      if(!pdginst->is_temporal()) {
+        //Normal Dedidated Instructions
+        if(!sched->pdgNodeOf(cand_fu) && !sched->isPassthrough(cand_fu)) {
+           spots.push_back(cand_fu);
+        }
+      } else {
+        //For temporaly-shared instructions
+        //For now the approach is to *not* consume dedicated resources, although
+        //this can be changed later if that's helpful.
+        if(cand_fu->max_util() > 1) {
+          if(sched->thingsAssigned(cand_fu) +1 < cand_fu->max_util()) {
+            spots.push_back(cand_fu);
+          } 
+        }
       }
     }
+  }
+  if(pdginst->is_temporal() && spots.size()==0) {
+    cout << "Warning, no spots for" << pdginst->name() << "\n";
   }
 }
 
@@ -424,11 +444,8 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched,
      assert(0);
   }
   
-  //TODO: change for multi-link
-  assert(sched->pdgNodeOf(dest)==0 || sched->pdgNodeOf(dest)==pdgedge->use()); 
-  assert(sched->pdgNodeOf(source)==0 || sched->pdgNodeOf(source)==pdgedge->def()); 
-
-  priority_queue<std::pair<sbnode*,int>,vector<std::pair<sbnode*,int>>,mycomparison> openset;
+  priority_queue<std::pair<sbnode*,int>, 
+                 vector<std::pair<sbnode*,int>>, mycomparison> openset;
 
   _sbModel->subModel()->clear_all_runtime_vals();
 
@@ -506,23 +523,54 @@ pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched,
 }
 
 bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
-  int ninsts = sbPDG->inst_end() - sbPDG->inst_begin();
+  int dedicated_insts=0;
+  int temporal_insts=0;
+  for(auto I = sbPDG->inst_begin(), E=sbPDG->inst_end(); I!=E; ++I) {
+    SbPDG_Inst* i = *I;
+    if(!i->is_temporal()) {
+      dedicated_insts++;
+    } else {
+      temporal_insts++;
+    }
+  }
+
+  int temporal_fus=0;
+  int temporal_inst_slots=0;
+  auto fu_list = _sbModel->subModel()->fu_list();
+  for(sbfu* inst : fu_list) {
+    if(inst->max_util() > 1) {
+      temporal_inst_slots+=inst->max_util();
+      temporal_fus += 1;
+    }
+  }
 
   int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
 
-  if(ninsts > nfus) {
-    cerr << "\n\nError: Too many instructions in SbPDG for given SBCONFIG\n\n";
+  if(dedicated_insts > nfus) {
+    cerr << "\n\nError: Too many dedicated instructions ("
+         << dedicated_insts << ") in SbPDG for given SBCONFIG (has " 
+         << nfus << " fus)\n\n";
+    exit(1);
+  }
+  if(temporal_insts > temporal_inst_slots) {
+     cerr << "\n\nError: Too many temporal instructions ("
+         << temporal_insts << ") in SbPDG for given SBCONFIG (has " 
+         << temporal_inst_slots << " temporal slots)\n\n";
     exit(1);
   }
 
   bool failed_count_check=false;
 
-  std::map<sb_inst_t,int> count_types;
+  std::map<sb_inst_t,int> dedicated_count_types, temporal_count_types;
   for(auto Ii=sbPDG->inst_begin(), Ei=sbPDG->inst_end(); Ii!=Ei; ++Ii) {
-    count_types[(*Ii)->inst()]++;
+    if(!(*Ii)->is_temporal()) {
+      dedicated_count_types[(*Ii)->inst()]++;
+    } else {
+      temporal_count_types[(*Ii)->inst()]++;
+    }
   }
 
-  for(auto& pair : count_types) {
+  for(auto& pair : dedicated_count_types) {
     sb_inst_t sb_inst = pair.first;
     int pdg_count = pair.second;
 
@@ -538,9 +586,33 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     if(fu_count < pdg_count) {
       failed_count_check=true;
       cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst) 
-           << " insts, but only " << fu_count << " fus to support them\n";
+           << " dedicated insts, but only " << fu_count 
+           << " dedicated fus to support them\n";
     }
   }
+
+  for(auto& pair : temporal_count_types) {
+    sb_inst_t sb_inst = pair.first;
+    int pdg_count = pair.second;
+
+    int fu_count =0;
+    for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+      for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+        sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
+        if(cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(sb_inst)) {
+          fu_count+=cand_fu->max_util();
+        }
+      }
+    }
+    if(fu_count < pdg_count) {
+      failed_count_check=true;
+      cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst) 
+           << " temporal insts, but only " 
+           << fu_count << " temporal fu slots to support them\n";
+    }
+  }
+
+
 
   if(failed_count_check) {
     cerr << "\n\nError: FAILED Basic FU Count Check\n\n";

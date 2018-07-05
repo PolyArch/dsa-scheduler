@@ -303,8 +303,8 @@ class Schedule {
       //Remove all passthroughs associated with this edge
       for(auto& pt : ep.passthroughs) {
         auto& np = _nodeProp[pt->id()];
-        np.is_passthrough-=1; //take one passthrough edge away
-        assert(np.is_passthrough>=0);
+        np.num_passthroughs-=1; //take one passthrough edge away
+        assert(np.num_passthroughs>=0);
       }
 
       _edgeProp[edge->id()].reset();
@@ -426,6 +426,11 @@ class Schedule {
       return vec.size()==0 ? NULL : (*vec.begin());
     }
 
+    int thingsAssigned(sbnode* node) {
+      auto& np = _nodeProp[node->id()];
+      return np.vertices.size() + np.num_passthroughs;
+    }
+
     bool nodeAssigned(sbnode* node) {
       return _nodeProp[node->id()].vertices.size()>0;
     }
@@ -541,10 +546,10 @@ class Schedule {
   void add_passthrough_node(sbnode* n) {
     assert(pdgNodeOf(n)==NULL);
 
-    _nodeProp[n->id()].is_passthrough+=1; //add one to edges passing through
+    _nodeProp[n->id()].num_passthroughs+=1; //add one to edges passing through
   }
 
-  bool isPassthrough(sbnode* n) {return _nodeProp[n->id()].is_passthrough;}
+  bool isPassthrough(sbnode* n) {return _nodeProp[n->id()].num_passthroughs;}
 
   void print_bit_loc() {
     std::cout << "Primary Config\n";
@@ -652,7 +657,7 @@ class Schedule {
     };
 
     struct NodeProp {
-      int is_passthrough=0;
+      int num_passthroughs=0;
       std::unordered_set<SbPDG_Node*> vertices;
     };
 
@@ -704,7 +709,7 @@ class Schedule {
 
     int colorOf(SbPDG_Node* n) {return _cm.colorOf(n);}
 
-    int get_overprov();
+    void get_overprov(int& ovr, int& max_util);
 
   private:    
 

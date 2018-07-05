@@ -260,17 +260,9 @@ class SbPDG_Node {
       }  
     }
 
-    SbPDG_Edge* first_inc_edge() {
-      return _ops[0];
-    }
-
-    SbPDG_Node* first_operand() {
-      return (_ops[0]->def());
-    }
-
-    SbPDG_Node* first_use() {
-      return (_uses[0]->use());
-    }
+    SbPDG_Edge* first_inc_edge() { return _ops[0]; }
+    SbPDG_Node* first_operand()  { return (_ops[0]->def()); }
+    SbPDG_Node* first_use()      { return (_uses[0]->use()); }
 
     int num_inc() const { return  _ops.size();  }
     int num_out() const { return  _uses.size(); }
@@ -286,7 +278,7 @@ class SbPDG_Node {
     
     int id() {return _ID;}
     
-    void     set_value(uint64_t v, bool valid) {
+    void set_value(uint64_t v, bool valid) {
       _val=v; 
       _invalid=!valid;
     }
@@ -374,6 +366,8 @@ class SbPDG_Node {
     int get_inputs_ready() {
         return _inputs_ready;
     }
+
+    bool is_temporal();
    //---------------------------------------------------------------------------
   
     V_TYPE type() {return _vtype;} 
@@ -398,6 +392,7 @@ class SbPDG_Node {
     int _min_lat=0;
     int _sched_lat=0;
     int _max_thr=0;
+    int _group_id = 0; //which group do I belong to
 
     V_TYPE _vtype;
 };
@@ -780,16 +775,17 @@ class SbPDG_Output : public SbPDG_IO {
 //vector class
 class SbPDG_Vec {
   public:
-  SbPDG_Vec(std::string name, int id) : _name(name), _ID(id) {
-    _locMap.resize(1); //set up default loc map
-    _locMap[0].push_back(0);
-  }
+  SbPDG_Vec(std::string name, int id, SbPDG* sbpdg);
 
   void setLocMap(std::vector<std::vector<int> >& vec) { _locMap=vec;}
   std::vector<std::vector<int> >& locMap() {return _locMap;}
 
   int id() {return _ID;}
-  
+
+  void set_group_id(int id) {_group_id=id;}
+  int group_id() {return _group_id;}
+  bool is_temporal();
+
   virtual std::string gamsName() = 0;
   virtual std::string name() {return _name;}
 
@@ -797,6 +793,8 @@ class SbPDG_Vec {
     std::string _name;
     std::vector<std::vector<int>> _locMap;
     int _ID;
+    SbPDG* _sbpdg;
+    int _group_id = 0; //which group do I belong to
 };
 
 static std::vector<std::vector<int>> simple_pm(int vec_len) {
@@ -817,7 +815,8 @@ static std::vector<std::vector<int>> simple_pm(int vec_len) {
 class SbPDG_VecInput : public SbPDG_Vec {
   public:
     
-  SbPDG_VecInput(std::string name, int id) : SbPDG_Vec(name,id) {}
+  SbPDG_VecInput(std::string name, int id, SbPDG* sbpdg) 
+    : SbPDG_Vec(name,id,sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -848,7 +847,8 @@ class SbPDG_VecInput : public SbPDG_Vec {
 class SbPDG_VecOutput : public SbPDG_Vec {
   public:
 
-  SbPDG_VecOutput(std::string name, int id) : SbPDG_Vec(name,id) {}
+  SbPDG_VecOutput(std::string name, int id, SbPDG* sbpdg) : 
+    SbPDG_Vec(name,id,sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -993,7 +993,9 @@ class SbPDG {
     }
 
     void addScalarInput(std::string name, SymTab& syms) {
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
+                                                     this); 
+
       insert_vec_in(vec_input);
  
       SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
@@ -1010,7 +1012,8 @@ class SbPDG {
       SbPDG_Node* out_node = syms.get_node(name);
  
       //new vector output
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size(),
+                                                        this); 
       insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output(this);
@@ -1029,7 +1032,8 @@ class SbPDG {
                      std::vector<std::vector<int> >& pm,
                      SymTab& syms ) {
         
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size(),
+                                                        this); 
       vec_output->setLocMap(pm);
       insert_vec_out(vec_output); 
        
@@ -1066,7 +1070,8 @@ class SbPDG {
                      std::vector<std::vector<int> >& pm,
                      SymTab& syms ) {
 
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name,_vecInputs.size()); 
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
+                                                     this); 
       vec_input->setLocMap(pm);
       insert_vec_in(vec_input);
 
@@ -1092,7 +1097,8 @@ class SbPDG {
       this->addVecInput(name,pm,syms);
     }
 
-    SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
+    SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,
+                        SbPDG_Edge::EdgeType etype);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
     SymEntry createInst(std::string opcode, std::vector<SymEntry>& args);
@@ -1124,7 +1130,7 @@ class SbPDG {
     int num_vec_input() {return _vecInputs.size();}
     int num_vec_output() {return _vecOutputs.size();}
 
-    void insert_vec_in(SbPDG_VecInput*    in) {
+    void insert_vec_in(SbPDG_VecInput* in) {
       _vecInputs.push_back(in);
       // add to the group we are creating right now
       // std::cout << "It does come in inserting vec_in" << "\n";
@@ -1200,7 +1206,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
     std::vector<SbPDG_VecOutput*>& vec_out_group(int i) {return _vecOutputGroups[i];}
-    GroupProp&  prop_group(int i) {return _propGroups[i];}
+    GroupProp& group_prop(int i) {return _groupProps[i];}
 
     int num_groups() {return _vecInputGroups.size();}
 
@@ -1436,7 +1442,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
-    std::vector<GroupProp> _propGroups;
+    std::vector<GroupProp> _groupProps;
 
     int _total_dyn_insts=0;
    

@@ -77,7 +77,8 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     }
 
     if(slices().read_slice(IN_ACT_SLICE,i,i)) {
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input()); 
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input(),
+                                                     _sbPDG); 
       //vec_input->setLocMap(pm);
       //_sbPDG->insert_vec_in(vec_input);
 
@@ -117,7 +118,9 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
     total_bits_vp_mask+=port_m.size();
 
     if(slices().read_slice(OUT_ACT_SLICE,i,i)) { //activate output port
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput("O",_sbPDG->num_vec_output()); 
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput("O",_sbPDG->num_vec_output(),
+                                                        _sbPDG); 
+
       //_sbPDG->insert_vec_out(vec_output);
 
       vector<bool> mask;
@@ -1620,37 +1623,6 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
   //add_violation(violation);
 }
 
-//bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
-//  for(auto& i : _edgeProp) {
-//    i.extra_lat=0;
-//  }
-//
-//
-//  bool succ = true;
-//
-//  succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
-//  if (succ) succ = fixLatency_bwd(); //bwd pass
-//
-//  int max_lat2=0,max_lat_mis2=0;
-//  cheapCalcLatency(max_lat2, max_lat_mis2);
-//
-//  calcLatency(max_lat, max_lat_mis); //fwd pass
-//  checkOutputMatch(max_lat_mis);
-//
-//  printGraphviz("viz/sched.gv");
-//
-//  if(max_lat2 != max_lat || max_lat_mis2 != max_lat_mis) {
-//     cout << "\nmax_lat:" << max_lat << " " << max_lat2 << "\n";
-//     cout << "max_lat_mis:" << max_lat_mis << " " << max_lat_mis2 << "\n";
-//
-//    _sbPDG->printGraphviz("viz/remap-fail.dot");
-//    assert(max_lat2 == max_lat);
-//    assert(max_lat_mis2 == max_lat_mis);
-//  }  
-//
-//  return succ;
-//}
-
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   for(auto& i : _edgeProp) {
     i.extra_lat=0;
@@ -1664,9 +1636,9 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   } else {
     //bool succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
     //int max_lat2=0,max_lat_mis2=0;
-    //cheapCalcLatency(max_lat, max_lat_mis, true);
-    //fixLatency_bwd(); //bwd pass
-    iterativeFixLatency();
+    cheapCalcLatency(max_lat, max_lat_mis, true);
+    fixLatency_bwd(); //bwd pass
+    //iterativeFixLatency();
 
     max_lat=0;
     max_lat_mis=0;
@@ -1736,8 +1708,11 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
   for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
     if(*I == NULL) { continue; } //could be immediate, constant within FU
     SbPDG_Edge* source_pdgedge = (*I);
-    _edgeProp[source_pdgedge->id()].extra_lat += ed;
-    if (_edgeProp[source_pdgedge->id()].extra_lat > _sbModel->maxEdgeDelay()) {
+
+    _edgeProp[source_pdgedge->id()].extra_lat = std::min(_sbModel->maxEdgeDelay(),
+        _edgeProp[source_pdgedge->id()].extra_lat + ed);
+
+    if (_edgeProp[source_pdgedge->id()].extra_lat + ed > _sbModel->maxEdgeDelay()) {
       return false;
     }
   }
@@ -1877,7 +1852,6 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
   if(isScheduled(inst)) {
-
     for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
       if(edge == NULL) continue;
@@ -1898,10 +1872,13 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
     }
   }
 
-  assign_lat_bounds(inst,low_lat,up_lat); //FIXME: turn off, just for debug
+  //assign_lat_bounds(inst,low_lat,up_lat); //FIXME: turn off, just for debug
 
   int diff = up_lat - low_lat; // - _sbModel->maxEdgeDelay();
-  if(diff>max_lat_mis) max_lat_mis=diff;
+
+  if(!inst->is_temporal()) {
+    if(diff>_max_lat_mis) max_lat_mis=diff;
+  }
 
   int new_lat = inst->lat_of_inst() + up_lat;
   assign_lat(inst,new_lat);
@@ -1915,6 +1892,7 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
     record_violation(inst,diff);
   }
 
+  //Set the delay based on a simple model
   if(set_delay && isScheduled(inst)) {
     for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
@@ -1942,6 +1920,18 @@ void Schedule::iterativeFixLatency() {
   bool overflow = false;
   int max_mis=0;
 
+  //TODO:
+  //We didn't quite fix the problem of vectors in temporal region, though
+  //hopefully this isn't necessary
+  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
+  std::vector<SbPDG_Inst*> ordered_non_temp;
+  for(SbPDG_Inst* i : ordered_insts) {
+    if(!i->is_temporal()) {
+      ordered_non_temp.push_back(i);
+    }
+  }
+
+
   while(changed || overflow) {
     changed=false;
 
@@ -1953,8 +1943,7 @@ void Schedule::iterativeFixLatency() {
     }
 
     //FORWARD PASS -- INSTS
-    std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
-    for(SbPDG_Inst* inst : ordered_insts) {
+    for(SbPDG_Inst* inst : ordered_non_temp) {
       auto& vp = _vertexProp[inst->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
@@ -2033,8 +2022,8 @@ void Schedule::iterativeFixLatency() {
     if(overflow) continue;
 
     //BACKWARDS PASS
-    for(int i = ordered_insts.size()-1; i>=0; i--) {
-      SbPDG_Inst* inst = ordered_insts[i];
+    for(int i = ordered_non_temp.size()-1; i>=0; i--) {
+      SbPDG_Inst* inst = ordered_non_temp[i];
       auto& vp = _vertexProp[inst->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
@@ -2067,8 +2056,7 @@ void Schedule::iterativeFixLatency() {
   //cout << "iters until converge: " << iters << ", mismatch: " << max_mis << "\n";
   // NOW SET THE LATENCY!
 
-  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
-  for(SbPDG_Inst* inst : ordered_insts) {
+  for(SbPDG_Inst* inst : ordered_non_temp) {
     auto& vp = _vertexProp[inst->id()];
     //cout << inst->name() << "  min_lat:" << vp.min_lat << " max_lat:" 
     //                                    << vp.max_lat << "\n";
@@ -2162,8 +2150,11 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
 
     //assign_lat_bounds(vec_out,low_lat,up_lat); //turn off, just for debug
  
-    int diff = up_lat - low_lat;// - _sbModel->maxEdgeDelay();
-    if(diff>max_lat_mis) max_lat_mis=diff;
+    int diff = up_lat - low_lat;
+
+    if(!vec_out->is_temporal()) {
+      if(diff>max_lat_mis) max_lat_mis=diff;
+    }
   
     if(max_lat < up_lat) max_lat=up_lat;
  
@@ -2210,7 +2201,6 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
        lat_edge[firstOutLink]=latOf(pdgnode);
     }
   }
-    
     
  //Outlinks of all the inputs 
   while(!openset.empty()) {
@@ -2526,22 +2516,27 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
   }
 }
 
-int Schedule::get_overprov() {
-  int ovr = 0;
+void Schedule::get_overprov(int& ovr, int& max_util) {
+  ovr=0;
+  max_util=0;
   for(int i = 0; i < (int)_vertexProp.size(); ++i) {
     sbnode* n = _vertexProp[i].node;
     if(n) {
       auto& np = _nodeProp[n->id()];
-      //fixme: make 1 a param
-      ovr = std::max((int)np.vertices.size() - 1,ovr); 
+      int util = np.vertices.size() + np.num_passthroughs;
+      ovr = std::max(util-n->max_util(),ovr);
+      max_util = std::max(util,max_util); 
     }
   }
-  for(int i = 0; i < (int)_linkProp.size(); ++i) {
-    auto& lp = _linkProp[i];
-    //fixme: make 1 a param
-    ovr = std::max((int)lp.nodes.size()-1,ovr);
+  auto& vec = _sbModel->subModel()->node_list();
+  for(auto& n : vec) {
+    for(auto I=n->obegin(), E=n->oend();I!=E;++I) {
+      auto& lp = _linkProp[(*I)->id()];
+      int util = (int)lp.nodes.size();
+      ovr = std::max(util-n->max_util(),ovr);
+      max_util = std::max(util,max_util); 
+    }
   }
-  return ovr;
 }
 
 

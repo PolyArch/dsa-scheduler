@@ -27,6 +27,10 @@ SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use,
   _sbpdg=sbpdg;
 }
 
+bool SbPDG_Node::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
+}
+
 /*
 void SbPDG_Edge::compute_next(){
   if(_data_buffer.size()==1){
@@ -258,12 +262,12 @@ SymEntry SbPDG::createInst(std::string opcode,
   return SymEntry(pdg_inst);
 }
 void SbPDG::set_pragma(std::string& c, std::string& s) {
-
   if(c==string("dfg")) {
     cout << "No pragmas yet for dfg\n";
   } else if (c==string("group")) {
     if(s=="temporal") { 
-      _propGroups.end()->is_temporal=true;
+      assert(_groupProps.size() > 0);
+      _groupProps[_groupProps.size()-1].is_temporal=true;
     } 
   } else {
     cout << "Context \"" << c << "\" not recognized.";
@@ -273,7 +277,7 @@ void SbPDG::set_pragma(std::string& c, std::string& s) {
 void SbPDG::start_new_dfg_group() {
   _vecInputGroups.push_back({});
   _vecOutputGroups.push_back({});
-  _propGroups.push_back(GroupProp());
+  _groupProps.push_back(GroupProp());
 }
 
 SbPDG::SbPDG(string filename) : SbPDG() {
@@ -563,9 +567,26 @@ int SbPDG_Inst::update_next_nodes(bool print, bool verif){
     return 0;
 }
 
-SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
-      _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v) {}
+bool SbPDG_Vec::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
+}
 
+SbPDG_Vec::SbPDG_Vec(std::string name, int id, SbPDG* sbpdg)
+    : _name(name), _ID(id), _sbpdg(sbpdg) {
+  //TODO:FIXME: This will likely be incorrect while rebuilding the
+  //DFG from a config file, but might work for now
+  _group_id = sbpdg->num_groups()-1;
+  _locMap.resize(1); //set up default loc map
+  _locMap[0].push_back(0);
+}
+
+SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
+      _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v) {
+  //TODO:FIXME: This will likely be incorrect while rebuilding the
+  //DFG from a config file, but might work for now
+  _group_id = _sbpdg->num_groups()-1;      
+
+}
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
     _sbpdg->push_transient(this, v,valid, avail, cycle);
@@ -1239,9 +1260,6 @@ void SbPDG::calc_minLats() {
       }
     }
   }
-
-
-
 }
 
 //Gams related
@@ -1416,9 +1434,6 @@ void SbPDG::printGams(std::ostream& os,
     } else {
        os << (*Ie)->gamsName() << " " << "0";  //TODO: WHAT LATENCY SHOULD I USE??
     }
-    
-   
   }
   os << "/;\n";
-  
 }

@@ -217,6 +217,8 @@ int main(int argc, char* argv[])
   assert(vsh.good()); 
   sched->printConfigVerif(vsh);
 
+  delete sched; // just to calm HEAPCHECK
+
 //  int num_pdgnodes=
 //  (sched->sbpdg()->inst_end()-  sched->sbpdg()->inst_begin())+
 //  (sched->sbpdg()->input_end()- sched->sbpdg()->input_begin())+
