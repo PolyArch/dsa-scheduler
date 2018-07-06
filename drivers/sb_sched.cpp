@@ -190,8 +190,9 @@ int main(int argc, char* argv[])
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(verbose) {
-    int lat,latmis;
-    sched->calcLatency(lat,latmis);
+    int lat=0,latmis=0;
+    sched->cheapCalcLatency(lat,latmis);
+    //sched->checkOutputMatch(latmis);
     if(succeed_sched) {
       cout << "latency: " << lat << "\n";  
       cout << "latency mismatch: " << latmis << "\n";

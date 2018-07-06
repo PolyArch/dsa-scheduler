@@ -1,4 +1,5 @@
-#define IN_ACT_SLICE 0
+#define IN_ACT_SLICE 0  //also the group throughput for 6 groups are mapped here,
+                        // with 5 bits each
 #define OUT_ACT_SLICE 1 
 #define VP_MAP_SLICE_1 2
 #define VP_MAP_SLICE_2 3

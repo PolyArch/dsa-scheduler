@@ -585,6 +585,8 @@ class Schedule {
 
   int max_lat() {assert(_max_lat!=-1);  return _max_lat;}
   int max_lat_mis() {return _max_lat_mis;}
+  int decode_lat_mis() {return _decode_lat_mis;}
+
 
   void reset_lat_bounds() {
     for(auto I = _sbPDG->input_begin(), E = _sbPDG->input_end(); I!=E;++I) {
@@ -731,6 +733,8 @@ class Schedule {
     std::vector< LinkProp > _linkProp;
 
     std::map<sbswitch*, std::map<sblink*,sblink*>> _assignSwitch; //out to in
+
+    int _decode_lat_mis=0;
 };
 
 #endif
