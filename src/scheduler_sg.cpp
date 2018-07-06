@@ -97,6 +97,22 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
 
     std::pair<int, int> score = 
       make_pair(succeed_sched + succeed_timing-num_left, -obj);
+
+    if ((verbose && score > best_score)) {
+      fprintf(stdout, "Iter: %4d, time:%0.2f, rt:%d, left: %3d, " 
+              "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
+              " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s\n", 
+              iter, total_msec()/1000.f, _route_times,
+              num_left, lat, violation, latmis, obj,
+              cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
+              cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
+              cur_sched->num_insts_mapped(),  presize, postsize,
+              cur_sched->num_links_mapped(),
+              cur_sched->num_edge_links_mapped(),
+              succeed_sched ? ", all mapped" : "",
+              succeed_timing ? ", mismatch == 0" : "");
+    }
+
     if (score > best_score) {
 
       if(_integrate_timing && succeed_sched) { //set new best latmis to bound it
@@ -109,20 +125,6 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
         best_dummies = sbPDG->getDummiesOutputs();
       }
 
-      if (verbose) {
-        fprintf(stdout, "Iter: %4d, time:%0.2f, rt:%d, left: %3d, " 
-                "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s\n", 
-                iter, total_msec()/1000.f, _route_times,
-                num_left, lat, violation, latmis, obj,
-                cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
-                cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
-                cur_sched->num_insts_mapped(),  presize, postsize,
-                cur_sched->num_links_mapped(),
-                cur_sched->num_edge_links_mapped(),
-                succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", mismatch == 0" : "");
-      }
       best_score = score;
       if (sched) {
         delete sched;
