@@ -19,12 +19,12 @@ Input: L2
 Input: ONE2
 Input: reset2
 
-IncH = Add64(H2,ONE2)
-Cond = ICmpEQ(L2, H2)
+IncH2 = Add64(H2,ONE2)
+Cond2 = ICmpEQ(L2, H2)
 
-NewL = Select(L2,IncH,Cond)
-CNT  = Acc64(ONE2,reset2)
+NewL2 = Select(L2,IncH2,Cond2)
+CNT2  = Acc64(ONE2,reset2)
 
-Output: NewL
-Output: CNT
+Output: NewL2
+Output: CNT2
 

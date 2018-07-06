@@ -56,20 +56,20 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(
 
     int obj = ovr*1000000 + latmis*10000+violation*100+lat + max_util;
 
-        fprintf(stdout, "objective rt:%d, left: %3d, " 
-                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
-                "obj:%d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d, links:%d, edge-links:%d  %s%s\n", 
-                _route_times,
-                sched->num_left(), lat, 
-                sched->violation(), latmis, ovr, max_util, obj,
-                sched->num_inputs_mapped(),  sched->sbpdg()->num_inputs(),
-                sched->num_outputs_mapped(), sched->sbpdg()->num_outputs(),
-                sched->num_insts_mapped(),  
-                sched->num_links_mapped(),
-                sched->num_edge_links_mapped(),
-                succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", mismatch == 0" : "");
+//        fprintf(stdout, "objective rt:%d, left: %3d, " 
+//                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
+//                "obj:%d, ins: %d/%d, outs: %d/%d,"
+//                " insts: %d, links:%d, edge-links:%d  %s%s\n", 
+//                _route_times,
+//                sched->num_left(), lat, 
+//                sched->violation(), latmis, ovr, max_util, obj,
+//                sched->num_inputs_mapped(),  sched->sbpdg()->num_inputs(),
+//                sched->num_outputs_mapped(), sched->sbpdg()->num_outputs(),
+//                sched->num_insts_mapped(),  
+//                sched->num_links_mapped(),
+//                sched->num_edge_links_mapped(),
+//                succeed_sched ? ", all mapped" : "",
+//                succeed_timing ? ", mismatch == 0" : "");
 
     return make_pair(succeed_sched + succeed_timing + succeed_ovr -num_left, -obj);
 }
@@ -414,6 +414,9 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
 }
 
 bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_input (" 
+                       << sched->num_inputs_mapped() << " mapped)\n";
+
   int n = sbPDG->num_vec_input();
 
   int p = rand_bt(0,n);
@@ -428,6 +431,9 @@ bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
 }
 
 bool SchedulerSimulatedAnnealing::map_one_output(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_output (" 
+                       << sched->num_outputs_mapped() << " mapped)\n";
+
    int n = sbPDG->num_vec_output();
 
   int p = rand_bt(0,n);
@@ -441,6 +447,9 @@ bool SchedulerSimulatedAnnealing::map_one_output(SbPDG* sbPDG, Schedule* sched) 
 }
 
 bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_inst (" 
+                       << sched->num_insts_mapped() << " mapped)\n";
+
   std::vector<SbPDG_Inst*>& inst_vec = sbPDG->inst_vec();
   int n = inst_vec.size();
 
@@ -450,16 +459,15 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     SbPDG_Inst* inst = inst_vec[p];
     if(sched->isScheduled(inst)) continue;
 
-    cout << "try " << inst->name() << "\n";
+    //cout << "try to map this inst: " << inst->name() << "\n";
 
     bool success = scheduleNode(sched,inst);
-
-    if(success) {
-      cout << "success with " << inst->name() << "\n";
-    } else {
-      cout << "failed with " << inst->name() << "\n";
-    }
-
+    //if(success) {
+    //  cout << "success with " << inst->name() << "\n";
+    //} else {
+    //  cout << "failed with " << inst->name() << "\n";
+    //}
+    return success;
   }
   return false;
 }
@@ -490,6 +498,8 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SbPDG* sbPDG, Schedule* sche
       }      
     }
   }
+  //cout << "Schedule Complete, mapped: " << sched->num_mapped() 
+  //                          << "left:" << sched->num_left();
   
   return true;
 }
@@ -675,7 +685,6 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched,
           bestScore=curScore;
           bestspot=cand_spot;
           std::swap(bestRouting,curRouting);
-          if(routes==0) break; // just quit if there aren't any routes
         }
       }
 
@@ -720,7 +729,10 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       //route using source node, sbnode
       pair<int,int> tempScore = route(sched, source_pdgedge, 
           source_loc, here,candRouting,bestScore-score);
-      if(tempScore==fscore) return fscore;
+      if(tempScore==fscore) {
+        //cout << "failed to route def\n";
+        return fscore;
+      }
 
       score = score + tempScore;
     }
@@ -742,7 +754,10 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       sbnode* use_loc = sched->locationOf(use_pdgnode);
 
       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc,candRouting,bestScore-score);
-      if(tempScore==fscore) return fscore;
+      if(tempScore==fscore) {
+        //cout << "failed to route use\n";
+        return fscore;
+      }
       score = score + tempScore;
     }
   }
@@ -757,9 +772,10 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 
   SbPDG_Node* def_pdgnode = edge->def();
   SbPDG_Node* use_pdgnode = edge->use();
-  
-  bool is_temporal = use_pdgnode->is_temporal() && 
-                     def_pdgnode->type() != SbPDG_Node::V_OUTPUT;
+ 
+  bool is_temporal = def_pdgnode->is_temporal() && 
+                     use_pdgnode->type() != SbPDG_Node::V_OUTPUT &&
+                     def_pdgnode->type() != SbPDG_Node::V_INPUT;
 
   //For now, links only route on their own network
   if(!is_temporal && link->max_util()>1) return -1;
@@ -812,6 +828,16 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, 
     SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+  if(source == dest) {
+    sblink* link = source->getCycleLink();
+    assert(link);
+    candRouting.routing[link].insert(pdgedge);
+    auto& prop = candRouting.edge_prop[pdgedge];
+    prop.num_links=0;//1-1
+    prop.num_passthroughs=0;
+    return std::make_pair(0,2);
+  }
 
   pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
     return score;
