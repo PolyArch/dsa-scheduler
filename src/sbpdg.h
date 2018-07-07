@@ -23,7 +23,7 @@ class SbPDG;
 
 class SbPDG_Edge {
   public:
-    enum EdgeType { data, ctrl_true, ctrl_false };
+    enum EdgeType { data, ctrl, ctrl_true, ctrl_false };
     
     EdgeType etype() {return _etype;}
     
@@ -103,8 +103,9 @@ class SbPDG_Edge {
     std::queue<std::pair<uint64_t,bool>> _data_buffer;
     // unsigned int buf_len = 1;
     // using 2 since 1st entry is used for bp
-    // unsigned int buf_len = 3;
-    unsigned int buf_len = 1024;
+    unsigned int buf_len = 9;
+    // unsigned int buf_len = FU_BUF_LEN;
+  
     //-------------
 
     int _delay =0;
@@ -282,7 +283,7 @@ class SbPDG_Node {
 
     bool get_bp(){
         bool bp=false;
-        for(auto it=this->uses_begin(); it!=this->uses_end(); ++it){
+        for(auto it=this->uses_begin(); it!=this->uses_end(); it++){
             if((*it)->is_buffer_full()){
                 bp=true;
             }
@@ -306,7 +307,7 @@ class SbPDG_Node {
       if(this->num_out()==0) { return; }
       if(avail){
         if(!get_bp()){
-          for(auto iter=_uses.begin(); iter != _uses.end(); ++iter) {
+          for(auto iter=_uses.begin(); iter != _uses.end(); iter++) {
             (*iter)->push_in_buffer(v, valid, print, verif);
           }
           _avail=false;
@@ -352,6 +353,7 @@ class SbPDG_Node {
           int num_computed = compute_backcgra(print,verif);//it's 0 or 1
           return num_computed;
         } else {
+          // _inputs_ready-=1;
           // add some code here
           std::cout << "I NEED AN OUTPUT BUFFER\n";
           return 0;
@@ -1303,12 +1305,14 @@ SbPDG_VecInput* get_vector_input(int i){
     int cycle(bool print, bool verif){ 
 
       // int num_computed=0;
-       
-      for(auto it=buf_transient_values[cur_buf_ptr].begin();it!= buf_transient_values[cur_buf_ptr].end();++it){
-        // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
+      // std::cout << "size of the next list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
+      for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end(); it++){
+        std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
         // set the values
         SbPDG_Edge* e = *it;
+        std::cout << "Allotted value of iterator to edge\n";
         e->pop_buffer_val(print, verif);
+        std::cout << "popped value from buffer\n";
         /*if(!e->is_buffer_empty()){
             SbPDG_Node* n = e->use();
             n->set_is_new_val(1);
@@ -1316,11 +1320,13 @@ SbPDG_VecInput* get_vector_input(int i){
         }
         */
         buf_transient_values[cur_buf_ptr].erase(it);
+        std::cout << "erased value from cyclic buffer\n";
         it--;
       }
+      // std::cout << "new size of the list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
 
 
-      for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end();++it){
+      for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end(); it++){
         struct cycle_result* temp = *it;
         SbPDG_Node* sb_node = temp->n;
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
