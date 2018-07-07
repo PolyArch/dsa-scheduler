@@ -185,7 +185,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
       bool bottom = (j==_sbModel->subModel()->sizey());
       sbswitch* sbsw = &switches[i][j];
 
-     // cout << i << "," << j << "\n";
+      //cout << "Decode switch: " << i << "," << j << "\n";
 
       //read the [Row]
       int row = _bitslices.read_slice(cur_slice, ROW_LOC, ROW_LOC+ROW_BITS-1);
@@ -217,7 +217,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
         //cout << SbDIR::dirName(in_dir) << "->" <<
         //        SbDIR::dirName(out_dir) << ":";
 
-        //cout << b << " @pos: " << o << "\n";
+        //cout << b << " @pos: " << o << " " << out_dir << "\n";
 
         inst_histo[SB_CONFIG::SB_Switch]+=1;
 
@@ -531,6 +531,8 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     
     for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j,++cur_slice) {
       
+      //cout << "Encode switch: " << i << "," << j << "\n";
+
       bool top = (j==0);
       bool bottom = (j==_sbModel->subModel()->sizey());
 
@@ -550,7 +552,8 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
         std::set<int> used_in_enc;
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
           sblink* inlink=I->second;
-          int in_encode = sbdir.encode(inlink->dir(),top,bottom,left,right);
+          auto in_port  = SbDIR::reverse(inlink->dir());
+          int in_encode = sbdir.encode(in_port,top,bottom,left,right);
           used_in_enc.insert(in_encode);
         }
 
@@ -571,7 +574,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           _bitslices.write(cur_slice,p1,p2,unused_dir_enc);     //Why write unused input dir
         }
 
-
         //Step 2: Fill in correct switches
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
           sblink* outlink=I->first;
@@ -581,10 +583,10 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           int in_encode = sbdir.encode(in_port,top,bottom,left,right);
           int out_pos   = sbdir.slot_for_dir(outlink->dir(),top,bottom,left,right);
          
-//          cout << SbDIR::dirName(inlink->dir()) << "->" <<
-//                  SbDIR::dirName(outlink->dir()) << ":";
-//
-//          cout << in_encode << " @pos: " << out_pos << "\n";
+          //cout << SbDIR::dirName(inlink->dir()) << "->" <<
+          //        SbDIR::dirName(outlink->dir()) << ":";
+
+          //cout << in_encode << " @pos: " << out_pos << "\n";
 
           unsigned p1 = SWITCH_LOC + out_pos*BITS_PER_DIR;
           unsigned p2 = p1 + BITS_PER_DIR-1; 
@@ -2284,11 +2286,13 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
             if(!isPassthrough(node)) {
               SbPDG_Edge* edge = origNode->getLinkTowards(next_pdgnode);
               if(!edge) {
-                cout << "Edge: " << origNode->name() << " has no link towards "
-                     << next_pdgnode->name() << "\n";
-                cout << "dummy:" << next_pdginst->isDummy() << "\n";
+                cout << "Edge: " << origNode->name() << " has no edge towards "
+                     << next_pdgnode->name() << ", for link:"
+                     << inlink->name() << "\n";
+                if(next_pdginst->isDummy()) cout << "dummy!\n";
 
                 _sbPDG->printGraphviz("viz/remap-fail2.dot");
+                printGraphviz("viz/remap-fail2.gv");
               
                 assert(edge);
               }
@@ -2458,7 +2462,8 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
     auto& item = worklist.back();
     sbnode* curItem = std::get<0>(item);
     SbDIR::DIR inDir = std::get<1>(item);
-        auto links = std::get<2>(item);
+
+    auto item_links = std::get<2>(item);
     worklist.pop_back();
     
     map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
@@ -2473,6 +2478,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
         sblink* outLink = curItem->getOutLink(newOutDir);
         //FIXME: assign_link(pdgnode,outLink);
 
+        auto links = item_links;
         links.push_back(outLink);
         
         if(outLink==NULL) {

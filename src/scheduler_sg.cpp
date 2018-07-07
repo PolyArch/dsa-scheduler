@@ -98,7 +98,7 @@ bool SchedulerStochasticGreedy::schedule(SbPDG* sbPDG, Schedule*& sched) {
     std::pair<int, int> score = 
       make_pair(succeed_sched + succeed_timing-num_left, -obj);
 
-    if ((verbose && score > best_score)) {
+    if (verbose && (score > best_score)) {
       fprintf(stdout, "Iter: %4d, time:%0.2f, rt:%d, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, obj:%d, ins: %d/%d, outs: %d/%d,"
               " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s\n", 
