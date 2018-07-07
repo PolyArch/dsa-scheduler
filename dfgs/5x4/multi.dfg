@@ -1,5 +1,3 @@
-#R = A . B + carry
-
 #pragma group temporal
 
 Input: A [4] 
@@ -15,6 +13,7 @@ Output: R
 
 
 ------
+
 
 Input: X1  
 Input: X2

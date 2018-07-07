@@ -27,13 +27,10 @@ class SbPDG_Edge {
     
     EdgeType etype() {return _etype;}
     
-    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg) {
-       _def=def;
-       _use=use;
-       _etype=etype;
-       _ID=ID_SOURCE++;
-       _sbpdg=sbpdg;
-    }
+    SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
+               EdgeType etype, SbPDG* sbpdg);
+
+    int id() {return _ID;}
 
     SbPDG_Node* def() const {
       return _def;
@@ -110,10 +107,6 @@ class SbPDG_Edge {
 
     int _delay =0;
 
-  
-
-  private:
-    static int ID_SOURCE;
 };
 
 class SbPDG_Inst;
@@ -121,6 +114,8 @@ class SbPDG_Inst;
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
+    enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
+
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
@@ -130,11 +125,8 @@ class SbPDG_Node {
     bool getScalar() {return _scalar;}
 
     int findDepth(std::ostream& os, std::string dfg_name, int level);
-    SbPDG_Node(SbPDG* sbpdg) {
-        _sbpdg=sbpdg;
-        _ID=ID_SOURCE++;
-    }
-    
+    SbPDG_Node(SbPDG* sbpdg, V_TYPE v);
+
     typedef std::vector<SbPDG_Edge*>::const_iterator const_edge_iterator;
      
     void addIncEdge(unsigned pos, SbPDG_Edge *edge) { 
@@ -166,14 +158,25 @@ class SbPDG_Node {
        
        _uses[pos]=edge;
     }
-    
+
+    void validate() {
+      for (unsigned i = 0; i < _ops.size(); ++i) {
+        SbPDG_Edge* edge = _ops[i];
+        assert(edge == NULL || edge->use() == this);
+      }
+      for (unsigned i = 0; i < _uses.size(); ++i) {
+        SbPDG_Edge* edge = _uses[i];
+        assert(edge->def() == this);
+      }
+    }
+
     void removeIncEdge(SbPDG_Node* orig) { 
       _num_inc_edges--;
       for (unsigned i = 0; i < _ops.size(); ++i) {
         SbPDG_Edge* edge = _ops[i];
         if (edge->def() == orig) {
-            _ops[i]=0;
-            return;
+          _ops[i]=NULL;
+          return;
         }
       }
       assert(false && "edge was not found");
@@ -245,6 +248,10 @@ class SbPDG_Node {
        return _max_thr; 
     }
 
+    virtual int lat_of_inst() {
+      return 0;
+    }
+
     virtual void depInsts(std::vector<SbPDG_Inst*>& insts) {
       for (auto it=_uses.begin(); it!=_uses.end(); it++) {
         SbPDG_Node* use = (*it)->use();
@@ -254,13 +261,9 @@ class SbPDG_Node {
       }  
     }
 
-    SbPDG_Node* first_operand() {
-      return (_ops[0]->def());
-    }
-
-    SbPDG_Node* first_use() {
-      return (_uses[0]->use());
-    }
+    SbPDG_Edge* first_inc_edge() { return _ops[0]; }
+    SbPDG_Node* first_operand()  { return (_ops[0]->def()); }
+    SbPDG_Node* first_use()      { return (_uses[0]->use()); }
 
     int num_inc() const { return  _ops.size();  }
     int num_out() const { return  _uses.size(); }
@@ -276,7 +279,7 @@ class SbPDG_Node {
     
     int id() {return _ID;}
     
-    void     set_value(uint64_t v, bool valid) {
+    void set_value(uint64_t v, bool valid) {
       _val=v; 
       _invalid=!valid;
     }
@@ -365,8 +368,12 @@ class SbPDG_Node {
     int get_inputs_ready() {
         return _inputs_ready;
     }
+
+    bool is_temporal();
    //---------------------------------------------------------------------------
-   
+  
+    V_TYPE type() {return _vtype;} 
+
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
@@ -387,10 +394,9 @@ class SbPDG_Node {
     int _min_lat=0;
     int _sched_lat=0;
     int _max_thr=0;
+    int _group_id = 0; //which group do I belong to
 
-
-  private:
-    static int ID_SOURCE;
+    V_TYPE _vtype;
 };
 
 
@@ -561,13 +567,18 @@ struct SymEntry {
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
-    SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg), _predInv(false), _isDummy(false),
+    SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg, V_INST), 
+                     _predInv(false), _isDummy(false),
                      _imm_slot(-1), _subFunc(0) {
       _reg.resize(8,0);
     }
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
+
+    virtual int lat_of_inst() {
+      return inst_lat(inst());
+    }
 
     void setImm( uint64_t val ) { _imm=val; }
     int  getImmInt() { return _imm; }
@@ -666,7 +677,7 @@ class SbPDG_IO : public SbPDG_Node {
   void setVPort(int vport) { _vport = vport; } 
   int vport() {return _vport;}
 
-  SbPDG_IO(SbPDG* sbpdg) : SbPDG_Node(sbpdg) {}
+  SbPDG_IO(SbPDG* sbpdg, V_TYPE v) : SbPDG_Node(sbpdg, v) {}
 
   protected:
     SbPDG* _sbpdg;
@@ -679,7 +690,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
-    SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+    SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg,V_INPUT) {}
 
     std::string name() {
         std::stringstream ss;
@@ -723,7 +734,7 @@ class SbPDG_Output : public SbPDG_IO {
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
-    SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg) {}
+    SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg, V_OUTPUT) {}
 
     std::string name() {
         std::stringstream ss;
@@ -766,16 +777,17 @@ class SbPDG_Output : public SbPDG_IO {
 //vector class
 class SbPDG_Vec {
   public:
-  SbPDG_Vec(std::string name, int id) : _name(name), _ID(id) {
-    _locMap.resize(1); //set up default loc map
-    _locMap[0].push_back(0);
-  }
+  SbPDG_Vec(std::string name, int id, SbPDG* sbpdg);
 
   void setLocMap(std::vector<std::vector<int> >& vec) { _locMap=vec;}
   std::vector<std::vector<int> >& locMap() {return _locMap;}
 
   int id() {return _ID;}
-  
+
+  void set_group_id(int id) {_group_id=id;}
+  int group_id() {return _group_id;}
+  bool is_temporal();
+
   virtual std::string gamsName() = 0;
   virtual std::string name() {return _name;}
 
@@ -783,6 +795,8 @@ class SbPDG_Vec {
     std::string _name;
     std::vector<std::vector<int>> _locMap;
     int _ID;
+    SbPDG* _sbpdg;
+    int _group_id = 0; //which group do I belong to
 };
 
 static std::vector<std::vector<int>> simple_pm(int vec_len) {
@@ -803,7 +817,8 @@ static std::vector<std::vector<int>> simple_pm(int vec_len) {
 class SbPDG_VecInput : public SbPDG_Vec {
   public:
     
-  SbPDG_VecInput(std::string name, int id) : SbPDG_Vec(name,id) {}
+  SbPDG_VecInput(std::string name, int id, SbPDG* sbpdg) 
+    : SbPDG_Vec(name,id,sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -834,7 +849,8 @@ class SbPDG_VecInput : public SbPDG_Vec {
 class SbPDG_VecOutput : public SbPDG_Vec {
   public:
 
-  SbPDG_VecOutput(std::string name, int id) : SbPDG_Vec(name,id) {}
+  SbPDG_VecOutput(std::string name, int id, SbPDG* sbpdg) : 
+    SbPDG_Vec(name,id,sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -871,6 +887,9 @@ public:
   void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, double n)      {_sym_tab[s]=SymEntry(n);}
+  bool has_sym(std::string& s) {
+    return _sym_tab.count(s);
+  }
   SymEntry get_sym(std::string& s) { 
     assert_exists(s);
     return _sym_tab[s];
@@ -918,6 +937,21 @@ class SbPDG {
     void rememberDummies(std::set<SbPDG_Output*> d);
     void removeDummies();
 
+    static void order_insts(SbPDG_Inst* inst,
+                 std::set<SbPDG_Inst*>& done_nodes,         //done insts
+                 std::vector<SbPDG_Inst*>& ordered_insts);
+
+    std::vector<SbPDG_Inst*>& ordered_insts() {
+      if(_orderedInsts.size()==0) {
+        std::set<SbPDG_Inst*> done_nodes;
+        for(SbPDG_Output* out : _outputs) {
+          if(SbPDG_Inst* producing_node = out->out_inst()) {
+            order_insts(producing_node, done_nodes, _orderedInsts);
+          }
+        } 
+      }
+      return _orderedInsts;
+    }
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printEmuDFG(std::ostream& os, std::string dfg_name);
@@ -947,10 +981,7 @@ class SbPDG {
     {
       _insts.erase(std::remove(_insts.begin(), _insts.end(), inst), _insts.end());
       _nodes.erase(std::remove(_nodes.begin(), _nodes.end(), inst), _nodes.end());
-  
-      //_insts.erase(inst);
-      //_nodes.erase(inst);
-    }
+     }
 
     //Just for adding single input without keeping track of name/sym-table
     void addInput(SbPDG_Input* input) {
@@ -964,7 +995,9 @@ class SbPDG {
     }
 
     void addScalarInput(std::string name, SymTab& syms) {
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size()); 
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
+                                                     this); 
+
       insert_vec_in(vec_input);
  
       SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
@@ -981,7 +1014,8 @@ class SbPDG {
       SbPDG_Node* out_node = syms.get_node(name);
  
       //new vector output
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size(),
+                                                        this); 
       insert_vec_out(vec_output);
  
       SbPDG_Output* pdg_out = new SbPDG_Output(this);
@@ -1000,7 +1034,8 @@ class SbPDG {
                      std::vector<std::vector<int> >& pm,
                      SymTab& syms ) {
         
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size()); 
+      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size(),
+                                                        this); 
       vec_output->setLocMap(pm);
       insert_vec_out(vec_output); 
        
@@ -1037,7 +1072,8 @@ class SbPDG {
                      std::vector<std::vector<int> >& pm,
                      SymTab& syms ) {
 
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name,_vecInputs.size()); 
+      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
+                                                     this); 
       vec_input->setLocMap(pm);
       insert_vec_in(vec_input);
 
@@ -1063,7 +1099,8 @@ class SbPDG {
       this->addVecInput(name,pm,syms);
     }
 
-    SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype);
+    SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,
+                        SbPDG_Edge::EdgeType etype);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
     SymEntry createInst(std::string opcode, std::vector<SymEntry>& args);
@@ -1080,6 +1117,7 @@ class SbPDG {
 
     const_inst_iterator inst_begin() {return _insts.begin();}
     const_inst_iterator inst_end() {return _insts.end();}
+    std::vector<SbPDG_Inst*>& inst_vec() {return _insts;}
     int num_insts() {return _insts.size();}
     
     const_input_iterator input_begin() {return _inputs.begin();}
@@ -1094,7 +1132,7 @@ class SbPDG {
     int num_vec_input() {return _vecInputs.size();}
     int num_vec_output() {return _vecOutputs.size();}
 
-    void insert_vec_in(SbPDG_VecInput*    in) {
+    void insert_vec_in(SbPDG_VecInput* in) {
       _vecInputs.push_back(in);
       // add to the group we are creating right now
       // std::cout << "It does come in inserting vec_in" << "\n";
@@ -1170,7 +1208,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::vector<SbPDG_VecInput*>&  vec_in_group(int i) {return _vecInputGroups[i];}
     std::vector<SbPDG_VecOutput*>& vec_out_group(int i) {return _vecOutputGroups[i];}
-    GroupProp&  prop_group(int i) {return _propGroups[i];}
+    GroupProp& group_prop(int i) {return _groupProps[i];}
 
     int num_groups() {return _vecInputGroups.size();}
 
@@ -1349,7 +1387,6 @@ SbPDG_VecInput* get_vector_input(int i){
        return temp; 
     }
 
-
 // ---------------------------------------------------------------------------
 
     std::set<SbPDG_Output*> getDummiesOutputs() {return dummiesOutputs;}
@@ -1365,6 +1402,10 @@ SbPDG_VecInput* get_vector_input(int i){
     int  total_dyn_insts()     {return _total_dyn_insts;}
     int get_max_lat() { return MAX_LAT; }
 
+    int num_node_ids() {return _num_node_ids;}
+    int num_edge_ids() {return _num_edge_ids;}
+    int inc_node_id() {return _num_node_ids++;}
+    int inc_edge_id() {return _num_edge_ids++;}
 
   private:
     // to keep track of number of cycles---------------------
@@ -1407,11 +1448,13 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::vector<std::vector<SbPDG_VecInput*>> _vecInputGroups;
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
-    std::vector<GroupProp> _propGroups;
-
+    std::vector<GroupProp> _groupProps;
 
     int _total_dyn_insts=0;
-    
+   
+    int _num_node_ids=0;
+    int _num_edge_ids=0;
+
     //Dummy Stuffs:
     std::map<SbPDG_Output*,SbPDG_Inst*> dummy_map;
     std::map<SbPDG_Node*,int> dummys_per_port;
@@ -1419,9 +1462,6 @@ SbPDG_VecInput* get_vector_input(int i){
     std::set<SbPDG_Output*> dummiesOutputs;
 
     std::ostream* _dbg_stream;
-
-    int span;
-    int work;
 };
 
 #endif

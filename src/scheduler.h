@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <map>
 #include <chrono>
+#include <random>
+#include <stdlib.h>
 
 #define MAX_ROUTE 100000000
 
@@ -38,24 +40,44 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
 
 class CandidateRouting {
   public:
-  std::unordered_map< SB_CONFIG::sblink*, SbPDG_Edge* > routing;
-  std::map< std::pair<int,int>,std::pair<int,int> > forwarding;
+  struct EdgeProp {
+    int num_links=0;
+    int num_passthroughs=0; 
+    std::unordered_set<sblink*> links;
+  };
 
-  std::unordered_map< SbPDG_Edge*, std::pair<int,int> > edge_prop;
 
+  void take_union(CandidateRouting& r) {
+    for(auto& link_iter : r.routing) {
+      for(SbPDG_Edge* edge : link_iter.second) {
+        routing[link_iter.first].insert(edge);
+      } 
+    }
+    for(auto& edge_iter : r.edge_prop) {
+      SbPDG_Edge* edge = edge_iter.first;
+      assert(edge_prop.count(edge)==0);
+      edge_prop[edge]=edge_iter.second;
+    }
+  }
+
+  std::unordered_map< SB_CONFIG::sblink*, std::unordered_set<SbPDG_Edge*> > routing;
+  std::unordered_map< SbPDG_Edge*, EdgeProp> edge_prop;
 
   void fill_lat(Schedule* sched,
                 int& min_node_lat, int& max_node_lat, bool print=false) {
     min_node_lat = 0; //need minimax, so that's why this is odd
     max_node_lat = MAX_ROUTE;
+
+    if(edge_prop.size() ==0) return;
+
     SbPDG_Node* n = (*edge_prop.begin()).first->use();
     bool output = dynamic_cast<SbPDG_Output*>(n);
 
     for(auto I=edge_prop.begin(), E=edge_prop.end();I!=E;++I) {
       SbPDG_Edge* source_pdgedge = (*I).first;
       auto i = edge_prop[source_pdgedge];
-      int num_links = i.first;
-      int num_passthroughs = i.second;
+      int num_links = i.num_links;
+      int num_passthroughs = i.num_passthroughs;
   
       auto p = sched->lat_bounds(source_pdgedge->def());
 
@@ -63,21 +85,14 @@ class CandidateRouting {
       int max_inc_lat = p.second + num_links +
               sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs);
 
-    if(print) {
-      std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
-      std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
-      std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs) << "\n";
-    }
-
-
-      //earliest starting time is *latest* incomming edge
-      if(min_inc_lat > min_node_lat) {
-        min_node_lat = min_inc_lat;
+      if(print) {
+        std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
+        std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
+        std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output)+num_passthroughs) << "\n";
       }
-      //latest starting time is *earliest* incomming edge
-      if(max_inc_lat < max_node_lat) {
-        max_node_lat = max_inc_lat;
-      }
+
+      if(min_inc_lat > min_node_lat) min_node_lat = min_inc_lat;
+      if(max_inc_lat < max_node_lat) max_node_lat = max_inc_lat;
     }
     if(print) {
       std::cout << "  min_inc_lat" << min_node_lat << " " << max_node_lat << "\n";
@@ -88,7 +103,6 @@ class CandidateRouting {
 
   void clear() {
     routing.clear();
-    forwarding.clear();
     edge_prop.clear();
   }
 };
@@ -125,99 +139,6 @@ class Scheduler {
   void set_max_iters(int i) {_max_iters=i;}
 
   std::string str_subalg;
-
-  enum StatType {FA, Input, Output};
-
-  void progress_updateCurNum(StatType s, int init = 0){
-    if (s == FA) {
-      numFASched = init;
-    } else if (s == Input) {
-      numInputSched = init;
-    } else if (s == Output) {
-      numOutputSched = init;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  
-  void progress_updateBestNum(StatType s, int init = 0){
-    if (s == FA) {
-      bestFASched = init;
-    } else if (s == Input) {
-      bestInputSched = init;
-    } else if (s == Output) {
-      bestOutputSched = init;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  void progress_saveBestNum(StatType s) {
-    int progress_cur = progress_getCurNum(s);
-    int progress_best =  progress_getBestNum(s);
-    if ( progress_cur > progress_best) {
-      progress_updateBestNum(s, progress_cur);
-    }
-  }
-
-  void progress_incCurNum(StatType s) {
-    if (s == FA) {
-      numFASched++;
-    } else if (s == Input) {
-      numInputSched++;
-    } else if (s == Output) {
-      numOutputSched++;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-  }
-
-  int progress_getCurNum(StatType s) {
-    int ret = 0;
-    if (s == FA) {
-      ret = numFASched;
-    } else if (s == Input) {
-      ret = numInputSched;
-    } else if (s == Output) {
-      ret = numOutputSched;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-    return ret;
-  }
-
-  int progress_getBestNum(StatType s) {
-    int ret = 0;
-    if (s == FA) {
-      ret = bestFASched;
-    } else if (s == Input) {
-      ret = bestInputSched;
-    } else if (s == Output) {
-      ret = bestOutputSched;
-    } else {
-      std::cout<<"Bad Stat Type\n";
-      exit(0);
-    }
-    return ret;
-  }
-
-  void progress_initCurNums(){
-    progress_updateCurNum(FA,0);
-    progress_updateCurNum(Input,0);
-    progress_updateCurNum(Output,0);
-  }
-
-  void progress_initBestNums(){
-    progress_updateBestNum(FA,-1);
-    progress_updateBestNum(Input,-1);
-    progress_updateBestNum(Output,-1);
-  }
-
   std::string AUX(int x) {
     return (x==-1 ? "-" : std::to_string(x));
   }  
@@ -226,11 +147,6 @@ class Scheduler {
     auto end = get_time::now();
     auto diff = end - _start;
     return ((double)std::chrono::duration_cast<usec>(diff).count())/1000.0;
-  }
-
-  void progress_printBests(){
-    std::cout<<"Progress: ("<<AUX(bestInputSched)
-             <<", "<<AUX(bestFASched)<<", "<<AUX(bestOutputSched)<<")\n";
   }
 
   virtual bool schedule_timed(SbPDG* sbPDG, Schedule*& sched) {
@@ -251,6 +167,9 @@ class Scheduler {
   }
 
   void setTimeout(float timeout) {_reslim=timeout;}
+
+  //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
+  //                     SB_CONFIG::sbnode* source);
 
   protected:
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
@@ -278,10 +197,9 @@ public:
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft) = 0;
 
- std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
-            SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
-            CandidateRouting&,std::pair<int,int> scoreLeft);
- std::pair<int,int> route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgnode,
+  virtual int routing_cost(SbPDG_Edge*, sblink*, Schedule*, CandidateRouting&, sbnode* dest);
+
+  std::pair<int,int> route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgnode,
             SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
             CandidateRouting&,std::pair<int,int> scoreLeft);
 
@@ -299,6 +217,19 @@ protected:
                      std::vector<SB_CONFIG::sbnode*>& spots);
 
   const std::pair<int,int> fscore;
+
+  void random_order(int n, std::vector<int>& order);
+
+  std::vector<bool> rand_node_choose_k(int k, 
+                          std::vector<sbnode*>& input_nodes, 
+                          std::vector<sbnode*>& output_nodes);
+
+  void rand_n_choose_k(int n, int m, std::vector<int>& indices);
+  int rand_bt(int s, int e) {
+    return rand()%(e-s)+s;
+  }
+
+  int _route_times=0;
 };
 
 #endif

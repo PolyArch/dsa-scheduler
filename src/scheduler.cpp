@@ -29,14 +29,63 @@ void System(const char* command) {
   }
 }
 
+//floyd's unique-number sampling algorithm (ordered)
+//CACM Programming Pearls, 1987
+void HeuristicScheduler::rand_n_choose_k(int n, int k, std::vector<int>& indices) {
+  std::vector<bool> mask; 
+  mask.resize(n);
+  indices.clear();
+  
+  for(int j = n-k; j <n; ++j) {
+    int t = rand_bt(0,j+1);
+    if(mask[t]==false) {
+      mask[t]=true;
+    } else {
+      mask[j]=true;
+    }
+  }
+  for(int i = 0; i < n; ++i) {
+    if(mask[i]) {
+      indices.push_back(i);
+    }
+  }
+}
 
-/*
-class proposedPaths {
-  public:
-  //vector<pair<PDG_ID,
-  //vector<pair<int,vector<int> > path;
-  std::map<int,int>;
-}*/
+void HeuristicScheduler::random_order(int n, std::vector<int>& order) {
+  order.clear();
+  for (int i=0; i<n; ++i) order.push_back(i); 
+  std::random_shuffle ( order.begin(), order.end() ); 
+}
+
+
+//could make this a template really!
+vector<bool> HeuristicScheduler::rand_node_choose_k(int k, 
+    std::vector<sbnode*>& poss_nodes, std::vector<sbnode*>& chosen_nodes) {
+  std::vector<bool> mask; 
+  int n = poss_nodes.size();
+  mask.resize(n);
+  chosen_nodes.clear();
+  
+  for(int j = n-k; j <n; ++j) {
+    int t = rand_bt(0,j+1);
+    if(mask[t]==false) {
+      mask[t]=true;
+    } else {
+      mask[j]=true;
+    }
+  }
+
+  for(int i = 0; i < n; ++i) {
+    if(mask[i]) {
+      chosen_nodes.push_back(poss_nodes[i]);
+    }
+  }
+  return mask;
+}
+
+
+
+
 bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   sbio_interface si =  subModel->io_interf();
@@ -55,10 +104,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 
     //for(auto& i : subModel->io_interf().in_vports) {
 
-    int curNum = progress_getCurNum(Input);
-
     for(auto& i : sd) {
-      progress_updateCurNum(Input, curNum);
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/,vport_num);
       vector<pair<int, vector<int>>>& vport_desc = si.getDesc_I(vport_num);
@@ -81,9 +127,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
                   ports_okay_to_use=false;
                   break;
                 } 
-                progress_incCurNum(Input);
               }
-              progress_saveBestNum(Input);
               if(!ports_okay_to_use) {
                 //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
@@ -109,13 +153,10 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
       }
     }
     if(!found_vector_port) {
-      progress_saveBestNum(Input);  
       //cout << "Could not find Input hardware vector port\n";
       return false;
     }
-    //progress_incCurNum(Input);
   }
-  progress_saveBestNum(Input);  
   return true;
 }
 
@@ -138,10 +179,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
     
     bool found_vector_port = false;
 
-    int curNum = progress_getCurNum(Output);
-
     for(auto& i : sd) {
-      progress_updateCurNum(Output, curNum);
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/,vport_num);
       vector<pair<int, vector<int>>>& vport_desc = si.getDesc_I(vport_num);
@@ -170,9 +208,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
                   ports_okay_to_use=false;
                   break;
                 }
-                progress_incCurNum(Output);
               }
-              progress_saveBestNum(Output);
               if(!ports_okay_to_use) {
                 //cout << "skipping this port assignment\n";
                 continue; //don't assign these ports
@@ -199,38 +235,40 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
       }
     }
     if(!found_vector_port) {
-
-      progress_saveBestNum(Output);  
       //cout << "Could not find output hardware vector port\n";
       return false;
     }
-    //progress_incCurNum(Output);
   }
-
-  progress_saveBestNum(Output);  
   return true;
 }
 
 void HeuristicScheduler::applyRouting(Schedule* sched, 
                              CandidateRouting* candRouting) {
 
-  std::unordered_map<SB_CONFIG::sblink*,SbPDG_Edge* >::iterator I,E;
-  for(I= candRouting->routing.begin(), E=candRouting->routing.end();I!=E;++I) {
+  for(auto I = candRouting->routing.begin(), 
+           E = candRouting->routing.end(); I!=E; ++I) {
     sblink* link = I->first;
     sbnode* dest = link->dest();
     if(sbfu* fu = dynamic_cast<sbfu*>(dest)) {
       SbPDG_Node* dest_pdgnode = sched->pdgNodeOf(fu);
       if(!dest_pdgnode) {
         //sched->add_passthrough_node(dest);
-        sched->assign_edge_pt(I->second,dest);
+        for(auto& e : I->second) { 
+          sched->assign_edge_pt(e,dest);
+        }
       }
     }
-    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl;  
-    sched->assign_edgelink(I->second,I->first);
-    sched->updateLinkCount(I->first);
+    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl; 
+    for(auto& e : I->second)  {
+      sched->assign_edgelink(e,I->first);
+    }
   }
-  //TODO: Apply forwarding
 
+  for(auto I : candRouting->edge_prop) {
+    SbPDG_Edge* edge = I.first;
+    int links = I.second.num_links;
+    sched->set_num_links(links,edge);  
+  } 
 }
 
 void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
@@ -264,7 +302,7 @@ void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
 }
 
 void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
-                              vector<sbnode*>& spots) {
+                                        vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_input_iterator I,E;
@@ -279,7 +317,7 @@ void HeuristicScheduler::fillInputSpots(Schedule* sched,SbPDG_Input* pdginst,
 }
 
 void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
-                              vector<sbnode*>& spots) {
+                                         vector<sbnode*>& spots) {
   spots.clear();
   
   SubModel::const_output_iterator I,E;
@@ -297,243 +335,242 @@ void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
 void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
                               vector<sbnode*>& spots) {
   spots.clear();
-  
-  for(int i = 2; i < _sbModel->subModel()->sizex(); ++i) {
-    sbfu* cand_fu = _sbModel->subModel()->fuAt(i,0);
-    
-    if((cand_fu->fu_def()==NULL || cand_fu->fu_def()->is_cap(pdginst->inst()))
-       && sched->pdgNodeOf(cand_fu)==NULL) {
-       spots.push_back(cand_fu);
-    }
-  }
-  
+ 
+  //For Dedicated-required Instructions
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
       sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
+
+      if(!(cand_fu->fu_def()==NULL) &&
+        !cand_fu->fu_def()->is_cap(pdginst->inst())) {
+        continue;
+      }
       
-      if((cand_fu->fu_def()==NULL||cand_fu->fu_def()->is_cap(pdginst->inst()))
-         && sched->pdgNodeOf(cand_fu)==NULL) {
-         spots.push_back(cand_fu);
+      if(!pdginst->is_temporal()) {
+        //Normal Dedidated Instructions
+        if(!sched->pdgNodeOf(cand_fu) && !sched->isPassthrough(cand_fu)) {
+           spots.push_back(cand_fu);
+        }
+      } else {
+        //For temporaly-shared instructions
+        //For now the approach is to *not* consume dedicated resources, although
+        //this can be changed later if that's helpful.
+        if(cand_fu->max_util() > 1) {
+          if(sched->thingsAssigned(cand_fu) +1 < cand_fu->max_util()) {
+            spots.push_back(cand_fu);
+          } 
+        }
       }
     }
   }
+  if(pdginst->is_temporal() && spots.size()==0) {
+    cout << "Warning, no spots for" << pdginst->name() << "\n";
+  }
 }
 
-//I was too lazy to implement dijkstra's algorithm (also i don't like priority queues),
-//so instead i made one fast list (openset) and one slow list (openset_long)
-//Why, you ask is dijkstra's necesary -- well, we want to penalize passthrough nodes.
-pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-  list<sbnode*> openset;
-  list<sbnode*> openset_long;
+//void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
+//                        SB_CONFIG::sbnode* source) {
+// 
+//  std::queue<sbnode*> openset;
+//  openset.push(source);
+//
+//  _sbModel->subModel()->clear_all_runtime_vals();
+//  
+//  SbPDG_Node* pdgnode = pdgedge->def();
+//
+//  while(!openset.empty()) {
+//    sbnode* node = openset.front();
+//    openset.pop();
+//    node->set_done(1);
+//
+//    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
+//      sblink* link = *I;
+//      sbnode* next = link->dest();
+//   
+//      if(sched->pdgNodeOf(link) == pdgnode) {
+//        sched->unassign_link(pdgnode,link);
+//        if(next->done()!=1) {
+//          openset.push(next);
+//        }
+//      } 
+//    }
+//  }
+//}
 
-  unordered_map<sbnode*,int> node_dist;
-  unordered_map<sbnode*,sblink*> came_from;
-  unordered_map<sbnode*,sblink*> prior_came_from;
-  bool found_dest = false;
-  
-  openset.push_back(source);
-  
-  SbPDG_Node* pdgnode = pdgedge->def();
-  
-  //fill up worklist with nodes reachable 
-  Schedule::link_iterator I,E;
-  for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    sblink* link = *I;
-    sbnode* dest = link->dest();
-    sbfu* fu = dynamic_cast<sbfu*>(dest);
-    if(!fu || sched->pdgNodeOf(fu) == NULL) { // don't start at some other instruction's fu
-      node_dist[dest]=0;
-      openset.push_back(dest);
-      prior_came_from[dest]=link;
-    }
+struct mycomparison {
+  bool operator() (std::pair<sbnode*,int> lhs, std::pair<sbnode*,int> rhs) const {
+    return lhs.second > rhs.second;
   }
+};
 
-  while(!openset.empty() || !openset_long.empty()) {
-    if(openset.empty()) {
-      openset = openset_long;
-      openset_long.clear();
-    }
+int HeuristicScheduler::routing_cost(SbPDG_Edge* edge, sblink* link, 
+      Schedule* sched, CandidateRouting& candRouting, sbnode* dest) {
 
-    sbnode* node = openset.front();
-    openset.pop_front();
+    SbPDG_Node* pdgnode = edge->def();
+    sbnode* next = link->dest();
 
-    int cur_dist = node_dist[node];
-    if(cur_dist >= scoreLeft.first) {
-      continue;
-    }
+    //check if connection is closed..
+    SbPDG_Node* sched_node = sched->pdgNodeOf(link);
+    if(sched_node!=NULL && sched_node!=pdgnode) return -1;
     
+    SbPDG_Node* cand_node = candRouting.routing.count(link)==0 ? NULL :
+                            (*candRouting.routing[link].begin())->def();
+    if(cand_node!=NULL && cand_node!=pdgnode) return -1;
+
+    bool is_dest=(next==dest);
+
+    sbfu* fu = dynamic_cast<sbfu*>(next);
+    if(fu && sched->pdgNodeOf(fu) && !is_dest) return -1;  //stop if run into fu
+
+    if(sched_node==pdgnode || cand_node==pdgnode) { 
+      return 0; //free link because schedule or candidate routing already maps
+    } else {
+      if(fu && sched->isPassthrough(fu)) return -1; //someone else's pass through
+    
+      bool passthrough = (fu && !is_dest);
+      return 1+passthrough*1000;
+    }
+}
+
+//Dijkstra's Algorithm
+pair<int,int> HeuristicScheduler::route_minimizeDistance(Schedule* sched, 
+    SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
+    CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+  _route_times++;
+
+  if(sched->link_count(pdgedge)!=0) {
+     cerr << "Edge: " << pdgedge->name() << " is already routed!\n"; 
+     assert(0);
+  }
+  
+  priority_queue<std::pair<sbnode*,int>, 
+                 vector<std::pair<sbnode*,int>>, mycomparison> openset;
+
+  _sbModel->subModel()->clear_all_runtime_vals();
+
+  source->set_node_dist(0);
+  openset.push(make_pair(source,0));
+  
+  //cout << "*** ROUTING Problem; source: " 
+  //     << source->name() << " dest: " << dest->name() 
+  //     << " pdgedge: " << pdgedge->name() << " *** \n";
+
+  while(!openset.empty()) {
+    sbnode* node = openset.top().first;
+    //cout << "pop node: " << node->name() << " dist: " << node->node_dist() << " " << openset.top().second << "\n";
+    openset.pop();
+    if(node->done()) continue;
+    node->set_done(1);
+
+    if(node == dest) break;
+    
+    int cur_dist = node->node_dist();
+    if(cur_dist >= scoreLeft.first) continue;
+
     for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
       sblink* link = *I;
-      
-      //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
-      if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
-      
-      sblink* p = link;
-      SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
-                                  candRouting.routing[p]->def();
-      if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
-     
+ 
       sbnode* next = link->dest();
-      
-      if(node_dist.count(next)!=0) continue; //has or will be looked at
+      if(next->done()) continue;
 
-      found_dest=(next==dest);
-      bool passthrough = (dynamic_cast<sbfu*>(next) && !found_dest);
+      int route_cost = routing_cost(pdgedge,link,sched,candRouting,dest);
+      if(route_cost ==-1) continue; // didn't work
+       
+      int new_dist = cur_dist + route_cost;
 
-      //passthrough = passthrough && ((rand()&0x7)!=0);
-
-      int new_dist = cur_dist+1+passthrough*1000;
-
-      came_from[next] = link;
-      node_dist[next] = new_dist;
-
-      if(found_dest) break; 
-      
-//      if(passthrough&&((((uint64_t)next)&0x70)!=0))  dumb idea
-      if(passthrough) {
-        openset_long.push_back(next);
-      } else {
-        openset.push_back(next);
+      int next_dist = next->node_dist();
+      if(next_dist==-1 || new_dist < next_dist) {
+         next->set_came_from(link);
+         next->set_node_dist(new_dist);
+         openset.emplace(next,new_dist);
+         //cout << "push node at " << link->name() << " with " << new_dist << "\n";
       }
-
     }
-    if(found_dest) break;
-  } 
-  if(!found_dest) return fscore;  //routing failed, no routes exist!
+  }
+  if(!dest->done()) return fscore;  //routing failed, no routes exist!
   
   pair<int,int> score;
-  score = make_pair(0,node_dist[dest]);
-  
+  score = make_pair(0,dest->node_dist());
   sbnode* x = dest;
-  while(came_from.count(x)!=0) {
-    sblink* link = came_from[x];
-    candRouting.routing[link]=pdgedge;
+
+  int num_links=0, pts=0;
+
+  x = dest;
+  while(x->node_dist()!=0) {
+    sblink* link = x->came_from();
+    candRouting.routing[link].insert(pdgedge);
     x=link->orig();
-  }
-
-  int count = 0; 
-  while(prior_came_from.count(x)!=0) {
-    sblink* link = prior_came_from[x];
-    count++;
-    x=link->orig();
-  }
-
-  int tot_lat = node_dist[dest] + count -1;
-  int pts=0;
-  while(tot_lat > 1000) {
-    tot_lat -= 1000;
-    pts++;
-  }
-
-  candRouting.edge_prop[pdgedge]=make_pair(tot_lat,pts);
-  return score;
-}
-
-//routes only inside a configuration
-pair<int,int> HeuristicScheduler::route_minimizeOverlapping(Schedule* sched, SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest,
-                     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
-  
-  list<sbnode*> openset;
-  map<sbnode*,int> node_dist;
-  map<sbnode*,int> node_overlap;
-  map<sbnode*,sblink*> came_from;
-  bool found_dest = false;
-  
-  openset.push_back(source);
-  
-  SbPDG_Node* pdgnode = pdgedge->def();
-  
-  //fill up worklist with nodes reachable 
-  Schedule::link_iterator I,E;
-  for(I=sched->links_begin(pdgnode),E=sched->links_end(pdgnode);I!=E;++I) {
-    openset.push_back((*I)->dest());
-  }
-  
-  while(!openset.empty()) {
-    sbnode* node = openset.front(); 
-    openset.pop_front();
-    
-    //don't search this node if it's too much anyways
-    //if(x->links+1>=cost_allotted) continue; 
-    
-    //check neighboring nodes
-    sbnode::const_iterator I,E;
-    for(I = node->obegin(), E = node->oend(); I!=E; ++I)
-    {
-      sblink* link = *I;
-      
-      //check if connection is closed..
-      SbPDG_Node* sched_exist_pdg = sched->pdgNodeOf(link);
-      //if(sched_exist_pdg!=NULL && sched_exist_pdg!=pdgnode) continue;
-      
-      sblink* p = link;
-      SbPDG_Node* cand_exist_pdg = candRouting.routing.count(p)==0 ? NULL :
-                                  candRouting.routing[p]->def();
-      //if(cand_exist_pdg!=NULL && cand_exist_pdg!=pdgnode) continue;
-      
-      sbnode* next = link->dest();
-      
-   //   if(next==_sbModel->subModel()->cross_switch()) continue;
-    //  if(next==_sbModel->subModel()->load_slice()  ) continue;
-      if(node_dist.count(next)!=0) continue; //it has been looked at, or will be looked at
-      
-      found_dest=(next==dest);
-
-      if(dynamic_cast<sbfu*>(next) && !found_dest) continue;  //don't route through fu
-
-      came_from[next] = link;
-      node_dist[next] = node_dist[node]+1;
-      if ((sched_exist_pdg != NULL && sched_exist_pdg != pdgnode) 
-        || (cand_exist_pdg != NULL && cand_exist_pdg != pdgnode)) {
-        node_overlap[next]=node_overlap[node]+1;
-      }
- 
-      if(found_dest) break; 
-      
-      openset.push_back(next);
+    sbnode* next = link->dest();
+    if(dynamic_cast<sbfu*>(next) && num_links!=0) {
+      pts++;
     }
-    if(found_dest) break;
+    num_links++;
   }
-    
-  if(!found_dest) return fscore;  //routing failed, no routes exist!
-  
-  int distScore;
-  distScore = node_dist[dest];
 
-  int overlapScore;
-  overlapScore = node_overlap[dest];
- 
-  std::pair<int,int> score = make_pair(overlapScore,distScore);
-   
-  sbnode* x = dest;
-  while(came_from.count(x)!=0) {
-    sblink* link = came_from[x];
-    candRouting.routing[link]=pdgedge;
+  while(x != source) {
+    sblink* link = x->came_from();
+    num_links++;
+    candRouting.routing[link].insert(pdgedge);
     x=link->orig();
   }
-  
+  num_links--;
+
+  auto& prop = candRouting.edge_prop[pdgedge];
+  prop.num_links=num_links;
+  prop.num_passthroughs=pts;
   return score;
 }
 
 bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
-  int ninsts = sbPDG->inst_end() - sbPDG->inst_begin();
+  int dedicated_insts=0;
+  int temporal_insts=0;
+  for(auto I = sbPDG->inst_begin(), E=sbPDG->inst_end(); I!=E; ++I) {
+    SbPDG_Inst* i = *I;
+    if(!i->is_temporal()) {
+      dedicated_insts++;
+    } else {
+      temporal_insts++;
+    }
+  }
+
+  int temporal_fus=0;
+  int temporal_inst_slots=0;
+  auto fu_list = _sbModel->subModel()->fu_list();
+  for(sbfu* inst : fu_list) {
+    if(inst->max_util() > 1) {
+      temporal_inst_slots+=inst->max_util();
+      temporal_fus += 1;
+    }
+  }
 
   int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
 
-  if(ninsts > nfus) {
-    cerr << "\n\nError: Too many instructions in SbPDG for given SBCONIG\n\n";
+  if(dedicated_insts > nfus) {
+    cerr << "\n\nError: Too many dedicated instructions ("
+         << dedicated_insts << ") in SbPDG for given SBCONFIG (has " 
+         << nfus << " fus)\n\n";
+    exit(1);
+  }
+  if(temporal_insts > temporal_inst_slots) {
+     cerr << "\n\nError: Too many temporal instructions ("
+         << temporal_insts << ") in SbPDG for given SBCONFIG (has " 
+         << temporal_inst_slots << " temporal slots)\n\n";
     exit(1);
   }
 
   bool failed_count_check=false;
 
-  std::map<sb_inst_t,int> count_types;
+  std::map<sb_inst_t,int> dedicated_count_types, temporal_count_types;
   for(auto Ii=sbPDG->inst_begin(), Ei=sbPDG->inst_end(); Ii!=Ei; ++Ii) {
-    count_types[(*Ii)->inst()]++;
+    if(!(*Ii)->is_temporal()) {
+      dedicated_count_types[(*Ii)->inst()]++;
+    } else {
+      temporal_count_types[(*Ii)->inst()]++;
+    }
   }
 
-  for(auto& pair : count_types) {
+  for(auto& pair : dedicated_count_types) {
     sb_inst_t sb_inst = pair.first;
     int pdg_count = pair.second;
 
@@ -549,9 +586,33 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     if(fu_count < pdg_count) {
       failed_count_check=true;
       cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst) 
-           << " insts, but only " << fu_count << " fus to support them\n";
+           << " dedicated insts, but only " << fu_count 
+           << " dedicated fus to support them\n";
     }
   }
+
+  for(auto& pair : temporal_count_types) {
+    sb_inst_t sb_inst = pair.first;
+    int pdg_count = pair.second;
+
+    int fu_count =0;
+    for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+      for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+        sbfu* cand_fu = _sbModel->subModel()->fuAt(i,j);
+        if(cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(sb_inst)) {
+          fu_count+=cand_fu->max_util();
+        }
+      }
+    }
+    if(fu_count < pdg_count) {
+      failed_count_check=true;
+      cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst) 
+           << " temporal insts, but only " 
+           << fu_count << " temporal fu slots to support them\n";
+    }
+  }
+
+
 
   if(failed_count_check) {
     cerr << "\n\nError: FAILED Basic FU Count Check\n\n";

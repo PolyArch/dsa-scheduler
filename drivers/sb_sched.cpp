@@ -6,9 +6,6 @@
 #include <fstream>
 
 #include "scheduler.h"
-#include "scheduler_greedy.h"
-#include "scheduler_bkt.h"
-#include "scheduler_mlg.h"
 #include "scheduler_gams.h"
 #include "scheduler_sg.h"
 #include "scheduler_sa.h"
@@ -109,7 +106,13 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
-  SbModel sbmodel(argv[0]);
+  std::string model_filename = argv[0];
+  int lastindex = model_filename.find_last_of(".");
+  string model_rawname = model_filename.substr(0,lastindex);
+  string model_base =
+    model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
+
+  SbModel sbmodel(model_filename.c_str());
   sbmodel.setMaxEdgeDelay(max_edge_delay);
   sbmodel.maxEdgeDelay();
 
@@ -117,9 +120,10 @@ int main(int argc, char* argv[])
   //                               << sbmodel.subModel()->sizey() <<"\n";
 
   std::string pdg_filename=argv[1];
-  int lastindex = pdg_filename.find_last_of("."); 
+  lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
 
+  
 
   string dfg_base = basename(pdg_filename); // the name without preceeding dirs or file extension
   string pdg_dir = basedir(pdg_filename);   // preceeding directories only
@@ -160,18 +164,12 @@ int main(int argc, char* argv[])
     scheduler_gams->setMipstart(mipstart);
     scheduler_gams->setSll(sll);
     scheduler = scheduler_gams;
-  } else if(str_schedType == "greedy") { /*original*/
-    scheduler = new SchedulerGreedy(&sbmodel);
-  } else if(str_schedType == "mlg") { /*multiple-link greedy*/
-    scheduler = new SchedulerMultipleLinkGreedy(&sbmodel);
   } else if(str_schedType == "sg") { /*stochastic greedy*/
     auto* scheduler_sg = new SchedulerStochasticGreedy(&sbmodel);
     scheduler_sg->set_integrate_timing(!no_int_time);
     scheduler = scheduler_sg;
   } else if(str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
-  } else if(str_schedType == "bkt") {
-    scheduler = new SchedulerBacktracking(&sbmodel);
   } else {
     cerr <<  "Something Went Wrong with Default Scheduler String";
     exit(1);
@@ -192,8 +190,9 @@ int main(int argc, char* argv[])
   sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
 
   if(verbose) {
-    int lat,latmis;
-    sched->calcLatency(lat,latmis);
+    int lat=0,latmis=0;
+    sched->cheapCalcLatency(lat,latmis);
+    //sched->checkOutputMatch(latmis);
     if(succeed_sched) {
       cout << "latency: " << lat << "\n";  
       cout << "latency mismatch: " << latmis << "\n";
@@ -211,10 +210,16 @@ int main(int argc, char* argv[])
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigBits(osh, dfg_base);
+
+  std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
+  sched->printGraphviz(sched_viz.c_str());
+ 
   std::string verif_header = verif_dir + dfg_base + ".configbits";
   std::ofstream vsh(verif_header);
   assert(vsh.good()); 
   sched->printConfigVerif(vsh);
+
+  delete sched; // just to calm HEAPCHECK
 
 //  int num_pdgnodes=
 //  (sched->sbpdg()->inst_end()-  sched->sbpdg()->inst_begin())+

@@ -14,16 +14,16 @@ Output: CNT
 
 ------------------------
 
-Input: H
-Input: L
-Input: ONE
-Input: reset
+Input: H2
+Input: L2
+Input: ONE2
+Input: reset2
 
-IncH = Add64(H,ONE)
-Cond = ICmpEQ(L, H)
+IncH = Add64(H2,ONE2)
+Cond = ICmpEQ(L2, H2)
 
-NewL = Select(L,IncH,Cond)
-CNT  = Acc64(ONE,reset)
+NewL = Select(L2,IncH,Cond)
+CNT  = Acc64(ONE2,reset2)
 
 Output: NewL
 Output: CNT

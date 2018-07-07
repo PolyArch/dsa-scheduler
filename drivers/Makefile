@@ -6,7 +6,7 @@ include ../make.config
 SYS = $(shell sys)
 CXX = g++
 
-CXXFLAGS := $(OPT) -Wall -g -std=c++11 
+CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
 LIB_PATH=$(SS_TOOLS)/lib 
 INC_SBMODEL_PATH=$(SS_TOOLS)/include/ss-config
@@ -14,7 +14,7 @@ INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LIBS=-ly -ll -lsbscheduler -lsbconfig
+LIBS +=-ly -lfl -lsbscheduler -lsbconfig
 
 #all: reschedule stat-config
 

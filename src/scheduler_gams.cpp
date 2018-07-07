@@ -38,32 +38,29 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 
   int config=0;
   //Mapping Variables
-  for(auto I = sched->assign_node_begin(), E= sched->assign_node_end();I!=E;++I) {
-    sbnode* spot = I->first;
-    SbPDG_Node* pdgnode = I->second;
+  for(auto I = sbPDG->nodes_begin(), E=sbPDG->nodes_end(); I!=E; ++I) {
+    SbPDG_Node* pdgnode = *I;
+    sbnode* spot = sched->locationOf(pdgnode);
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
-  }
- 
-  for(auto Il = sched->assign_link_begin(), 
-      El= sched->assign_link_end();Il!=El;++Il) {
-    sblink* link = Il->first;
-    SbPDG_Node* pdgnode = Il->second;
-    ofs << "Mvl.l('" << pdgnode->gamsName() 
-        << "','" << link->gams_name(config) << "')=1;\n";
-  }
-  
-  for(auto Ile = sched->assign_edgelink_begin(), 
-      Ele= sched->assign_edgelink_end();Ile!=Ele;++Ile) {
+
+    for(auto II = pdgnode->uses_begin(), EE = pdgnode->uses_end(); II!=EE; ++II) {
+      SbPDG_Edge* pdgedge = *II;
+      auto& link_set = sched->links_of(pdgedge);
     
-    sblink* link = Ile->first;
-    set<SbPDG_Edge*>& edgelist= Ile->second;
-    
-    set<SbPDG_Edge*>::const_iterator Ie,Ee;
-    for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; ++Ie) {
-      SbPDG_Edge* pdgedge = *Ie;
-      ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
-          << link->gams_name(config) << "')=1;\n";
+      for(auto LI = link_set.begin(), LE = link_set.end(); LI != LE; ++LI) {
+        sblink* link = *LI;
+        ofs << "Mvl.l('" << pdgnode->gamsName() 
+            << "','" << link->gams_name(config) << "')=1;\n";
+        ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
+            << link->gams_name(config) << "')=1;\n";
+
+        int order = sched->link_order(link);
+        if(order!=-1) {
+          ofs << "O.l('" << link->gams_name(config) << "')=" << order << ";\n";
+        }
+
+      }
     }
   }
 
@@ -97,12 +94,14 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   }
 
   //Ordering
-  auto link_order = sched->get_link_order();
-  for(auto i : link_order) {
-    sblink* l = i.first;
-    int order = i.second;
-    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
-  }
+  //auto link_order = sched->get_link_prop();
+  //for(auto i : link_order) {
+  //  sblink* l = i.first;
+  //  int order = i.second.order;
+  //  if(order!=-1) {
+  //    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
+  //  }
+  //}
 
   //Timing
   int d1,d2;
@@ -210,7 +209,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     //  heur_scheduler.set_integrate_timing(false);
     //}
     heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
-    heur_sched->calcAssignEdgeLink();
+    //heur_sched->calcAssignEdgeLink();
   }
 
   if(str_subalg == "MRT'" || str_subalg == "MR'.T'" || str_subalg == "MR'") {
@@ -219,15 +218,16 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   }
 
   //load up various models?
-  string hw_model          = string((const char*)gams_models_hw_model_gms);
-  string timing_model      = string((const char*)gams_models_timing_model_gms);
-  char* transfer_model = (char*) malloc(gams_models_stage_model_gms_len+1);
-  memcpy((void*) transfer_model, (void*) gams_models_stage_model_gms, gams_models_stage_model_gms_len);
-  transfer_model[gams_models_stage_model_gms_len] = '\0';
-  string stage_model       = string((char*) transfer_model);
-  stage_model = stage_model.substr(0, stage_model.length()-2);
-  string softbrain_gams    = string((const char*)gams_models_softbrain_gams_gms);
-  string softbrain_gams_hw = string((const char*)gams_models_softbrain_gams_hw_gms);
+  string hw_model          = string((char*)gams_models_hw_model_gms,
+                                           gams_models_hw_model_gms_len);
+  string timing_model      = string((char*)gams_models_timing_model_gms,
+                                           gams_models_timing_model_gms_len);
+  string stage_model       = string((char*)gams_models_stage_model_gms,
+                                           gams_models_stage_model_gms_len);
+  string softbrain_gams    = string((char*)gams_models_softbrain_gams_gms,
+                                           gams_models_softbrain_gams_gms_len);
+  string softbrain_gams_hw = string((char*)gams_models_softbrain_gams_hw_gms,
+                                           gams_models_softbrain_gams_hw_gms_len);
 
   //mkfifo("/tmp/gams_fifo",S_IRWXU);
   stringstream ss;
@@ -310,7 +310,6 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     }
 
     ofs_constraints.close();
-    free(transfer_model);
      // Print the kinds of instructions
     ofstream ofs_kinds(_gams_work_dir+"/softbrain_kind.gams", ios::out);
     assert(ofs_kinds.good());
@@ -409,7 +408,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
-  enum {VtoN,VtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
+  enum {VtoN,EtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
   bool message_start=false, message_fus_ok=false, 
        message_ports_ok=false, message_complete=false;
@@ -427,8 +426,8 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       parse_stage = Parse_None; 
       if(ModelParsing::StartsWith(line,"[vertex-node-map]")) {
         parse_stage = VtoN; continue;
-      } else if(ModelParsing::StartsWith(line,"[vertex-link-map]")) {
-        parse_stage = VtoL; continue;
+      } else if(ModelParsing::StartsWith(line,"[edge-link-map]")) {
+        parse_stage = EtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[switch-map]")) {
         parse_stage = LtoL; continue;
       } else if(ModelParsing::StartsWith(line,"[extra-lat]")) {
@@ -605,23 +604,25 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
       }
       
-    } else if (parse_stage==VtoL) {
+    } else if (parse_stage==EtoL) {
 //      if(_assignSwitch.size()!=0) {
 //        continue;
 //      }
 
       stringstream ss(line);
-      getline(ss, vertex_name, ':');
+      getline(ss, edge_name, ':');
       //getline(ss, list_of_links);
       
-      ModelParsing::trim(vertex_name);
-      if(vertex_name.empty()) continue;
+      ModelParsing::trim(edge_name);
+      if(edge_name.empty()) continue;
       
-      SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
+      SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
+      SbPDG_Node* pdgnode = pdgedge->def(); 
       if(pdgnode==NULL) {
         cerr << "null pdgnode:\"" << vertex_name << "\"\n";
       }
-      
+     
+      //TODO:FIXME check if I broke anything 
       while(ss.good()) {
         getline(ss, link_name, ' ');
         ModelParsing::trim(link_name);
@@ -632,7 +633,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
           cerr << "null slink:\"" << link_name << "\"\n";
         }
         
-        schedule->assign_link(pdgnode,slink);
+        schedule->assign_edgelink(pdgedge,slink);
         
         if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
           schedule->assign_node(pdgnode,sbin); 

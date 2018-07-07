@@ -11,15 +11,26 @@
 using namespace std;
 using namespace SB_CONFIG;
 
-int SbPDG_Node::ID_SOURCE=0;
-int SbPDG_Edge::ID_SOURCE=0;
-
 CtrlMap CtrlBits::ctrl_map;
 
 bool SbPDG_VecInput::backPressureOn() {
     // return getBackBit();
     return false;
 }
+
+SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
+               EdgeType etype, SbPDG* sbpdg) {
+  _def=def;
+  _use=use;
+  _etype=etype;
+  _ID=sbpdg->inc_edge_id();
+  _sbpdg=sbpdg;
+}
+
+bool SbPDG_Node::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
+}
+
 /*
 void SbPDG_Edge::compute_next(){
   if(_data_buffer.size()==1){
@@ -36,7 +47,7 @@ void SbPDG_Edge::compute_after_pop(bool print, bool verif){
     _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
-void order_insts(SbPDG_Inst* inst,
+void SbPDG::order_insts(SbPDG_Inst* inst,
                  std::set<SbPDG_Inst*>& done_nodes,         //done insts
                  std::vector<SbPDG_Inst*>& ordered_insts) {
 
@@ -249,12 +260,12 @@ SymEntry SbPDG::createInst(std::string opcode,
   return SymEntry(pdg_inst);
 }
 void SbPDG::set_pragma(std::string& c, std::string& s) {
-
   if(c==string("dfg")) {
     cout << "No pragmas yet for dfg\n";
   } else if (c==string("group")) {
     if(s=="temporal") { 
-      _propGroups.end()->is_temporal=true;
+      assert(_groupProps.size() > 0);
+      _groupProps[_groupProps.size()-1].is_temporal=true;
     } 
   } else {
     cout << "Context \"" << c << "\" not recognized.";
@@ -264,7 +275,7 @@ void SbPDG::set_pragma(std::string& c, std::string& s) {
 void SbPDG::start_new_dfg_group() {
   _vecInputGroups.push_back({});
   _vecOutputGroups.push_back({});
-  _propGroups.push_back(GroupProp());
+  _groupProps.push_back(GroupProp());
 }
 
 SbPDG::SbPDG(string filename) : SbPDG() {
@@ -557,6 +568,26 @@ int SbPDG_Inst::update_next_nodes(bool print, bool verif){
     return 0;
 }
 
+bool SbPDG_Vec::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
+}
+
+SbPDG_Vec::SbPDG_Vec(std::string name, int id, SbPDG* sbpdg)
+    : _name(name), _ID(id), _sbpdg(sbpdg) {
+  //TODO:FIXME: This will likely be incorrect while rebuilding the
+  //DFG from a config file, but might work for now
+  _group_id = sbpdg->num_groups()-1;
+  _locMap.resize(1); //set up default loc map
+  _locMap[0].push_back(0);
+}
+
+SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
+      _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v) {
+  //TODO:FIXME: This will likely be incorrect while rebuilding the
+  //DFG from a config file, but might work for now
+  _group_id = _sbpdg->num_groups()-1;      
+
+}
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
     _sbpdg->push_transient(this, v,valid, avail, cycle);
@@ -814,7 +845,8 @@ void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, in
 }
 
 //Connect two nodes in PDG
-SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edge::EdgeType etype) {
+SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
+                           SbPDG_Edge::EdgeType etype) {
  
   assert(orig != dest && "we only allow acyclic pdgs");
 
@@ -825,7 +857,6 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,SbPDG_Edg
   } else { 
     new_edge = new SbPDG_Edge(orig, dest, etype, this);
   }
-
 
   SbPDG_Inst* inst = 0;
   if(etype==SbPDG_Edge::ctrl_true) {
@@ -904,6 +935,8 @@ int SbPDG::remappingNeeded(int num_HW_FU) {
 }
 
 void SbPDG::removeDummies() {
+  _orderedInsts.clear(); //invalidate dummies
+
   for (auto Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {
     SbPDG_Inst* inst = *Ii;
     if(inst->isDummy()) {
@@ -1228,9 +1261,6 @@ void SbPDG::calc_minLats() {
       }
     }
   }
-
-
-
 }
 
 //Gams related
@@ -1405,9 +1435,6 @@ void SbPDG::printGams(std::ostream& os,
     } else {
        os << (*Ie)->gamsName() << " " << "0";  //TODO: WHAT LATENCY SHOULD I USE??
     }
-    
-   
   }
   os << "/;\n";
-  
 }

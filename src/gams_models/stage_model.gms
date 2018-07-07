@@ -105,15 +105,15 @@ PT.l(n)=0;
 
 * Set input latencies to 0
 Tv.lo(v) = minT(v);
-Tv.up(v) = minT(v) + 25;
+Tv.up(v) = minT(v) + 30;
 Tv.up(v)$kindV('Input',v)=0;
 
 loop((pv,v)$(VI(pv,v) <> 0 and KindV('Output',v)),
   minTpv.lo(pv)=minT(v);
   maxTpv.lo(pv)=minT(v);
 
-  minTpv.up(pv)=minT(v) + 25;
-  maxTpv.up(pv)=minT(v) + 25;
+  minTpv.up(pv)=minT(v) + 30;
+  maxTpv.up(pv)=minT(v) + 30;
 );
 
 * Fix the lat-mis related variables
@@ -264,7 +264,7 @@ equation latency_vmin(e,v);
 latency_vmin(e,v2)$(Gev(e,v2))..   minTv(v2) =l= Te(e);
 
 equation calc_Tv_le_Te(e,v);
-calc_Tv_le_Te(e,v2)$(Gev(e,v2))..   (Tv(v2) - Te(e)) =l= 25 * (1 - Tv_le_Te(e,v2));
+calc_Tv_le_Te(e,v2)$(Gev(e,v2))..   (Tv(v2) - Te(e)) =l= 30 * (1 - Tv_le_Te(e,v2));
 
 equation force_One_Tv_le_Te(v);
 force_One_Tv_le_Te(v)$(not KindV('Input',v)).. sum(e$Gev(e,v), Tv_le_Te(e,v)) =g= 1;
