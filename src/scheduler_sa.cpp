@@ -71,6 +71,8 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(
 //                succeed_sched ? ", all mapped" : "",
 //                succeed_timing ? ", mismatch == 0" : "");
 
+//    sched->printGraphviz("hi.gv");
+
     return make_pair(succeed_sched + succeed_timing + succeed_ovr -num_left, -obj);
 }
 
@@ -128,6 +130,8 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
     int succeed_timing = (latmis ==0) && (ovr ==0);
 
     if (score > best_score) {
+      sched->printGraphviz("viz/cur-best.gv");
+
       if(remapNeeded) {
         sbPDG->printGraphviz("viz/remap.dot");
         best_dummies = sbPDG->getDummiesOutputs();
