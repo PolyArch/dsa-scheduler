@@ -187,7 +187,9 @@ int main(int argc, char* argv[])
 
   succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
-  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
+  //if(succeed_sched) {
+  //  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
+  //}
 
   if(verbose) {
     int lat=0,latmis=0;
