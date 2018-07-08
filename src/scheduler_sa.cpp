@@ -445,7 +445,11 @@ bool SchedulerSimulatedAnnealing::map_one_output(SbPDG* sbPDG, Schedule* sched) 
     if(++p ==n) {p=0;}
     SbPDG_VecOutput* vec_out = sbPDG->vec_out(p);
     if(sched->vecMapped(vec_out)) continue;
-    return schedule_output(vec_out,sbPDG,sched);
+    bool success = schedule_output(vec_out,sbPDG,sched);
+    //if(!success) {
+    //  cout << "failed with " << vec_out->name() << "\n";
+    //}
+    return success;
   }
   return false; 
 }
@@ -466,7 +470,7 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     //cout << "try to map this inst: " << inst->name() << "\n";
 
     bool success = scheduleNode(sched,inst);
-    //if(success) {
+    //if(!success) {
     //  cout << "success with " << inst->name() << "\n";
     //} else {
     //  cout << "failed with " << inst->name() << "\n";
@@ -809,7 +813,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 
   if(t_cost==2) {
     if(!is_temporal) {
-      return -1; 
+      return 100; 
     } 
   }
   bool is_dest=(next==dest);
