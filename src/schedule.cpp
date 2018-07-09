@@ -664,7 +664,16 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               //delay for each input
               int d1=IN_DELAY_LOC+BITS_PER_DELAY*n;
               int d2=d1+BITS_PER_DELAY-1;
-              _bitslices.write(cur_slice, d1, d2, edge_delay(inc_edge));
+
+              int ed = edge_delay(inc_edge);
+              int max_representable = ((1 << BITS_PER_DELAY)-1);
+              if(ed > max_representable) {
+                cout << "FU " << i << "," << j << " delay too large (" 
+                  << ed << ", but if that doesn't matter just ignore.\n";
+                ed = max_representable;
+              }
+
+              _bitslices.write(cur_slice, d1, d2, ed);
               //cout <<  i << " " << j << " slice: " << cur_slice 
               //   << ",delay:" << _extraLatOfEdge[inc_edge] << "\n";
 

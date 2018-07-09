@@ -155,7 +155,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   Schedule* best_schedule=NULL;
   Schedule* cur_schedule=NULL;
 
-  while(total_msec() < _reslim * 1000) {
+  while(total_msec() < _reslim * 10000) {
     bool success = schedule_internal(sbPDG,cur_schedule);
     
     int lat,latmis;
@@ -176,7 +176,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     success = success && (latmis == 0);
 
     iters++;
-    if(success || iters > 20) {
+    if(success || iters > 1000) {
       schedule = best_schedule;
       return success;
     }     
