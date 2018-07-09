@@ -80,6 +80,14 @@ class SbPDG_Edge {
       return _data_buffer.front().second;
     }
 
+    void dummy_pop_buffer_val(bool print, bool verif) {
+      assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
+      // print_buf_state();
+
+      // _data_buffer.pop();
+      compute_after_pop(print, verif);      
+     
+    }
     void pop_buffer_val(bool print, bool verif) {
       assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
       // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
@@ -356,9 +364,12 @@ class SbPDG_Node {
           int num_computed = compute_backcgra(print,verif);//it's 0 or 1
           return num_computed;
         } else {
-          // _inputs_ready-=1;
+          _inputs_ready-=1;
+          // _sbpdg->push_buf_transient(this->first_operand(), true, 1); // 0 bit implies dummy
+          this->push_buf_dummy_node();
+          // pop
           // add some code here
-          std::cout << "I NEED AN OUTPUT BUFFER\n";
+          // std::cout << "I NEED AN OUTPUT BUFFER\n";
           return 0;
         }
       }
@@ -368,6 +379,8 @@ class SbPDG_Node {
     int get_inputs_ready() {
         return _inputs_ready;
     }
+
+    void push_buf_dummy_node();
 
     bool is_temporal();
    //---------------------------------------------------------------------------
@@ -1335,8 +1348,9 @@ SbPDG_VecInput* get_vector_input(int i){
       transient_values[(cycle+cur_node_ptr)%get_max_lat()].push_back(temp);
     }
     
-    void push_buf_transient(SbPDG_Edge* e, int cycle){
-      buf_transient_values[(cycle+cur_buf_ptr)%get_max_lat()].push_back(e);
+    void push_buf_transient(SbPDG_Edge* e, bool is_dummy, int cycle){
+      struct buffer_pop_info* temp = new buffer_pop_info(e, is_dummy);
+      buf_transient_values[(cycle+cur_buf_ptr)%get_max_lat()].push_back(temp);
       // std::cout << "POP FROM BUFFER AT: " << (cycle+cur_buf_ptr)%get_max_lat() << "\n";
     }
 
@@ -1345,12 +1359,18 @@ SbPDG_VecInput* get_vector_input(int i){
       // int num_computed=0;
       // std::cout << "size of the next list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
       for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end(); it++){
-        std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
+        // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
         // set the values
-        SbPDG_Edge* e = *it;
-        std::cout << "Allotted value of iterator to edge\n";
-        e->pop_buffer_val(print, verif);
-        std::cout << "popped value from buffer\n";
+        buffer_pop_info* temp = *it;
+        SbPDG_Edge* e = temp->e;
+        bool dummy = temp->is_dummy;
+        // std::cout << "Allotted value of iterator to edge\n";
+        if(!dummy){
+          e->pop_buffer_val(print, verif);
+        } else {
+          e->dummy_pop_buffer_val(print, verif);
+        }
+        // std::cout << "popped value from buffer\n";
         /*if(!e->is_buffer_empty()){
             SbPDG_Node* n = e->use();
             n->set_is_new_val(1);
@@ -1358,7 +1378,7 @@ SbPDG_VecInput* get_vector_input(int i){
         }
         */
         buf_transient_values[cur_buf_ptr].erase(it);
-        std::cout << "erased value from cyclic buffer\n";
+        // std::cout << "erased value from cyclic buffer\n";
         it--;
       }
       // std::cout << "new size of the list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
@@ -1427,7 +1447,17 @@ SbPDG_VecInput* get_vector_input(int i){
     std::list<struct cycle_result*> transient_values[1000];
     int cur_node_ptr=0;
     int cur_buf_ptr=0;
-    std::list<SbPDG_Edge*> buf_transient_values[1000];
+    struct buffer_pop_info{
+       SbPDG_Edge* e;
+       bool is_dummy;
+
+       buffer_pop_info(SbPDG_Edge* edge, bool dummy){
+          e = edge;
+          is_dummy = dummy;
+       }
+    };
+    std::list<struct buffer_pop_info*> buf_transient_values[1000];
+    // std::list<SbPDG_Edge*> buf_transient_values[1000];
     //--------------------------------------
 
     std::vector<SbPDG_Node*> _nodes;

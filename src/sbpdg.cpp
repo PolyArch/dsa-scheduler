@@ -47,6 +47,12 @@ void SbPDG_Edge::compute_after_pop(bool print, bool verif){
     _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
+
+void SbPDG_Node::push_buf_dummy_node(){
+    _sbpdg->push_buf_transient(this->first_inc_edge(), true, 1); // can it be immediate?
+}
+
+
 void SbPDG::order_insts(SbPDG_Inst* inst,
                  std::set<SbPDG_Inst*>& done_nodes,         //done insts
                  std::vector<SbPDG_Inst*>& ordered_insts) {
@@ -531,7 +537,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
        _inputs_ready += 1;
      }
      else{
-       _sbpdg->push_buf_transient(_ops[i],inst_throughput);
+       _sbpdg->push_buf_transient(_ops[i], false, inst_throughput);
      }
    }
             
