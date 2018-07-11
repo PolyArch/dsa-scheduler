@@ -1434,3 +1434,13 @@ void SbPDG::printGams(std::ostream& os,
   }
   os << "/;\n";
 }
+
+//Boost Stuff
+BOOST_CLASS_EXPORT_GUID(SbPDG_Edge,  "SbPDG_Edge");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Node,  "SbPDG_Node")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Inst,  "SbPDG_Inst");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Input, "SbPDG_Input")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Output,"SbPDG_Output")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Vec,"SbPDG_Vec")
+BOOST_CLASS_EXPORT_GUID(SbPDG_VecInput,"SbPDG_VecInput")
+BOOST_CLASS_EXPORT_GUID(SbPDG_VecOutput,"SbPDG_VecOutput")

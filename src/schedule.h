@@ -15,6 +15,16 @@
 #include "color_mapper.h"
 #include "limits.h"
 
+//Experimental Boost Stuffs
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/unordered_map.hpp>
+#include <boost/serialization/unordered_set.hpp>
+
+
 using namespace SB_CONFIG;
 
 //How do you choose which switch in each row and FU to pass ??
@@ -39,6 +49,7 @@ using namespace SB_CONFIG;
 
 class Schedule {
   public:
+    Schedule(){}
     Schedule(std::string filename); //Read in schedule (both sbmodel, sbpdg, and schedule from file)
 
     Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {
@@ -73,8 +84,10 @@ class Schedule {
       assert(os.good()); 
       printConfigText(os);
     }
-   
-    void printConfigBits(std::ostream& os, std::string cfg_name );
+
+    void printConfigHeader(std::ostream&, std::string cfg_name, bool cheat=true);
+    void printConfigBits(std::ostream& os, std::string cfg_name);
+    void printConfigCheat(std::ostream& os, std::string cfg_name);
     void printConfigVerif(std::ostream& os);
     
     //Rest of Stuff
@@ -536,9 +549,12 @@ class Schedule {
       }//end for sizey
     }
 
-  //NOTE/WARN: If you call interpretConfigBits, this will create an
-  //sbPDG that you need to delete later
-  std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBits();
+  //NOTE/WARN: interpretConfigBits creates a pdg object that should
+  //be cleaned up later by the schedule object
+  std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBits(int size, uint64_t* bits);
+  std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBitsCheat(char* s);
+  std::map<SB_CONFIG::sb_inst_t,int> interpretConfigBitsDedicated();
+
   void clear_sbpdg();
 
   bitslices<uint64_t>& slices() {return _bitslices;}
@@ -629,52 +645,7 @@ class Schedule {
     std::map<SbPDG_Node*, std::vector<SbDIR::DIR> >&);
 
 
-    //Private Data
-    SbDIR sbdir;
-
-    bitslices<uint64_t> _bitslices;
-    SbModel* _sbModel;
-    SbPDG*   _sbPDG;
-
-    int _totalViolation=0;
-    int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
-
   public:
-    struct VertexProp {
-      int min_lat=0, max_lat=0, lat=0, vio=0;
-      sbnode* node=NULL;
-    };
-
-    struct EdgeProp {
-      int num_links=0;
-      int extra_lat=0;
-      std::unordered_set<sblink*> links;
-      std::unordered_set<sbnode*> passthroughs;
-      void reset() {
-        num_links=0;
-        extra_lat=0;
-        links.clear();
-        passthroughs.clear();
-      }
-    };
-
-    struct NodeProp {
-      int num_passthroughs=0;
-      std::unordered_set<SbPDG_Node*> vertices;
-    };
-
-    struct LinkProp {
-      int lat=0, order=-1;
-      std::unordered_set<SbPDG_Edge*> edges;
-      std::unordered_set<SbPDG_Node*> nodes;
-    };
-
-    struct VecProp{ 
-      int min_lat=0, max_lat=INT_MAX,lat=0;
-      std::pair<bool,int> vport = {false,-1};
-      std::vector<bool> mask;
-    };
-
     int num_insts_mapped() {return _num_mapped[SbPDG_Node::V_INST];}
     int num_inputs_mapped() {return _num_mapped[SbPDG_Node::V_INPUT];}
     int num_outputs_mapped() {return _num_mapped[SbPDG_Node::V_OUTPUT];}
@@ -713,9 +684,94 @@ class Schedule {
 
     void get_overprov(int& ovr, int& max_util);
 
+    struct VertexProp {
+      int min_lat=0, max_lat=0, lat=0, vio=0;
+      sbnode* node=NULL;
+
+      private:    
+      friend class boost::serialization::access;
+      template<class Archive>
+      void serialize(Archive & ar, const unsigned version) {
+        ar & min_lat & max_lat & lat & vio;
+      }
+
+    };
+
+    struct EdgeProp {
+      int num_links=0;
+      int extra_lat=0;
+      std::unordered_set<sblink*> links;
+      std::unordered_set<sbnode*> passthroughs;
+      void reset() {
+        num_links=0;
+        extra_lat=0;
+        links.clear();
+        passthroughs.clear();
+      }
+
+      private:    
+      friend class boost::serialization::access;
+      template<class Archive>
+      void serialize(Archive & ar, const unsigned version) {
+        ar & num_links & extra_lat; //need to restore links & passthroughs
+      }
+    };
+
+    struct NodeProp {
+      int num_passthroughs=0;
+      std::unordered_set<SbPDG_Node*> vertices;
+
+      private:    
+      friend class boost::serialization::access;
+      template<class Archive>
+      void serialize(Archive & ar, const unsigned version) {
+        ar & num_passthroughs & vertices;
+      }
+    };
+
+    struct LinkProp {
+      int lat=0, order=-1;
+      std::unordered_set<SbPDG_Edge*> edges;
+      std::unordered_set<SbPDG_Node*> nodes;
+
+      private:    
+      friend class boost::serialization::access;
+      template<class Archive>
+      void serialize(Archive & ar, const unsigned version) {
+        ar & lat & order & edges & nodes;
+      }
+    };
+
+    struct VecProp{ 
+      int min_lat=0, max_lat=INT_MAX,lat=0;
+      std::pair<bool,int> vport = {false,-1};
+      std::vector<bool> mask;
+
+      private:    
+      friend class boost::serialization::access;
+      template<class Archive>
+      void serialize(Archive & ar, const unsigned version) {
+        ar & min_lat & max_lat & lat & vport & mask;
+      }
+    };
+
   private:    
 
-    ColorMapper _cm;
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned version) {
+      //Note: sbmodel not serialized 
+      ar & _sbPDG & _num_mapped & _links_mapped & _edge_links_mapped 
+         & _wide_ports & _assignVPort & _vecProp & _vertexProp 
+         & _edgeProp & _nodeProp & _linkProp;
+    }
+
+    //Private Data
+    SbModel* _sbModel; 
+    SbPDG*   _sbPDG;
+
+    int _totalViolation=0;
+    int _max_lat=-1, _max_lat_mis=-1; //filled from interpretConfigBits + calcLatency
 
     int _num_mapped[SbPDG_Node::V_NUM_TYPES] = {0}; //init all to zero
     int _links_mapped = 0, _edge_links_mapped = 0;
@@ -732,9 +788,16 @@ class Schedule {
     std::vector< NodeProp > _nodeProp;
     std::vector< LinkProp > _linkProp;
 
+
     std::map<sbswitch*, std::map<sblink*,sblink*>> _assignSwitch; //out to in
 
     int _decode_lat_mis=0;
+
+    //CGRA-parsable Config Data
+    bitslices<uint64_t> _bitslices;
+
+    SbDIR sbdir;
+    ColorMapper _cm;
 };
 
 #endif
