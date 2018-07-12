@@ -83,24 +83,6 @@ void SbPDG::order_insts(SbPDG_Inst* inst,
   ordered_insts.push_back(inst);
 }
 
-/*
-// Adding new code for cycle-by-cycle CGRA functionality: this is used .h not used
-int SbPDG::compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif) {
- 
-    // std::cout << "now this compute for my vec_in\n";
-    int num_computed = 0;
-    for (unsigned int i=0; i<vec_in->num_inputs(); ++i){
-      num_computed += vec_in->getInput(i)->compute_backcgra(print, verif);
-      // std::cout << "Trigger computation for each input in this vector: "<<i<<" and num_computed: " << num_computed << "\n";
-    } 
-
-  return num_computed;
-}
-*/
-// --------------------------------------------------
-
-
-
 void SbPDG::check_for_errors() {
   bool error = false;
   for (auto I=_inputs.begin(),E=_inputs.end();I!=E;++I)  { 
@@ -561,15 +543,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
 // Virtual function-------------------------------------------------
 
-/*
-int SbPDG_Inst::update_next_nodes(bool print, bool verif){
-   // std::cout << "Node name: " << this->name() << " Incoming: " << this->num_inc() << " and ready are: " << this->get_inputs_ready() << "\n";
-   if(this->num_inc() == this->get_inputs_ready()){
-     compute_backcgra(false, false);
-   }
-   return 0;
-}
-*/
 int SbPDG_Inst::update_next_nodes(bool print, bool verif){
     return 0;
 }
@@ -594,6 +567,17 @@ SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) :
   _group_id = _sbpdg->num_groups()-1;      
 
 }
+
+int SbPDG_Node::inc_inputs_ready_backcgra(bool print, bool verif) {
+  _inputs_ready+=1;
+  // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
+  if(_inputs_ready == _num_inc_edges) {
+    _sbpdg->push_ready_node(this);
+  }
+  return 0;
+} 
+
+
 
 void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
     _sbpdg->push_transient(this, v,valid, avail, cycle);
@@ -693,6 +677,9 @@ int SbPDG_Node::findDepth(ostream& os, string dfg_name, int level) {
   return returned_level;
 }
 
+
+// ---------------------------------------------------------------------------
+// DFG Emulation -- not currently used ---------------------------------------
 void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
   //os << "INSTRUCTION " << dfg_name << "_" << _name << endl;
   auto name_iter = _uses.begin();
@@ -849,6 +836,9 @@ void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, in
   //SbPDG_Node::printEmuDFG(os, dfg_name);
   *realName = _realName;
 }
+// End DFG Emulation -- not currently used -----------------------------------
+// ---------------------------------------------------------------------------
+
 
 //Connect two nodes in PDG
 SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
@@ -978,7 +968,7 @@ void SbPDG::remap(int num_HW_FU) {
       SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
       connect(node, newNode, 0, SbPDG_Edge::data);
       connect(newNode, pdg_out, 0, SbPDG_Edge::data);
-      addInst(newNode); //add to list of nodes -- TODO: check if this borked anything
+      addInst(newNode); //add to list of nodes 
       dummies.insert(newNode);
       dummiesOutputs.insert(pdg_out);
 
@@ -1007,7 +997,7 @@ void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
       SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
       connect(node, newNode, 0, SbPDG_Edge::data);
       connect(newNode, pdg_out, 0, SbPDG_Edge::data);
-      addInst(newNode); //add to list of nodes -- TODO: check if this borked anything
+      addInst(newNode); //add to list of nodes
       dummies.insert(newNode);
       dummiesOutputs.insert(pdg_out);
     }

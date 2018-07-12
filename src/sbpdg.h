@@ -308,6 +308,8 @@ class SbPDG_Node {
       _avail = avail;
     }
 
+    // Check's all consumers for backpressure-freedom,
+    // If backpressure, 
     void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif) {
       _val=v; 
       _invalid=!valid;
@@ -356,25 +358,7 @@ class SbPDG_Node {
     }
     
 
-    int inc_inputs_ready_backcgra(bool print, bool verif) {
-      _inputs_ready+=1;
-      // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<_num_inc_edges<<"\n";
-      if(_inputs_ready == _num_inc_edges) {
-        if(_avail==0) {
-          int num_computed = compute_backcgra(print,verif);//it's 0 or 1
-          return num_computed;
-        } else {
-          _inputs_ready-=1;
-          // _sbpdg->push_buf_transient(this->first_operand(), true, 1); // 0 bit implies dummy
-          this->push_buf_dummy_node();
-          // pop
-          // add some code here
-          // std::cout << "I NEED AN OUTPUT BUFFER\n";
-          return 0;
-        }
-      }
-      return 0;
-    } 
+    int inc_inputs_ready_backcgra(bool print, bool verif);
 
     int get_inputs_ready() {
         return _inputs_ready;
@@ -1265,16 +1249,10 @@ SbPDG_VecInput* get_vector_input(int i){
     //  std::cout <<"\n";
 
       return true;
-      /*
-      if(t>0)
-          return true;
-      else
-          return false;
-      */
-
    }
 
-    // check if some value present at input node or there is some backpressure or invalid value
+    // check if some value present at input node or if 
+    // there is some backpressure or invalid value
     bool can_push_input(SbPDG_VecInput* vec_in){
       for(unsigned int i=0; i<vec_in->num_inputs(); ++i) {
         SbPDG_Input* temp = vec_in->getInput(i);
@@ -1287,28 +1265,12 @@ SbPDG_VecInput* get_vector_input(int i){
       return true;
     }
 
-    //Advances simulation by one cycle  (return whether there was activity)
-    int cycle_compute(bool print, bool verif);
-    // int compute_backcgra(SbPDG_VecInput* vec_in, bool print, bool verif);
-
-
-    // bool none_config = false;
-    bool backcgra_cycle(SbPDG_VecInput* vec_in) {
-    
-      int num_computed = 0;
-
-      if (num_computed ==0)
-           return false;
-      else 
-       return true;
-    }
-
-
-    //Simulator would like to op size elements from vector port (vector_id)
+    //Simulator would like to pop size elements from vector port (vector_id)
     bool can_pop_output(SbPDG_VecOutput* vec_out, unsigned int len){
         
       assert(len>0 && "Cannot pop 0 length output\n");
-      assert(vec_out->num_outputs()==len && "asked for different number of outputs than the supposed length\n");
+      assert(vec_out->num_outputs()==len 
+          && "asked for different number of outputs than the supposed length\n");
 
       unsigned int ready_outputs=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
@@ -1398,13 +1360,23 @@ SbPDG_VecInput* get_vector_input(int i){
         
         transient_values[cur_buf_ptr].erase(it);
         it--;
-       }
-       
-       cur_buf_ptr = (cur_buf_ptr+1)%get_max_lat();
-       cur_node_ptr = (cur_node_ptr+1)%get_max_lat();
-       int temp = _total_dyn_insts;
-       _total_dyn_insts=0;
-       return temp; 
+      }
+      
+      for(auto I = _ready_nodes.begin(); I!=_ready_nodes.end();) {
+        SbPDG_Node* n = *I;
+        if(n->get_avail()==0) {
+          n->compute_backcgra(print,verif);
+          I=_ready_nodes.erase(I);
+        } else {
+          ++I;
+        }
+      }
+
+      cur_buf_ptr = (cur_buf_ptr+1)%get_max_lat();
+      cur_node_ptr = (cur_node_ptr+1)%get_max_lat();
+      int temp = _total_dyn_insts;
+      _total_dyn_insts=0;
+      return temp; 
     }
 
 // ---------------------------------------------------------------------------
@@ -1427,6 +1399,8 @@ SbPDG_VecInput* get_vector_input(int i){
     int inc_node_id() {return _num_node_ids++;}
     int inc_edge_id() {return _num_edge_ids++;}
 
+    void push_ready_node(SbPDG_Node* node) {_ready_nodes.push_back(node);}
+
   private:
     // to keep track of number of cycles---------------------
     struct cycle_result{
@@ -1443,10 +1417,6 @@ SbPDG_VecInput* get_vector_input(int i){
        }
     };
 
-    int MAX_LAT = 1000;
-    std::list<struct cycle_result*> transient_values[1000];
-    int cur_node_ptr=0;
-    int cur_buf_ptr=0;
     struct buffer_pop_info{
        SbPDG_Edge* e;
        bool is_dummy;
@@ -1456,6 +1426,14 @@ SbPDG_VecInput* get_vector_input(int i){
           is_dummy = dummy;
        }
     };
+
+    std::vector<SbPDG_Node*> _ready_nodes;
+
+    int MAX_LAT = 1000;
+    std::list<struct cycle_result*> transient_values[1000];
+    int cur_node_ptr=0;
+    int cur_buf_ptr=0;
+  
     std::list<struct buffer_pop_info*> buf_transient_values[1000];
     // std::list<SbPDG_Edge*> buf_transient_values[1000];
     //--------------------------------------
