@@ -175,7 +175,7 @@ void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
 }
 
 SbPDG::SbPDG() {
-  start_new_dfg_group(); 
+   
 } 
 
 
@@ -268,6 +268,7 @@ void SbPDG::start_new_dfg_group() {
 
 SbPDG::SbPDG(string filename) : SbPDG() {
   string line;
+  start_new_dfg_group();
   parse_dfg(filename.c_str(),this);
   calc_minLats();
   check_for_errors();

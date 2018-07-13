@@ -16,29 +16,17 @@ CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH)
 
 LIBS +=-ly -lfl -lsbscheduler -lsbconfig
 
-#all: reschedule stat-config
-
 all: sb_sched sb_dfg_emu
-#reschedul
-
-reschedule : reschedule.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  
-
-stat-config : stat-config.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS) 
 
 sb_sched : sb_sched.cpp $(INC_SBMODEL_PATH)/*.h
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
-
-standalone_sim : standalone_sim.cpp $(INC_SBMODEL_PATH)/*.h
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) -lsbscheduler -lsbconfig -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 sb_dfg_emu : sb_dfg_emu.cpp
-	$(CXX) $(CXXFLAGS) -MD -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 
 clean:
-	rm -rf *.o  sb_dfg_emu standalone_sim sb_sched stat-config reschedule *.d
+	rm -rf *.o  sb_dfg_emu sb_sched *.d
 
 include ../make.rules
 

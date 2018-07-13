@@ -5,9 +5,7 @@
 
 class SbPDG_Node;
 
-
-//basically, a global state for all objects
-//no one said this project wasn't a hack!
+//Maintain mapping between SbPDG_Node's and colors
 class ColorMapper {
 public:
     int colorOf(SbPDG_Node* item, bool reset =false);

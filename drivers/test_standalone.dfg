@@ -1,7 +1,0 @@
-Input: A[2]
-Input: B[2]
-
-R0 = Add64(A0,B0)
-R1 = Add64(A1,B1)
-
-Output: R[2]

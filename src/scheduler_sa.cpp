@@ -264,7 +264,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
     if((int)possInputs.size() < n_vertex) continue;
 
     vector<sbnode*> candInputs;
-    vector<bool> candMask = rand_node_choose_k(n_vertex, possInputs, candInputs);
+    rand_node_choose_k(n_vertex, possInputs, candInputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
@@ -301,10 +301,24 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
       //cout << "lat: " << lat << " latmis: " << latmis 
       //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
       bestScore=candScore;
-      bestMask=candMask;
       bestInputs=candInputs;
       bestVportid=vport_id;
       std::swap(bestRouting,candRouting);
+      bestMask.clear();
+      bestMask.resize(vport_desc.size());
+      int num_cgra_ports=0; //for debugging
+      for (int m=0; m < (int)vport_desc.size(); m++) {
+        int cgra_port_num = vport_desc[m].first;
+        for(int i = 0; i < (int)candInputs.size(); ++i) {
+          if(static_cast<sbinput*>(candInputs[i])->port()==cgra_port_num) {
+            assert(bestMask[m]==false);
+            bestMask[m]=true;
+            num_cgra_ports++;
+            break;
+          }
+        }
+      }
+      assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";
@@ -364,7 +378,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
     if((int)possOutputs.size() < n_vertex) continue;
 
     vector<sbnode*> candOutputs;
-    vector<bool> candMask = rand_node_choose_k(n_vertex, possOutputs, candOutputs);
+    rand_node_choose_k(n_vertex, possOutputs, candOutputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
@@ -400,10 +414,24 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
       //cout << "lat: " << lat << " latmis: " << latmis 
       //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
       bestScore=candScore;
-      bestMask=candMask;
       bestOutputs=candOutputs;
       bestVportid=vport_id;
       std::swap(bestRouting,candRouting);
+      bestMask.clear();
+      bestMask.resize(vport_desc.size());
+      int num_cgra_ports=0; //for debugging
+      for (int m=0; m < (int)vport_desc.size(); m++) {
+        int cgra_port_num = vport_desc[m].first;
+        for(int i = 0; i < (int)candOutputs.size(); ++i) {
+          if(static_cast<sboutput*>(candOutputs[i])->port()==cgra_port_num) {
+            assert(bestMask[m]==false);
+            bestMask[m]=true;
+            num_cgra_ports++;
+            break;
+          }
+        }
+      }
+      assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";

@@ -251,6 +251,14 @@ class Schedule {
       auto& vp = _vecProp[pdgvec];
       vp.vport=pn;
       vp.mask=mask;
+
+      //for assert
+      auto& io_interf = _sbModel->subModel()->io_interf();
+      if(pn.first) {
+        assert(mask.size() == io_interf.in_vports[pn.second].size());
+      } else {
+        assert(mask.size() == io_interf.out_vports[pn.second].size());
+      }
     }
 
     bool vecMapped(SbPDG_Vec* p) {
