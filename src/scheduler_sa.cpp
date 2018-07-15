@@ -56,20 +56,22 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(
 
     int obj = ovr*1000000 + latmis*10000+violation*100+lat + max_util;
 
-        fprintf(stdout, "objective rt:%d, left: %3d, " 
-                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
-                "obj:%d, ins: %d/%d, outs: %d/%d,"
-                " insts: %d, links:%d, edge-links:%d  %s%s\n", 
-                _route_times,
-                sched->num_left(), lat, 
-                sched->violation(), latmis, ovr, max_util, obj,
-                sched->num_inputs_mapped(),  sched->sbpdg()->num_inputs(),
-                sched->num_outputs_mapped(), sched->sbpdg()->num_outputs(),
-                sched->num_insts_mapped(),  
-                sched->num_links_mapped(),
-                sched->num_edge_links_mapped(),
-                succeed_sched ? ", all mapped" : "",
-                succeed_timing ? ", mismatch == 0" : "");
+//        fprintf(stdout, "objective rt:%d, left: %3d, " 
+//                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
+//                "obj:%d, ins: %d/%d, outs: %d/%d,"
+//                " insts: %d, links:%d, edge-links:%d  %s%s\n", 
+//                _route_times,
+//                sched->num_left(), lat, 
+//                sched->violation(), latmis, ovr, max_util, obj,
+//                sched->num_inputs_mapped(),  sched->sbpdg()->num_inputs(),
+//                sched->num_outputs_mapped(), sched->sbpdg()->num_outputs(),
+//                sched->num_insts_mapped(),  
+//                sched->num_links_mapped(),
+//                sched->num_edge_links_mapped(),
+//                succeed_sched ? ", all mapped" : "",
+//                succeed_timing ? ", mismatch == 0" : "");
+
+//    sched->printGraphviz("hi.gv");
 
     return make_pair(succeed_sched + succeed_timing + succeed_ovr -num_left, -obj);
 }
@@ -128,6 +130,8 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
     int succeed_timing = (latmis ==0) && (ovr ==0);
 
     if (score > best_score) {
+      sched->printGraphviz("viz/cur-best.gv");
+
       if(remapNeeded) {
         sbPDG->printGraphviz("viz/remap.dot");
         best_dummies = sbPDG->getDummiesOutputs();
@@ -260,7 +264,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
     if((int)possInputs.size() < n_vertex) continue;
 
     vector<sbnode*> candInputs;
-    vector<bool> candMask = rand_node_choose_k(n_vertex, possInputs, candInputs);
+    rand_node_choose_k(n_vertex, possInputs, candInputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
@@ -297,10 +301,24 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
       //cout << "lat: " << lat << " latmis: " << latmis 
       //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
       bestScore=candScore;
-      bestMask=candMask;
       bestInputs=candInputs;
       bestVportid=vport_id;
       std::swap(bestRouting,candRouting);
+      bestMask.clear();
+      bestMask.resize(vport_desc.size());
+      int num_cgra_ports=0; //for debugging
+      for (int m=0; m < (int)vport_desc.size(); m++) {
+        int cgra_port_num = vport_desc[m].first;
+        for(int i = 0; i < (int)candInputs.size(); ++i) {
+          if(static_cast<sbinput*>(candInputs[i])->port()==cgra_port_num) {
+            assert(bestMask[m]==false);
+            bestMask[m]=true;
+            num_cgra_ports++;
+            break;
+          }
+        }
+      }
+      assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";
@@ -360,7 +378,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
     if((int)possOutputs.size() < n_vertex) continue;
 
     vector<sbnode*> candOutputs;
-    vector<bool> candMask = rand_node_choose_k(n_vertex, possOutputs, candOutputs);
+    rand_node_choose_k(n_vertex, possOutputs, candOutputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
@@ -396,10 +414,24 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
       //cout << "lat: " << lat << " latmis: " << latmis 
       //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
       bestScore=candScore;
-      bestMask=candMask;
       bestOutputs=candOutputs;
       bestVportid=vport_id;
       std::swap(bestRouting,candRouting);
+      bestMask.clear();
+      bestMask.resize(vport_desc.size());
+      int num_cgra_ports=0; //for debugging
+      for (int m=0; m < (int)vport_desc.size(); m++) {
+        int cgra_port_num = vport_desc[m].first;
+        for(int i = 0; i < (int)candOutputs.size(); ++i) {
+          if(static_cast<sboutput*>(candOutputs[i])->port()==cgra_port_num) {
+            assert(bestMask[m]==false);
+            bestMask[m]=true;
+            num_cgra_ports++;
+            break;
+          }
+        }
+      }
+      assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";
@@ -414,6 +446,9 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
 }
 
 bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_input (" 
+                       << sched->num_inputs_mapped() << " mapped)\n";
+
   int n = sbPDG->num_vec_input();
 
   int p = rand_bt(0,n);
@@ -428,6 +463,9 @@ bool SchedulerSimulatedAnnealing::map_one_input(SbPDG* sbPDG, Schedule* sched) {
 }
 
 bool SchedulerSimulatedAnnealing::map_one_output(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_output (" 
+                       << sched->num_outputs_mapped() << " mapped)\n";
+
    int n = sbPDG->num_vec_output();
 
   int p = rand_bt(0,n);
@@ -435,12 +473,19 @@ bool SchedulerSimulatedAnnealing::map_one_output(SbPDG* sbPDG, Schedule* sched) 
     if(++p ==n) {p=0;}
     SbPDG_VecOutput* vec_out = sbPDG->vec_out(p);
     if(sched->vecMapped(vec_out)) continue;
-    return schedule_output(vec_out,sbPDG,sched);
+    bool success = schedule_output(vec_out,sbPDG,sched);
+    //if(!success) {
+    //  cout << "failed with " << vec_out->name() << "\n";
+    //}
+    return success;
   }
   return false; 
 }
 
 bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
+  if(DEBUG_SCHED) cout << "map_one_inst (" 
+                       << sched->num_insts_mapped() << " mapped)\n";
+
   std::vector<SbPDG_Inst*>& inst_vec = sbPDG->inst_vec();
   int n = inst_vec.size();
 
@@ -450,16 +495,15 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     SbPDG_Inst* inst = inst_vec[p];
     if(sched->isScheduled(inst)) continue;
 
-    cout << "try " << inst->name() << "\n";
+    //cout << "try to map this inst: " << inst->name() << "\n";
 
     bool success = scheduleNode(sched,inst);
-
-    if(success) {
-      cout << "success with " << inst->name() << "\n";
-    } else {
-      cout << "failed with " << inst->name() << "\n";
-    }
-
+    //if(!success) {
+    //  cout << "success with " << inst->name() << "\n";
+    //} else {
+    //  cout << "failed with " << inst->name() << "\n";
+    //}
+    return success;
   }
   return false;
 }
@@ -490,6 +534,8 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SbPDG* sbPDG, Schedule* sche
       }      
     }
   }
+  //cout << "Schedule Complete, mapped: " << sched->num_mapped() 
+  //                          << "left:" << sched->num_left();
   
   return true;
 }
@@ -675,7 +721,6 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched,
           bestScore=curScore;
           bestspot=cand_spot;
           std::swap(bestRouting,curRouting);
-          if(routes==0) break; // just quit if there aren't any routes
         }
       }
 
@@ -720,7 +765,10 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       //route using source node, sbnode
       pair<int,int> tempScore = route(sched, source_pdgedge, 
           source_loc, here,candRouting,bestScore-score);
-      if(tempScore==fscore) return fscore;
+      if(tempScore==fscore) {
+        //cout << "failed to route def\n";
+        return fscore;
+      }
 
       score = score + tempScore;
     }
@@ -742,7 +790,10 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       sbnode* use_loc = sched->locationOf(use_pdgnode);
 
       pair<int,int> tempScore = route(sched, use_pdgedge, here, use_loc,candRouting,bestScore-score);
-      if(tempScore==fscore) return fscore;
+      if(tempScore==fscore) {
+        //cout << "failed to route use\n";
+        return fscore;
+      }
       score = score + tempScore;
     }
   }
@@ -757,9 +808,10 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 
   SbPDG_Node* def_pdgnode = edge->def();
   SbPDG_Node* use_pdgnode = edge->use();
-  
-  bool is_temporal = use_pdgnode->is_temporal() && 
-                     def_pdgnode->type() != SbPDG_Node::V_OUTPUT;
+ 
+  bool is_temporal = def_pdgnode->is_temporal() && 
+                     use_pdgnode->type() != SbPDG_Node::V_OUTPUT &&
+                     def_pdgnode->type() != SbPDG_Node::V_INPUT;
 
   //For now, links only route on their own network
   if(!is_temporal && link->max_util()>1) return -1;
@@ -789,7 +841,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 
   if(t_cost==2) {
     if(!is_temporal) {
-      return -1; 
+      return 100; 
     } 
   }
   bool is_dest=(next==dest);
@@ -812,6 +864,16 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, 
     SbPDG_Edge* pdgedge, sbnode* source, sbnode* dest, 
     CandidateRouting& candRouting, pair<int,int> scoreLeft) {
+
+  if(source == dest) {
+    sblink* link = source->getCycleLink();
+    assert(link);
+    candRouting.routing[link].insert(pdgedge);
+    auto& prop = candRouting.edge_prop[pdgedge];
+    prop.num_links=0;//1-1
+    prop.num_passthroughs=0;
+    return std::make_pair(0,2);
+  }
 
   pair<int,int> score = route_minimizeDistance(sched, pdgedge, source, dest, candRouting, scoreLeft);
     return score;

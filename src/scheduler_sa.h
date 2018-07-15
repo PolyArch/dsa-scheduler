@@ -24,7 +24,6 @@ protected:
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
       int& lat_mis, int& ovr, int& max_util); 
 
-
   bool schedule_input( SbPDG_VecInput*  vec, SbPDG* sbPDG, Schedule* sched);
   bool schedule_output(SbPDG_VecOutput* vec, SbPDG* sbPDG, Schedule* sched);
   bool scheduleNode(Schedule* sched, SbPDG_Node* pdgnode);

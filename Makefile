@@ -13,24 +13,24 @@ program:
 	+make -C src
 
 make_drivers: program
-	make -C drivers
+	+make -C drivers
 
 install: directories install_headers install_program install_drivers 
 	
 
 install_headers:
 	${MKDIR_P} ${prefix}/include/ss-scheduler
-	cp src/*.h ${prefix}/include/ss-scheduler/
+	cp -p src/*.h ${prefix}/include/ss-scheduler/
 
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
-	cp drivers/sb_sched ${prefix}/bin
-	cp drivers/sb_dfg_emu ${prefix}/bin
+	cp -p drivers/sb_sched ${prefix}/bin
+	cp -p drivers/sb_dfg_emu ${prefix}/bin
 
 
 install_program: program
 	${MKDIR_P} ${prefix}/lib
-	cp ${build}/lib/* ${prefix}/lib
+	cp -p ${build}/lib/* ${prefix}/lib
 	
 clean:
 	make -C src clean

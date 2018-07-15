@@ -17,16 +17,26 @@
 #include "model.h"
 #include <bitset>
 
+//Experimental Boost Stuffs
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/bitset.hpp>
+#include <boost/serialization/set.hpp>
+#include <boost/serialization/export.hpp>
+
 class Schedule;
 class SbPDG_Node;
 class SbPDG;
 
 class SbPDG_Edge {
   public:
-    enum EdgeType { data, ctrl, ctrl_true, ctrl_false };
-    
+    SbPDG_Edge() {}
+
+    enum EdgeType { data, ctrl, ctrl_true, ctrl_false };    
     EdgeType etype() {return _etype;}
-    
+
     SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
                EdgeType etype, SbPDG* sbpdg);
 
@@ -100,21 +110,26 @@ class SbPDG_Edge {
      
     }
 
+  friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+      ar & _ID & _sbpdg & _def & _use & _etype;
+    }
+
   private:
     int _ID;
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
+
+    //Runtime Types
     std::queue<std::pair<uint64_t,bool>> _data_buffer;
     // unsigned int buf_len = 1;
     // using 2 since 1st entry is used for bp
     unsigned int buf_len = 9;
     // unsigned int buf_len = FU_BUF_LEN;
   
-    //-------------
-
     int _delay =0;
-
 };
 
 class SbPDG_Inst;
@@ -122,6 +137,8 @@ class SbPDG_Inst;
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
+    SbPDG_Node() {}
+
     enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
 
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
@@ -371,21 +388,32 @@ class SbPDG_Node {
   
     V_TYPE type() {return _vtype;} 
 
+    private:
+
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+      ar & _sbpdg & _num_inc_edges & _ID & _name & _ops & _uses & _scalar & 
+        _min_lat & _sched_lat & _max_thr & _group_id;
+    }
+
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
 
+    //Dynamic stuff
     uint64_t _val = 0; //dynamic var (setting the default value)
     bool _avail = false; // if their is data in the output buffer
     // bool _backPressure=false;
     uint64_t _invalid=false;
     //bool _is_new_val = 0; // new variable
     int _inputs_ready=0; //dynamic inputs ready
-    int _num_inc_edges=0; //number of incomming edges, not including immmediates
+    std::vector<bool>  _back_array;     //in edges 
 
+    //Static Stuff
+    int _num_inc_edges=0; //number of incomming edges, not including immmediates
     int _ID;
     std::string _name;
     std::vector<SbPDG_Edge *> _ops;     //in edges 
-    std::vector<bool>  _back_array;     //in edges 
     std::vector<SbPDG_Edge *> _uses;   //out edges  
     bool _scalar = false;
     int _min_lat=0;
@@ -487,8 +515,14 @@ public:
     // std::cout << "num_ctrl: " << (int)CtrlMap::NUM_CTRL << " and flag: " << (int)flag << "\n";
     return _bits.test(bit_loc(c_val,flag));
   }
-  
+ 
 private:
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned version) {
+    ar & _bits;
+  }
+
   static CtrlMap ctrl_map;
   std::bitset<32> _bits;
 };
@@ -564,6 +598,7 @@ struct SymEntry {
 //Instruction
 class SbPDG_Inst : public SbPDG_Node {
   public:
+    SbPDG_Inst() {}
     SbPDG_Inst(SbPDG* sbpdg) : SbPDG_Node(sbpdg, V_INST), 
                      _predInv(false), _isDummy(false),
                      _imm_slot(-1), _subFunc(0) {
@@ -653,6 +688,14 @@ class SbPDG_Inst : public SbPDG_Node {
    uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
   private:
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned version) {
+      ar & boost::serialization::base_object<SbPDG_Node>(*this);
+      ar & _predInv & _isDummy & _imm_slot & _subFunc 
+         & _ctrl_bits & _reg & _imm & _sbinst;
+    }
+
     std::ofstream _verif_stream;
     std::string _verif_id;
     std::vector<uint64_t> _input_vals;
@@ -661,7 +704,6 @@ class SbPDG_Inst : public SbPDG_Node {
     int _imm_slot;
     int _subFunc;
     CtrlBits _ctrl_bits;
-    // CtrlMap _ctrl_map;
 
     std::vector<uint64_t> _reg;
     uint64_t _imm;
@@ -671,19 +713,31 @@ class SbPDG_Inst : public SbPDG_Node {
 
 class SbPDG_IO : public SbPDG_Node {
   public:
+  SbPDG_IO() {}
+
   void setVPort(int vport) { _vport = vport; } 
   int vport() {return _vport;}
 
   SbPDG_IO(SbPDG* sbpdg, V_TYPE v) : SbPDG_Node(sbpdg, v) {}
 
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned version) {
+    ar & _sbpdg & _vport & _realName & _subIter & _size;
+  }
+
   protected:
     SbPDG* _sbpdg;
     int _vport;
+    std::string _realName;
+    int _subIter;
+    int _size;
 };
-
 
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
+    SbPDG_Input() {}
+
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
@@ -720,13 +774,19 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
        return num_computed;
     }
 
-    std::string _realName;
-    int _subIter;
-    int _size;
+  private:
+  friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+      ar & boost::serialization::base_object<SbPDG_Node>(*this);
+    }
+
 };
 
 class SbPDG_Output : public SbPDG_IO {
   public:
+    SbPDG_Output() {}
+
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
     virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
@@ -765,15 +825,19 @@ class SbPDG_Output : public SbPDG_IO {
     virtual uint64_t invalid() {
       return _invalid;
     }
-
-    std::string _realName;
-    int _subIter;
-    int _size;
+  private:
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+      ar & boost::serialization::base_object<SbPDG_Node>(*this);
+    }
 };
 
 //vector class
 class SbPDG_Vec {
   public:
+  SbPDG_Vec() {}
+
   SbPDG_Vec(std::string name, int id, SbPDG* sbpdg);
 
   void setLocMap(std::vector<std::vector<int> >& vec) { _locMap=vec;}
@@ -787,6 +851,13 @@ class SbPDG_Vec {
 
   virtual std::string gamsName() = 0;
   virtual std::string name() {return _name;}
+
+  private:
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned version) {
+      ar & _name & _locMap & _ID & _sbpdg & _group_id;
+    }
 
   protected:
     std::string _name;
@@ -813,6 +884,7 @@ static std::vector<std::vector<int>> simple_pm(int vec_len) {
 
 class SbPDG_VecInput : public SbPDG_Vec {
   public:
+  SbPDG_VecInput() {}
     
   SbPDG_VecInput(std::string name, int id, SbPDG* sbpdg) 
     : SbPDG_Vec(name,id,sbpdg) {}
@@ -838,6 +910,13 @@ class SbPDG_VecInput : public SbPDG_Vec {
      return (this->num_inputs() > s.num_inputs());
   }*/
 
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned version) {
+    ar & boost::serialization::base_object<SbPDG_Vec>(*this);
+    ar & _inputs;
+  }
+
   private:
     std::vector<SbPDG_Input*> _inputs;
 };
@@ -845,6 +924,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
 
 class SbPDG_VecOutput : public SbPDG_Vec {
   public:
+  SbPDG_VecOutput() {}
 
   SbPDG_VecOutput(std::string name, int id, SbPDG* sbpdg) : 
     SbPDG_Vec(name,id,sbpdg) {}
@@ -866,6 +946,14 @@ class SbPDG_VecOutput : public SbPDG_Vec {
   {
      return (this->num_outputs() > s.num_outputs());
   }*/
+
+  private:
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned version) {
+    ar & boost::serialization::base_object<SbPDG_Vec>(*this);
+    ar & _outputs;
+  }
 
   private:
     std::vector<SbPDG_Output*> _outputs;
@@ -919,6 +1007,13 @@ public:
 
 struct GroupProp {
   bool is_temporal=false;
+
+private:
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned version) {
+    ar & is_temporal;
+  }
 };
 
 class SbPDG {
@@ -1441,7 +1536,21 @@ SbPDG_VecInput* get_vector_input(int i){
     // std::list<SbPDG_Edge*> buf_transient_values[1000];
     //--------------------------------------
 
+    //stats
+    int _total_dyn_insts=0;
+
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned version) {
+      ar & _nodes &_insts & _inputs & _outputs 
+        & _orderedInsts & _orderedInstsGroup 
+        & _vecInputs & _vecOutputs & _edges
+        & removed_edges & _vecInputGroups & _vecOutputGroups & _groupProps 
+       & dummy_map & dummys_per_port & dummies & dummiesOutputs;
+    }
+
     std::vector<SbPDG_Node*> _nodes;
+
     //redundant storage:
     std::vector<SbPDG_Inst*> _insts;
     std::vector<SbPDG_Input*> _inputs;
@@ -1461,8 +1570,6 @@ SbPDG_VecInput* get_vector_input(int i){
     std::vector<std::vector<SbPDG_VecOutput*>> _vecOutputGroups;
     std::vector<GroupProp> _groupProps;
 
-    int _total_dyn_insts=0;
-   
     int _num_node_ids=0;
     int _num_edge_ids=0;
 
@@ -1474,5 +1581,8 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::ostream* _dbg_stream;
 };
+
+
+
 
 #endif

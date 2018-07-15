@@ -13,7 +13,6 @@ OPT ?= -O3
 LEX = lex
 YACC = yacc -d
 
-CXXFLAGS :=  -Wall -g -std=c++11 $(OPT) -ggdb -gdwarf-3  $(FLAGS)
 SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
 
 GAMS_DIR=gams_models
@@ -41,24 +40,30 @@ $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
     
 $(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^ $(LIBS)
+	$(CXX) $(CXXFLAGS) -shared -o $@ $^ $(LIBS)
 
-$(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp $(GAMS_INC) dfg-parser.tab.h
-	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
+$(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp  $(DEPDIR)/scheduler_gams.d $(GAMS_INC) dfg-parser.tab.h
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@$(POSTCOMPILE)
 
-$(OBJ_DEST)/%.o: %.cpp $(INCLUDE_DEST)/%.h dfg-parser.tab.h
-	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
+
+$(OBJ_DEST)/%.o: %.cpp dfg-parser.tab.h $(DEPDIR)/%.d
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@$(POSTCOMPILE)
 
 $(GAMS_DIR)/%.h: $(GAMS_DIR)/%.gms
 	xxd -i $< > $@
 
+include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SOURCES))))
 
 #-------- stuff to do with dfg-parser/lexer -----------
 dfg-parser.tab.o: dfg-parser.tab.c sbpdg.h
-	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -c -o $@ $<
+	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -g -c -o $@ $<
+	@$(POSTCOMPILE)
 
 dfg-lex.yy.o: dfg-lex.yy.c
-	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -c -o $@ $<
+	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -g -c -o $@ $<
+	@$(POSTCOMPILE)
 
 dfg-parser.tab.c dfg-parser.tab.h: dfg-parser.y
 	$(YACC) -o dfg-parser.tab.c -v $^
@@ -71,7 +76,7 @@ dfg-lex.yy.c: dfg-parser.l dfg-parser.tab.h
 .phony: clean
 
 clean:
-	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o  *.d  $(OBJ_DEST)/*.d  $(GAMS_INC) dfg-lex.yy.c dfg-lex.yy.o *.tab.*  dfg-parser *.output
+	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o  *.d  $(OBJ_DEST)/*.d $(DEPDIR)  $(GAMS_INC) dfg-parser.tab.c dfg-parser.tab.o dfg-lex.yy.c dfg-lex.yy.o *.tab.*  dfg-parser *.output 
 
 include ../make.rules
 

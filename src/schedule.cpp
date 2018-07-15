@@ -27,11 +27,9 @@ void Schedule::clear_sbpdg() {
   } 
 }
 
-//For a given pdgnode
-//return the input or ouput port num if the pdfgnode is a
+//For a given pdgnode return the input or ouput port num if the pdfgnode is a
 //sbinput ot sboutput
-int Schedule::getPortFor(SbPDG_Node* sbpdg_in) 
-{ 
+int Schedule::getPortFor(SbPDG_Node* sbpdg_in)  { 
   if (sbnode* n = locationOf(sbpdg_in)) {
     if (sbinput *assigned_sbinput = dynamic_cast<sbinput*>(n)) {
       return assigned_sbinput->port();
@@ -44,7 +42,88 @@ int Schedule::getPortFor(SbPDG_Node* sbpdg_in)
   return -1; 
 }
 
-std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
+std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits(int size,
+    uint64_t* bits) {
+
+  //Figure out if this configuration is real or not
+  //NOTE: the first 9 characters of the configuration must spell filename
+  //for this hack to work!
+  if(strncmp((char*)bits,"filename:",9)==0) {
+     char* c_bits = ((char*) bits)+9;
+     return interpretConfigBitsCheat(c_bits);
+  } else {
+    for(int i = 0; i < size; ++i) { //load in 64bit slices 
+      slices().write(i,bits[i]);
+    }  
+    return interpretConfigBitsDedicated();
+  }
+}
+
+std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
+  std::map<SB_CONFIG::sb_inst_t,int> inst_histo;
+
+  ifstream config_file;
+
+  std::string filename = string("sched/")+string(s);
+  config_file.open(filename.c_str());
+  if(!config_file.good()) {
+    filename = string(getenv("DFG_COMMON")) + string("/")+string(s);
+    config_file.open(filename.c_str());
+  } 
+
+  if(!config_file.good()) {
+    cout << "Could Not Open:" << s 
+         << " at folder sched/ or $DFG_COMMON\n";
+    assert(0);
+  }
+
+  static std::set<string> seen_sched;
+  if(!seen_sched.count(filename)) {
+    seen_sched.insert(filename);
+    cout << "Using Schedule: \"" << filename << "\"\n";
+  }
+
+  boost::archive::text_iarchive ia(config_file);
+
+  //I think this should work okay, its a little kludgey, but w/e
+  Schedule sched2;
+  ia >> sched2; //magic
+  sched2._sbModel = _sbModel;
+  *this = sched2;
+
+  //Now lets patch up the schedule to get recover
+  //vertex->node and edge->link mappings
+  for(int i = 0; i < (int)_linkProp.size(); ++i) {
+    auto& lp = _linkProp[i];
+    sblink* link = _sbModel->subModel()->get_link_by_id(i);
+    for(SbPDG_Edge* e : lp.edges) {
+      _edgeProp[e->id()].links.insert(link);
+    }
+  }
+  for(int i = 0; i < (int)_nodeProp.size(); ++i) {
+    auto& np = _nodeProp[i];
+    sbnode* node = _sbModel->subModel()->get_node_by_id(i);
+    for(SbPDG_Node* v : np.vertices) {
+      _vertexProp[v->id()].node = node;
+    }
+  }
+
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+      sbfu* sbfu_node = _sbModel->subModel()->fuAt(i,j);
+      auto* pdg_inst = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
+      if(pdg_inst) {
+        auto inst=pdg_inst->inst();
+        inst_histo[inst]+=1;
+      }
+    }
+  }
+
+  return inst_histo;
+}
+
+
+std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsDedicated() {
   std::map<SB_CONFIG::sb_inst_t,int> inst_histo;
 
   SbDIR sbdir;
@@ -82,7 +161,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
       SbPDG_VecInput* vec_input = new SbPDG_VecInput("I",_sbPDG->num_vec_input(),
                                                      _sbPDG); 
       //vec_input->setLocMap(pm);
-      //_sbPDG->insert_vec_in(vec_input);
+      //_sbPDG->insert_vec_in(vec_input); -- don't need this, stored in group
 
       //cout << "vp" << i << "  ";
 
@@ -123,7 +202,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
       SbPDG_VecOutput* vec_output = new SbPDG_VecOutput("O",_sbPDG->num_vec_output(),
                                                         _sbPDG); 
 
-      //_sbPDG->insert_vec_out(vec_output);
+      //_sbPDG->insert_vec_out(vec_output); don't do this, this is in group
 
       vector<bool> mask;
       mask.resize(port_m.size());
@@ -426,12 +505,57 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits() {
   return inst_histo;
 }
 
-
 //Write to a header file
+void Schedule::printConfigHeader(ostream& os, std::string cfg_name,
+                                 bool use_cheat) {
+  //Step 1: Write the vector port mapping
+  os << "#ifndef " << "__" << cfg_name << "_H__\n";
+  os << "#define " << "__" << cfg_name << "_H__\n";
+
+  for(auto& i : _assignVPort) {
+    std::pair<bool,int> pn = i.first;
+    SbPDG_Vec* pv = i.second;
+    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n"; 
+  }
+  os<< "\n";
+
+  if(use_cheat) {
+    printConfigCheat(os,cfg_name);
+  } else {
+    printConfigBits(os,cfg_name);
+  }
+
+  os << "#endif //" << cfg_name << "_H\n"; 
+}
+
+void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
+  //First, print the config to the file
+  std::string file_name = cfg_name + string(".sched");
+  std::string full_file_name = string("sched/") + file_name;
+  std::ofstream sched_file(full_file_name);
+  boost::archive::text_oarchive oa(sched_file);
+
+  oa << *this;
+
+  os << "// CAUTION: This is a Boost::Serialization-based version\n"
+     << "// of the schedule.  (ie. cheating)  It is for simulation only.\n"
+     << "// corresponding dfg is in: " << full_file_name << "\n\n";
+
+  //Approximate number of config words, good enough for now
+  int config_words  = (_sbModel->subModel()->sizex()+1) *
+                      (_sbModel->subModel()->sizey()+1)  + 16;
+
+  //Negative size indicates funny thing
+  os << "#define " << cfg_name << "_size " << config_words << "\n\n";
+
+  //NOTE: Filename is necessary here! it is the indicator that we
+  //are cheating and not giving the real config bits
+  os << "char " << cfg_name << "_config[" << config_words << "] = \"";
+  os << "filename:" << file_name.c_str() << "\";\n\n";
+}
+
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //print_bit_loc();
-
-  //Step 1: Place bits into fields
 
   //Active Input Ports
   for(auto& i : _assignVPort) {
@@ -721,19 +845,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       }
     }
   } 
-
-  //Step 2: Write to output stream
-  os << "#ifndef " << "__" << cfg_name << "_H__\n";
-  os << "#define " << "__" << cfg_name << "_H__\n";
-
   os << "#define " << cfg_name << "_size " << _bitslices.size() << "\n\n";
-
-  for(auto& i : _assignVPort) {
-    std::pair<bool,int> pn = i.first;
-    SbPDG_Vec* pv = i.second;
-    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n";    
-  }
-  os<< "\n";
 
   os << "unsigned long long " << cfg_name << "_config[" << _bitslices.size() << "] = {";
   for(unsigned i = 0; i < _bitslices.size(); ++i) {
@@ -743,8 +855,6 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   }
   os << "};\n";
   os << std::dec;
-
-  os << "#endif //" << cfg_name << "_H\n"; 
 }
 
 void Schedule::printConfigVerif(ostream& os) {

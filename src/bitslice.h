@@ -9,8 +9,7 @@ template <class T>
 class bitslices {
 public:
   void write(unsigned slice, unsigned p1, unsigned p2, T val, bool check0=true) {
-//    std::cout << slice << " " << p1 << " " << p2 << "\n";
-
+//    std::cout << slice << " " << p1 << " " << p2 << "\n"; 
     check_size(slice);
 
     T shift_val = val << p1;
