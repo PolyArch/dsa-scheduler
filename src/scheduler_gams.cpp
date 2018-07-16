@@ -166,19 +166,20 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
       printf("Best latmis so far: latmis %d\n",best_schedule->max_lat_mis());
     }
 
-
-    if(success && (best_schedule==NULL || 
-          cur_schedule->max_lat_mis() < best_schedule->max_lat_mis())) {
-      if(best_schedule) delete best_schedule;
-      best_schedule=cur_schedule;
+    if(success) {
+      if(best_schedule==NULL || 
+            (cur_schedule->max_lat_mis() < best_schedule->max_lat_mis()) ) {
+        if(best_schedule) delete best_schedule;
+        best_schedule=cur_schedule;
+      }
+  
+      //success = success && (latmis == 0);
+  
+      iters++;
+      if(latmis==0 || iters > 1000) {
+        break;
+      }     
     }
-
-    //success = success && (latmis == 0);
-
-    iters++;
-    if(latmis==0 || iters > 1000) {
-      break;
-    }     
   }
 
   schedule = best_schedule;
