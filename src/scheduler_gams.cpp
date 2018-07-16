@@ -250,6 +250,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   //bool use_hw=true;
   bool use_hw=false;
+  bool early_timeout=false;
 
   // ----------------- setup the sbmodel gams files --------------------------
   if(!_gams_files_setup) {
@@ -327,11 +328,17 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   // Print the controlling file
   ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_sb_gams.good());
-  
-  ofs_sb_gams << "option reslim=" << std::min(_reslim - (total_msec()/1000),300.0) 
-    << ";\n"
-                 << "option optcr="  <<  _optcr << ";\n"   
-                 << "option optca="  <<  _optca << ";\n";
+ 
+  double timeout = _reslim - (total_msec()/1000);
+
+  if(heur_fix && heur_sched) { // early timeout only for MR'.RT scheduler
+    timeout = std::min(timeout,300.0);
+  }
+
+  ofs_sb_gams << "option reslim=" << timeout << ";\n"
+              << "option optcr="  <<  _optcr << ";\n"   
+              << "option optca="  <<  _optca << ";\n";
+
   if(use_hw) {
     ofs_sb_gams << softbrain_gams_hw;
   } else {
