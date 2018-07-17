@@ -250,7 +250,6 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   //bool use_hw=true;
   bool use_hw=false;
-  bool early_timeout=false;
 
   // ----------------- setup the sbmodel gams files --------------------------
   if(!_gams_files_setup) {
