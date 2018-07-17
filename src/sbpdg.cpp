@@ -208,7 +208,7 @@ SymEntry SbPDG::createInst(std::string opcode,
                             std::vector<SymEntry>& args){
 
   SbPDG_Inst* pdg_inst = new SbPDG_Inst(this);
-  pdg_inst->setInst(inst_from_config_name(opcode.c_str()));
+  pdg_inst->setInst(inst_from_string(opcode.c_str()));
 
   int imm_offset=0;
   for(unsigned i = 0; i < args.size(); ++i) { 
@@ -344,7 +344,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
  
-  _val=SB_CONFIG::execute(_sbinst,_input_vals,_reg,_invalid,_back_array);
+  _val=SB_CONFIG::execute64(_sbinst,_input_vals,_reg,_invalid,_back_array);
 
    if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
@@ -459,7 +459,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
      _sbpdg->inc_total_dyn_insts();
    
     // Read in some temp value and set _val after inst_lat cycles
-    output=SB_CONFIG::execute(_sbinst,_input_vals,_reg,discard,_back_array);
+    output=SB_CONFIG::execute64(_sbinst,_input_vals,_reg,discard,_back_array);
   
     if(print) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
@@ -882,7 +882,7 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
   }
  
   dest->addIncEdge(slot,new_edge);
-  orig->addOutEdge(orig->num_out(),new_edge);
+  orig->addOutEdge(new_edge);
   _edges.push_back(new_edge);
   
   return new_edge;

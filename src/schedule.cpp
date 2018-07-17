@@ -938,7 +938,7 @@ void Schedule::printConfigText(ostream& os)
       if(nodeAssigned(sbfu_node)!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
         os << i << "," << j << ": ";
-        os << config_name_of_inst(pdg_node->inst()); //returns sb_inst
+        os << name_of_inst(pdg_node->inst()); //returns sb_inst
         os << "\t";
         
         //Parse the inc-edges for each FU dir
@@ -1218,7 +1218,7 @@ Schedule::Schedule(string filename) {
          
           //FU TYPE
           ModelParsing::trim(caps[0]);
-          pdg_inst->setInst(inst_from_config_name(caps[0].c_str()));
+          pdg_inst->setInst(inst_from_string(caps[0].c_str()));
 
           //FuArray[posX][posY]->routeInitialLink();
 

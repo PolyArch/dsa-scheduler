@@ -116,15 +116,24 @@ io_def
 rhs     : expr {$$ = $1;}
 	;
 
-
-expr    : I_CONST {$$ = SymEntry($1);}
+expr    : I_CONST {$$ = SymEntry($1);} //expr: what you can assign to a var
         | I_CONST I_CONST {$$ = SymEntry($1,$2);}
         | I_CONST I_CONST I_CONST I_CONST {$$ = SymEntry($1,$2,$3,$4);}
 	| F_CONST {$$ = SymEntry($1);}
         | F_CONST F_CONST {$$ = SymEntry($1,$2);}
-	| IDENT                  {$$ = p->syms.get_sym(*$1); delete $1;}
+	| ident_list {
+            if($1->size()==1) {
+              $$ = p->syms.get_sym((*$1)[0]); delete $1;
+            } else { 
+              //we need to create a new SymEntry to represent the concat
+              //of nodes
+              assert(0);
+            }
+          }
 	| IDENT '(' arg_list ')' {$$ = p->dfg->createInst(*$1,*$3); 
-                                  delete $1; delete $3;}
+                                       delete $1; delete $3;} 
+        ;
+
 arg_expr 
 	: expr {$$ = $1;}
 	| IDENT '=' expr { $$ = $3; $$.set_flag(*$1); }

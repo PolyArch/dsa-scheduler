@@ -17,7 +17,7 @@
 #include "model.h"
 #include <bitset>
 
-//Experimental Boost Stuffs
+//Boost Includes
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/base_object.hpp>
@@ -118,7 +118,7 @@ class SbPDG_Edge {
 
   private:
     int _ID;
-    SbPDG* _sbpdg;  //sometimes this is just nice to have : )
+    SbPDG* _sbpdg;  
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
 
@@ -133,6 +133,14 @@ class SbPDG_Edge {
 };
 
 class SbPDG_Inst;
+
+// Datatstructure describing the operand
+struct SbPDG_Operand {
+  //Edges concatenated in bit order from least to most significant
+  std::vector<SbPDG_Edge*> edges; 
+  uint64_t _imm=0;
+
+};
 
 //PDG Node -- abstract base class
 class SbPDG_Node {
@@ -169,19 +177,8 @@ class SbPDG_Node {
        _ops[pos]=edge;
     }
     
-    void addOutEdge(unsigned pos, SbPDG_Edge *edge) {
-      assert(pos <= 64 && "more than 64 users, check this! (may be okay if really large grid\n"); 
-       if(_uses.size()<=pos) { 
-         _uses.resize(pos+1,NULL); 
-       }
-
-       if(_uses[pos]) {
-         std::cerr << "ERROR: overwriting use at pos" << pos 
-                   << " name: " << _uses[pos]->use()->name() << "\n";
-         assert(0);
-       }
-       
-       _uses[pos]=edge;
+    void addOutEdge(SbPDG_Edge *edge) {
+       _uses.push_back(edge);
     }
 
     void validate() {
@@ -534,12 +531,16 @@ struct SymEntry {
     flag = FLAG_NONE;
   CtrlBits ctrl_bits;
   int width;
+
+  //Union data is just used for immediates
   union union_data {
     uint64_t i;
     double d;	 
     struct struct_data {float f1, f2;} f;
-    SbPDG_Node* node;
   } data;
+  std::vector<SbPDG_Node*> nodes;
+
+
   SymEntry() {
     type=SYM_INV; 
     flag=FLAG_INV;
@@ -574,7 +575,7 @@ struct SymEntry {
   }
   SymEntry(SbPDG_Node* node) {
     type=SYM_NODE;
-    data.node=node;
+    nodes.push_back(node);
     width=1;
   }
   void set_flag(std::string& s) {
