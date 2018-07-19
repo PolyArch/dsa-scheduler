@@ -19,8 +19,11 @@ public:
       CandidateRouting&, sbnode* dest);
 
 
-protected:
+  void set_fake_it() {_fake_it = true;}
+
   bool schedule_internal(SbPDG* sbPDG, Schedule*& sched);
+
+protected:
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
       int& lat_mis, int& ovr, int& max_util); 
 
@@ -38,6 +41,7 @@ protected:
   bool timingIsStillGood(Schedule* sched); 
 
   bool map_to_completion(SbPDG* sbPDG, Schedule* sched);
+  bool map_io_to_completion(SbPDG* sbPDG, Schedule* sched);
 
   bool map_one_input(   SbPDG* sbPDG, Schedule* sched);
   bool map_one_inst(    SbPDG* sbPDG, Schedule* sched);
@@ -55,6 +59,8 @@ protected:
   bool _integrate_timing = true;
   int _best_latmis, _best_lat, _best_violation;
   bool _strict_timing = true;
+
+  bool _fake_it = false;
 
 };
 

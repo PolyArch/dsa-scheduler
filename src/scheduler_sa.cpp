@@ -508,6 +508,34 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
   return false;
 }
 
+bool SchedulerSimulatedAnnealing::map_io_to_completion(SbPDG* sbPDG, 
+    Schedule* sched) {
+
+  while(!(sched->inputs_complete() && sched->outputs_complete())) {
+    int r = rand_bt(0,2); //upper limit defines ratio of input/output scheduling
+    switch(r) {
+      case 0: {
+        if(sched->inputs_complete()) break;
+        bool success = map_one_input(sbPDG,sched);
+        if(!success) return false;
+        break;
+      }
+      case 1: {
+        if(sched->outputs_complete()) break;
+        bool success = map_one_output(sbPDG,sched);
+        if(!success) return false;
+        break;
+      }      
+      default: {assert(0); break;}      
+    }
+  }
+  //cout << "Schedule Complete, mapped: " << sched->num_mapped() 
+  //                          << "left:" << sched->num_left();
+  
+  return true;
+}
+
+
 bool SchedulerSimulatedAnnealing::map_to_completion(SbPDG* sbPDG, Schedule* sched) {
 
   if(DEBUG_SCHED) cout << "Map to completion! " << sched->num_mapped() << "\n";
@@ -593,8 +621,7 @@ void SchedulerSimulatedAnnealing::unmap_one_inst(SbPDG* sbPDG, Schedule* sched) 
 
       //Error Checking : TODO: make function or remove these two loops
       SbPDG_Inst* n = inst;
-      for(auto I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
-        if(*I == NULL) { continue; } //could be immediate
+      for(auto I=n->inc_e_begin(), E=n->inc_e_end();I!=E;++I) {
         SbPDG_Edge* source_pdgedge = (*I);
         if(sched->link_count(source_pdgedge)!=0) {
            cerr << "Edge: " << source_pdgedge->name() << " is already routed!\n"; 
@@ -646,11 +673,20 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SbPDG* sbPDG, Schedule*& sch
   for(int t = 0; t < max_retries; ++t) {
     unmap_some(sbPDG,sched);
 
-    map_to_completion(sbPDG,sched);
-    if(sched->isComplete()) {
-      //cout << "remppaed after " << t << " tries" << "\n";
-      return true;
-    } 
+    if(_fake_it) {
+      //Just map the i/o ports
+      map_io_to_completion(sbPDG,sched);
+      if(sched->inputs_complete() && sched->outputs_complete()) {
+        return true;
+      }
+    } else {
+      //THE REAL THING
+      map_to_completion(sbPDG,sched);
+      if(sched->isComplete()) {
+        //cout << "remppaed after " << t << " tries" << "\n";
+        return true;
+      } 
+    }
   } 
   //cout << "failed to remap\n";
   return false;
@@ -744,8 +780,8 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
 
   //cout << "Schedule Here "  << n->name() << " to here: " << here->name() << "\n";
 
-  for(auto I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
-    if(*I == NULL) { continue; } //could be immediate
+  //TODO: make work for decomp-CGRA
+  for(auto I=n->inc_e_begin(), E=n->inc_e_end();I!=E;++I) {
     SbPDG_Edge* source_pdgedge = (*I);
     SbPDG_Node* source_pdgnode = source_pdgedge->def();     //could be input node also
 

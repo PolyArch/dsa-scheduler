@@ -183,52 +183,68 @@ int main(int argc, char* argv[])
   scheduler->setTimeout(timeout);
   scheduler->set_max_iters(max_iters);
 
-  scheduler->check_res(&sbpdg,&sbmodel);
 
   bool succeed_sched = false;
 
-  succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
+  if(scheduler->check_res(&sbpdg,&sbmodel)) {
+    // At least it's possible to schedule
+    
+    succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
-  //if(succeed_sched) {
-  //  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
-  //}
+    //if(succeed_sched) {
+    //  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
+    //}
 
-  if(verbose) {
+
     int lat=0,latmis=0;
-    sched->cheapCalcLatency(lat,latmis);
-    //sched->checkOutputMatch(latmis);
-    if(succeed_sched) {
-      cout << "latency: " << lat << "\n";  
-      cout << "latency mismatch: " << latmis << "\n";
-      cout << "Scheduling Successful!\n";
-    } else { 
-      cout << "latency: " << 0 << "\n";  
-      cout << "latency mismatch: " << 0 << "\n";  
-      cout << "Scheduling Failed!\n";
+    if(succeed_sched){
+      sched->cheapCalcLatency(lat,latmis);
+      sched->set_decode_lat_mis(latmis);
     }
-    sched->stat_printOutputLatency();
-    sbpdg.printGraphviz("viz/final.dot",sched);
-  } 
 
-  std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
-  sched->printGraphviz(sched_viz.c_str());
+    if(verbose) {
+      sched->cheapCalcLatency(lat,latmis);
+      //sched->checkOutputMatch(latmis);
+      if(succeed_sched) {
+        cout << "latency: " << lat << "\n";  
+        cout << "latency mismatch: " << latmis << "\n";
+        cout << "Scheduling Successful!\n";
+      } else { 
+        cout << "latency: " << 0 << "\n";  
+        cout << "latency mismatch: " << 0 << "\n";  
+        cout << "Scheduling Failed!\n";
+      }
+      sched->stat_printOutputLatency();
+      sbpdg.printGraphviz("viz/final.dot",sched);
+    } 
+
+    std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
+    sched->printGraphviz(sched_viz.c_str());
+ 
+    std::string verif_header = verif_dir + dfg_base + ".configbits";
+    std::ofstream vsh(verif_header);
+    assert(vsh.good()); 
+    sched->printConfigVerif(vsh);
+  }
+
+  if(!succeed_sched || sched==NULL) {
+    cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
+    //This is just a fake schedule!
+    //sched = new Schedule(&sbmodel,&sbpdg);
+    SchedulerSimulatedAnnealing* s = 
+      new SchedulerSimulatedAnnealing(&sbmodel);
+    s->set_fake_it();
+
+    s->initialize(&sbpdg,sched);
+    succeed_sched = s->schedule_internal(&sbpdg,sched);
+  }
 
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigHeader(osh, dfg_base);
- 
-  std::string verif_header = verif_dir + dfg_base + ".configbits";
-  std::ofstream vsh(verif_header);
-  assert(vsh.good()); 
-  sched->printConfigVerif(vsh);
+
 
   delete sched; // just to calm HEAPCHECK
-
-//  int num_pdgnodes=
-//  (sched->sbpdg()->inst_end()-  sched->sbpdg()->inst_begin())+
-//  (sched->sbpdg()->input_end()- sched->sbpdg()->input_begin())+
-//  (sched->sbpdg()->output_end()-sched->sbpdg()->output_begin());
-
 }
 

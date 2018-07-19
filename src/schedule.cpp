@@ -87,7 +87,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 
   //I think this should work okay, its a little kludgey, but w/e
   Schedule sched2;
-  ia >> sched2; //magic
+  ia >> BOOST_SERIALIZATION_NVP(sched2); //magic
   sched2._sbModel = _sbModel;
   *this = sched2;
 
@@ -472,7 +472,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsDedicated() {
           if (pdg_node->immSlot() == n) {
             //Do Nothing 
           } else if (n < (pdg_node->ops_end() - pdg_node->ops_begin())) {
-            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin() + n);
+            SbPDG_Edge* inc_edge = (pdg_node->ops_begin() + n)->get_first_edge();
             if (!inc_edge) {
               continue;
             }
@@ -535,7 +535,7 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
   std::ofstream sched_file(full_file_name);
   boost::archive::text_oarchive oa(sched_file);
 
-  oa << *this;
+  oa << BOOST_SERIALIZATION_NVP(*this);
 
   os << "// CAUTION: This is a Boost::Serialization-based version\n"
      << "// of the schedule.  (ie. cheating)  It is for simulation only.\n"
@@ -761,7 +761,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             if(pdg_node->immSlot()==n) {
               _bitslices.write(cur_slice,p1,p2,sbdir.encode_fu_dir(SbDIR::IM));  //imm slot for FU
             } else if(n  < (pdg_node->ops_end()-pdg_node->ops_begin())) {
-              SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+n);
+              SbPDG_Edge* inc_edge = (pdg_node->ops_begin()+n)->get_first_edge();
               if(!inc_edge) {continue;}
               SbPDG_Node* inc_pdg_node = inc_edge->def();
               
@@ -948,7 +948,7 @@ void Schedule::printConfigText(ostream& os)
             os << "IM ";
           } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
             
-            SbPDG_Edge* inc_edge = *(pdg_node->ops_begin()+i);
+            SbPDG_Edge* inc_edge = (pdg_node->ops_begin()+i)->get_first_edge();
             
             if(!inc_edge) {
               os << "-  ";
@@ -1520,9 +1520,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     //assert(0);
   }
   
-  SbPDG_Node::const_edge_iterator I,E;
-  for(I=pdgnode->ops_begin(), E=pdgnode->ops_end();I!=E;++I) {
-    if(*I == NULL) { continue; } //could be immediate
+  for(auto I=pdgnode->inc_e_begin(), E=pdgnode->inc_e_end();I!=E;++I) {
     SbPDG_Edge* source_pdgegde = (*I);
     SbPDG_Node* source_pdgnode = source_pdgegde->def();
 
@@ -1824,7 +1822,6 @@ bool Schedule::fixLatency_bwd() {
 
 bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>& visited) {
 
-  SbPDG_Node::const_edge_iterator I,E;
   SbPDG_Inst* n = pdgout->out_inst();
   if(!n || n->num_out()>1) { //bail if orig is input or has >1 use
     return false;
@@ -1839,8 +1836,7 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
   }
   visited.insert(n);
 
-  for(I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
-    if(*I == NULL) { continue; } //could be immediate, constant within FU
+  for(auto I=n->inc_e_begin(), E=n->inc_e_end();I!=E;++I) {
     SbPDG_Edge* source_pdgedge = (*I);
 
     _edgeProp[source_pdgedge->id()].extra_lat = std::min(_sbModel->maxEdgeDelay(),
@@ -2019,9 +2015,8 @@ void Schedule::iterativeFixLatency() {
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
 
-      for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+      for(auto i = inst->inc_e_begin(), e=inst->inc_e_end();i!=e;++i) {
         SbPDG_Edge* edge=*i;
-        if(edge == NULL) continue;
         SbPDG_Node* origNode = edge->def();
         auto& orig_vp = _vertexProp[origNode->id()];
 
@@ -2138,7 +2133,7 @@ void Schedule::iterativeFixLatency() {
 
     int max=0;
     int mis=0;
-    for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+    for(auto i = inst->inc_e_begin(), e=inst->inc_e_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
       if(edge == NULL) continue;
       SbPDG_Node* origNode = edge->def();
@@ -2190,6 +2185,8 @@ void Schedule::iterativeFixLatency() {
 
 void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) {
   _totalViolation=0;
+  max_lat_mis=0;
+  max_lat=0;
 
   std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
   for(SbPDG_Inst* inst : ordered_insts) {
@@ -2260,9 +2257,8 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
   if(isScheduled(inst)) {
-    for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+    for(auto i = inst->inc_e_begin(), e=inst->inc_e_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
-      if(edge == NULL) continue;
       
       SbPDG_Node* origNode = edge->def();
 
@@ -2306,9 +2302,8 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
 
   //Set the delay based on a simple model
   if(set_delay && isScheduled(inst)) {
-    for(auto i = inst->ops_begin(), e=inst->ops_end();i!=e;++i) {
+    for(auto i = inst->inc_e_begin(), e=inst->inc_e_end();i!=e;++i) {
       SbPDG_Edge* edge=*i;
-      if(edge == NULL) continue;
       
       SbPDG_Node* origNode = edge->def();
       if(isScheduled(origNode)) {
