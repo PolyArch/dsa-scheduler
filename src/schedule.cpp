@@ -119,6 +119,15 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
     }
   }
 
+  //Lets also just throw the node id at the pdg for now to make temporal
+  //simulation work
+  for(auto i = _sbPDG->inst_begin(), e=_sbPDG->inst_end(); i!=e;++i) {
+    SbPDG_Inst* inst = *i;
+    if(locationOf(inst)) {
+      inst->set_node_id(locationOf(inst)->id());
+    }
+  }
+
   return inst_histo;
 }
 

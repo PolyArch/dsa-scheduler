@@ -16,6 +16,7 @@
 #include <algorithm>
 #include "model.h"
 #include <bitset>
+#include <unordered_set>
 
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -471,6 +472,9 @@ class SbPDG_Node {
 
     void push_buf_dummy_node();
 
+    void set_node_id(int i) {_node_id=i;}
+    int node_id() {return _node_id;}
+
     bool is_temporal();
     virtual int bitwidth() {return 64;}
    //---------------------------------------------------------------------------
@@ -486,6 +490,8 @@ class SbPDG_Node {
 
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
+
+    int _node_id=-1; //hack for temporal simulator to remember _node_id
 
     //Dynamic stuff
     uint64_t _val = 0; //dynamic var (setting the default value)
@@ -837,9 +843,9 @@ class SbPDG_Inst : public SbPDG_Node {
    }
    uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
-    virtual int bitwidth() {
-      return SB_CONFIG::bitwidth[_sbinst];
-    }
+   virtual int bitwidth() {
+     return SB_CONFIG::bitwidth[_sbinst];
+   }
 
   private:
     friend class boost::serialization::access;
@@ -866,7 +872,6 @@ class SbPDG_Inst : public SbPDG_Node {
 
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
-
 };
 
 class SbPDG_IO : public SbPDG_Node {
@@ -1573,14 +1578,18 @@ SbPDG_VecInput* get_vector_input(int i){
         it--;
       }
       
+      std::unordered_set<int> nodes_complete;
+
       for(auto I = _ready_nodes.begin(); I!=_ready_nodes.end();) {
         SbPDG_Node* n = *I;
-        if(n->get_avail()==0) {
+        int node_id = n->node_id();
+        bool node_not_fired = (node_id == -1) || 
+                              (nodes_complete.count(node_id) == 0);
+
+        if(node_not_fired && n->get_avail()==0) {
           n->compute_backcgra(print,verif);
           I=_ready_nodes.erase(I);
         } else {
-
-          std::cout << "Cannot issue because avail not true\n";
           ++I;
         }
       }
