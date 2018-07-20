@@ -616,7 +616,7 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
 
   if(failed_count_check) {
     cerr << "\n\nError: FAILED Basic FU Count Check\n\n";
-    exit(1);
+    return false;
   }
   //TODO: add code from printPortcompatibility here
   

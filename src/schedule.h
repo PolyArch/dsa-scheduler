@@ -18,11 +18,6 @@
 //Experimental Boost Stuffs
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/base_object.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/map.hpp>
-#include <boost/serialization/unordered_map.hpp>
-#include <boost/serialization/unordered_set.hpp>
 
 
 using namespace SB_CONFIG;
@@ -334,9 +329,8 @@ class Schedule {
     //Delete all scheduling data associated with pdgnode, including its
     //mapped locations, and mapping information and metadata for edges
     void unassign_pdgnode(SbPDG_Node* pdgnode) { 
-      for(auto it=pdgnode->ops_begin(); it!=pdgnode->ops_end(); ++it){
+      for(auto it=pdgnode->inc_e_begin(); it!=pdgnode->inc_e_end(); ++it){
         SbPDG_Edge* edge = *it;
-        if(!edge) continue;
         unassign_edge(edge);
       }
       for(auto it=pdgnode->uses_begin(); it!=pdgnode->uses_end(); ++it){
@@ -610,7 +604,7 @@ class Schedule {
   int max_lat() {assert(_max_lat!=-1);  return _max_lat;}
   int max_lat_mis() {return _max_lat_mis;}
   int decode_lat_mis() {return _decode_lat_mis;}
-
+  void set_decode_lat_mis(int i) {_decode_lat_mis=i;}
 
   void reset_lat_bounds() {
     for(auto I = _sbPDG->input_begin(), E = _sbPDG->input_end(); I!=E;++I) {
@@ -699,10 +693,7 @@ class Schedule {
       private:    
       friend class boost::serialization::access;
       template<class Archive>
-      void serialize(Archive & ar, const unsigned version) {
-        ar & min_lat & max_lat & lat & vio;
-      }
-
+      void serialize(Archive & ar, const unsigned version);
     };
 
     struct EdgeProp {
@@ -720,9 +711,7 @@ class Schedule {
       private:    
       friend class boost::serialization::access;
       template<class Archive>
-      void serialize(Archive & ar, const unsigned version) {
-        ar & num_links & extra_lat; //need to restore links & passthroughs
-      }
+      void serialize(Archive & ar, const unsigned version);
     };
 
     struct NodeProp {
@@ -732,9 +721,7 @@ class Schedule {
       private:    
       friend class boost::serialization::access;
       template<class Archive>
-      void serialize(Archive & ar, const unsigned version) {
-        ar & num_passthroughs & vertices;
-      }
+      void serialize(Archive & ar, const unsigned version);
     };
 
     struct LinkProp {
@@ -745,9 +732,7 @@ class Schedule {
       private:    
       friend class boost::serialization::access;
       template<class Archive>
-      void serialize(Archive & ar, const unsigned version) {
-        ar & lat & order & edges & nodes;
-      }
+      void serialize(Archive & ar, const unsigned version);
     };
 
     struct VecProp{ 
@@ -758,21 +743,14 @@ class Schedule {
       private:    
       friend class boost::serialization::access;
       template<class Archive>
-      void serialize(Archive & ar, const unsigned version) {
-        ar & min_lat & max_lat & lat & vport & mask;
-      }
+      void serialize(Archive & ar, const unsigned version);
     };
 
   private:    
 
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned version) {
-      //Note: sbmodel not serialized 
-      ar & _sbPDG & _num_mapped & _links_mapped & _edge_links_mapped 
-         & _wide_ports & _assignVPort & _vecProp & _vertexProp 
-         & _edgeProp & _nodeProp & _linkProp;
-    }
+    void serialize(Archive & ar, const unsigned version);
 
     //Private Data
     SbModel* _sbModel; 

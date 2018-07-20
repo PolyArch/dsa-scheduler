@@ -16,15 +16,10 @@
 #include <algorithm>
 #include "model.h"
 #include <bitset>
+#include <unordered_set>
 
-//Experimental Boost Stuffs
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/base_object.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/bitset.hpp>
-#include <boost/serialization/set.hpp>
-#include <boost/serialization/export.hpp>
 
 class Schedule;
 class SbPDG_Node;
@@ -38,7 +33,7 @@ class SbPDG_Edge {
     EdgeType etype() {return _etype;}
 
     SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
-               EdgeType etype, SbPDG* sbpdg);
+               EdgeType etype, SbPDG* sbpdg, int bitwidth=64, int index=0);
 
     int id() {return _ID;}
 
@@ -81,23 +76,18 @@ class SbPDG_Edge {
       return _data_buffer.empty();
       // return (_data_buffer.size()!=0);
     }
+
+    uint64_t extract_value(uint64_t v_in);
+
     uint64_t get_buffer_val() {
       assert(_data_buffer.size() > 0);
-      return _data_buffer.front().first;
+      return extract_value(_data_buffer.front().first);
     }
     bool get_buffer_valid() {
       assert(_data_buffer.size() > 0);
       return _data_buffer.front().second;
     }
 
-    void dummy_pop_buffer_val(bool print, bool verif) {
-      assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
-      // print_buf_state();
-
-      // _data_buffer.pop();
-      compute_after_pop(print, verif);      
-     
-    }
     void pop_buffer_val(bool print, bool verif) {
       assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
       // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
@@ -110,17 +100,21 @@ class SbPDG_Edge {
      
     }
 
+    int bitwidth() { return _bitwidth; }
+    int index()    { return _index; }
+    uint64_t get_value();
+
   friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) {
-      ar & _ID & _sbpdg & _def & _use & _etype;
-    }
+    void serialize(Archive & ar, const unsigned int version);
 
   private:
     int _ID;
-    SbPDG* _sbpdg;  //sometimes this is just nice to have : )
+    SbPDG* _sbpdg;  
     SbPDG_Node *_def, *_use;
     EdgeType _etype;
+    int _bitwidth;
+    int _index;
 
     //Runtime Types
     std::queue<std::pair<uint64_t,bool>> _data_buffer;
@@ -134,6 +128,106 @@ class SbPDG_Edge {
 
 class SbPDG_Inst;
 
+// Datastructure describing the operand
+struct SbPDG_Operand {
+  SbPDG_Operand() {}
+
+  SbPDG_Operand(SbPDG_Edge* e) {
+    edges.push_back(e);
+  }
+  SbPDG_Operand(std::vector<SbPDG_Edge*> es) {
+    edges=es;
+  }
+  SbPDG_Operand(uint64_t i) {
+    imm=i;
+  }
+
+  //Helper functions
+  SbPDG_Edge* get_first_edge() const {
+    if(edges.size()==0) {
+      return NULL;
+    } else {
+      return edges[0];
+    }
+  }
+
+  void clear() {
+    imm=0;
+    edges.clear();
+  }
+
+  bool is_ctrl() {
+    for(SbPDG_Edge* e : edges) {
+      if(e->etype() == SbPDG_Edge::ctrl) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool is_imm() {return edges.size()==0;}
+  bool is_composed() {return edges.size()>1;}
+
+
+  //Functions which manipulate dynamic state
+  uint64_t get_value() { //used by simple simulator
+    uint64_t base = imm;
+    int cur_bit_pos=0;
+    for(SbPDG_Edge* e : edges) {
+      base|=e->get_value()<<cur_bit_pos;
+      cur_bit_pos+=e->bitwidth();
+    }
+    assert(cur_bit_pos<=64); // max bitwidth is 64
+    return base;
+  }
+
+  uint64_t get_buffer_val() { //used by backcgra simulator
+    uint64_t base = imm;
+    int cur_bit_pos=0;
+    for(SbPDG_Edge* e : edges) {
+      base|=e->get_buffer_val()<<cur_bit_pos;
+      cur_bit_pos+=e->bitwidth();
+    }
+    assert(cur_bit_pos<=64); // max bitwidth is 64
+    return base;
+  }
+
+  uint64_t get_buffer_valid() { //used by backcgra simulator
+    for(SbPDG_Edge* e : edges) {
+      if(e->get_buffer_valid()==false) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  uint64_t is_buffer_empty() { //used by backcgra simulator
+    for(SbPDG_Edge* e : edges) {
+      if(e->is_buffer_empty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void pop_buffer_val(bool print, bool verif) {
+    for(SbPDG_Edge* e : edges) {
+      e->pop_buffer_val(print, verif);
+    }
+  }
+
+  // An Operand is valid as long as ALL of its edges are valid
+  bool valid();
+
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned int version);
+
+  //Edges concatenated in bit order from least to most significant
+  std::vector<SbPDG_Edge*> edges; 
+  uint64_t imm=0;
+};
+
 //PDG Node -- abstract base class
 class SbPDG_Node {
  public:
@@ -142,51 +236,43 @@ class SbPDG_Node {
     enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
 
     virtual void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
+    //virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     // some issue with this function
     virtual uint64_t invalid() { return _invalid;} //execution-related
-    void setScalar() {_scalar = true;}
-    bool getScalar() {return _scalar;}
 
     int findDepth(std::ostream& os, std::string dfg_name, int level);
     SbPDG_Node(SbPDG* sbpdg, V_TYPE v);
 
     typedef std::vector<SbPDG_Edge*>::const_iterator const_edge_iterator;
-     
-    void addIncEdge(unsigned pos, SbPDG_Edge *edge) { 
-      _num_inc_edges++;
+    typedef std::vector<SbPDG_Operand>::const_iterator const_op_iterator;
+
+    //Add edge to operand in least to most significant bit order
+    void addOperand(unsigned pos, SbPDG_Edge* e) { 
       assert(pos <=4);
       if(_ops.size()<=pos) { 
-         _ops.resize(pos+1,NULL); 
-       }
+        _ops.resize(pos+1); 
+      }
+      
+      _ops[pos].edges.push_back(e);
+      //if(_ops[pos].edges.size()) {
+      //  std::cerr << "ERROR: overwriting op at pos" << pos << "\n";
+      //  assert(0);
+      //}
 
-       if(_ops[pos]) {
-         std::cerr << "ERROR: overwriting op at pos" << pos 
-                   << " name:" << _ops[pos]->def()->name() << "\n";
-         assert(0);
-       }
-       _ops[pos]=edge;
+      //for(SbPDG_Edge* e : op.edges) {
+      //  _inc_edge_list.push_back(e);
+      //}
+      _inc_edge_list.push_back(e);
     }
     
-    void addOutEdge(unsigned pos, SbPDG_Edge *edge) {
-      assert(pos <= 64 && "more than 64 users, check this! (may be okay if really large grid\n"); 
-       if(_uses.size()<=pos) { 
-         _uses.resize(pos+1,NULL); 
-       }
-
-       if(_uses[pos]) {
-         std::cerr << "ERROR: overwriting use at pos" << pos 
-                   << " name: " << _uses[pos]->use()->name() << "\n";
-         assert(0);
-       }
-       
-       _uses[pos]=edge;
+    void addOutEdge(SbPDG_Edge *edge) {
+       _uses.push_back(edge);
     }
 
     void validate() {
       for (unsigned i = 0; i < _ops.size(); ++i) {
-        SbPDG_Edge* edge = _ops[i];
+        SbPDG_Edge* edge = _inc_edge_list[i];
         assert(edge == NULL || edge->use() == this);
       }
       for (unsigned i = 0; i < _uses.size(); ++i) {
@@ -195,12 +281,12 @@ class SbPDG_Node {
       }
     }
 
+    //TODO:FIXME this won't work for decomp-CGRA
     void removeIncEdge(SbPDG_Node* orig) { 
-      _num_inc_edges--;
       for (unsigned i = 0; i < _ops.size(); ++i) {
-        SbPDG_Edge* edge = _ops[i];
+        SbPDG_Edge* edge = _ops[i].get_first_edge();;
         if (edge->def() == orig) {
-          _ops[i]=NULL;
+          _ops[i].clear();
           return;
         }
       }
@@ -286,19 +372,22 @@ class SbPDG_Node {
       }  
     }
 
-    SbPDG_Edge* first_inc_edge() { return _ops[0]; }
-    SbPDG_Node* first_operand()  { return (_ops[0]->def()); }
+    SbPDG_Edge* first_inc_edge() { return _ops[0].edges[0]; }
+    SbPDG_Operand& first_operand()  { return _ops[0]; }
+    SbPDG_Node* first_op_node()  { return (_ops[0].edges[0]->def()); }
     SbPDG_Node* first_use()      { return (_uses[0]->use()); }
 
     int num_inc() const { return  _ops.size();  }
     int num_out() const { return  _uses.size(); }
     
     virtual std::string name() = 0;     //pure func
-    void setName(std::string& name) {_name = name;}
+    void setName(std::string name) {_name = name;}
     virtual std::string gamsName() = 0;
     
-    const_edge_iterator ops_begin() const {return _ops.begin();}
-    const_edge_iterator ops_end() const {return _ops.end();}
+    const_op_iterator ops_begin() const {return _ops.begin();}
+    const_op_iterator ops_end() const {return _ops.end();}
+    const_edge_iterator inc_e_begin() const {return _inc_edge_list.begin();}
+    const_edge_iterator inc_e_end() const {return _inc_edge_list.end();}
     const_edge_iterator uses_begin() const {return _uses.begin();}
     const_edge_iterator uses_end() const {return _uses.end();}
     
@@ -366,7 +455,7 @@ class SbPDG_Node {
 
     int inc_inputs_ready(bool print, bool verif) {
       _inputs_ready+=1;
-      if(_inputs_ready == _num_inc_edges) {
+      if(_inputs_ready == num_inc_edges()) {
         int num_computed = compute(print,verif);
         _inputs_ready=0;
         return num_computed;
@@ -383,22 +472,26 @@ class SbPDG_Node {
 
     void push_buf_dummy_node();
 
+    void set_node_id(int i) {_node_id=i;}
+    int node_id() {return _node_id;}
+
     bool is_temporal();
+    virtual int bitwidth() {return 64;}
    //---------------------------------------------------------------------------
   
     V_TYPE type() {return _vtype;} 
 
+    int num_inc_edges() {return _inc_edge_list.size();}
     private:
 
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) {
-      ar & _sbpdg & _num_inc_edges & _ID & _name & _ops & _uses & _scalar & 
-        _min_lat & _sched_lat & _max_thr & _group_id;
-    }
+    void serialize(Archive & ar, const unsigned int version);
 
     protected:    
     SbPDG* _sbpdg;  //sometimes this is just nice to have : )
+
+    int _node_id=-1; //hack for temporal simulator to remember _node_id
 
     //Dynamic stuff
     uint64_t _val = 0; //dynamic var (setting the default value)
@@ -410,12 +503,11 @@ class SbPDG_Node {
     std::vector<bool>  _back_array;     //in edges 
 
     //Static Stuff
-    int _num_inc_edges=0; //number of incomming edges, not including immmediates
     int _ID;
     std::string _name;
-    std::vector<SbPDG_Edge *> _ops;     //in edges 
-    std::vector<SbPDG_Edge *> _uses;   //out edges  
-    bool _scalar = false;
+    std::vector<SbPDG_Operand> _ops;     //in edges 
+    std::vector<SbPDG_Edge *> _inc_edge_list; //in edges 
+    std::vector<SbPDG_Edge *> _uses;          //out edges  
     int _min_lat=0;
     int _sched_lat=0;
     int _max_thr=0;
@@ -519,13 +611,19 @@ public:
 private:
   friend class boost::serialization::access;
   template<class Archive>
-  void serialize(Archive & ar, const unsigned version) {
-    ar & _bits;
-  }
+  void serialize(Archive & ar, const unsigned version);
 
   static CtrlMap ctrl_map;
   std::bitset<32> _bits;
 };
+
+struct SymEntry;
+struct EdgeEntry {
+  int bitwidth=64;
+  int index=0;
+  SbPDG_Node* node;
+};
+
 
 struct SymEntry {
   enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
@@ -534,12 +632,17 @@ struct SymEntry {
     flag = FLAG_NONE;
   CtrlBits ctrl_bits;
   int width;
+  int bitwidth;
+
+  //Union data is just used for immediates
   union union_data {
     uint64_t i;
     double d;	 
     struct struct_data {float f1, f2;} f;
-    SbPDG_Node* node;
   } data;
+
+  std::vector<EdgeEntry>* edge_entries=NULL;
+
   SymEntry() {
     type=SYM_INV; 
     flag=FLAG_INV;
@@ -548,22 +651,26 @@ struct SymEntry {
     type=SYM_INT;
     data.i=i;
     width=1;
+    width=64;
   }
   SymEntry(uint64_t i1, uint64_t i2) {
     type=SYM_INT;
     data.i= ((i2&0xFFFFFFFF) << 32) | ((i1&0xFFFFFFFF) <<0);
     width=2;
+    width=64;
   }
   SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
     type=SYM_INT;
     data.i= ((i4&0xFFFF) << 48) | ((i3&0xFFFF) <<32) | 
             ((i2&0xFFFF) << 16) | ((i1&0xFFFF) << 0);
     width=4;
+    bitwidth=64;
   }
   SymEntry(double d) {
     type=SYM_DUB;
     data.d=d;
     width=1;
+    bitwidth=64;
   }
   SymEntry(double d1, double d2) {
     float f1=d1, f2=d2;
@@ -571,11 +678,26 @@ struct SymEntry {
     data.f.f1=f1;
     data.f.f2=f2;
     width=2;
+    bitwidth=64;
   }
   SymEntry(SbPDG_Node* node) {
     type=SYM_NODE;
-    data.node=node;
+    edge_entries=new std::vector<EdgeEntry>();
+    EdgeEntry e;
+    e.node=node;
+    e.bitwidth=64;
+    e.index=0;
+    edge_entries->push_back(e);
     width=1;
+  }
+  SymEntry(std::vector<EdgeEntry>& edge_vec) {
+    type=SYM_NODE;
+    edge_entries=new std::vector<EdgeEntry>();
+    for(EdgeEntry& e : edge_vec) {
+      edge_entries->push_back(e);
+      width++;
+    }
+    assert(edge_entries->size() <=16);
   }
   void set_flag(std::string& s) {
     if(s==std::string("pred")) {
@@ -590,9 +712,42 @@ struct SymEntry {
     }
   }
 
+  EdgeEntry firstEdge() {
+    assert(type==SymEntry::SYM_NODE && "trying to get node from wrong type");
+    if(edge_entries->size() != 1) {
+      assert(0 && "Node must have exactly one entry to extract");
+    }
+    return edge_entries->at(0);
+  }
+
+  SbPDG_Node* node() {
+    assert(type==SymEntry::SYM_NODE && "trying to get node from wrong type");
+    if(edge_entries->size() != 1) {
+      assert(0 && "Node must have exactly one entry to extract");
+    }
+    return edge_entries->at(0).node;
+  }
+
   void set_control_list(ctrl_def_t& d) {
     ctrl_bits = CtrlBits(d);
   }
+
+  void set_bitslice_params(int bitwidth, int index) {
+    EdgeEntry& edge_entry = edge_entries->at(0);
+    SbPDG_Node* node = edge_entry.node;
+    assert(index * bitwidth < node->bitwidth() &&
+          ((index+1) * bitwidth <= node->bitwidth()) &&
+          (bitwidth==8 || bitwidth==16 || bitwidth==32 || bitwidth==64) &&
+          "improper bitwidth");
+    edge_entry.bitwidth=bitwidth;
+    edge_entry.index=index;
+  }
+
+  //~SymEntry() {
+  //  if(type==SYM_NODE) {
+  //    delete edge_entries;
+  //  }
+  //}
 };
 
 //Instruction
@@ -606,7 +761,7 @@ class SbPDG_Inst : public SbPDG_Node {
     }
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
+    //virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
     virtual int lat_of_inst() {
       return inst_lat(inst());
@@ -667,6 +822,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
+    uint64_t do_compute();
     virtual int compute(bool print, bool verif); 
 
     // new line added
@@ -687,18 +843,22 @@ class SbPDG_Inst : public SbPDG_Node {
    }
    uint64_t ctrl_bits() {return _ctrl_bits.bits();}
 
+   virtual int bitwidth() {
+     return SB_CONFIG::bitwidth[_sbinst];
+   }
+
   private:
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned version) {
-      ar & boost::serialization::base_object<SbPDG_Node>(*this);
-      ar & _predInv & _isDummy & _imm_slot & _subFunc 
-         & _ctrl_bits & _reg & _imm & _sbinst;
-    }
+    void serialize(Archive & ar, const unsigned version);
 
     std::ofstream _verif_stream;
     std::string _verif_id;
     std::vector<uint64_t> _input_vals;
+    std::vector<uint32_t> _input_vals_32;
+    std::vector<uint16_t> _input_vals_16;
+    std::vector<uint8_t> _input_vals_8;
+
     bool _predInv;
     bool _isDummy;
     int _imm_slot;
@@ -706,9 +866,12 @@ class SbPDG_Inst : public SbPDG_Node {
     CtrlBits _ctrl_bits;
 
     std::vector<uint64_t> _reg;
+    std::vector<uint32_t> _reg_32;
+    std::vector<uint16_t> _reg_16;
+    std::vector<uint8_t> _reg_8;
+
     uint64_t _imm;
     SB_CONFIG::sb_inst_t _sbinst;
-
 };
 
 class SbPDG_IO : public SbPDG_Node {
@@ -722,9 +885,7 @@ class SbPDG_IO : public SbPDG_Node {
 
   friend class boost::serialization::access;
   template<class Archive>
-  void serialize(Archive & ar, const unsigned version) {
-    ar & _sbpdg & _vport & _realName & _subIter & _size;
-  }
+  void serialize(Archive & ar, const unsigned version);
 
   protected:
     SbPDG* _sbpdg;
@@ -739,7 +900,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     SbPDG_Input() {}
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
+    //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
     SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg,V_INPUT) {}
 
@@ -777,9 +938,7 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   private:
   friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) {
-      ar & boost::serialization::base_object<SbPDG_Node>(*this);
-    }
+    void serialize(Archive & ar, const unsigned int version);
 
 };
 
@@ -789,7 +948,7 @@ class SbPDG_Output : public SbPDG_IO {
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
     void printDirectAssignments(std::ostream& os, std::string dfg_name);
-    virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
+    //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
     SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg, V_OUTPUT) {}
 
@@ -805,21 +964,19 @@ class SbPDG_Output : public SbPDG_IO {
     //returns the instruction producing the
     //value to this output node
     //Returns NULL if the producing instruction is an input!
-    SbPDG_Inst* out_inst() {
-      return dynamic_cast<SbPDG_Inst*>(_ops[0]->def());
+    //TODO:FIXME: This might not be safe for decomp-CGRA
+    SbPDG_Inst* out_inst() { 
+      return dynamic_cast<SbPDG_Inst*>(_ops[0].edges[0]->def());
     }
 
-    SbPDG_Node* first_operand() {
-      return (_ops[0]->def());
-    }
     //retrieve the value of the def
     uint64_t retrieve() {
       assert(_ops.size()==1);
-      return _ops[0]->def()->get_value();
+      return _ops[0].get_value();
     }
 
     uint64_t parent_invalid() {
-      return _ops[0]->def()->invalid();
+      return _ops[0].edges[0]->def()->invalid();
     }
 
     virtual uint64_t invalid() {
@@ -828,9 +985,7 @@ class SbPDG_Output : public SbPDG_IO {
   private:
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) {
-      ar & boost::serialization::base_object<SbPDG_Node>(*this);
-    }
+    void serialize(Archive & ar, const unsigned int version);
 };
 
 //vector class
@@ -855,10 +1010,7 @@ class SbPDG_Vec {
   private:
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned version) {
-      ar & _name & _locMap & _ID & _sbpdg & _group_id;
-    }
-
+    void serialize(Archive & ar, const unsigned version); 
   protected:
     std::string _name;
     std::vector<std::vector<int>> _locMap;
@@ -912,11 +1064,7 @@ class SbPDG_VecInput : public SbPDG_Vec {
 
   friend class boost::serialization::access;
   template<class Archive>
-  void serialize(Archive & ar, const unsigned version) {
-    ar & boost::serialization::base_object<SbPDG_Vec>(*this);
-    ar & _inputs;
-  }
-
+  void serialize(Archive & ar, const unsigned version);
   private:
     std::vector<SbPDG_Input*> _inputs;
 };
@@ -950,11 +1098,7 @@ class SbPDG_VecOutput : public SbPDG_Vec {
   private:
   friend class boost::serialization::access;
   template<class Archive>
-  void serialize(Archive & ar, const unsigned version) {
-    ar & boost::serialization::base_object<SbPDG_Vec>(*this);
-    ar & _outputs;
-  }
-
+  void serialize(Archive & ar, const unsigned version);
   private:
     std::vector<SbPDG_Output*> _outputs;
 };
@@ -979,14 +1123,7 @@ public:
     assert_exists(s);
     return _sym_tab[s];
   }
-  SbPDG_Node* get_node(std::string& s) { 
-    assert_exists(s);
-    if(_sym_tab[s].type!=SymEntry::SYM_NODE) {
-      std::cerr << "symbol \"" + s +"\" is not a node\"";
-      assert(0);
-    }
-    return _sym_tab[s].data.node;
-  }
+
   int get_int(std::string& s) { 
     assert_exists(s);
     if(_sym_tab[s].type!=SymEntry::SYM_INT) {
@@ -1011,9 +1148,7 @@ struct GroupProp {
 private:
   friend class boost::serialization::access;
   template<class Archive>
-  void serialize(Archive & ar, const unsigned version) {
-    ar & is_temporal;
-  }
+  void serialize(Archive & ar, const unsigned version);
 };
 
 class SbPDG {
@@ -1046,11 +1181,12 @@ class SbPDG {
     }
 
     void printGraphviz(std::ostream& os, Schedule* sched=NULL);
-    void printEmuDFG(std::ostream& os, std::string dfg_name);
+    //void printEmuDFG(std::ostream& os, std::string dfg_name);
     void printGraphviz(const char *fname, Schedule* sched=NULL) {
       std::ofstream os(fname);
       assert(os.good());
       printGraphviz(os, sched);
+      os.flush();
     }
     
     void start_new_dfg_group();
@@ -1087,8 +1223,8 @@ class SbPDG {
     }
 
     void addScalarInput(std::string name, SymTab& syms) {
-      SbPDG_VecInput* vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
-                                                     this); 
+      SbPDG_VecInput* vec_input = 
+        new SbPDG_VecInput(name, _vecInputs.size(), this); 
 
       insert_vec_in(vec_input);
  
@@ -1096,30 +1232,40 @@ class SbPDG {
       syms.set(name,pdg_in);
       pdg_in->setName(name);
       pdg_in->setVPort(_vecInputs.size());
-      pdg_in->setScalar();
       addInput(pdg_in);
       vec_input->addInput(pdg_in);
     } 
 
+    void addOutputFromSym(std::string name, SbPDG_VecOutput* vec_output, 
+                          SymEntry sym) {
+       int num_entries = (int)sym.edge_entries->size();
+       assert(num_entries > 0 && num_entries <= 16);
+
+       SbPDG_Output* pdg_out = new SbPDG_Output(this);
+       pdg_out->setName(name+std::string("_out"));
+       pdg_out->setVPort(_vecOutputs.size());
+       addOutput(pdg_out);
+       vec_output->addOutput(pdg_out);       
+
+       for(int e = 0; e < num_entries; ++e) {
+         auto& edge_entry = sym.edge_entries->at(e);
+         SbPDG_Node* out_node = edge_entry.node;
+ 
+         connect(out_node, pdg_out,0,SbPDG_Edge::data,
+             edge_entry.bitwidth,edge_entry.index);
+       }
+    }
+
     //scalar output node
     void addScalarOutput(std::string name, SymTab& syms) {
-      SbPDG_Node* out_node = syms.get_node(name);
- 
       //new vector output
-      SbPDG_VecOutput* vec_output = new SbPDG_VecOutput(name,_vecOutputs.size(),
-                                                        this); 
-      insert_vec_out(vec_output);
- 
-      SbPDG_Output* pdg_out = new SbPDG_Output(this);
-      std::string out_name=name+"_out";
-      syms.set(out_name,pdg_out);
-      pdg_out->setName(out_name);
-      pdg_out->setVPort(_vecOutputs.size());
-      pdg_out->setScalar();
-      addOutput(pdg_out);
-      vec_output->addOutput(pdg_out);       //its own vector of out nodes
+      SbPDG_VecOutput* vec_output 
+        = new SbPDG_VecOutput(name,_vecOutputs.size(), this); 
 
-      connect(out_node, pdg_out,0,SbPDG_Edge::data);
+      insert_vec_out(vec_output);
+
+      SymEntry sym = syms.get_sym(name);
+      addOutputFromSym(name,vec_output,sym);
     } 
 
     void addVecOutput(std::string name,
@@ -1140,20 +1286,9 @@ class SbPDG {
         //std::cout << "name: " << name << "\n";
         std::string dep_name = ss.str();
 
-        SbPDG_Node* out_node = syms.get_node(dep_name);
-        SbPDG_Output* pdg_out = new SbPDG_Output(this);
-        std::string out_name = dep_name + "_out";
-        syms.set(out_name,pdg_out); 
-        pdg_out->setName(out_name);
-        pdg_out->setVPort(_vecOutputs.size());
-        addOutput(pdg_out);
-        vec_output->addOutput(pdg_out);
-
-        connect(out_node, pdg_out,0,SbPDG_Edge::data);
+        SymEntry sym = syms.get_sym(dep_name);
+        addOutputFromSym(dep_name,vec_output,sym);
       } 
-
-
-      //assert(0 && "addVecOutput not implemented");
     }
     void addVecOutput(std::string name, int len, SymTab& syms ) {
        std::vector<std::vector<int>> pm = simple_pm(len);
@@ -1192,7 +1327,7 @@ class SbPDG {
     }
 
     SbPDG_Edge* connect(SbPDG_Node* orig, SbPDG_Node* dest,int slot,
-                        SbPDG_Edge::EdgeType etype);
+                        SbPDG_Edge::EdgeType etype, int bitwidth=64, int index=0);
     void disconnect(SbPDG_Node* orig, SbPDG_Node* dest);
 
     SymEntry createInst(std::string opcode, std::vector<SymEntry>& args);
@@ -1369,8 +1504,8 @@ SbPDG_VecInput* get_vector_input(int i){
 
       unsigned int ready_outputs=0;
       for (unsigned int i=0; i<vec_out->num_outputs(); ++i){
-        SbPDG_Edge* inc_edge = *vec_out->getOutput(i)->ops_begin(); 
-        if(!inc_edge->is_buffer_empty()) {
+        SbPDG_Operand& operand = vec_out->getOutput(i)->first_operand(); 
+        if(!operand.is_buffer_empty()) {
           ready_outputs++;
         }
       }
@@ -1389,11 +1524,11 @@ SbPDG_VecInput* get_vector_input(int i){
       
       // we don't need discard now!
       for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
-        SbPDG_Edge* e = *vec_out->getOutput(i)->ops_begin(); 
-        data.push_back(e->get_buffer_val());
-        data_valid.push_back(e->get_buffer_valid());
+        SbPDG_Operand& operand = vec_out->getOutput(i)->first_operand(); 
+        data.push_back(operand.get_buffer_val());
+        data_valid.push_back(operand.get_buffer_valid());
         //std::cout << e->get_buffer_valid();
-        e->pop_buffer_val(print, verif);
+        operand.pop_buffer_val(print, verif);
       }
 
       // Insufficient output size
@@ -1412,7 +1547,6 @@ SbPDG_VecInput* get_vector_input(int i){
     }
 
     int cycle(bool print, bool verif){ 
-
       // int num_computed=0;
       // std::cout << "size of the next list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
       // for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end(); it++){
@@ -1421,21 +1555,11 @@ SbPDG_VecInput* get_vector_input(int i){
         // set the values
         buffer_pop_info* temp = *it;
         SbPDG_Edge* e = temp->e;
-        bool dummy = temp->is_dummy;
-        // std::cout << "Allotted value of iterator to edge\n";
-        if(!dummy){
-          e->pop_buffer_val(print, verif);
-        } else {
-          e->dummy_pop_buffer_val(print, verif);
-        }
-        // std::cout << "popped value from buffer\n";
-        /*if(!e->is_buffer_empty()){
-            SbPDG_Node* n = e->use();
-            n->set_is_new_val(1);
-            n->inc_inputs_ready_backcgra(false, false);
-        }
-        */
-        it = buf_transient_values[cur_buf_ptr].erase(it);
+
+        e->pop_buffer_val(print, verif);
+        
+     
+		it = buf_transient_values[cur_buf_ptr].erase(it);
         // buf_transient_values[cur_buf_ptr].erase(it);
         // it--;
       }
@@ -1449,20 +1573,20 @@ SbPDG_VecInput* get_vector_input(int i){
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
         sb_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
-        /*
-        if(!sb_node->get_avail()){
-          num_computed += sb_node->update_next_nodes(print, verif);
-        }
-        */ 
         
-        it = transient_values[cur_buf_ptr].erase(it);
-        // transient_values[cur_buf_ptr].erase(it);
-        // it--;
-      }
+		it = transient_values[cur_buf_ptr].erase(it);
+        
+	  }
       
+      std::unordered_set<int> nodes_complete;
+
       for(auto I = _ready_nodes.begin(); I!=_ready_nodes.end();) {
         SbPDG_Node* n = *I;
-        if(n->get_avail()==0) {
+        int node_id = n->node_id();
+        bool node_not_fired = (node_id == -1) || 
+                              (nodes_complete.count(node_id) == 0);
+
+        if(node_not_fired && n->get_avail()==0) {
           n->compute_backcgra(print,verif);
           I=_ready_nodes.erase(I);
         } else {
@@ -1541,14 +1665,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
     friend class boost::serialization::access;
     template<class Archive>
-    void serialize(Archive & ar, const unsigned version) {
-      ar & _nodes &_insts & _inputs & _outputs 
-        & _orderedInsts & _orderedInstsGroup 
-        & _vecInputs & _vecOutputs & _edges
-        & removed_edges & _vecInputGroups & _vecOutputGroups & _groupProps 
-       & dummy_map & dummys_per_port & dummies & dummiesOutputs;
-    }
-
+    void serialize(Archive & ar, const unsigned version);
     std::vector<SbPDG_Node*> _nodes;
 
     //redundant storage:
@@ -1581,8 +1698,6 @@ SbPDG_VecInput* get_vector_input(int i){
 
     std::ostream* _dbg_stream;
 };
-
-
 
 
 #endif

@@ -56,6 +56,7 @@ int main(int argc, char* argv[])
   std::string dfg_emu_header=pdg_rawname+string(".h");
   std::ofstream out_file(dfg_emu_header);     
   assert(out_file.good()); 
-  sbpdg.printEmuDFG(out_file, dfg_rawname);
+//  sbpdg.printEmuDFG(out_file, dfg_rawname);
+assert(0 && "oh no i depricated this");
 }
 

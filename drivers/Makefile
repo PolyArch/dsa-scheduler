@@ -14,15 +14,16 @@ INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LIBS +=-ly -lfl -lsbscheduler -lsbconfig
+LOCAL_LIBS = -ly -lfl -lsbscheduler -lsbconfig $(LIBS)
 
-all: sb_sched sb_dfg_emu
+all: sb_sched 
+#sb_dfg_emu
 
 sb_sched : sb_sched.cpp $(INC_SBMODEL_PATH)/*.h
-	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
+	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
-sb_dfg_emu : sb_dfg_emu.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
+#sb_dfg_emu : sb_dfg_emu.cpp
+#	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 
 clean:

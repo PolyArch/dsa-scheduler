@@ -35,7 +35,7 @@
 #define FU_PRED_INV_BITS   1
 
 #define OPCODE_LOC   FU_PRED_INV_LOC + FU_PRED_INV_BITS
-#define OPCODE_BITS   6
+#define OPCODE_BITS   7
 
 #define IN_DELAY_LOC   OPCODE_LOC + OPCODE_BITS
 #define BITS_PER_DELAY   4

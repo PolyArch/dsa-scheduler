@@ -12,8 +12,8 @@ Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B)
 Luminance (perceived option 2, slower to calculate): sqrt( 0.241*R^2 + 0.691*G^2 + 0.068*B^2 )
 */
 int ColorMapper::colorOf(SbPDG_Node* item, bool reset) {
-    if(item->num_inc()==1 && (*item->ops_begin())!=NULL) {
-      return colorOf((*item->ops_begin())->def());
+    if(item->num_inc()==1 && (*item->ops_begin()).edges.size()==1) {
+      return colorOf((*item->ops_begin()).get_first_edge()->def());
     }
     if(colorMap.count(item)==0 || reset) {
         int x=0,y=0,z=0;

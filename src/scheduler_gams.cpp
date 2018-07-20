@@ -166,19 +166,20 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
       printf("Best latmis so far: latmis %d\n",best_schedule->max_lat_mis());
     }
 
-
-    if(success && (best_schedule==NULL || 
-          cur_schedule->max_lat_mis() < best_schedule->max_lat_mis())) {
-      if(best_schedule) delete best_schedule;
-      best_schedule=cur_schedule;
+    if(success) {
+      if(best_schedule==NULL || 
+            (cur_schedule->max_lat_mis() < best_schedule->max_lat_mis()) ) {
+        if(best_schedule) delete best_schedule;
+        best_schedule=cur_schedule;
+      }
+  
+      //success = success && (latmis == 0);
+  
+      iters++;
+      if(latmis==0 || iters > 1000) {
+        break;
+      }     
     }
-
-    //success = success && (latmis == 0);
-
-    iters++;
-    if(latmis==0 || iters > 1000) {
-      break;
-    }     
   }
 
   schedule = best_schedule;
@@ -326,11 +327,17 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   // Print the controlling file
   ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
   assert(ofs_sb_gams.good());
-  
-  ofs_sb_gams << "option reslim=" << std::min(_reslim - (total_msec()/1000),300.0) 
-    << ";\n"
-                 << "option optcr="  <<  _optcr << ";\n"   
-                 << "option optca="  <<  _optca << ";\n";
+ 
+  double timeout = _reslim - (total_msec()/1000);
+
+  if(heur_fix && heur_sched) { // early timeout only for MR'.RT scheduler
+    timeout = std::min(timeout,300.0);
+  }
+
+  ofs_sb_gams << "option reslim=" << timeout << ";\n"
+              << "option optcr="  <<  _optcr << ";\n"   
+              << "option optca="  <<  _optca << ";\n";
+
   if(use_hw) {
     ofs_sb_gams << softbrain_gams_hw;
   } else {

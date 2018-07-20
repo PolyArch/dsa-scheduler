@@ -175,8 +175,7 @@ bool can_go(SbPDG_Inst* n, unordered_map<SbPDG_Inst*,int>& state) {
     return false;
   }
 //  return true;
-  for(auto II=n->ops_begin(), EE=n->ops_end(); II!=EE; ++II) {
-    if(*II == 0) continue;
+  for(auto II=n->inc_e_begin(), EE=n->inc_e_end(); II!=EE; ++II) {
     if(SbPDG_Inst* inc_node = dynamic_cast<SbPDG_Inst*>((*II)->def())) {
       if(state[inc_node]!=2) {
         return false;
@@ -351,8 +350,7 @@ std::pair<int,int> SchedulerStochasticGreedy::scheduleHere(Schedule* sched,
 
   pair<int,int> score=make_pair(0,0);
 
-  for(auto I=n->ops_begin(), E=n->ops_end();I!=E;++I) {
-    if(*I == NULL) { continue; } //could be immediate
+  for(auto I=n->inc_e_begin(), E=n->inc_e_end();I!=E;++I) {
     SbPDG_Edge* source_pdgedge = (*I);
     SbPDG_Node* source_pdgnode = source_pdgedge->def();     //could be input node also
 

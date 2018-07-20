@@ -13,7 +13,7 @@ OPT ?= -O3
 LEX = lex
 YACC = yacc -d
 
-SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp 
+SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_sg.cpp scheduler_sa.cpp scheduler_gams.cpp serialize-schedule.cpp serialize-sbpdg.cpp
 
 GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
@@ -34,7 +34,7 @@ all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
 CXXFLAGS += -I$(INC_SBMODEL_PATH)
 
-CXXFLAGS += -I$(INCLUDE_DEST) -L$(BOOST_PATH) -fPIC -lboost_regex
+CXXFLAGS += -I$(INCLUDE_DEST) -L$(BOOST_PATH) -fPIC 
 
 $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 

@@ -108,15 +108,6 @@ class CandidateRouting {
 };
 
 
-class Triplet {
-  public: 
-  Triplet(int x, int y, int z) : _x(x), _y(y), _z(z) {}
-    
-
-  private:
-  int _x, _y, _z;
-};
-
 class Scheduler {
   public:
   Scheduler(SB_CONFIG::SbModel* sbModel) :_sbModel(sbModel),
