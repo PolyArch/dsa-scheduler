@@ -480,6 +480,7 @@ class Schedule {
     SbModel* sbModel() {return _sbModel;}
 
     void  iterativeFixLatency();
+    void  ordered_non_temporal(std::vector<SbPDG_Inst*>& ret);
 
     void  calcLatency(int& lat, int& latmis, bool warnMismatch=false);
     void  cheapCalcLatency(int& lat, int& latmis, bool set_delay=false);
