@@ -626,23 +626,6 @@ struct EdgeEntry {
 
 
 struct SymEntry {
-  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
-  enum enum_flag {FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED, 
-                  FLAG_BGATE, FLAG_CONTROL} 
-    flag = FLAG_NONE;
-  CtrlBits ctrl_bits;
-  int width;
-  int bitwidth;
-
-  //Union data is just used for immediates
-  union union_data {
-    uint64_t i;
-    double d;	 
-    struct struct_data {float f1, f2;} f;
-  } data;
-
-  std::vector<EdgeEntry>* edge_entries=NULL;
-
   SymEntry() {
     type=SYM_INV; 
     flag=FLAG_INV;
@@ -690,15 +673,6 @@ struct SymEntry {
     edge_entries->push_back(e);
     width=1;
   }
-  SymEntry(std::vector<EdgeEntry>& edge_vec) {
-    type=SYM_NODE;
-    edge_entries=new std::vector<EdgeEntry>();
-    for(EdgeEntry& e : edge_vec) {
-      edge_entries->push_back(e);
-      width++;
-    }
-    assert(edge_entries->size() <=16);
-  }
   void set_flag(std::string& s) {
     if(s==std::string("pred")) {
       flag=FLAG_PRED;
@@ -710,6 +684,10 @@ struct SymEntry {
       printf("qualifier: %s unknown",s.c_str());
       assert(0 && "Invalid argument qualifier");
     }
+  }
+
+  void take_union(SymEntry entry) {
+    edge_entries->push_back(entry.firstEdge());
   }
 
   EdgeEntry firstEdge() {
@@ -733,6 +711,11 @@ struct SymEntry {
   }
 
   void set_bitslice_params(int bitwidth, int index) {
+    assert(type==SymEntry::SYM_NODE && "trying to get node from wrong type");
+    if(edge_entries->size() != 1) {
+      assert(0 && "Node must have exactly one entry to extract");
+    }
+
     EdgeEntry& edge_entry = edge_entries->at(0);
     SbPDG_Node* node = edge_entry.node;
     assert(index * bitwidth < node->bitwidth() &&
@@ -743,11 +726,51 @@ struct SymEntry {
     edge_entry.index=index;
   }
 
+  SymEntry(const SymEntry &s) {
+    this->type=s.type;
+    this->flag=s.flag;
+    this->ctrl_bits=s.ctrl_bits;
+    this->width=s.width;
+    this->bitwidth=s.bitwidth;
+    this->ctrl_bits=s.ctrl_bits;
+    this->data=s.data;
+
+    if(s.edge_entries) {
+      this->edge_entries = new std::vector<EdgeEntry>();
+      for(auto& i : *s.edge_entries) {
+        this->edge_entries->push_back(i);
+      }
+    }
+  }
+
+  //TODO:FIXME:Known-Issue
+  //The DFG parser, as-is, LEAKs the edge_entries vector.
+  //This is because if I uncomment the destructor, bad bad things happen,
+  //and i'm not sure why, and i'm not sure I care enough, yet.
+
   //~SymEntry() {
-  //  if(type==SYM_NODE) {
+  //  if(edge_entries) {
   //    delete edge_entries;
   //  }
   //}
+
+  //data
+  enum enum_type {SYM_INV,SYM_INT, SYM_DUB, SYM_NODE} type;
+  enum enum_flag {FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED, 
+                  FLAG_BGATE, FLAG_CONTROL} flag = FLAG_NONE;
+  CtrlBits ctrl_bits;
+  int width;
+  int bitwidth;
+
+  //Union data is just used for immediates
+  union union_data {
+    uint64_t i;
+    double d;	 
+    struct struct_data {float f1, f2;} f;
+  } data;
+
+  std::vector<EdgeEntry>* edge_entries=NULL;
+
 };
 
 //Instruction
@@ -1104,7 +1127,6 @@ class SbPDG_VecOutput : public SbPDG_Vec {
 };
 
 class SymTab {
-  std::map<std::string, SymEntry> _sym_tab;
   void assert_exists(std::string& s) {
     if(_sym_tab.count(s)==0) {
        std::cerr << "Could not find" + s + "\n";
@@ -1112,8 +1134,16 @@ class SymTab {
     }
   }
 public:
-  void set(std::string& s, SymEntry n) {_sym_tab[s]=n;}
-  void set(std::string& s, SbPDG_Node* n) {_sym_tab[s]=SymEntry(n);}
+  void set(std::string& s, SymEntry n)    {
+    //std::cout << "setting symbol " << s << " #ent:" << n.edge_entries->size() << "\n";
+    _sym_tab[s]=n;
+  }
+  void set(std::string& s, SbPDG_Node* n) {
+    //std::cout << "setting symbol " << s << " to node " << n->name() << "\n";
+    _sym_tab[s]=n;
+
+    _sym_tab[s]=SymEntry(n);
+  }
   void set(std::string& s, uint64_t n)    {_sym_tab[s]=SymEntry(n);}
   void set(std::string& s, double n)      {_sym_tab[s]=SymEntry(n);}
   bool has_sym(std::string& s) {
@@ -1140,6 +1170,8 @@ public:
     }
     return _sym_tab[s].data.d;
   }
+private:
+  std::map<std::string, SymEntry> _sym_tab;
 };
 
 struct GroupProp {

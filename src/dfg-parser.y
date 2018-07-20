@@ -46,9 +46,6 @@ static void yyerror(parse_param*, const char *);
         string_vec_t* str_vec;
 	ctrl_def_t* ctrl_def;
 
-        EdgeEntry edge_ent;
-	std::vector<EdgeEntry>* edge_vec;
-
         YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
         ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
 }
@@ -56,9 +53,7 @@ static void yyerror(parse_param*, const char *);
 
 %type <io_pair> io_def
 %type <sym_vec> arg_list  
-%type <sym_ent> arg_expr  rhs expr
-%type <edge_ent> edge
-%type <edge_vec> edge_list
+%type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list  
 %type <str_vec> ident_list  
 
@@ -129,7 +124,7 @@ expr    : I_CONST {$$ = SymEntry($1);} //expr: what you can assign to a var
         | I_CONST I_CONST I_CONST I_CONST {$$ = SymEntry($1,$2,$3,$4);}
 	| F_CONST {$$ = SymEntry($1);}
         | F_CONST F_CONST {$$ = SymEntry($1,$2);}
-	| edge_list {$$ = SymEntry(*$1);}
+	| edge_list {$$ = $1;}
         | IDENT '(' arg_list ')' {$$ = p->dfg->createInst(*$1,*$3); 
                                        delete $1; delete $3;} 
         ;
@@ -162,19 +157,20 @@ ident_list
         ;
 
 edge_list
-        : edge {$$ = new std::vector<EdgeEntry>(); 
-                $$->push_back($1);}
-        | edge_list edge {$1->push_back($2); $$ = $1;}
+        : edge {$$ = $1;}
+        | edge_list edge {
+            $1.take_union($2);
+            $$ = $1;
+          }
         ;
 
 /*edge is a pdgnode annotated with bitwidth/index information*/
 edge    : IDENT {
-          $$ = p->syms.get_sym(*$1).firstEdge();
+          $$ = p->syms.get_sym(*$1);
         }
         | IDENT ':' I_CONST ':' I_CONST {
-            $$.node = p->syms.get_sym(*$1).node();
-            $$.bitwidth=$3;
-            $$.index=$5;
+            $$ = p->syms.get_sym(*$1);
+            $$.set_bitslice_params($3,$5);
           }        
         ;
 
