@@ -1547,10 +1547,10 @@ SbPDG_VecInput* get_vector_input(int i){
     }
 
     int cycle(bool print, bool verif){ 
-
       // int num_computed=0;
       // std::cout << "size of the next list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
-      for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end(); it++){
+      // for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end(); it++){
+      for(auto it=buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end();){
         // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
         // set the values
         buffer_pop_info* temp = *it;
@@ -1558,25 +1558,25 @@ SbPDG_VecInput* get_vector_input(int i){
 
         e->pop_buffer_val(print, verif);
         
-        // std::cout << "popped value from buffer\n";
-
-        buf_transient_values[cur_buf_ptr].erase(it);
-        // std::cout << "erased value from cyclic buffer\n";
-        it--;
+     
+		it = buf_transient_values[cur_buf_ptr].erase(it);
+        // buf_transient_values[cur_buf_ptr].erase(it);
+        // it--;
       }
       // std::cout << "new size of the list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
 
 
-      for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end(); it++){
+      // for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end(); it++){
+      for(auto it=transient_values[cur_node_ptr].begin(); it!=transient_values[cur_node_ptr].end();){
         struct cycle_result* temp = *it;
         SbPDG_Node* sb_node = temp->n;
         //std::cout << "transient_value update valid: " << temp->valid << "\n";
 
         sb_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
-       
-        transient_values[cur_buf_ptr].erase(it);
-        it--;
-      }
+        
+		it = transient_values[cur_buf_ptr].erase(it);
+        
+	  }
       
       std::unordered_set<int> nodes_complete;
 
