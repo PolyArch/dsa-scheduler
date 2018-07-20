@@ -1770,10 +1770,10 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   } else {
     //bool succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
     //int max_lat2=0,max_lat_mis2=0;
-    cheapCalcLatency(max_lat, max_lat_mis, true);
+    //cheapCalcLatency(max_lat, max_lat_mis, true);
     //fixLatency_fwd(max_lat,max_lat_mis);
-    fixLatency_bwd(); //bwd pass
-    //iterativeFixLatency();
+    //fixLatency_bwd(); //bwd pass
+    iterativeFixLatency();
 
     max_lat=0;
     max_lat_mis=0;
@@ -1986,6 +1986,17 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   return true;
 }
 
+void Schedule::ordered_non_temporal(std::vector<SbPDG_Inst*>& ret) {
+  ret.clear();
+  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
+  for(SbPDG_Inst* i : ordered_insts) {
+    if(!i->is_temporal()) {
+      ret.push_back(i);
+    }
+  }
+}
+
+
 void Schedule::iterativeFixLatency() {
   bool changed=true;
   reset_lat_bounds();
@@ -1997,16 +2008,11 @@ void Schedule::iterativeFixLatency() {
   int max_mis=0;
 
   //TODO:
-  //We didn't quite fix the problem of vectors in temporal region, though
+  //We didn't quite fix the problem of IO vectors in temporal region, though
   //hopefully this isn't necessary
-  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
-  std::vector<SbPDG_Inst*> ordered_non_temp;
-  for(SbPDG_Inst* i : ordered_insts) {
-    if(!i->is_temporal()) {
-      ordered_non_temp.push_back(i);
-    }
-  }
 
+  std::vector<SbPDG_Inst*> ordered_non_temp;
+  ordered_non_temporal(ordered_non_temp);  
 
   while(changed || overflow) {
     changed=false;
@@ -2197,8 +2203,10 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   max_lat_mis=0;
   max_lat=0;
 
-  std::vector<SbPDG_Inst*>& ordered_insts = _sbPDG->ordered_insts();
-  for(SbPDG_Inst* inst : ordered_insts) {
+  std::vector<SbPDG_Inst*> ordered_non_temp;
+  ordered_non_temporal(ordered_non_temp);  
+
+  for(SbPDG_Inst* inst : ordered_non_temp) {
     calcNodeLatency(inst,max_lat,max_lat_mis,set_delay);
   }
 
