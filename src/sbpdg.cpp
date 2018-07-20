@@ -471,6 +471,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
      std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
   }
   if(this->name() == ":Phi") {
+	// std::cout << "came here to execute Phi instruction\n";
     _sbpdg->inc_total_dyn_insts();
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
