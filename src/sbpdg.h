@@ -846,6 +846,7 @@ class SbPDG_Inst : public SbPDG_Node {
     int subFunc() const {return _subFunc;}
 
     uint64_t do_compute();
+    uint64_t do_compute_backcgra(uint64_t &discard);
     virtual int compute(bool print, bool verif); 
 
     // new line added
@@ -1558,7 +1559,7 @@ SbPDG_VecInput* get_vector_input(int i){
       for (unsigned int i =0 ; i<vec_out->num_outputs(); i++){
         SbPDG_Operand& operand = vec_out->getOutput(i)->first_operand(); 
         data.push_back(operand.get_buffer_val());
-        data_valid.push_back(operand.get_buffer_valid());
+        data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
         //std::cout << e->get_buffer_valid();
         operand.pop_buffer_val(print, verif);
       }

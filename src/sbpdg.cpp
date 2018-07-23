@@ -389,6 +389,41 @@ uint64_t SbPDG_Inst::do_compute() {
   return output;
 }
 
+uint64_t SbPDG_Inst::do_compute_backcgra(uint64_t &discard) {
+  //This is a really cheezy way to do this, but i'm a little tired
+  uint64_t output;
+  switch(bitwidth()) {
+    case 64: 
+     output=SB_CONFIG::execute64(_sbinst,_input_vals,_reg,discard,_back_array);
+      break;
+    case 32:
+      _input_vals_32.resize(_input_vals.size());
+      for(int i = 0; i < (int)_input_vals.size(); ++i) {
+        _input_vals_32[i] = _input_vals[i];
+      }
+      output=SB_CONFIG::execute32(_sbinst,_input_vals_32,_reg_32,discard,_back_array);
+      break;
+    case 16:
+      _input_vals_16.resize(_input_vals.size());
+      for(int i = 0; i < (int)_input_vals.size(); ++i) {
+        _input_vals_16[i] = _input_vals[i];
+      }
+      output=SB_CONFIG::execute16(_sbinst,_input_vals_16,_reg_16,discard,_back_array);
+      break;
+    case 8:
+      _input_vals_8.resize(_input_vals.size());
+      for(int i = 0; i < (int)_input_vals.size(); ++i) {
+        _input_vals_8[i] = _input_vals[i];
+      }
+      output=SB_CONFIG::execute8(_sbinst,_input_vals_8,_reg_8,discard,_back_array);
+      break;
+    default:
+      cout << "Weird bitwidth: " << bitwidth() << "\n";
+      assert(0 && "weird bitwidth");
+  }
+  return output;
+}
+
 //compute:actual compute called from SbPDG class (slightly modify this)
 int SbPDG_Inst::compute(bool print, bool verif) {
   assert(_ops.size() <=3);
@@ -479,6 +514,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // cout << name() << " (" << _ID << "): ";
 
   uint64_t discard=0;
+  // bool discard=0;
   uint64_t output = 0;
 
   _invalid=false;
@@ -528,7 +564,11 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
      _sbpdg->inc_total_dyn_insts();
    
     // Read in some temp value and set _val after inst_lat cycles
-    output=do_compute();
+    // output=do_compute();
+    output=do_compute_backcgra(discard);
+
+	// _invalid=false;
+	// std::cout << "invalid after compute (should be false): " << _invalid << "\n";
   
     if(print) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
@@ -557,13 +597,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   }
 
   // std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
-  // std::cout << "Final value of inst: " << name() << " is: " << output << endl;
-
   _inputs_ready=0;
 
-  /*
-  cout << " with input: " << std::hex << _input_vals[0] << " and the other input: " << std::hex << _input_vals[1] << " = " << std::hex << output;
-  */
   if(print) {
     std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
     if(discard) { 
