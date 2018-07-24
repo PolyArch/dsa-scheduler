@@ -845,8 +845,7 @@ class SbPDG_Inst : public SbPDG_Node {
     void setSubFunc(int i) {_subFunc=i;}
     int subFunc() const {return _subFunc;}
 
-    uint64_t do_compute();
-    uint64_t do_compute_backcgra(uint64_t &discard);
+    uint64_t do_compute(uint64_t &discard);
     virtual int compute(bool print, bool verif); 
 
     // new line added

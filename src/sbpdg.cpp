@@ -353,43 +353,7 @@ void SbPDG_Inst::setImmSlot(int i) {
   _imm_slot=i;
 }
 
-
-uint64_t SbPDG_Inst::do_compute() {
-  //This is a really cheezy way to do this, but i'm a little tired
-  uint64_t output;
-  switch(bitwidth()) {
-    case 64: 
-     output=SB_CONFIG::execute64(_sbinst,_input_vals,_reg,_invalid,_back_array);
-      break;
-    case 32:
-      _input_vals_32.resize(_input_vals.size());
-      for(int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_32[i] = _input_vals[i];
-      }
-      output=SB_CONFIG::execute32(_sbinst,_input_vals_32,_reg_32,_invalid,_back_array);
-      break;
-    case 16:
-      _input_vals_16.resize(_input_vals.size());
-      for(int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_16[i] = _input_vals[i];
-      }
-      output=SB_CONFIG::execute16(_sbinst,_input_vals_16,_reg_16,_invalid,_back_array);
-      break;
-    case 8:
-      _input_vals_8.resize(_input_vals.size());
-      for(int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_8[i] = _input_vals[i];
-      }
-      output=SB_CONFIG::execute8(_sbinst,_input_vals_8,_reg_8,_invalid,_back_array);
-      break;
-    default:
-      cout << "Weird bitwidth: " << bitwidth() << "\n";
-      assert(0 && "weird bitwidth");
-  }
-  return output;
-}
-
-uint64_t SbPDG_Inst::do_compute_backcgra(uint64_t &discard) {
+uint64_t SbPDG_Inst::do_compute(uint64_t &discard) {
   //This is a really cheezy way to do this, but i'm a little tired
   uint64_t output;
   switch(bitwidth()) {
@@ -453,7 +417,7 @@ int SbPDG_Inst::compute(bool print, bool verif) {
     }
   }
   
-  _val = do_compute();
+  _val = do_compute(_invalid);
 
   if(print) {
     _sbpdg->dbg_stream() << " = " << _val << "\n";
@@ -564,8 +528,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
      _sbpdg->inc_total_dyn_insts();
    
     // Read in some temp value and set _val after inst_lat cycles
-    // output=do_compute();
-    output=do_compute_backcgra(discard);
+    output=do_compute(discard);
 
 	// _invalid=false;
 	// std::cout << "invalid after compute (should be false): " << _invalid << "\n";
