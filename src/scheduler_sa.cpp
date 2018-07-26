@@ -226,10 +226,16 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   sbio_interface& si =  subModel->io_interf();
   int n_vertex = vec_in->num_inputs();
+  int n_vertex_physical = n_vertex;
+
+  if(vec_in->is_temporal()) {
+    n_vertex_physical=1;  // temporal vectors are always scheduled to one node
+  }
 
   unsigned int index = 0;
   int num_found=0;
-  findFirstIndex(_sd_in, si, n_vertex, index, true /*input*/);
+  //use physical number of vertices to decide a port
+  findFirstIndex(_sd_in, si, n_vertex_physical, index, true /*input*/);
   unsigned int attempt = 0;
 
   vector<int> order; //temp variable used for randomly iterating
@@ -261,21 +267,22 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
       }
     }
 
-    if((int)possInputs.size() < n_vertex) continue;
+    if((int)possInputs.size() < n_vertex_physical) continue;
 
     vector<sbnode*> candInputs;
-    rand_node_choose_k(n_vertex, possInputs, candInputs);
+    rand_node_choose_k(n_vertex_physical, possInputs, candInputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
     int num_links_used=0;
     for(int i : order) {
-      sbnode* node = candInputs[i];
+      //In a temporal region, just select the 0th input
+      int cand_index = vec_in->is_temporal() ? 0 : i;
+      sbnode* node = candInputs[cand_index];
       SbPDG_Node* vertex = vec_in->getInput(i);
 
       pair<int,int> n_score = scheduleHere(sched, vertex, node, 
                                            *candRouting, fscore);
-  
       if(n_score>=fscore) {
         ports_okay_to_use=false;
         break;
@@ -288,8 +295,11 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
     num_found++;
 
     applyRouting(sched,candRouting);
-    for(int i = 0; i < n_vertex; ++i) 
-       sched->assign_node(vec_in->getInput(i),candInputs[i]);    
+    for(int i = 0; i < n_vertex; ++i) {
+       int cand_index = vec_in->is_temporal() ? 0 : i;
+       sbnode* node = candInputs[cand_index];
+       sched->assign_node(vec_in->getInput(i),node);    
+    }
 
     int lat=INT_MAX,latmis=INT_MAX,ovr=INT_MAX,max_util=INT_MAX;
     pair<int,int> candScore = obj(sched,lat,latmis,ovr,max_util);
@@ -318,14 +328,17 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in,
           }
         }
       }
-      assert(n_vertex == num_cgra_ports);
+      //assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";
 
   if(num_found > 0) {
-    for(int i = 0; i < n_vertex; ++i) 
-       sched->assign_node(vec_in->getInput(i),bestInputs[i]);    
+    for(int i = 0; i < n_vertex; ++i) {
+       int cand_index = vec_in->is_temporal() ? 0 : i;
+       sbnode* node = bestInputs[cand_index];
+       sched->assign_node(vec_in->getInput(i),node);    
+    }
     sched->assign_vport(vec_in, bestVportid, bestMask);
     applyRouting(sched, bestRouting); //Commit the routing
   }
@@ -338,17 +351,17 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   sbio_interface& si =  subModel->io_interf();
   int n_vertex = vec_out->num_outputs();
+  int n_vertex_physical = n_vertex;
 
   unsigned int index = 0;
   int num_found=0;
-  findFirstIndex(_sd_out, si, n_vertex, index, false /*output*/);
+  findFirstIndex(_sd_out, si, n_vertex_physical, index, false /*output*/);
   unsigned int attempt = 0;
 
   vector<int> order; //temp variable used for randomly iterating
 
   CandidateRouting r1,r2;
-  CandidateRouting* bestRouting = &r1;
-  CandidateRouting* candRouting = &r2;  
+  CandidateRouting* bestRouting = &r1, * candRouting = &r2;  
 
   vector<bool> bestMask;
   pair<int,int> bestScore = std::make_pair(INT_MIN,INT_MIN);
@@ -375,16 +388,17 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
       }
     }
 
-    if((int)possOutputs.size() < n_vertex) continue;
+    if((int)possOutputs.size() < n_vertex_physical) continue;
 
     vector<sbnode*> candOutputs;
-    rand_node_choose_k(n_vertex, possOutputs, candOutputs);
+    rand_node_choose_k(n_vertex_physical, possOutputs, candOutputs);
 
     bool ports_okay_to_use=true;
     random_order(n_vertex,order);
     int num_links_used=0;
     for(int i : order) {
-      sbnode* node = candOutputs[i];
+      int cand_index = vec_out->is_temporal() ? 0 : i;
+      sbnode* node = candOutputs[cand_index];
       SbPDG_Node* vertex = vec_out->getOutput(i);
 
       pair<int,int> n_score = scheduleHere(sched, vertex, node, 
@@ -401,8 +415,11 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
     num_found++;
 
     applyRouting(sched,candRouting);
-    for(int i = 0; i < n_vertex; ++i) 
-       sched->assign_node(vec_out->getOutput(i),candOutputs[i]);    
+    for(int i = 0; i < n_vertex; ++i) {
+       int cand_index = vec_out->is_temporal() ? 0 : i;
+       sbnode* node = candOutputs[cand_index];
+       sched->assign_node(vec_out->getOutput(i),node);    
+    }
     
     int lat=INT_MAX,latmis=INT_MAX,ovr=INT_MAX,max_util=INT_MAX;
     pair<int,int> candScore = obj(sched,lat,latmis,ovr,max_util);
@@ -431,13 +448,16 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
           }
         }
       }
-      assert(n_vertex == num_cgra_ports);
+      //assert(n_vertex == num_cgra_ports);
     }
   }
   //cout << " -- \n";
   if(num_found > 0) {
-    for(int i = 0; i < n_vertex; ++i) 
-       sched->assign_node(vec_out->getOutput(i),bestOutputs[i]);    
+    for(int i = 0; i < n_vertex; ++i) { 
+       int cand_index = vec_out->is_temporal() ? 0 : i;
+       sbnode* node = bestOutputs[cand_index];
+       sched->assign_node(vec_out->getOutput(i),node);    
+    }
 
     sched->assign_vport(vec_out,bestVportid,bestMask);
     applyRouting(sched, bestRouting); //Commit the routing
@@ -834,8 +854,6 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
     }
   }
 
-  
-
   return score;
 }
 
@@ -844,14 +862,21 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
 
   SbPDG_Node* def_pdgnode = edge->def();
   SbPDG_Node* use_pdgnode = edge->use();
- 
-  bool is_temporal = def_pdgnode->is_temporal() && 
-                     use_pdgnode->type() != SbPDG_Node::V_OUTPUT &&
-                     def_pdgnode->type() != SbPDG_Node::V_INPUT;
+
+  bool is_in = def_pdgnode->type() == SbPDG_Node::V_INPUT;
+  bool is_out = use_pdgnode->type() == SbPDG_Node::V_OUTPUT;
+  bool is_io = is_in||is_out;
+
+  bool is_temporal = def_pdgnode->is_temporal();
+  bool is_temporal_inst = is_temporal && !is_io;
+  bool is_temporal_in   = is_temporal && is_in;
+  bool is_temporal_out  = is_temporal && is_out;
+
 
   //For now, links only route on their own network
-  if(!is_temporal && link->max_util()>1) return -1;
-  if(is_temporal && link->max_util()<=1) return -1;
+  //ie. temporal_io and non-temporal route on dedicated network
+  if(!is_temporal_inst && link->max_util()>1) return -1;
+  if(is_temporal_inst && link->max_util()<=1) return -1;
 
   sbnode* next = link->dest();
 
@@ -859,7 +884,17 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
   //0: free
   //1: empty
   //2: already there
-  int t_cost = sched->temporal_cost(link, def_pdgnode);
+  int t_cost;
+  if(is_temporal_in) {
+    SbPDG_Input* in = static_cast<SbPDG_Input*>(def_pdgnode);
+    t_cost = sched->temporal_cost_in(link, in->input_vec());
+  } else if(is_temporal_out) {
+    SbPDG_Output* out = static_cast<SbPDG_Output*>(use_pdgnode);
+    t_cost = sched->temporal_cost_out(link, def_pdgnode,
+                                      out->output_vec());
+  } else { //NORMAL CASE!
+    t_cost = sched->temporal_cost(link, def_pdgnode);
+  }
   if(t_cost==1) { //empty
     if(candRouting.routing.count(link)) {
       bool found_match=false;
@@ -869,6 +904,19 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
           found_match=true;
           break;
         }
+        //kind of horribly ugly
+        if(is_temporal_in) {
+          if(sched->input_matching_vector(cur_node,
+             static_cast<SbPDG_Input*>(def_pdgnode)->input_vec()) ||
+             sched->output_matching_vector(cur_node,
+              static_cast<SbPDG_Output*>(use_pdgnode)->output_vec()) ){
+              found_match=true;
+              break;
+          }
+        }
+        if(is_temporal_out) {
+
+        }
       }
       if(found_match) t_cost=0;
       else t_cost=2;
@@ -876,7 +924,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, sblink* link,
   }
 
   if(t_cost==2) {
-    if(!is_temporal) {
+    if(!is_temporal_inst) {
       return 100; 
     } 
   }

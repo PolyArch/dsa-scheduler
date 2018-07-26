@@ -183,7 +183,6 @@ int main(int argc, char* argv[])
   scheduler->setTimeout(timeout);
   scheduler->set_max_iters(max_iters);
 
-
   bool succeed_sched = false;
 
   if(scheduler->check_res(&sbpdg,&sbmodel)) {
@@ -239,6 +238,7 @@ int main(int argc, char* argv[])
     succeed_sched = s->schedule_internal(&sbpdg,sched);
   }
 
+  sched->set_name(pdg_rawname);
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);     
   assert(osh.good()); 

@@ -29,7 +29,7 @@ using namespace SB_CONFIG;
 //  unsigned fu_in1:2;    //cfg for 1st input of FU
 //  unsigned fu_in2:2;    //cfg for 2nd input of FU
 //  unsigned fu_out:2;    //cfg for 3rd input of FU
-//  unsigned  sw_s:3;     //select lien for output muxes
+//  unsigned  sw_s:3;     //select line for output muxes
 //  unsigned sw_se:3;
 //  unsigned  sw_e:3;
 //  unsigned sw_ne:3;
@@ -45,8 +45,9 @@ using namespace SB_CONFIG;
 class Schedule {
   public:
     Schedule(){}
-    Schedule(std::string filename); //Read in schedule (both sbmodel, sbpdg, and schedule from file)
 
+    //Read in schedule (both sbmodel, sbpdg, and schedule from file)
+    Schedule(std::string filename); 
     Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {
       allocate_space();  
     }
@@ -63,8 +64,6 @@ class Schedule {
 
     void printOutputGraphviz(std::ofstream& ofs, sbnode* node);
     void printSwitchGraphviz(std::ofstream& ofs, sbswitch* sw);
-
-
 
     //Scheduling Interface:
     bool spilled(SbPDG_Node*);
@@ -154,12 +153,9 @@ class Schedule {
       _edgeProp[edge->id()].passthroughs.insert(pt);
     }
 
-    //Computes maximum throughput both given the latency mismatch &&
-    //functional unit throughput
-    //int maxMismatch(int g) {
-      //int maxgt=_sbPDG->maxGroupThroughput(g);
-      
-    //}
+    int groupMismatch(int g) {
+      return _groupMismatch[g];
+    }
 
     int violation() {return _totalViolation;}
     void add_violation(int violation) {
@@ -434,6 +430,64 @@ class Schedule {
       return 2;
     }
 
+    bool input_matching_vector(SbPDG_Node* node, SbPDG_VecInput* in_v) {
+      SbPDG_Input *input = dynamic_cast<SbPDG_Input*>(node);
+      if(input) {
+        if(input->input_vec() == in_v) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    bool output_matching_vector(SbPDG_Node* node, SbPDG_VecOutput* out_v) {
+      for(auto I=node->uses_begin(), E=node->uses_end();I!=E;++I) {
+        SbPDG_Output* output = dynamic_cast<SbPDG_Output*>((*I)->use());
+        if(output && output->output_vec() == out_v) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    int temporal_cost_in(sblink* link, SbPDG_VecInput* in_v) {
+      assert(link);
+      auto& vec = _linkProp[link->id()].nodes;
+      if(vec.size()==0) return 1;
+      for(SbPDG_Node* old_node : vec) {
+        if(input_matching_vector(old_node,in_v)) return 0;
+      }
+      return 2;
+    }
+
+    //what a confusing function
+    int temporal_cost_out(sblink* link, SbPDG_Node* node, SbPDG_VecOutput* out_v) {
+      assert(link);
+      auto& vec = _linkProp[link->id()].nodes;
+      if(vec.size()==0) return 1;
+      //It's free if the node is the same, or one of the use vectors is the same.
+      for(SbPDG_Node* old_node : vec) {
+        if(old_node == node) return 0;
+        if(output_matching_vector(old_node,out_v)) return 0;
+      }
+      return 2;
+    }
+
+    /*
+    int temporal_cost_out(sblink* link, SbPDG_Output* first_out) {
+      assert(link);
+      auto& vec = _linkProp[link->id()].nodes;
+      if(vec.size()==0) return 1;
+      for(SbPDG_Node* old_node : vec) {
+        if(SbPDG_Output *old_output = dynamic_cast<SbPDG_Iput*>(old_node)) {
+          if(old_input->first_input_of_vec() == first_in) {
+            return 0;
+          }
+        }
+      }
+      return 2;
+    }*/
+
     //find first node for
     SbPDG_Node* pdgNodeOf(sblink* link) {
       assert(link);
@@ -632,6 +686,9 @@ class Schedule {
     }
   }
 
+  void set_name(std::string s) {_name=s;}
+  std::string name() {return _name;}
+
   private:
 
 
@@ -753,6 +810,8 @@ class Schedule {
     template<class Archive>
     void serialize(Archive & ar, const unsigned version);
 
+    std::string _name;
+
     //Private Data
     SbModel* _sbModel; 
     SbPDG*   _sbPDG;
@@ -762,6 +821,8 @@ class Schedule {
 
     int _num_mapped[SbPDG_Node::V_NUM_TYPES] = {0}; //init all to zero
     int _links_mapped = 0, _edge_links_mapped = 0;
+
+    std::map<int, int> _groupMismatch;
 
     std::vector< std::vector<int> > _wide_ports;
 

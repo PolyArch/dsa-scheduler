@@ -480,6 +480,7 @@ class SbPDG_Node {
    //---------------------------------------------------------------------------
   
     V_TYPE type() {return _vtype;} 
+    int group_id() {return _group_id;}
 
     int num_inc_edges() {return _inc_edge_list.size();}
     private:
@@ -901,7 +902,6 @@ class SbPDG_IO : public SbPDG_Node {
   public:
   SbPDG_IO() {}
 
-  void setVPort(int vport) { _vport = vport; } 
   int vport() {return _vport;}
 
   SbPDG_IO(SbPDG* sbpdg, V_TYPE v) : SbPDG_Node(sbpdg, v) {}
@@ -911,12 +911,13 @@ class SbPDG_IO : public SbPDG_Node {
   void serialize(Archive & ar, const unsigned version);
 
   protected:
-    SbPDG* _sbpdg;
     int _vport;
     std::string _realName;
     int _subIter;
     int _size;
 };
+
+class SbPDG_VecInput;
 
 class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
   public:
@@ -926,6 +927,9 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
     //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
     
     SbPDG_Input(SbPDG* sbpdg) : SbPDG_IO(sbpdg,V_INPUT) {}
+
+    void setVPort(SbPDG_VecInput* v) {_input_vec=v;}
+    SbPDG_VecInput* input_vec() {return _input_vec;}
 
     std::string name() {
         std::stringstream ss;
@@ -958,13 +962,16 @@ class SbPDG_Input : public SbPDG_IO {       //inturn inherits sbnode
        return num_computed;
     }
 
+
   private:
   friend class boost::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version);
 
+    SbPDG_VecInput* _input_vec=NULL;
 };
 
+class SbPDG_VecOutput;
 class SbPDG_Output : public SbPDG_IO {
   public:
     SbPDG_Output() {}
@@ -974,6 +981,9 @@ class SbPDG_Output : public SbPDG_IO {
     //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
     SbPDG_Output(SbPDG* sbpdg) : SbPDG_IO(sbpdg, V_OUTPUT) {}
+
+    void setVPort(SbPDG_VecOutput* v) {_output_vec=v;}
+    SbPDG_VecOutput* output_vec() {return _output_vec;}
 
     std::string name() {
         std::stringstream ss;
@@ -1009,6 +1019,9 @@ class SbPDG_Output : public SbPDG_IO {
     friend class boost::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version);
+
+    SbPDG_VecOutput* _output_vec=NULL;
+
 };
 
 //vector class
@@ -1263,7 +1276,7 @@ class SbPDG {
       SbPDG_Input* pdg_in = new SbPDG_Input(this);  //new input nodes
       syms.set(name,pdg_in);
       pdg_in->setName(name);
-      pdg_in->setVPort(_vecInputs.size());
+      pdg_in->setVPort(vec_input);
       addInput(pdg_in);
       vec_input->addInput(pdg_in);
     } 
@@ -1275,7 +1288,7 @@ class SbPDG {
 
        SbPDG_Output* pdg_out = new SbPDG_Output(this);
        pdg_out->setName(name+std::string("_out"));
-       pdg_out->setVPort(_vecOutputs.size());
+       pdg_out->setVPort(vec_output);
        addOutput(pdg_out);
        vec_output->addOutput(pdg_out);       
 
@@ -1348,7 +1361,7 @@ class SbPDG {
         std::string name = ss.str();
         syms.set(name,pdg_in);
         pdg_in->setName(name);
-        pdg_in->setVPort(_vecInputs.size());
+        pdg_in->setVPort(vec_input);
         addInput(pdg_in);
         vec_input->addInput(pdg_in);
       }

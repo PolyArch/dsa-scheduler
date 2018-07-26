@@ -181,7 +181,7 @@ int SbPDG::compute(bool print, bool verif, int g) {
   return num_computed;
 }
 
-
+//Calculates max group throughput based on functional unit type
 int SbPDG::maxGroupThroughput(int g) {
   int maxgt=0;
 
@@ -205,6 +205,7 @@ void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
   }
 }
 
+//Necessary for BOOST::SERIALIZATION
 SbPDG::SbPDG() {
    
 } 

@@ -64,7 +64,7 @@ void SbPDG_Inst::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void SbPDG_IO::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_sbpdg);
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
   ar & BOOST_SERIALIZATION_NVP(_vport);
   ar & BOOST_SERIALIZATION_NVP(_realName);
   ar & BOOST_SERIALIZATION_NVP(_subIter);
@@ -73,12 +73,14 @@ void SbPDG_IO::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void SbPDG_Input::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
+  ar & BOOST_SERIALIZATION_NVP(_input_vec); 
 }
 
 template<class Archive>
 void SbPDG_Output::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
+  ar & BOOST_SERIALIZATION_NVP(_output_vec); 
 }
 
 template<class Archive>
@@ -129,18 +131,25 @@ void SbPDG::serialize(Archive & ar, const unsigned version) {
 }
 
 //Boost Stuff
-BOOST_CLASS_EXPORT_GUID(SbPDG_Edge,  "SbPDG_Edge");
-BOOST_CLASS_EXPORT_GUID(SbPDG_Node,  "SbPDG_Node")
-BOOST_CLASS_EXPORT_GUID(SbPDG_Inst,  "SbPDG_Inst");
-BOOST_CLASS_EXPORT_GUID(SbPDG_Input, "SbPDG_Input")
-BOOST_CLASS_EXPORT_GUID(SbPDG_Output,"SbPDG_Output")
-BOOST_CLASS_EXPORT_GUID(SbPDG_Vec,"SbPDG_Vec")
-BOOST_CLASS_EXPORT_GUID(SbPDG_VecInput,"SbPDG_VecInput")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Edge,     "SbPDG_Edge");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Node,     "SbPDG_Node")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Inst,     "SbPDG_Inst");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Input,    "SbPDG_Input")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Output,   "SbPDG_Output")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Vec,      "SbPDG_Vec")
+BOOST_CLASS_EXPORT_GUID(SbPDG_VecInput, "SbPDG_VecInput")
 BOOST_CLASS_EXPORT_GUID(SbPDG_VecOutput,"SbPDG_VecOutput")
-BOOST_CLASS_EXPORT_GUID(SbPDG,"SbPDG")
+BOOST_CLASS_EXPORT_GUID(SbPDG,          "SbPDG")
 
 SERIALIZABLE(SbPDG_Edge);
 SERIALIZABLE(SbPDG_Node);
+SERIALIZABLE(SbPDG_Inst);
+SERIALIZABLE(SbPDG_Input);
+SERIALIZABLE(SbPDG_Output);
+SERIALIZABLE(SbPDG_Vec);
+SERIALIZABLE(SbPDG_VecInput);
+SERIALIZABLE(SbPDG_VecOutput);
+SERIALIZABLE(SbPDG);
 
 
 

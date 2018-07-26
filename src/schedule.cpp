@@ -12,6 +12,7 @@
 #include <regex>
 #include <list>
 #include  <iomanip>
+#include <unordered_set>
 
 using namespace std;
 using namespace SB_CONFIG;
@@ -183,7 +184,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsDedicated() {
           int sb_in_port = port_m[mi].first;
           sbinput* in = _sbModel->subModel()->get_input(sb_in_port);
           SbPDG_Input* pdg_in = new SbPDG_Input(_sbPDG);
-          pdg_in->setVPort(_sbPDG->num_vec_input());
+          pdg_in->setVPort(vec_input);
           pdgnode_for[in]=pdg_in;
           _sbPDG->addInput(pdg_in); //add input to pdg
           vec_input->addInput(pdg_in); //add input to vector
@@ -221,7 +222,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsDedicated() {
         if(mask[mi]) {
           sboutput* out = _sbModel->subModel()->get_output(port_m[mi].first);
           SbPDG_Output* pdg_out = new SbPDG_Output(_sbPDG);
-          pdg_out->setVPort(_sbPDG->num_vec_output());
+          pdg_out->setVPort(vec_output);
           pdgnode_for[out]=pdg_out;
           _sbPDG->addOutput(pdg_out);
           vec_output->addOutput(pdg_out); //add output to vector
@@ -1181,7 +1182,7 @@ Schedule::Schedule(string filename) {
                   } else {
                     pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[d_input]);
                   }
-                  pdg_in->setVPort(d_input->port());
+                  //pdg_in->setVPort(d_input->port());
               } 
               
               if (SbDIR::isInputDir(outDir)) {
@@ -1193,7 +1194,7 @@ Schedule::Schedule(string filename) {
                   pdg_out = new SbPDG_Output(_sbPDG);
                   pdgnode_for[d_output]=pdg_out;
                   _sbPDG->addOutput(pdg_out);
-                  pdg_out->setVPort(d_output->port());
+                  //pdg_out->setVPort(d_output->port());
               }
               routeMap[_sbModel->subModel()->switchAt(posX,posY)][outDir]=inDir;
           }
@@ -2202,6 +2203,7 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   _totalViolation=0;
   max_lat_mis=0;
   max_lat=0;
+  _groupMismatch.clear();
 
   std::vector<SbPDG_Inst*> ordered_non_temp;
   ordered_non_temporal(ordered_non_temp);  
@@ -2297,8 +2299,9 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
 
   int diff = up_lat - low_lat; // - _sbModel->maxEdgeDelay();
 
-  if(diff>max_lat_mis) {
-    max_lat_mis=diff;
+  if(diff>max_lat_mis) {max_lat_mis=diff;}
+  if(diff>_groupMismatch[inst->group_id()]) {
+    _groupMismatch[inst->group_id()] = diff;
   }
 
   int new_lat = inst->lat_of_inst() + up_lat;
@@ -2675,6 +2678,52 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
   }
 }
 
+int calc_ovr(std::unordered_set<SbPDG_Node*> vlist) {
+  int total_used = 0;
+
+  std::unordered_set<SbPDG_VecInput*> in_vecs;
+  std::unordered_set<SbPDG_VecOutput*> out_vecs;
+
+  for(SbPDG_Node* v : vlist) {
+    if(v->is_temporal() && v->type() == SbPDG_Node::V_INPUT) {
+      in_vecs.insert(dynamic_cast<SbPDG_Input*>(v)->input_vec());
+    } else if(v->is_temporal() && v->type() == SbPDG_Node::V_OUTPUT) {
+      out_vecs.insert(dynamic_cast<SbPDG_Output*>(v)->output_vec());
+    } else {
+      total_used++;
+    }
+  }
+  total_used+=in_vecs.size() + out_vecs.size();
+  return total_used;
+}
+
+int calc_ovr_node(std::unordered_set<SbPDG_Node*> vlist) {
+  int total_used = 0;
+
+  std::unordered_set<SbPDG_VecInput*> in_vecs;
+  std::unordered_set<SbPDG_VecOutput*> out_vecs;
+
+  for(SbPDG_Node* v : vlist) {
+    if(v->is_temporal()) { 
+      if(v->type() == SbPDG_Node::V_INPUT) {
+        in_vecs.insert(dynamic_cast<SbPDG_Input*>(v)->input_vec());
+        continue;
+      } 
+      for(auto I = v->uses_begin(), E= v->uses_end();I!=E;++I) {
+        SbPDG_Output* out = dynamic_cast<SbPDG_Output*>((*I)->use());
+        if(out) {
+          out_vecs.insert(out->output_vec());
+          continue;
+        }
+      } 
+    } else {
+      total_used++;
+    }
+  }
+  total_used+=in_vecs.size() + out_vecs.size();
+  return total_used;
+}
+
 void Schedule::get_overprov(int& ovr, int& max_util) {
   ovr=0;
   max_util=0;
@@ -2682,16 +2731,17 @@ void Schedule::get_overprov(int& ovr, int& max_util) {
     sbnode* n = _vertexProp[i].node;
     if(n) {
       auto& np = _nodeProp[n->id()];
-      int util = np.vertices.size() + np.num_passthroughs;
+
+      int util = calc_ovr(np.vertices) + np.num_passthroughs;
       ovr = std::max(util-n->max_util(),ovr);
-      max_util = std::max(util,max_util); 
+      max_util = std::max(util,max_util);
     }
   }
   auto& vec = _sbModel->subModel()->node_list();
   for(auto& n : vec) {
     for(auto I=n->obegin(), E=n->oend();I!=E;++I) {
       auto& lp = _linkProp[(*I)->id()];
-      int util = (int)lp.nodes.size();
+      int util = calc_ovr_node(lp.nodes);
       ovr = std::max(util-n->max_util(),ovr);
       max_util = std::max(util,max_util); 
     }
