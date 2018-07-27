@@ -353,6 +353,10 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
   int n_vertex = vec_out->num_outputs();
   int n_vertex_physical = n_vertex;
 
+  if(vec_out->is_temporal()) {
+    n_vertex_physical=1;  // temporal vectors are always scheduled to one node
+  }
+
   unsigned int index = 0;
   int num_found=0;
   findFirstIndex(_sd_out, si, n_vertex_physical, index, false /*output*/);
@@ -441,7 +445,6 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
         int cgra_port_num = vport_desc[m].first;
         for(int i = 0; i < (int)candOutputs.size(); ++i) {
           if(static_cast<sboutput*>(candOutputs[i])->port()==cgra_port_num) {
-            assert(bestMask[m]==false);
             bestMask[m]=true;
             num_cgra_ports++;
             break;
