@@ -1625,16 +1625,41 @@ SbPDG_VecInput* get_vector_input(int i){
       
       std::unordered_set<int> nodes_complete;
 
+
       for(auto I = _ready_nodes.begin(); I!=_ready_nodes.end();) {
         SbPDG_Node* n = *I;
+
         int node_id = n->node_id();
-        bool node_not_fired = (node_id == -1) || 
+        bool should_fire = (node_id == -1) || 
                               (nodes_complete.count(node_id) == 0);
 
-        if(node_not_fired && n->get_avail()==0) {
+
+        unsigned inst_throughput=1;
+
+        //If inst_throughput cycles is great than 1, lets mark the throughput
+        //make sure nobody else can also schedule a complex instruction during
+        //that period
+        if(should_fire && node_id!=-1) {
+          if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
+            inst_throughput = inst_thr(inst->inst());
+            if(inst_throughput > 1) {
+              if(_complex_fu_free_cycle[node_id] > _cur_cycle) {
+                should_fire=false;
+              }
+            }
+          }
+        }
+
+
+        if(should_fire && n->get_avail()==0) {
           n->compute_backcgra(print,verif);
           I=_ready_nodes.erase(I);
           nodes_complete.insert(node_id);
+
+          if(node_id!=-1 && inst_throughput > 1) {
+            _complex_fu_free_cycle[node_id]=_cur_cycle+inst_throughput;
+          }
+
         } else {
           ++I;
         }
@@ -1642,6 +1667,7 @@ SbPDG_VecInput* get_vector_input(int i){
 
       cur_buf_ptr = (cur_buf_ptr+1)%get_max_lat();
       cur_node_ptr = (cur_node_ptr+1)%get_max_lat();
+      _cur_cycle = _cur_cycle+1;
       int temp = _total_dyn_insts;
       _total_dyn_insts=0;
       return temp; 
@@ -1701,10 +1727,15 @@ SbPDG_VecInput* get_vector_input(int i){
     std::list<struct cycle_result*> transient_values[1000];
     int cur_node_ptr=0;
     int cur_buf_ptr=0;
+    uint64_t _cur_cycle=0;
   
     std::list<struct buffer_pop_info*> buf_transient_values[1000];
+
+    std::unordered_map<int,uint64_t> _complex_fu_free_cycle;
+
     // std::list<SbPDG_Edge*> buf_transient_values[1000];
     //--------------------------------------
+
 
     //stats
     int _total_dyn_insts=0;
