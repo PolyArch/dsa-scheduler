@@ -1634,6 +1634,7 @@ SbPDG_VecInput* get_vector_input(int i){
         if(node_not_fired && n->get_avail()==0) {
           n->compute_backcgra(print,verif);
           I=_ready_nodes.erase(I);
+          nodes_complete.insert(node_id);
         } else {
           ++I;
         }
