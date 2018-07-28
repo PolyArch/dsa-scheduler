@@ -550,13 +550,13 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     cerr << "\n\nError: Too many dedicated instructions ("
          << dedicated_insts << ") in SbPDG for given SBCONFIG (has " 
          << nfus << " fus)\n\n";
-    exit(1);
+    return false;
   }
   if(temporal_insts > temporal_inst_slots) {
      cerr << "\n\nError: Too many temporal instructions ("
          << temporal_insts << ") in SbPDG for given SBCONFIG (has " 
          << temporal_inst_slots << " temporal slots)\n\n";
-    exit(1);
+    return false;
   }
 
   bool failed_count_check=false;
