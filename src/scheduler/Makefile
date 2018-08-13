@@ -1,6 +1,6 @@
 include $(SS_STACK)/msg.mk
-level=../
-include ../make.config
+level=../../
+include $(level)/make.config
 
 
 SYS = $(shell sys)
@@ -19,7 +19,7 @@ GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
 GAMS_INC=$(GAMS_FILES:.gms=.h)
 
-INCLUDE_DEST=../src
+INCLUDE_DEST=$(level)/src
 LIB_DEST=${build}/lib
 OBJ_DEST=${build}/obj
 
@@ -78,5 +78,5 @@ dfg-lex.yy.c: dfg-parser.l dfg-parser.tab.h
 clean:
 	-rm -Rf $(LIB_DEST)/*.so $(LIB_DEST)/*.a *.o $(OBJ_DEST)/*.o  *.d  $(OBJ_DEST)/*.d $(DEPDIR)  $(GAMS_INC) dfg-parser.tab.c dfg-parser.tab.o dfg-lex.yy.c dfg-lex.yy.o *.tab.*  dfg-parser *.output 
 
-include ../make.rules
+include ../../make.rules
 

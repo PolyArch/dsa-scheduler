@@ -9,18 +9,23 @@ all: directories program make_drivers
 
 include make.rules
 
-program:
-	+make -C src
+program: scheduler-program config-program
+
+scheduler-program:
+	+make -C src/scheduler
+
+config-program:
+	+make -C src/config
 
 make_drivers: program
 	+make -C drivers
 
-install: directories install_headers install_program install_drivers 
+install: directories install_headers install_config install_scheduler install_drivers
 	
 
 install_headers:
 	${MKDIR_P} ${prefix}/include/ss-scheduler
-	cp -p src/*.h ${prefix}/include/ss-scheduler/
+	cp -p src/scheduler/*.h ${prefix}/include/ss-scheduler/
 
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
@@ -28,12 +33,20 @@ install_drivers: make_drivers
 	#cp -p drivers/sb_dfg_emu ${prefix}/bin
 
 
-install_program: program
+install_scheduler: scheduler-program
 	${MKDIR_P} ${prefix}/lib
 	cp -p ${build}/lib/* ${prefix}/lib
+
+install_config: config-program
+	${MKDIR_P} ${prefix}/lib
+	cp -p ${build}/lib/* ${prefix}/lib
+	${MKDIR_P} ${prefix}/include/ss-config
+	cp -p src/config/*.h ${prefix}/include/ss-config/
+	cp -rfp configs ${prefix}/
 	
 clean:
-	make -C src clean
+	make -C src/scheduler clean
+	make -C src/config clean
 	make -C drivers clean
 
 
