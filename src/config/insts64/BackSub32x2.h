@@ -15,18 +15,18 @@ uint64_t c1 = 0;
 
 // could have been fix minus
 switch(fm1){
-    case 1: c0 = (uint64_t)(abs(a0-b0))<<0;
+    case 1: c0 = (uint64_t)(abs((int)(a0-b0)))<<0;
             break;
-    case 2: c0 = (uint64_t)(abs(a0-b1))<<0;
+    case 2: c0 = (uint64_t)(abs((int)(a0-b1)))<<0;
             break;
     default: c0 = (uint64_t)(0)<<0;
              break;
 }
 
 switch(fm2){
-    case 1: c1 = (uint64_t)(abs(a1-b0))<<32;
+    case 1: c1 = (uint64_t)(abs((int)(a1-b0)))<<32;
             break;
-    case 2: c1 = (uint64_t)(abs(a1-b1))<<32;
+    case 2: c1 = (uint64_t)(abs((int)(a1-b1)))<<32;
             break;
     default: c1 = (uint64_t)(0)<<32;
              break;
