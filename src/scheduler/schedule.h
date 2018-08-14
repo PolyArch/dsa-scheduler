@@ -47,7 +47,6 @@ class Schedule {
     Schedule(){}
 
     //Read in schedule (both sbmodel, sbpdg, and schedule from file)
-    Schedule(std::string filename); 
     Schedule(SbModel* model, SbPDG* pdg ) : _sbModel(model), _sbPDG(pdg) {
       allocate_space();  
     }

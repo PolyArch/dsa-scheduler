@@ -30,7 +30,6 @@ install_headers:
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
 	cp -p drivers/sb_sched ${prefix}/bin
-	#cp -p drivers/sb_dfg_emu ${prefix}/bin
 
 
 install_scheduler: scheduler-program
