@@ -93,8 +93,7 @@ void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
 
         sb_inst_t sb_inst = inst_from_string(cap.c_str());
         
-        if(sb_inst==SB_NONE || sb_inst==SB_ERR)
-        {
+        if(sb_inst==SB_NONE || sb_inst==SB_ERR) {
             cerr << "ERROR IN PARSING SOFTBRAIN INSTRUCTION: \"" << cap << "\"\n";
             assert(0);
             return;
@@ -102,8 +101,7 @@ void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
         
         fu.add_cap(sb_inst);
         
-        if(pss.good()) //then there must be an encoding string
-        {
+        if(pss.good()) { //then there must be an encoding string
             unsigned encoding;
             pss >> encoding;
             

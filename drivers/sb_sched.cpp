@@ -190,11 +190,6 @@ int main(int argc, char* argv[])
     
     succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
-    //if(succeed_sched) {
-    //  sched->printConfigText((viz_dir + dfg_base).c_str()); // text form of config fed to gui
-    //}
-
-
     int lat=0,latmis=0;
     if(succeed_sched){
       sched->cheapCalcLatency(lat,latmis);

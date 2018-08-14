@@ -160,8 +160,6 @@ void SubModel::parse_io(std::istream& istream) {
     }
 }
 
-
-
 bool parseInt(std::string param, string value, const char* param_name, int& i) {
   if(ModelParsing::StartsWith(param, param_name)) {
     istringstream(value) >> i;
