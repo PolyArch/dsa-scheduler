@@ -23,19 +23,21 @@ $(LIB_DEST)/libsbconfig.a: $(OBJECTS)
 $(LIB_DEST)/libsbconfig.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^ $(LIBS)
 
+
 sbinst.cpp: sbinst.h $(INST_HEADERS)
 	@echo "done"
 
+#don't use autodeps for this, because generated files are hard
 sbinst.h: inst_model.cpp inst_model.h model_parsing.cpp $(INST_HEADERS) $(INST_MODEL_FILE)
 	$(CXX) $(CXXFLAGS) -MD inst_model.cpp model_parsing.cpp -o inst_model
+	@$(POSTCOMPILE)
 	./inst_model $(INST_MODEL_FILE) sbinst.h sbinst.cpp
     
-$(OBJ_DEST)/%.o: %.cpp %.h sbinst.h
+$(OBJ_DEST)/%.o: %.cpp %.h sbinst.h $(DEPDIR)/%.d
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
+	@$(POSTCOMPILE)
 
-$(OBJ_DEST)/sbinst.o: sbinst.cpp sbinst.h
-	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
-
+include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SOURCES))))
 
 .phony: clean
 
