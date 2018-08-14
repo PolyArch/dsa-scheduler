@@ -71,13 +71,6 @@ class Schedule {
     
     int getPortFor(SbPDG_Node*);
     
-    void printConfigText(std::ostream& os);
-    void printConfigText(const char *fname) {
-      std::ofstream os((std::string(fname)+".cfg").c_str());
-      assert(os.good()); 
-      printConfigText(os);
-    }
-
     void printConfigHeader(std::ostream&, std::string cfg_name, bool cheat=true);
     void printConfigBits(std::ostream& os, std::string cfg_name);
     void printConfigCheat(std::ostream& os, std::string cfg_name);
