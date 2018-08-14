@@ -11,11 +11,6 @@ using namespace std;
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <unistd.h>
 #include <algorithm>
 #include "model_parsing.h"
 
@@ -29,7 +24,7 @@ using namespace std;
 #include "gams_models/stage_model.h"
 
 
-#include "scheduler_sg.h"
+#include "scheduler_sa.h"
 
 void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
                                    bool fix) {
@@ -198,15 +193,13 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   bool heur_fix = mrt_heur || mr_heur;
 
   if(_mipstart || heur_fix) {
-    SchedulerStochasticGreedy heur_scheduler(_sbModel);
+    SchedulerSimulatedAnnealing heur_scheduler(_sbModel);
     heur_scheduler.suppress_timing_print=true;
     heur_scheduler.verbose=verbose;
     heur_scheduler.set_max_iters(_max_iters);
-    heur_scheduler.set_max_iters_zero_vio(20000);
     heur_scheduler.setTimeout(_reslim - (total_msec()/1000));
 
     //if(mrt_heur) {
-      heur_scheduler.set_integrate_timing(true);
     //} else if(mr_heur) {
     //  heur_scheduler.set_integrate_timing(false);
     //}
@@ -397,22 +390,15 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   ofs_sb_pdg.close();
   
   // ----------------- run gams! --------------------------------------------
-  if (_use_server) {
-    char buf[1024];
-    std::string fullname = std::string(getcwd(buf, 1023));
-    fullname += std::string("/") + gams_file_name;
-    requestGams(fullname.c_str());
+  stringstream ss_cmd;
+  ss_cmd << "gams " << gams_file_name << " wdir=" << _gams_work_dir;
+  if(_showGams) {
+    ss_cmd << " -lo=3";
   } else {
-    stringstream ss_cmd;
-    ss_cmd << "gams " << gams_file_name << " wdir=" << _gams_work_dir;
-    if(_showGams) {
-      ss_cmd << " -lo=3";
-    } else {
-       ss_cmd << " -o=/dev/null -lo=2"; 
-    }
-    cout << ss_cmd.str().c_str() << "\n";
-    System(ss_cmd.str().c_str());
+     ss_cmd << " -o=/dev/null -lo=2"; 
   }
+  cout << ss_cmd.str().c_str() << "\n";
+  System(ss_cmd.str().c_str());
 
   // ----------------- parse output -----------------------------------------
 
@@ -469,8 +455,6 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       getline(ss, vertex_name, ':');
       ss >> std::ws;
       getline(ss, sbnode_name, ' ');
-
-      //cout << "PORT MAP: " << vertex_name << " " <<sbnode_name << "\n";
 
       ModelParsing::trim(vertex_name);
       ModelParsing::trim(sbnode_name);
@@ -676,8 +660,6 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     return false; 
   }
 
-
-
   //if(_showGams) {
   //  //Print the I/Os
   //  std::cout << "in/out mapping:";
@@ -700,59 +682,5 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   
   
   return true;
-}
-
-
-void error(const char *msg)
-{
-  perror(msg);
-  exit(0);
-}
-
-
-
-bool GamsScheduler::requestGams(const char *filename)
-{
-  int sockfd, portno, n;
-  struct sockaddr_in serv_addr;
-  struct hostent *server;
-
-  char cmd_buf[256];
-  char buffer[1024];
-
-  portno = 20202;
-  sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0)
-    error("ERROR opening socket");
-  server = gethostbyname("arcturus.cs.wisc.edu");
-  if (server == NULL) {
-    fprintf(stderr,"ERROR, no such host\n");
-    exit(0);
-  }
-  bzero((char *) &serv_addr, sizeof(serv_addr));
-  serv_addr.sin_family = AF_INET;
-  bcopy((char *)server->h_addr,
-        (char *)&serv_addr.sin_addr.s_addr,
-        server->h_length);
-  serv_addr.sin_port = htons(portno);
-  if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
-    error("ERROR connecting");
-
-  strcpy(cmd_buf, "run-gams");
-  n = write(sockfd, cmd_buf, strlen(cmd_buf));
-  if (n < 0)
-    error("ERROR writing to socket");
-
-  n = write(sockfd, filename,strlen(filename));
-  if (n < 0)
-    error("ERROR writing to socket");
-  bzero(buffer,256);
-  n = read(sockfd,buffer,255);
-  if (n < 0)
-    error("ERROR reading from socket");
-  if (strcmp(buffer, "__DONE__") == 0)
-    return true;
-  error("Error running gams");
-  return false;
 }
 

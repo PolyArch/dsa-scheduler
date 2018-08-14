@@ -10,20 +10,16 @@ class GamsScheduler : public Scheduler {
 public:
   GamsScheduler(SB_CONFIG::SbModel* sbModel) :
     Scheduler(sbModel),
-    _gams_files_setup(false), _use_server(false),
-    _gams_work_dir("gams"),
+    _gams_files_setup(false), _gams_work_dir("gams"),
     _showGams(true), _mipstart(false), _sll(false) { }
 
   virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule);
   virtual bool schedule_internal(SbPDG* sbPDG, Schedule*& schedule);
 
-  bool requestGams(const char *filename);
-
   void showGams(bool show) {
     _showGams=show; 
   }
   void setMipstart(bool mipstart) {_mipstart=mipstart;}
-  void use_server() { _use_server = true; }
 
   void setSll(bool sll) {_sll=sll;}
   void print_mipstart(std::ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
@@ -32,7 +28,6 @@ public:
   protected:
 
   bool _gams_files_setup;
-  bool _use_server;
   std::string _gams_work_dir;
   bool _showGams, _mipstart;
   bool _sll;
