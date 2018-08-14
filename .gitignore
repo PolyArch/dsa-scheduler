@@ -1,3 +1,4 @@
+*.Td
 *.d
 src/gams_models/*.h
 build/
