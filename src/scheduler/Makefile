@@ -19,7 +19,7 @@ GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
 GAMS_INC=$(GAMS_FILES:.gms=.h)
 
-INCLUDE_DEST=$(level)/src
+INCLUDE_CONFIG=$(level)/src/config/
 LIB_DEST=${build}/lib
 OBJ_DEST=${build}/obj
 
@@ -28,13 +28,10 @@ PRE_OBJECTS=$(SOURCES:.cpp=.o)
 OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS)) dfg-parser.tab.o dfg-lex.yy.o
 
 BOOST_PATH=${boost}
-INC_SBMODEL_PATH=${SS_TOOLS}/include/ss-config/
 
 all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
 
-CXXFLAGS += -I$(INC_SBMODEL_PATH)
-
-CXXFLAGS += -I$(INCLUDE_DEST) -L$(BOOST_PATH) -fPIC 
+CXXFLAGS += -I$(INCLUDE_CONFIG) -L$(BOOST_PATH) -fPIC 
 
 $(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
