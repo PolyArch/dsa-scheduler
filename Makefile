@@ -11,10 +11,13 @@ include make.rules
 
 program: scheduler-program config-program
 
-scheduler-program:
+src/config/sbinst.h:
+	make -C src/config sbinst.h
+
+scheduler-program: src/config/sbinst.h
 	+make -C src/scheduler
 
-config-program:
+config-program: src/config/sbinst.h
 	+make -C src/config
 
 make_drivers: program
