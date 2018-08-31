@@ -18,15 +18,8 @@ bool SbPDG_VecInput::backPressureOn() {
     return false;
 }
 
-SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, 
-               EdgeType etype, SbPDG* sbpdg, int bitwidth, int index) {
-  _def=def;
-  _use=use;
-  _etype=etype;
-  _ID=sbpdg->inc_edge_id();
-  _sbpdg=sbpdg;
-  _index=index;
-  _bitwidth=bitwidth;
+SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg, int l, int r) :
+    _def(def), _use(use), _etype(etype), _ID(sbpdg->inc_edge_id()), _sbpdg(sbpdg), _l(l), _r(r) {
 }
 
 bool SbPDG_Node::is_temporal() {
@@ -56,11 +49,11 @@ void SbPDG_Edge::compute_after_pop(bool print, bool verif){
 //Calculate the value based on the origin's value, and the edge's
 //index and bitwidth fields
 uint64_t SbPDG_Edge::extract_value(uint64_t val) {
-  if(_bitwidth==64) { //this is special cased because << 64 is weird in c
+  if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
     return val;
   } else {
-    uint64_t mask = (((uint64_t)1<<_bitwidth)-1);
-    return (val >> _index*_bitwidth) & mask;
+    uint64_t mask = (((uint64_t) 1 << bitwidth()) - 1);
+    return (val >> _l) & mask;
   }
 }
 
@@ -95,8 +88,7 @@ void SbPDG::order_insts(SbPDG_Inst* inst,
  
   //incoming edges to a node
   int index=0;
-  for(auto i = inst->inc_e_begin(), e=inst->inc_e_end();i!=e;++i,++index) {
-    SbPDG_Edge* edge=*i;
+  for(auto edge : inst->in_edges()) {
     if(!edge) {
       assert(inst->immSlot()==index);
       continue;
@@ -107,6 +99,7 @@ void SbPDG::order_insts(SbPDG_Inst* inst,
       order_insts(op_inst, done_nodes, ordered_insts);                  
       //recursive call until the top inst with the last incoming edge 
     }
+    ++index;
   }
 
   ordered_insts.push_back(inst);
@@ -114,34 +107,34 @@ void SbPDG::order_insts(SbPDG_Inst* inst,
 
 void SbPDG::check_for_errors() {
   printGraphviz("viz/error_check_pdg.dot");
-  
+
   bool error = false;
-  for (auto I=_inputs.begin(),E=_inputs.end();I!=E;++I)  { 
-    if((*I)->num_out()==0) {
-      cerr << "Error: No uses on input " << (*I)->name() << "\n";  
-      error=true;
-    }
-  }
-  for (auto I=_insts.begin(),E=_insts.end();I!=E;++I)  { 
-    if((*I)->num_out()==0) {
-      cerr << "Error: No uses on inst " << (*I)->name() << "\n";  
-      error=true;
-    }
-    if((*I)->num_inc()==0) {
-      cerr << "Error: No operands on inst " << (*I)->name() << "\n";
-      error=true;
-    }
-  }
-  for (auto I=_outputs.begin(),E=_outputs.end();I!=E;++I)  { 
-    if((*I)->num_inc()==0) {
-      cerr << "Error: No operands on output " << (*I)->name() << "\n";
-      error=true;
+  for (auto elem : _inputs) {
+    if (elem->num_out() == 0) {
+      cerr << "Error: No uses on input " << elem->name() << "\n";
+      error = true;
     }
   }
 
-  if(error) {
-    assert(0 && "ERROR: BAD PDG");
+  for (auto elem : _insts) {
+    if (elem->num_out() == 0) {
+      cerr << "Error: No uses on inst " << elem->name() << "\n";
+      error = true;
+    }
+    if (elem->num_inc() == 0) {
+      cerr << "Error: No operands on inst " << elem->name() << "\n";
+      error = true;
+    }
   }
+
+  for (auto elem : _outputs) {
+    if (elem->num_inc() == 0) {
+      cerr << "Error: No operands on output " << elem->name() << "\n";
+      error = true;
+    }
+  }
+
+  assert(!error && "ERROR: BAD PDG");
 }
 
 // This function is called from the simulator to 
@@ -174,8 +167,8 @@ int SbPDG::compute(bool print, bool verif, int g) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SbPDG_VecInput* vec = _vecInputGroups[g][i];
-    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
-      num_computed += vec->getInput(j)->compute(print,verif); //calling some other compute
+    for (auto elem : vec->inputs()) {
+      num_computed += elem->compute(print,verif); //calling some other compute
     }
   }
   return num_computed;
@@ -188,9 +181,8 @@ int SbPDG::maxGroupThroughput(int g) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SbPDG_VecInput* vec = _vecInputGroups[g][i];
-    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
-      maxgt=std::max(maxgt,vec->getInput(j)->maxThroughput());
-    }
+    for (auto elem : vec->inputs())
+      maxgt=std::max(maxgt, elem->maxThroughput());
   }
   return maxgt;
 }
@@ -199,9 +191,8 @@ void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SbPDG_VecInput* vec = _vecInputGroups[g][i];
-    for(unsigned j = 0; j < vec->num_inputs(); ++j) {
-      vec->getInput(j)->depInsts(insts);
-    }
+    for (auto elem : vec->inputs())
+      elem->depInsts(insts);
   }
 }
 
@@ -213,98 +204,101 @@ SbPDG::SbPDG() {
 
 //COMMA IF NOT FIRST
 void CINF(std::ostream& os, bool& first) {
-  if(first) {
-    first=false;
+  if (first) {
+    first = false;
   } else {
-    os << ", " ;
+    os << ", ";
   }
 }
 
-bool conv_to_int(std::string s, uint64_t& ival){ 
+bool conv_to_int(std::string s, uint64_t& ival) {
   try {
-     ival = stol(s,0,0);
-     return true;
-  } catch(...){}
+    ival = (uint64_t) stol(s, 0, 0);
+    return true;
+  } catch (...) {}
   return false;
 }
 
-bool conv_to_double(std::string s, double& dval){ 
+bool conv_to_double(std::string s, double& dval) {
   try {
-     dval = stod(s);
-     return true;
-  } catch(...){}
+    dval = stod(s);
+    return true;
+  } catch (...) {}
   return false;
 }
 
-SymEntry SbPDG::createInst(std::string opcode, 
-                            std::vector<SymEntry>& args){
+SymEntry SbPDG::create_inst(std::string opcode, std::vector<SymEntry> &args) {
 
-  SbPDG_Inst* pdg_inst = new SbPDG_Inst(this);
   SB_CONFIG::sb_inst_t inst = inst_from_string(opcode.c_str());
-  pdg_inst->setInst(inst);
+  auto *pdg_inst = new SbPDG_Inst(this, inst);
 
-  int imm_offset=0;
-  for(unsigned i = 0; i < args.size(); ++i) { 
-    SymEntry& sym = args[i];
-    if(sym.type==SymEntry::SYM_INT || sym.type==SymEntry::SYM_DUB) { 
-      assert(imm_offset==0 && "only one immediate per instr. is allowed");
+  int imm_offset = 0;
+  for (unsigned i = 0; i < args.size(); ++i) {
+    SymEntry &sym = args[i];
+    if (sym.type == SymEntry::SYM_INT || sym.type == SymEntry::SYM_DUB) {
+      assert(imm_offset == 0 && "only one immediate per instr. is allowed");
       pdg_inst->setImm(sym.data.i);
-      pdg_inst->setImmSlot(i); 
-      imm_offset=1;
-      assert(sym.flag==SymEntry::FLAG_NONE);
-    } else if (sym.type==SymEntry::SYM_NODE) {
-      int num_entries = (int)sym.edge_entries->size();
+      pdg_inst->setImmSlot(i);
+      imm_offset = 1;
+      assert(sym.flag == SymEntry::FLAG_NONE);
+    } else if (sym.type == SymEntry::SYM_NODE) {
+      int num_entries = (int) sym.edge_entries->size();
       assert(num_entries > 0 && num_entries <= 16);
-      for(int e = 0; e < num_entries; ++e) {
-        auto& edge_entry = sym.edge_entries->at(e);
-        SbPDG_Node* inc_node = edge_entry.node;
-        if(inc_node==NULL) {
-          cerr << "Could not find argument " << i << " for \"" 
-               <<  opcode + "\" inst \n";
-          assert("0");
+      for (int e = 0; e < num_entries; ++e) {
+        auto &edge_entry = sym.edge_entries->at(e);
+        SbPDG_Node *inc_node = edge_entry.node;
+        if (inc_node == nullptr) {
+          cerr << "Could not find argument " << i << " for \""
+               << opcode + "\" inst \n";
+          assert(false);
         }
-        SbPDG_Edge::EdgeType etype = SbPDG_Edge::EdgeType::data; 
-        if(sym.flag==SymEntry::FLAG_CONTROL) {
-          etype = SbPDG_Edge::EdgeType::ctrl;
-        } else if(sym.flag==SymEntry::FLAG_PRED) {
-          etype = SbPDG_Edge::EdgeType::ctrl_true;
-        } else if(sym.flag==SymEntry::FLAG_INV_PRED) {
-          etype = SbPDG_Edge::EdgeType::ctrl_false;
+        SbPDG_Edge::EdgeType etype = SbPDG_Edge::EdgeType::data;
+
+        switch (sym.flag) {
+          case SymEntry::FLAG_CONTROL:
+            etype = SbPDG_Edge::EdgeType::ctrl;
+            break;
+          case SymEntry::FLAG_PRED:
+            etype = SbPDG_Edge::EdgeType::ctrl_true;
+            break;
+          case SymEntry::FLAG_INV_PRED:
+            etype = SbPDG_Edge::EdgeType::ctrl_false;
+            break;
         }
-  
+
         // flag should not work if it is control
-        connect(inc_node, pdg_inst,i, etype, 
-            edge_entry.bitwidth, edge_entry.index);
+        connect(inc_node, pdg_inst, i, etype, edge_entry.l, edge_entry.r);
         pdg_inst->set_ctrl_bits(sym.ctrl_bits);
       }
     } else {
-      assert(0 && "Invalide Node type");
+      assert(false && "Invalide Node type");
     }
   }
-  
 
-  addInst(pdg_inst);     
+
+  addInst(pdg_inst);
   SymEntry e(pdg_inst);
-  e.set_bitslice_params(SB_CONFIG::bitwidth[inst],0);
+  e.set_bitslice_params(0, SB_CONFIG::bitwidth[inst] - 1);
   return e;
 }
+
 void SbPDG::set_pragma(std::string& c, std::string& s) {
-  if(c==string("dfg")) {
+  if (c == string("dfg")) {
     cout << "No pragmas yet for dfg\n";
-  } else if (c==string("group")) {
-    if(s=="temporal") { 
-      assert(_groupProps.size() > 0);
-      _groupProps[_groupProps.size()-1].is_temporal=true;
-    } 
+  } else if (c == string("group")) {
+    if (s == "temporal") {
+      assert(!_groupProps.empty());
+      _groupProps[_groupProps.size() - 1].is_temporal = true;
+    }
   } else {
     cout << "Context \"" << c << "\" not recognized.";
   }
 }
 
 void SbPDG::start_new_dfg_group() {
-  _vecInputGroups.push_back({});
-  _vecOutputGroups.push_back({});
-  _groupProps.push_back(GroupProp());
+  _vecInputGroups.emplace_back(std::vector<SbPDG_VecInput*>());
+  _vecOutputGroups.emplace_back(std::vector<SbPDG_VecOutput*>());
+  _groupProps.emplace_back(GroupProp());
 }
 
 SbPDG::SbPDG(string filename) : SbPDG() {
@@ -346,12 +340,13 @@ std::string SbPDG_Inst::gamsName() {
   return ss.str();
 }
 void SbPDG_Inst::setImmSlot(int i) {
-  assert(i <4);
-  if((int)_ops.size()<=i) { 
-     _ops.resize(i+1); 
-   }
+  assert(i < 4);
 
-  _imm_slot=i;
+  if ((int) _ops.size() <= i) {
+    _ops.resize(i + 1);
+  }
+
+  _imm_slot = i;
 }
 
 uint64_t SbPDG_Inst::do_compute(uint64_t &discard) {
@@ -516,11 +511,9 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     _invalid=true;
   }
 
-  /*
-  if(print) {
-     std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
-  }
-  */
+  //if(print) {
+  //   std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
+  //}
 
   // std::cout << "init values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
   // std::cout << "init values of discard: " << discard << " pred: " << pred << "\n";
@@ -682,9 +675,8 @@ void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
   
   //print edges
   SbPDG_Node::const_edge_iterator I,E;
-  for(I=uses_begin(),E=uses_end();I!=E;++I) {
-    SbPDG_Edge* e = (*I);
-    
+  for (auto e : _uses) {
+
     if(e->etype()==SbPDG_Edge::data) {
        ncolor="black";
     } else if(e->etype()==SbPDG_Edge::ctrl_true) {
@@ -702,7 +694,7 @@ void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
          << "\\nex:" << sched->edge_delay(e)
          << "\\npt:" << sched->num_passthroughs(e);
     }
-    os << e->bitwidth() << ":" << e->index();  
+    os << e->l() << ":" << e->r();
     os << "\"];\n";
   }
  
@@ -918,7 +910,7 @@ void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, in
 //assumption is that each operand's edges are
 //added to in least to most significant order!
 SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
-                           SbPDG_Edge::EdgeType etype, int bitwidth, int index) {
+                           SbPDG_Edge::EdgeType etype, int l, int r) {
   assert(orig != dest && "we only allow acyclic pdgs");
 
   SbPDG_Edge* new_edge = 0; //check if it's a removed edge first
@@ -926,35 +918,9 @@ SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
   if(edge_it != removed_edges.end()) {
     new_edge = edge_it->second;
   } else { 
-    new_edge = new SbPDG_Edge(orig, dest, etype, this, bitwidth, index);
+    new_edge = new SbPDG_Edge(orig, dest, etype, this, l, r);
   }
 
-  //SbPDG_Inst* inst = 0;
-  //if(etype==SbPDG_Edge::ctrl_true) {
-  //  if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
-
-  //    assert(slot==SB_CONFIG::num_ops[inst->inst()]);       
-  //    //std::cout << "true edge" << orig->name() << "->" << dest->name() << "\n";
-  //    //slot = 2;
-  //    inst->setPredInv(false);
-  //  } else {
-  //    assert(0 && "not a Inst dest"); 
-  //  }
-  //} else if (etype==SbPDG_Edge::ctrl_false) {
-  //  if((inst = dynamic_cast<SbPDG_Inst*>(dest))) {
-  //    assert(slot==SB_CONFIG::num_ops[inst->inst()]);
-  //    //std::cout << "false edge" << orig->name() << "->" << dest->name() << "\n";
-  //    //slot = 2;
-  //    inst->setPredInv(true);
-  //  } else {
-  //    assert(0 && "not an Inst dest"); 
-  //  }
-  //} else if (etype==SbPDG_Edge::data) {
-  //    //std::cout << "data edge" << orig->name() << "->" << dest->name() << "\n";
-  //    //assert(slot >=0);
-  //    //assert(slot <=1);
-  //}
- 
   dest->addOperand(slot,new_edge);
   orig->addOutEdge(new_edge);
   _edges.push_back(new_edge);
@@ -989,9 +955,8 @@ int SbPDG::remappingNeeded(int num_HW_FU) {
       //if producing instruction is an input or
       // if producing instruction has more than one uses
       if (!inst || inst->num_out() > 1) {
-        SbPDG_Inst* newNode = new SbPDG_Inst(this);
+        SbPDG_Inst* newNode = new SbPDG_Inst(this, SB_CONFIG::sb_inst_t::SB_Copy);
         //TODO: insert information about this dummy node
-        newNode->setInst(SB_CONFIG::sb_inst_t::SB_Copy);
         disconnect(node, pdg_out);
         connect(node, newNode, 0, SbPDG_Edge::data);
         connect(newNode, pdg_out, 0, SbPDG_Edge::data);
@@ -1085,25 +1050,20 @@ void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
 void SbPDG::printGraphviz(ostream& os, Schedule* sched)
 {
   os << "Digraph G { \nnewrank=true;\n " ;
-  const_inst_iterator Ii,Ei;
 
   //Insts
-  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { 
-    (*Ii)->printGraphviz(os,sched); 
+  for (auto insts : _insts) {
+    insts->printGraphviz(os,sched);
   }
   
-  const_input_iterator Iin,Ein;
-
   //Inputs
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
-    (*Iin)->printGraphviz(os,sched); 
+  for (auto in : _inputs) {
+    in->printGraphviz(os,sched);
   }
   
-  const_output_iterator Iout,Eout;
-
   //Outputs
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
-    (*Iout)->printGraphviz(os,sched); 
+  for (auto out : _outputs) {
+    out->printGraphviz(os,sched);
   }
 
   int cluster_num=0;
@@ -1111,8 +1071,7 @@ void SbPDG::printGraphviz(ostream& os, Schedule* sched)
   os << "\n";
   for(auto& i : _vecInputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for(auto I=i->input_begin(),E=i->input_end();I!=E;++I) {
-      SbPDG_Input* sbin = *I;
+    for (auto sbin : i->inputs()) {
       os << "N" << sbin->id() << " ";
     }
     os << "}\n";
@@ -1120,8 +1079,7 @@ void SbPDG::printGraphviz(ostream& os, Schedule* sched)
 
   for(auto& i : _vecOutputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for(auto I=i->output_begin(),E=i->output_end();I!=E;++I) {
-      SbPDG_Output* sbout = *I;
+    for (auto sbout : i->outputs()) {
       os << "N" << sbout->id() << " ";
     }
     os << "}\n";
@@ -1130,11 +1088,11 @@ void SbPDG::printGraphviz(ostream& os, Schedule* sched)
 
 
   os << "\t{ rank = same; ";
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)   { os << "N" << (*Iin)->id() << " ";  }
+  for (auto in : _inputs)   { os << "N" << in->id() << " ";  }
   os << "}\n";
   
   os << "\t{ rank = same; ";
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)   { os << "N" << (*Iout)->id() << " "; }
+  for (auto out:_outputs)   { os << "N" << out->id() << " "; }
   os << "}\n";
 
   os << "}\n";
@@ -1299,8 +1257,8 @@ void SbPDG::calc_minLats() {
 
     int cur_lat = 0;
 
-    for(auto I=n->inc_e_begin(), E=n->inc_e_end();I!=E;++I) {
-      SbPDG_Node* dn = (*I)->def();
+    for(auto elem : n->in_edges()) {
+      SbPDG_Node* dn = elem->def();
       if(dn->min_lat() > cur_lat) {
         cur_lat = dn->min_lat();
       }
@@ -1316,12 +1274,12 @@ void SbPDG::calc_minLats() {
 
     n->set_min_lat(cur_lat);
 
-    for(auto I=n->uses_begin(), E=n->uses_end();I!=E;++I) {
-      SbPDG_Node* un = (*I)->use();
+    for(auto elem : n->uses()) {
+      SbPDG_Node* un = elem->use();
 
       bool ready = true;
-      for(auto II=un->inc_e_begin(), EE=un->inc_e_end(); II!=EE; ++II) {
-        SbPDG_Node* dn = (*II)->def();
+      for(auto elem : un->in_edges()) {
+        SbPDG_Node* dn = elem->def();
         if(!seen.count(dn)) {
           ready = false;
           break;
@@ -1424,21 +1382,16 @@ void SbPDG::printGams(std::ostream& os,
   os << "parameter VI(pv,v) \"Port Vector Definitions\" \n /";   // Print the set of port vertices mappings:
   for(auto& i : _vecInputs) {
     int ind=0;
-    std::vector<SbPDG_Input*>::iterator I,E;
-    for(I=i->input_begin(),E=i->input_end();I!=E;++I,++ind) {
-      SbPDG_Input* sbin = *I;
+    for (auto sbin : i->inputs()) {
       CINF(os,first);
       os << i->gamsName() << "." << sbin->gamsName() << " " << ind+1;
     }
   }
   for(auto& i : _vecOutputs) {
     int ind=0;
-    std::vector<SbPDG_Output*>::iterator I,E;
-    for(I=i->output_begin(),E=i->output_end();I!=E;++I,++ind) {
-      SbPDG_Output* sbout = *I;
+    for (auto sbout : i->outputs()) {
       CINF(os,first);
       os << i->gamsName() << "." << sbout->gamsName() << " " << ind+1;
-
     }
   }
   os << "/;\n";

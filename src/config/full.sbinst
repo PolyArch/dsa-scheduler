@@ -12,6 +12,7 @@ IndexMatch16            16           2             1           1
 # 32-Bit Instructions
 FMul32                  32           2             1           1
 FAdd32                  32           2             1           1
+FSub32                  32           2             1           1
 Add32                   32           2             1           1
 Mul32                   32           2             1           1
 

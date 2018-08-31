@@ -21,20 +21,21 @@ using get_time = chrono::steady_clock ;
 using namespace SB_CONFIG;
 
 static struct option long_options[] = {
-  { "algorithm", required_argument, NULL, 'a', },
-  { "sub-alg", required_argument, NULL, 's', },
-  { "verbose", no_argument, NULL, 'v', },
+  { "algorithm", required_argument, nullptr, 'a', },
+  { "sub-alg", required_argument, nullptr, 's', },
+  { "verbose", no_argument, nullptr, 'v', },
 
-  { "show-gams", no_argument, NULL, 'G', },
-  { "mipstart", no_argument, NULL, 'm', },
-  { "sll", no_argument, NULL, 'S', },
+  { "show-gams", no_argument, nullptr, 'G', },
+  { "mipstart", no_argument, nullptr, 'm', },
+  { "sll", no_argument, nullptr, 'S', },
+  { "no-int-time", no_argument, nullptr, 'n', },
 
-  { "relative-gap", required_argument, NULL, 'r', },
-  { "absolute-gap", required_argument, NULL, 'g', },
-  { "timeout",      required_argument, NULL, 't', },
-  { "max-iters",    required_argument, NULL, 'i', },
+  { "relative-gap", required_argument, nullptr, 'r', },
+  { "absolute-gap", required_argument, nullptr, 'g', },
+  { "timeout",      required_argument, nullptr, 't', },
+  { "max-iters",    required_argument, nullptr, 'i', },
 
-  { "max-edge-delay", required_argument, NULL, 'd', },
+  { "max-edge-delay", required_argument, nullptr, 'd', },
 
   { 0, 0, 0, 0, },
 };
@@ -73,7 +74,7 @@ int main(int argc, char* argv[])
   int max_edge_delay=15;
   int max_iters=20000;
   
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, nullptr)) != -1) {
     switch (opt) {
     case 'a': str_schedType = string(optarg); break;
     case 's': str_subalg = string(optarg); break;
@@ -151,7 +152,7 @@ int main(int argc, char* argv[])
   sbpdg.printGraphviz(ofs);
   ofs.close();
 
-  Schedule* sched=NULL;
+  Schedule* sched=nullptr;
 
   //Scheduler scheduler(&sbmodel);
   Scheduler* scheduler;
@@ -212,12 +213,11 @@ int main(int argc, char* argv[])
     sched->printConfigVerif(vsh);
   }
 
-  if(!succeed_sched || sched==NULL) {
+  if(!succeed_sched || sched==nullptr) {
     cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
     //This is just a fake schedule!
     //sched = new Schedule(&sbmodel,&sbpdg);
-    SchedulerSimulatedAnnealing* s = 
-      new SchedulerSimulatedAnnealing(&sbmodel);
+    SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(&sbmodel);
     s->set_fake_it();
 
     s->initialize(&sbpdg,sched);

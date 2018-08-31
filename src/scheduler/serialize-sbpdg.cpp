@@ -20,8 +20,8 @@ void SbPDG_Edge::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_def);
   ar & BOOST_SERIALIZATION_NVP(_use);
   ar & BOOST_SERIALIZATION_NVP(_etype); 
-  ar & BOOST_SERIALIZATION_NVP(_bitwidth);
-  ar & BOOST_SERIALIZATION_NVP(_index);
+  ar & BOOST_SERIALIZATION_NVP(_l);
+  ar & BOOST_SERIALIZATION_NVP(_r);
 }
 
 template<class Archive> 

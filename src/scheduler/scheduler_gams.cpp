@@ -39,18 +39,17 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
 
-    for(auto II = pdgnode->uses_begin(), EE = pdgnode->uses_end(); II!=EE; ++II) {
-      SbPDG_Edge* pdgedge = *II;
+    for(auto pdgedge : pdgnode->uses()) {
       auto& link_set = sched->links_of(pdgedge);
     
-      for(auto LI = link_set.begin(), LE = link_set.end(); LI != LE; ++LI) {
-        sblink* link = *LI;
+      for(auto elem : link_set) {
+        sblink* link = elem.second;
         ofs << "Mvl.l('" << pdgnode->gamsName() 
             << "','" << link->gams_name(config) << "')=1;\n";
         ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
             << link->gams_name(config) << "')=1;\n";
 
-        int order = sched->link_order(link);
+        int order = sched->link_order(elem);
         if(order!=-1) {
           ofs << "O.l('" << link->gams_name(config) << "')=" << order << ";\n";
         }
@@ -147,8 +146,8 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   int iters=0;
 
-  Schedule* best_schedule=NULL;
-  Schedule* cur_schedule=NULL;
+  Schedule* best_schedule=nullptr;
+  Schedule* cur_schedule=nullptr;
 
   while(total_msec() < _reslim * 1000) {
     bool success = schedule_internal(sbPDG,cur_schedule);
@@ -162,7 +161,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
     }
 
     if(success) {
-      if(best_schedule==NULL || 
+      if(best_schedule==nullptr || 
             (cur_schedule->max_lat_mis() < best_schedule->max_lat_mis()) ) {
         if(best_schedule) delete best_schedule;
         best_schedule=cur_schedule;
@@ -178,14 +177,14 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
   }
 
   schedule = best_schedule;
-  return best_schedule != NULL;
+  return best_schedule != nullptr;
 }
 
 
 bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   //Get the heuristic scheduling done first
-  Schedule* heur_sched=NULL;
+  Schedule* heur_sched=nullptr;
   bool heur_success=false;
 
   bool mrt_heur = ModelParsing::StartsWith(str_subalg,"MRT'");
@@ -505,7 +504,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
         if(sbnode_name.empty()) continue;
         
         sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
-        if(sbnode==NULL) {
+        if(sbnode==nullptr) {
           cerr << "null sbnode:\"" << sbnode_name << "\"\n";
         }
         schedule->add_passthrough_node(sbnode);
@@ -563,7 +562,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       if(vertex_name.empty()) continue;
       
      
-      schedule->assign_node(pdgnode,sbnode);
+      schedule->assign_node(pdgnode, make_pair(0, sbnode));
       
         /*if(sboutput* sbout = dynamic_cast<sboutput*>(sbnode) ) {
            cout << pdgnode->name() << " new=" << schedule->getPortFor(pdgnode) << "\n";
@@ -577,7 +576,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       if(switch_name.empty()) continue;
 
       sbswitch* sbsw = gamsToSbswitch[switch_name].first;
-      if(sbsw==NULL) {
+      if(sbsw==nullptr) {
         cerr << "null sbsw:\"" << switch_name << "\"\n";
       }
 
@@ -613,7 +612,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       
       SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
       SbPDG_Node* pdgnode = pdgedge->def(); 
-      if(pdgnode==NULL) {
+      if(pdgnode==nullptr) {
         cerr << "null pdgnode:\"" << vertex_name << "\"\n";
       }
      
@@ -624,20 +623,19 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
         if(link_name.empty()) continue;
         sblink* slink = gamsToSblink[link_name].first;
         
-        if(slink==NULL) {
+        if(slink==nullptr) {
           cerr << "null slink:\"" << link_name << "\"\n";
         }
         
-        schedule->assign_edgelink(pdgedge,slink);
+        schedule->assign_edgelink(pdgedge, 0, slink);
         
         if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
-          schedule->assign_node(pdgnode,sbin); 
+          schedule->assign_node(pdgnode, make_pair(0, sbin));
         } else if(sboutput* sbout = dynamic_cast<sboutput*>(slink->dest())) {
           //find output for this output edge
-          SbPDG_Node::const_edge_iterator I,E;
-          for(I=pdgnode->uses_begin(), E=pdgnode->uses_end();I!=E;++I) {
-            if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>((*I)->use())) {
-              schedule->assign_node(pdg_out,sbout);
+          for(auto elem : pdgnode->uses()) {
+            if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(elem->use())) {
+              schedule->assign_node(pdg_out, make_pair(0, sbout));
             }
           }
         }

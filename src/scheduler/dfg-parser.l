@@ -56,8 +56,7 @@ M   [-]
 \n 					{ return EOLN; }
 
 
-{L}{A}*					{ yylval.s = new std::string(yytext);
-                                          return IDENT; /*return check_type();*/ }
+{L}{A}*					{ yylval.s = new std::string(yytext); return IDENT; }
 
 {HP}{H}+{IS}?				{ si(&yylval,yytext); return I_CONST; }
 {NZ}{D}*{IS}?				{ si(&yylval,yytext); return I_CONST; }

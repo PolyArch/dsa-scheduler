@@ -37,16 +37,16 @@ InstModel::InstModel(char* filename) {
         string str_name(token);
         inst->setName(str_name);
         
-        token = strtok (NULL," ");
+        token = strtok (nullptr," ");
         inst->setBitwidth(atoi(token));
         
-        token = strtok (NULL, " ");
+        token = strtok (nullptr, " ");
         inst->setNumOperands(atoi(token));
 
-        token = strtok (NULL, " ");
+        token = strtok (nullptr, " ");
         inst->setLatency(atoi(token));
 
-        token = strtok (NULL, " ");
+        token = strtok (nullptr, " ");
         inst->setThroughput(atoi(token));
 
         _instList.push_back(inst);
