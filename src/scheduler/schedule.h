@@ -64,6 +64,8 @@ class Schedule {
     void printOutputGraphviz(std::ofstream& ofs, sbnode* node);
     void printSwitchGraphviz(std::ofstream& ofs, sbswitch* sw);
 
+    void printConfigText(std::ostream& os);
+
     //Scheduling Interface:
     bool spilled(SbPDG_Node*);
     
@@ -311,7 +313,7 @@ class Schedule {
         assert(np.num_passthroughs>=0);
       }
 
-      _edgeProp[edge->id()].reset();
+      ep.reset();
     }
 
     //Delete all scheduling data associated with pdgnode, including its
@@ -323,6 +325,7 @@ class Schedule {
       }
       for(auto it=pdgnode->uses_begin(); it!=pdgnode->uses_end(); ++it){
         SbPDG_Edge* edge = *it;
+        //std::cout << "unassign edge: " << edge->name() << "\n";
         unassign_edge(edge);
       }
 
@@ -411,7 +414,7 @@ class Schedule {
     //return cost_to_route
     //0: free
     //1: empty
-    //2: already there
+    //>=2: already there
     int temporal_cost(sblink* link, SbPDG_Node* node) {
       assert(link);
       auto& vec = _linkProp[link->id()].nodes;
@@ -419,7 +422,7 @@ class Schedule {
       for(SbPDG_Node* old_node : vec) {
         if(old_node == node) return 0;
       }
-      return 2;
+      return vec.size()+1;
     }
 
     bool input_matching_vector(SbPDG_Node* node, SbPDG_VecInput* in_v) {
@@ -501,7 +504,13 @@ class Schedule {
       auto& vec = _nodeProp[node->id()].vertices;
       return vec.size()==0 ? NULL : *vec.begin();
     }
-    
+
+    //find first node for
+    std::unordered_set<SbPDG_Node*>& pdgNodesOf(sbnode* node) {
+      return _nodeProp[node->id()].vertices;
+    }
+
+
     sbnode* locationOf(SbPDG_Node* pdgnode) {
       return _vertexProp[pdgnode->id()].node;
     }
@@ -635,8 +644,10 @@ class Schedule {
   void set_edge_delay(int i, SbPDG_Edge* e) { _edgeProp[e->id()].extra_lat=i; }
   int edge_delay(SbPDG_Edge* e) { return _edgeProp[e->id()].extra_lat;}
 
-  void set_num_links(int i, SbPDG_Edge* e) { _edgeProp[e->id()].num_links=i; }
-  int edge_links(SbPDG_Edge* e) { return _edgeProp[e->id()].num_links;}
+  void set_num_links(int i, SbPDG_Edge* e) { assert(0); }
+  std::unordered_set<sblink*>& edge_links(SbPDG_Edge* e) { 
+    return _edgeProp[e->id()].links;
+  }
 
   void set_link_order(sblink* l, int i) { _linkProp[l->id()].order=i; }
   int link_order(sblink* l) { return _linkProp[l->id()].order; }
@@ -734,7 +745,7 @@ class Schedule {
 
     int colorOf(SbPDG_Node* n) {return _cm.colorOf(n);}
 
-    void get_overprov(int& ovr, int& max_util);
+    void get_overprov(int& ovr, int& agg_ovr, int& max_util);
 
     struct VertexProp {
       int min_lat=0, max_lat=0, lat=0, vio=0;

@@ -12,8 +12,12 @@
 #include <cstdlib>
 #include <string>
 
-# include <iostream>
-# include <chrono>
+#include <iostream>
+#include <chrono>
+
+#include <signal.h>
+
+
 using namespace std;
 using sec = chrono::seconds;
 using get_time = chrono::steady_clock ;
@@ -38,6 +42,19 @@ static struct option long_options[] = {
 
   { 0, 0, 0, 0, },
 };
+
+Scheduler* scheduler;
+
+void sigint_handler(int s){
+  if(scheduler) {
+    if(scheduler->running()) {
+      scheduler->stop();
+      return;
+    } 
+  }
+  exit(1); 
+}
+
 
 std::string basename(std::string& filename) {
   size_t lastindex = filename.find_last_of("."); 
@@ -108,6 +125,7 @@ int main(int argc, char* argv[])
     model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
 
   SbModel sbmodel(model_filename.c_str());
+  cout << "Using max edge delay: " << max_edge_delay << "\n";
   sbmodel.setMaxEdgeDelay(max_edge_delay);
   sbmodel.maxEdgeDelay();
 
@@ -154,7 +172,6 @@ int main(int argc, char* argv[])
   Schedule* sched=NULL;
 
   //Scheduler scheduler(&sbmodel);
-  Scheduler* scheduler;
   if(str_schedType == "gams") {
     auto* scheduler_gams = new GamsScheduler(&sbmodel);
     scheduler_gams->showGams(show_gams);
@@ -178,13 +195,24 @@ int main(int argc, char* argv[])
 
   if(scheduler->check_res(&sbpdg,&sbmodel)) {
     // At least it's possible to schedule
-    
+
+    //Setup signal so we can stop if we need to
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = sigint_handler;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL); 
+
     succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
     int lat=0,latmis=0;
     if(succeed_sched){
       sched->cheapCalcLatency(lat,latmis);
       sched->set_decode_lat_mis(latmis);
+
+      ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
+      sched->printConfigText(ctxs); // text form of config fed to gui
+
     }
 
     if(verbose) {

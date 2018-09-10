@@ -1695,6 +1695,8 @@ SbPDG_VecInput* get_vector_input(int i){
 
     void push_ready_node(SbPDG_Node* node) {_ready_nodes.push_back(node);}
 
+    std::vector<SbPDG_Edge*>& edges() {return _edges;}
+
   private:
     // to keep track of number of cycles---------------------
     struct cycle_result{

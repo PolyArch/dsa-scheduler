@@ -97,11 +97,11 @@ void HeuristicScheduler::applyRouting(Schedule* sched,
     }
   }
 
-  for(auto I : candRouting->edge_prop) {
-    SbPDG_Edge* edge = I.first;
-    int links = I.second.num_links;
-    sched->set_num_links(links,edge);  
-  } 
+  //for(auto I : candRouting->edge_prop) {
+  //  SbPDG_Edge* edge = I.first;
+  //  int links = I.second.num_links;
+  //  sched->set_num_links(links,edge);  
+  //} 
 }
 
 void HeuristicScheduler::applyRouting(Schedule* sched, SbPDG_Node* pdgnode,
@@ -168,7 +168,9 @@ void HeuristicScheduler::fillOutputSpots(Schedule* sched,SbPDG_Output* pdginst,
 void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
                               vector<sbnode*>& spots) {
   spots.clear();
- 
+
+  
+
   //For Dedicated-required Instructions
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
@@ -181,7 +183,8 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
       
       if(!pdginst->is_temporal()) {
         //Normal Dedidated Instructions
-        if(!sched->pdgNodeOf(cand_fu) && !sched->isPassthrough(cand_fu)) {
+        int util=sched->thingsAssigned(cand_fu);
+        if(util==0 || (rand_bt(0,3+util*util) ==0) ) {
            spots.push_back(cand_fu);
         }
       } else {
@@ -194,41 +197,13 @@ void HeuristicScheduler::fillInstSpots(Schedule* sched,SbPDG_Inst* pdginst,
           } 
         }
       }
+      
     }
   }
   if(pdginst->is_temporal() && spots.size()==0) {
     cout << "Warning, no spots for" << pdginst->name() << "\n";
   }
 }
-
-//void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
-//                        SB_CONFIG::sbnode* source) {
-// 
-//  std::queue<sbnode*> openset;
-//  openset.push(source);
-//
-//  _sbModel->subModel()->clear_all_runtime_vals();
-//  
-//  SbPDG_Node* pdgnode = pdgedge->def();
-//
-//  while(!openset.empty()) {
-//    sbnode* node = openset.front();
-//    openset.pop();
-//    node->set_done(1);
-//
-//    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
-//      sblink* link = *I;
-//      sbnode* next = link->dest();
-//   
-//      if(sched->pdgNodeOf(link) == pdgnode) {
-//        sched->unassign_link(pdgnode,link);
-//        if(next->done()!=1) {
-//          openset.push(next);
-//        }
-//      } 
-//    }
-//  }
-//}
 
 struct mycomparison {
   bool operator() (std::pair<sbnode*,int> lhs, std::pair<sbnode*,int> rhs) const {

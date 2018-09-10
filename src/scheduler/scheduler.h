@@ -161,11 +161,15 @@ class Scheduler {
   //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
   //                     SB_CONFIG::sbnode* source);
 
+  bool running() {return !_should_stop;}
+  void stop() {_should_stop=true;}
+
   protected:
   SB_CONFIG::SbModel* getSBModel(){return _sbModel;} 
   SB_CONFIG::SbModel* _sbModel;
  
   int _max_iters = 20000;
+  bool _should_stop = false;
 
   float _optcr,_optca,_reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;

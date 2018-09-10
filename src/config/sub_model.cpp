@@ -944,6 +944,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
         ofs << _fus[x1][y1].gams_name(config) << "." 
             << _outputs[i].gams_name(config) << " " << d;
       }
+      ofs << "\n";
     }
   }
   ofs << "/\n";
@@ -1254,7 +1255,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
       endItem->add_link(&_switches[i+1][j+1])->setdir(SbDIR::SE);
 
       //For temporal region, lets add some extra outputs!
-      if(i>=temp_x && i<temp_x+temp_width) {
+      if(i>=temp_x && i<temp_x+temp_width && j>=temp_y && j <temp_y+temp_width) {
         endItem->add_link(&_switches[i+0][j+0])->setdir(SbDIR::NW);
         endItem->add_link(&_switches[i+1][j+0])->setdir(SbDIR::NE);
         endItem->add_link(&_switches[i+0][j+1])->setdir(SbDIR::SW);
@@ -1351,9 +1352,11 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
   } else if(portType == PortType::threein || portType == PortType::threetwo) {  //Three sides have inputs
 
+    bool bonus_middle = true;    
+
     //Inputs to Switches
-    _inputs.resize((_sizex+_sizey*2)*ips);
-    
+    _inputs.resize((_sizex*(1+bonus_middle)+_sizey*2)*ips);
+
     for(unsigned i = 0; i < _inputs.size(); ++i) {
       _inputs[i].setPort(i);
     }
@@ -1385,6 +1388,25 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
         else if(p==2) link->setdir(SbDIR::IP2);
       }
     }
+
+    if(bonus_middle) {  //TODO: make an option for this
+      cout << "bonus inputs: ";
+      for(int sw = 0; sw < _sizex; sw++) {
+        for(int p = 0; p < ips; p++) {
+          cout << in_index << " ";
+          assert((unsigned)in_index < _inputs.size());
+          sblink* link = _inputs[in_index++].add_link(&_switches[sw+1][_sizey]);
+          if(p==0) link->setdir(SbDIR::IP0);
+          else if(p==1) link->setdir(SbDIR::IP1);
+          else if(p==2) link->setdir(SbDIR::IP2);
+        }
+      }
+      cout << "\n";
+      assert((unsigned)in_index == _inputs.size());
+    }
+
+
+
 
     if(portType == PortType::threein) {
 
@@ -1429,7 +1451,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
         }
       }
     }
-  
 
 
   } else if(portType == PortType::everysw) {  //all switches have inputs/outputs

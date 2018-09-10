@@ -882,6 +882,7 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, sbnode* node) {
       ofs << "<tr><td port=\"" << v->name() 
           << "\" border=\"1\" bgcolor=\"#" 
           << std::hex << colorOf(v) << std::dec << "\">" 
+//          << ((node->max_util()!=1) ? "T!" : "")
           << v->name() << "</td></tr>";
     }
   }
@@ -2243,16 +2244,24 @@ int calc_ovr_node(std::unordered_set<SbPDG_Node*> vlist) {
   return total_used;
 }
 
-void Schedule::get_overprov(int& ovr, int& max_util) {
+void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   ovr=0;
+  agg_ovr=0;
   max_util=0;
-  for(int i = 0; i < (int)_vertexProp.size(); ++i) {
-    sbnode* n = _vertexProp[i].node;
+  //for(int i = 0; i < (int)_vertexProp.size(); ++i) {
+  for(auto I=_sbPDG->nodes_begin(), E=_sbPDG->nodes_end(); I!=E; ++I) {
+    SbPDG_Node* vertex = *I;
+    sbnode* n = _vertexProp[vertex->id()].node;
     if(n) {
       auto& np = _nodeProp[n->id()];
 
       int util = calc_ovr(np.vertices) + np.num_passthroughs;
-      ovr = std::max(util-n->max_util(),ovr);
+      int new_ovr = util-1;
+      if(vertex->is_temporal()) {
+        new_ovr= util-n->max_util();
+      }
+      ovr = std::max(new_ovr,ovr);
+      agg_ovr+=std::max(new_ovr,0)*1;
       max_util = std::max(util,max_util);
     }
   }
@@ -2261,10 +2270,171 @@ void Schedule::get_overprov(int& ovr, int& max_util) {
     for(auto I=n->obegin(), E=n->oend();I!=E;++I) {
       auto& lp = _linkProp[(*I)->id()];
       int util = calc_ovr_node(lp.nodes);
-      ovr = std::max(util-n->max_util(),ovr);
+      int new_ovr = util-n->max_util();
+      ovr = std::max(new_ovr,ovr);
+      agg_ovr+=std::max(new_ovr,0);
       max_util = std::max(util,max_util); 
     }
   }
 }
 
 
+//Had to insert this for something...
+//Print to a program config file (.cfg) -- text format for gui
+void Schedule::printConfigText(ostream& os) {
+  //print dimension
+  os << "[dimension]\n";
+  os << "height = " << _sbModel->subModel()->sizey() << "\n";
+  os << "width = " << _sbModel->subModel()->sizex() << "\n";
+  os << "\n";
+  
+  xfer_link_to_switch(); // makes sure we have switch representation of link
+
+  //for each switch -- print routing if there is some
+  os << "[switch]\n";
+  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  
+  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
+    
+      stringstream ss;
+      sbswitch* sbsw = &switches[i][j];
+    
+      //get the out to in link map for each switch
+      std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map = _assignSwitch[sbsw]; 
+      
+      if(link_map.size()!=0) {
+        ss << i << "," << j << ":\t";
+
+        for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
+          //os << i << "," << j << ": ";
+          //os << "\t";
+        
+        // print inputs and ordering 
+          //Get the sbnode for pdgnode
+          sblink* outlink=I->first;
+          sblink* inlink=I->second;
+          ss << SbDIR::dirName(inlink->dir(),true) << "->" << SbDIR::dirName(outlink->dir(),false) << "\t";
+        }
+
+      ss << "\n";
+      os << ss.str();
+      }
+
+    }
+  }
+
+  os << "\n";
+  os << "[funcunit]\n";
+  //for each fu -- print assignment if there is some
+  
+  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+
+  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
+      sbfu* sbfu_node = &fus[i][j];
+
+      if(isPassthrough(sbfu_node)) {
+         os << i << "," << j << ": ";
+         os << "Copy ";
+
+         //Where did it come from?
+         for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+           sblink* inlink=*Ie;
+           if(linkAssigned(inlink)) {
+              os << SbDIR::dirName(inlink->dir(),true);   //reverse
+              os << " -  -  \n";
+           }
+         }
+      }
+
+      if(nodeAssigned(sbfu_node)!=0) {
+        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
+        os << i << "," << j << ": ";
+        os << name_of_inst(pdg_node->inst()); //returns sb_inst
+        os << "\t";
+        
+        //Parse the inc-edges for each FU dir
+        for(int i = 0; i < NUM_IN_FU_DIRS; ++i) {
+          
+          if(pdg_node->immSlot()==i) {
+            os << "IM ";
+          } else if(i < (pdg_node->ops_end()-pdg_node->ops_begin())) {
+            
+            SbPDG_Edge* inc_edge = (pdg_node->ops_begin()+i)->get_first_edge();
+            
+            if(!inc_edge) {
+              os << "-  ";
+              continue;
+            }
+            
+            SbPDG_Node* inc_pdg_node = inc_edge->def();
+            
+            for(auto Ie=sbfu_node->ibegin(), Ee=sbfu_node->iend(); Ie!=Ee; ++Ie) {
+              sblink* inlink=*Ie;
+              if(linkAssigned(inlink) && pdgNodeOf(inlink)==inc_pdg_node) {
+                os << SbDIR::dirName(inlink->dir(),true);           //reverse the direction of inlink
+                break;
+              }
+            }
+
+            os << " ";
+          } else {
+            os << "-  ";
+          }
+
+        }//end for FU dir
+        
+        //print predicate
+        if(pdg_node->predInv()) {
+          os << "1 ";
+        } else {
+          os << "0 ";
+        }
+        
+        if(pdg_node->subFunc()!=0) {
+          os << "," << pdg_node->subFunc() << " ";
+        }
+        
+        //print constant
+        if(pdg_node->immSlot()!=-1) {
+          os << pdg_node->getImmInt();
+        }
+
+        for(auto I=sbfu_node->obegin(), E=sbfu_node->oend(); I!=E; ++I) {
+          sblink* link=*I;
+          if(linkAssigned(link)) {
+            os << SbDIR::dirName(link->dir(),false); 
+            break;
+          }
+        }
+
+        //more stuff?
+        os << "\n";
+      }//end if to check if sbfu ias assigned to each PDG_INST
+    }
+  }
+  
+  
+  
+  if(_wide_ports.size()>0) {
+    os << "\n[wide-port]\n";
+    for(unsigned i=0; i <_wide_ports.size(); ++i) {
+      os << i << ": ";
+      for(unsigned j = 0; j < _wide_ports[i].size(); ++j) {
+        
+        if(_wide_ports[i][j]==0xff) {
+          os << "0xff ";
+        } else {
+          os << _wide_ports[i][j] << " ";
+        }
+
+      }//end for j loop
+      os << "\n"; 
+    }//end for i loop
+
+  }
+  
+  os << "\n";
+
+}
