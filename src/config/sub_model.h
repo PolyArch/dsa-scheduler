@@ -65,233 +65,241 @@ class sbio_interface {
 };
 
 class sblink {
-    public:
-    //enum linktype { input, output, inter, cross }
-          
-    sblink() {}
-      
-    sbnode* orig() const {return _orig;}
-    sbnode* dest() const {return _dest;}
-    SbDIR::DIR dir()  const {return _dir;}
-    void setdir(SbDIR::DIR dir) { _dir=dir;}
-    
-    //Constructor
-    sblink(sbnode* orig, sbnode* dest) {
-        _orig=orig;
-        _dest=dest;
-        _ID=-1;
-    }
+public:
 
-    std::string name() const;
-    std::string gams_name(int config) const;
-    std::string gams_name(int , int) const;
-    
-    int id() {return _ID;}
-    void set_id(int id) {_ID=id;}
+  sblink() {}
 
-    int max_util() {return _max_util;}
-    int set_max_util(int m) {return _max_util = m;}
+  sbnode *orig() const { return _orig; }
 
-    protected:
-    int _ID=-1;
+  sbnode *dest() const { return _dest; }
 
-    int _max_util=1; // by default, assume its a dedicated link
+  SbDIR::DIR dir() const { return _dir; }
 
-    sbnode* _orig;
-    sbnode* _dest;
-    SbDIR::DIR _dir;
-    
-    private:
-    friend class SubModel;
+  void setdir(SbDIR::DIR dir) { _dir = dir; }
+
+  //Constructor
+  sblink(sbnode *orig, sbnode *dest) {
+    _orig = orig;
+    _dest = dest;
+    _ID = -1;
+  }
+
+  std::string name() const;
+
+  std::string gams_name(int config) const;
+
+  std::string gams_name(int, int) const;
+
+  int id() { return _ID; }
+
+  void set_id(int id) { _ID = id; }
+
+  int max_util() { return _max_util; }
+
+  int set_max_util(int m) { return _max_util = m; }
+
+protected:
+  int _ID = -1;
+
+  int _max_util = 1; // by default, assume its a dedicated link
+
+  sbnode *_orig;
+  sbnode *_dest;
+  SbDIR::DIR _dir;
+
+private:
+  friend class SubModel;
 };
     
     
-class sbnode {   
-    public:
-    sbnode()  {}
-      
-    sblink* add_link(sbnode* node) { 
-        sblink* link = new sblink(this, node);
-        _out_links.push_back(link);
-        node->add_back_link(link);
-        return link;
-    }
+class sbnode {
+public:
+  sbnode() {}
 
-    void add_back_link(sblink* link) {
-        _in_links.push_back(link);
+  sblink *add_link(sbnode *node) {
+    sblink *link = new sblink(this, node);
+    _out_links.push_back(link);
+    node->add_back_link(link);
+    return link;
+  }
+
+  void add_back_link(sblink *link) {
+    _in_links.push_back(link);
+  }
+
+  virtual std::string name() const {
+    return std::string("loadslice");
+  }
+
+  virtual std::string gams_name(int config = 0) const {
+    return std::string("loadslice");
+  }
+
+  typedef std::vector<sblink *>::const_iterator const_iterator;
+
+  const std::vector<sblink *> &in_links() { return _in_links; }
+
+  const std::vector<sblink *> &out_links() { return _out_links; }
+
+  sblink *getFirstOutLink() {
+    return _out_links.empty() ? nullptr : _out_links[0];
+  }
+
+  sblink *getFirstInLink() {
+    return _in_links.empty() ? nullptr : _in_links[0];
+  }
+
+  sblink *getInLink(SbDIR::DIR dir) {
+    for (auto &dlink: in_links()) {
+      if (dlink->dir() == dir) return dlink;
     }
-    
-    virtual std::string name() const {
-      return std::string("loadslice"); 
+    return nullptr;
+  }
+
+  sblink *getOutLink(SbDIR::DIR dir) {
+    for (auto &dlink: out_links()) {
+      if (dlink->dir() == dir) return dlink;
     }
-    virtual std::string gams_name(int config=0) const {
-      return std::string("loadslice");
-    }
-    
-    typedef std::vector<sblink*>::const_iterator const_iterator;
-    const_iterator ibegin() const {return _in_links.begin();}
-    const_iterator iend() const {return _in_links.end();}
-    const_iterator obegin() const {return _out_links.begin();}
-    const_iterator oend() const {return _out_links.end();}
-    
-    sblink* getFirstOutLink() {
-      if(_out_links.size()>0) {
-          return _out_links[0];
-      } else {
-          return NULL;
+    return nullptr;
+  }
+
+  sblink *get_cycle_link() {
+    for (auto &dlink: out_links()) {
+      if (dlink->dest() == this) {
+        return dlink;
       }
     }
-    
-    sblink* getFirstInLink() {
-      if(_in_links.size()>0) {
-          return _in_links[0];
-      } else {
-          return NULL;
-      }
+    return nullptr;
+  }
+
+
+  int id() { return _ID; }
+
+  void set_id(std::vector<sbnode *> &node_list,
+              std::vector<sblink *> &link_list) {
+    _ID = (int) node_list.size();
+    node_list.push_back(this);
+    for (unsigned i = 0; i < _out_links.size(); ++i) {
+      sblink *link = _out_links[i];
+      assert(link->id() == -1);
+      link->set_id((int) link_list.size());
+      link_list.push_back(link);
     }
-    
-    sblink* getInLink(SbDIR::DIR dir) {
-      for(const_iterator I=ibegin(), E=iend();I!=E; ++I) {
-          sblink* dlink= *I;
-          if(dlink->dir() == dir) return dlink;
-      }
-      return NULL;
-    }
+  }
 
-    sblink* getOutLink(SbDIR::DIR dir) {
-      for(const_iterator I=obegin(), E=oend();I!=E; ++I) {
-          sblink* dlink= *I;
-          if(dlink->dir() == dir) return dlink;
-      }
-      return NULL;
-    }
-
-    sblink* getCycleLink() {
-      for(const_iterator I=obegin(), E=oend();I!=E; ++I) {
-        sblink* dlink= *I;
-        if(dlink->dest() == this) {
-          return dlink;
-        }
-      }
-      return NULL;
-    }
+  int node_dist(int slot) { return _node_dist[slot]; }
 
 
-    int id() {return _ID;}
-    void set_id(std::vector<sbnode*>& node_list, 
-                std::vector<sblink*>& link_list) {
-      _ID=node_list.size();
-      node_list.push_back(this);  
-      for(unsigned i = 0; i < _out_links.size(); ++i) {
-        sblink* link = _out_links[i];
-        assert(link->id()==-1);
-        link->set_id(link_list.size());
-        link_list.push_back(link);
-      }
-    }
-    
-    int node_dist() {return _node_dist;}
-    void set_node_dist(int n) {_node_dist = n;}
+  std::pair<int, sblink *> came_from(int slot) { return _came_from[slot]; }
 
-    int done() {return _done;}
-    void set_done(int n) {_done = n;}
+  void update_dist(int slot, int dist, int from_slot, sblink *from) {
+    _node_dist[slot] = dist;
+    _came_from[slot] = std::make_pair(from_slot, from);
+  }
 
-    sblink* came_from() {return _came_from;}
-    void set_came_from(sblink* n) {
-      assert(n==0 || n->orig()->came_from()==0 || n->orig()->came_from()->orig() != this);
-      _came_from = n;
-    }
+  void reset_runtime_vals() {
+    memset(_node_dist, -1, sizeof _node_dist);
+    memset(_came_from, 0, sizeof _came_from);
+  }
 
-    void reset_runtime_vals() {
-      set_node_dist(-1);
-      set_came_from(0);
-      set_done(0);
-    }
+  int max_util() { return _max_util; }
 
-    int max_util() {return _max_util;}
-    int set_max_util(int m) {return _max_util = m;}
+  int max_util(SB_CONFIG::sb_inst_t inst) { return _max_util * 64 / SB_CONFIG::bitwidth[inst]; }
 
-    protected:
-      int _ID=-1;
-      int _node_dist;
-      int _done;
-      int _max_util=1; // by default, assume its a dedicated link
-      sblink* _came_from;
-      std::vector<sblink*> _in_links; 
-      std::vector<sblink*> _out_links; 
-    
-    private:
-      friend class SubModel;
+  int set_max_util(int m) { return _max_util = m; }
+
+protected:
+  int _ID = -1;
+
+  int _node_dist[8];
+  std::pair<int, sblink*>_came_from[8];
+
+  int _max_util = 1; // by default, assume its a dedicated link
+  std::vector<sblink *> _in_links;
+  std::vector<sblink *> _out_links;
+
+private:
+  friend class SubModel;
 };
     
 class sbswitch : public sbnode {
-    public:
+public:
 
-    sbswitch() : sbnode() {}
-    
-    void setXY(int x,int y) {_x=x;_y=y;}
-    int x() const {return _x;}
-    int y() const {return _y;}
+  sbswitch() : sbnode() {}
 
-    virtual std::string name() const {
-        std::stringstream ss;
-        ss << "SW" << "_" << _x << "_" << _y;
-        return ss.str();
+  void setXY(int x, int y) {
+    _x = x;
+    _y = y;
+  }
+
+  int x() const { return _x; }
+
+  int y() const { return _y; }
+
+  virtual std::string name() const {
+    std::stringstream ss;
+    ss << "SW" << "_" << _x << "_" << _y;
+    return ss.str();
+  }
+
+  virtual std::string gams_name(int config) const {
+    std::stringstream ss;
+    if (config != 0) {
+      ss << "Sw" << _x << _y << "c" << config;
+    } else {
+      ss << "Sw" << _x << _y;
     }
+    return ss.str();
+  }
 
-    virtual std::string gams_name(int config) const {
-        std::stringstream ss;
-        if(config!=0) {
-          ss << "Sw" << _x << _y << "c" << config;
-        } else {
-          ss << "Sw" << _x << _y;
-        }
-        return ss.str();
-    }
-    
-    sbinput* getInput(int i);
-    
-    sboutput* getOutput(int i);
-    
-    protected:
-    int _x, _y;
+  sbinput *getInput(int i);
+
+  sboutput *getOutput(int i);
+
+protected:
+  int _x, _y;
 };
     
 class sbfu : public sbnode {
-    public:   
+public:
 
-    sbfu() : sbnode() {}
-      
-    void setFUDef(func_unit_def* fu_def) {_fu_def = fu_def;}
-    void setXY(int x, int y) {_x=x;_y=y;}
+  sbfu() : sbnode() {}
 
-    int x() const {return _x;}
-    int y() const {return _y;}
-    
-    virtual std::string name() const {
-        std::stringstream ss;
-        ss << "FU" << "_" << _x << "_" << _y;
-        return ss.str();
+  void setFUDef(func_unit_def *fu_def) { _fu_def = fu_def; }
+
+  void setXY(int x, int y) {
+    _x = x;
+    _y = y;
+  }
+
+  int x() const { return _x; }
+
+  int y() const { return _y; }
+
+  virtual std::string name() const {
+    std::stringstream ss;
+    ss << "FU" << "_" << _x << "_" << _y;
+    return ss.str();
+  }
+
+  virtual std::string gams_name(int config) const {
+    std::stringstream ss;
+    if (config != 0) {
+      ss << "Fu" << _x << _y << "c" << config;
+    } else {
+      ss << "Fu" << _x << _y;
     }
+    return ss.str();
+  }
 
-    virtual std::string gams_name(int config) const {
-        std::stringstream ss;
-        if(config!=0) {
-          ss << "Fu" << _x << _y << "c" << config;
-        } else {
-          ss << "Fu" << _x << _y;
-        }
-        return ss.str();
-    }
-    
-    func_unit_def* fu_def() {return _fu_def;}
-    
-    protected:      
-    int _x, _y;
-    func_unit_def* _fu_def;
+  func_unit_def *fu_def() { return _fu_def; }
 
-    private:
-    friend class SubModel;
+protected:
+  int _x, _y;
+  func_unit_def *_fu_def;
+
+private:
+  friend class SubModel;
 };
 
 class sbinput : public sbnode { 

@@ -91,7 +91,7 @@ SbModel::SbModel(const char* filename, bool multi_config)
         }
         
         if(ModelParsing::StartsWith(line,"[sub-model]")){
-            if(_fuModel==NULL) { 
+            if(_fuModel==nullptr) { 
                 cerr<< "No Fu Model Specified\n";
                 exit(1);
             }
@@ -99,7 +99,7 @@ SbModel::SbModel(const char* filename, bool multi_config)
         }
 
         if(ModelParsing::StartsWith(line,"[io-model]")) {
-            if(_subModel==NULL) { 
+            if(_subModel==nullptr) { 
                 cerr<< "No Sub Model Specified\n";
                 exit(1);
             }

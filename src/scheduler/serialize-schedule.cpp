@@ -18,6 +18,8 @@ void Schedule::VertexProp::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(max_lat);
   ar & BOOST_SERIALIZATION_NVP(lat);
   ar & BOOST_SERIALIZATION_NVP(vio);
+  ar & BOOST_SERIALIZATION_NVP(idx);
+  ar & BOOST_SERIALIZATION_NVP(width);
 }
 
 template<class Archive>
@@ -35,10 +37,11 @@ void Schedule::NodeProp::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void Schedule::LinkProp::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(lat );
-  ar & BOOST_SERIALIZATION_NVP(order);
-  ar & BOOST_SERIALIZATION_NVP(edges);
-  ar & BOOST_SERIALIZATION_NVP(nodes);
+  for (int i = 0; i < 8; ++i) {
+    ar & BOOST_SERIALIZATION_NVP(slots[i].lat);
+    ar & BOOST_SERIALIZATION_NVP(slots[i].order);
+    ar & BOOST_SERIALIZATION_NVP(slots[i].edges);
+  }
 }
 
 template<class Archive>

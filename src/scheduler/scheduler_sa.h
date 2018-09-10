@@ -5,57 +5,66 @@
 
 class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 public:
-  void initialize(SbPDG*, Schedule*&);
+  void initialize(SbPDG *, Schedule *&);
 
-  SchedulerSimulatedAnnealing(SB_CONFIG::SbModel* sbModel) : 
-    HeuristicScheduler(sbModel) {}
-  bool schedule(SbPDG*, Schedule*&);
+  SchedulerSimulatedAnnealing(SB_CONFIG::SbModel *sbModel) :
+          HeuristicScheduler(sbModel) {}
 
-  std::pair<int,int> route(Schedule* sched, SbPDG_Edge* pdgnode,
-    SB_CONFIG::sbnode* source, SB_CONFIG::sbnode* dest, 
-    CandidateRouting&,std::pair<int,int> scoreLeft);
+  bool schedule(SbPDG *, Schedule *&);
 
-  virtual int routing_cost(SbPDG_Edge*, sblink*, Schedule*, 
-      CandidateRouting&, sbnode* dest);
+  std::pair<int, int> route(Schedule *sched, SbPDG_Edge *pdgnode,
+                            std::pair<int, SB_CONFIG::sbnode *> source, std::pair<int, SB_CONFIG::sbnode *> dest,
+                            CandidateRouting &);
 
+  int routing_cost(SbPDG_Edge *, int, int, sblink *, Schedule *, CandidateRouting &, const std::pair<int, sbnode*> &);
 
-  void set_fake_it() {_fake_it = true;}
+  void set_fake_it() { _fake_it = true; }
 
-  bool schedule_internal(SbPDG* sbPDG, Schedule*& sched);
+  bool schedule_internal(SbPDG *sbPDG, Schedule *&sched);
 
 protected:
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
       int& lat_mis, int& ovr, int& agg_ovr, int& max_util); 
 
-  bool schedule_input( SbPDG_VecInput*  vec, SbPDG* sbPDG, Schedule* sched);
-  bool schedule_output(SbPDG_VecOutput* vec, SbPDG* sbPDG, Schedule* sched);
-  bool scheduleNode(Schedule* sched, SbPDG_Node* pdgnode);
-  std::pair<int,int> scheduleHere(Schedule*, SbPDG_Node*, SB_CONFIG::sbnode*,
-         CandidateRouting&,std::pair<int,int> bestScore);
+  bool schedule_input(SbPDG_VecInput *vec, SbPDG *sbPDG, Schedule *sched);
 
-  void findFirstIndex(std::vector<std::pair<int,int>>& sd, sbio_interface& si, 
-    unsigned int numIO, unsigned int& index, bool is_input);
+  bool schedule_output(SbPDG_VecOutput *vec, SbPDG *sbPDG, Schedule *sched);
 
- bool genRandomIndexBW(std::pair<bool, int>& vport_id, std::vector<std::pair<int, std::vector<int>>>& vport_desc, std::vector<std::pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool s);
+  bool scheduleNode(Schedule *sched, SbPDG_Node *pdgnode);
 
-  bool timingIsStillGood(Schedule* sched); 
+  std::pair<int, int> scheduleHere(Schedule *, SbPDG_Node *, std::pair<int, SB_CONFIG::sbnode *>, CandidateRouting &);
 
-  bool map_to_completion(SbPDG* sbPDG, Schedule* sched);
-  bool map_io_to_completion(SbPDG* sbPDG, Schedule* sched);
+  void findFirstIndex(std::vector<std::pair<int, int>> &sd, sbio_interface &si,
+                      unsigned int numIO, unsigned int &index, bool is_input);
 
-  bool map_one_input(   SbPDG* sbPDG, Schedule* sched);
-  bool map_one_inst(    SbPDG* sbPDG, Schedule* sched);
-  bool map_one_output(  SbPDG* sbPDG, Schedule* sched);
-  void unmap_one_input( SbPDG* sbPDG, Schedule* sched);
-  void unmap_one_inst(  SbPDG* sbPDG, Schedule* sched);
-  void unmap_one_output(SbPDG* sbPDG, Schedule* sched);
+  bool genRandomIndexBW(std::pair<bool, int> &vport_id, std::vector<std::pair<int, std::vector<int>>> &vport_desc,
+                        std::vector<std::pair<int, int>> &sd, sbio_interface &si, unsigned int size, unsigned int index,
+                        Schedule *&sched, bool s);
 
-  void unmap_some(SbPDG* sbPDG, Schedule* sched);
+  bool timingIsStillGood(Schedule *sched);
 
-  std::vector<std::pair<int,int>> _sd_in;  //port, length pair 
-  std::vector<std::pair<int,int>> _sd_out; //port, length pair
+  bool map_to_completion(SbPDG *sbPDG, Schedule *sched);
 
-  int _max_iters_zero_vio=1000000000;
+  bool map_io_to_completion(SbPDG *sbPDG, Schedule *sched);
+
+  bool map_one_input(SbPDG *sbPDG, Schedule *sched);
+
+  bool map_one_inst(SbPDG *sbPDG, Schedule *sched);
+
+  bool map_one_output(SbPDG *sbPDG, Schedule *sched);
+
+  void unmap_one_input(SbPDG *sbPDG, Schedule *sched);
+
+  void unmap_one_inst(SbPDG *sbPDG, Schedule *sched);
+
+  void unmap_one_output(SbPDG *sbPDG, Schedule *sched);
+
+  void unmap_some(SbPDG *sbPDG, Schedule *sched);
+
+  std::vector<std::pair<int, int>> _sd_in;  //port, length pair
+  std::vector<std::pair<int, int>> _sd_out; //port, length pair
+
+  int _max_iters_zero_vio = 1000000000;
   bool _integrate_timing = true;
   int _best_latmis, _best_lat, _best_violation;
   bool _strict_timing = true;

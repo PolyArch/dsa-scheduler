@@ -61,7 +61,7 @@ func_unit_def* FuModel::GetFUDef(string& fu_string)
             return &func_defs[i];
         }
     }
-    return NULL;  //if no fu, return null
+    return nullptr;  //if no fu, return null
 }
 
 //This function reads line from an ifstream, and gets a param and value,
