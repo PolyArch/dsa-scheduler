@@ -211,9 +211,8 @@ int main(int argc, char* argv[])
       sched->cheapCalcLatency(lat,latmis);
       sched->set_decode_lat_mis(latmis);
 
-      ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
-      sched->printConfigText(ctxs); // text form of config fed to gui
-
+      //ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
+      //sched->printConfigText(ctxs); // text form of config fed to gui
     }
 
     if(verbose) {
