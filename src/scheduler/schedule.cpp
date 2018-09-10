@@ -2257,7 +2257,7 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
         util = count_unique(nodes) + count_unique(vecs);
         int cur_ovr = util - n->max_util();
         ovr = std::max(cur_ovr, ovr);
-        agg_ovr += cur_ovr; 
+        agg_ovr += std::max(cur_ovr,0); 
         max_util = std::max(util, max_util);
       }
     }
