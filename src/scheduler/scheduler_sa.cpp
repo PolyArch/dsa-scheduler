@@ -253,7 +253,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
 
   SB_CONFIG::SubModel *subModel = _sbModel->subModel();
   sbio_interface &si = subModel->io_interf();
-  int n_vertex = vec_in->inputs().size();
+  int n_vertex = (int) vec_in->inputs().size();
   int n_vertex_physical = n_vertex;
 
   if (vec_in->is_temporal()) {
@@ -297,7 +297,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
 
     for (unsigned m = 0; m < vport_desc.size(); m++) {
       int cgra_port_num = vport_desc[m].first;
-      sbinput *in = subModel->get_input(cgra_port_num);
+      sbinput *in = &subModel->inputs()[cgra_port_num];
       if (sched->pdgNodeOf(in) == nullptr) {
         possInputs.push_back(in);
       }
@@ -427,7 +427,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
 
     for (unsigned m=0; m < vport_desc.size(); m++) {
       int cgra_port_num = vport_desc[m].first;
-      sboutput* out = subModel->get_output(cgra_port_num);
+      sboutput* out = &subModel->outputs()[cgra_port_num];
       if (sched->pdgNodeOf(out) == nullptr) {
         possOutputs.push_back(out);
       }

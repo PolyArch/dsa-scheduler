@@ -65,22 +65,17 @@ void SbPDG_Inst::serialize(Archive & ar, const unsigned version) {
 template<class Archive>
 void SbPDG_IO::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
-  ar & BOOST_SERIALIZATION_NVP(_vport);
-  ar & BOOST_SERIALIZATION_NVP(_realName);
-  ar & BOOST_SERIALIZATION_NVP(_subIter);
-  ar & BOOST_SERIALIZATION_NVP(_size);
+  ar & BOOST_SERIALIZATION_NVP(vec_);
 }
 
 template<class Archive>
 void SbPDG_Input::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
-  ar & BOOST_SERIALIZATION_NVP(_input_vec); 
 }
 
 template<class Archive>
 void SbPDG_Output::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
-  ar & BOOST_SERIALIZATION_NVP(_output_vec); 
 }
 
 template<class Archive>

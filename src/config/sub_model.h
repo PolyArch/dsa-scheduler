@@ -358,102 +358,94 @@ class sboutput : public sbnode {
 
 
 class SubModel {
-    public:
-    
-    //Port type of the substrate nodes
-    //opensp -- dyser opensplyser N + N -1 ips
-    //three ins -- Softbrain 3 x N
-    //everywitch -- all switches has ops and ips
-    enum class PortType {opensp, everysw, threein, threetwo};
-    
-    typedef std::vector<sbinput>::const_iterator  const_input_iterator;
-    typedef std::vector<sboutput>::const_iterator const_output_iterator;
-    
-    SubModel(std::istream& istream, FuModel*, bool multi_config=true);
-    SubModel(int x, int y, PortType pt=PortType::opensp, int ips=2, int ops=2, bool multi_config=true);
-    
-    void PrintGraphviz(std::ostream& ofs);
-    void PrintGamsModel(std::ostream& ofs, 
-                        std::unordered_map<std::string, std::pair<sbnode*,int> >&,
-                        std::unordered_map<std::string, std::pair<sblink*,int> >&, 
-                        std::unordered_map<std::string, std::pair<sbswitch*,int> >&, 
-                        std::unordered_map<std::string, std::pair<bool,int>>&,  /*isInput, port*/
-                        int n_configs=1);
-    
-    int sizex() {return _sizex;}
-    int sizey() {return _sizey;}
-    
-    sbfu* fuAt(int x, int y) {return &(_fus[x][y]);}
-    sbswitch* switchAt(int x, int y) {return &(_switches[x][y]);}
+public:
 
-    sbinput*  get_input(int i)  {return &(_inputs[i]); }
-    sboutput* get_output(int i) {return &(_outputs[i]);}
+  //Port type of the substrate nodes
+  //opensp -- dyser opensplyser N + N -1 ips
+  //three ins -- Softbrain 3 x N
+  //everywitch -- all switches has ops and ips
+  enum class PortType {
+    opensp, everysw, threein, threetwo
+  };
 
-    const_input_iterator input_begin() { return _inputs.begin();}
-    const_input_iterator input_end()  { return _inputs.end();}
-    
-    const_output_iterator output_begin()  { return _outputs.begin();}
-    const_output_iterator output_end()  { return _outputs.end();}
-    
-    //const_output_iterator output_begin()  { return _outputs.begin();}
-    //const_output_iterator output_end()  { return _outputs.end();}
-    
-    std::vector<std::vector<sbfu> >& fus() {return _fus;}
-    std::vector<std::vector<sbswitch> >& switches() {return _switches;}
-    
-    bool multi_config() { return _multi_config;}
-    
-    sbswitch* cross_switch() {return &_cross_switch;}
-    sbnode* load_slice() {return &_load_slice;}
-    
-    int num_fu() {return _fus.size();}
-    
-    void parse_io(std::istream& istream);
-    sbio_interface& io_interf() {return _sbio_interf;}
+  typedef std::vector<sbinput>::const_iterator const_input_iterator;
+  typedef std::vector<sboutput>::const_iterator const_output_iterator;
 
-    void clear_all_runtime_vals();
-    void clear_fu_runtime_vals();
+  SubModel(std::istream &istream, FuModel *, bool multi_config = true);
 
-    sbnode* get_node_by_id(int i) {return _node_list[i];}
-    sblink* get_link_by_id(int i) {return _link_list[i];}
+  SubModel(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2, bool multi_config = true);
 
-    int num_node_ids() {return _node_list.size();}
-    int num_link_ids() {return _link_list.size();}
+  void PrintGraphviz(std::ostream &ofs);
 
-    std::vector<sbinput>&   inputs()      {return _inputs;}
-    std::vector<sboutput>&  outputs()     {return _outputs;}
-    std::vector<sbfu*>&     fu_list()     {return _fu_list;}
-    std::vector<sbswitch*>& switch_list() {return _switch_list;}
-    std::vector<sbnode*>&   node_list()   {return _node_list;}
+  void PrintGamsModel(std::ostream &ofs,
+                      std::unordered_map<std::string, std::pair<sbnode *, int> > &,
+                      std::unordered_map<std::string, std::pair<sblink *, int> > &,
+                      std::unordered_map<std::string, std::pair<sbswitch *, int> > &,
+                      std::unordered_map<std::string, std::pair<bool, int>> &,  /*isInput, port*/
+                      int n_configs = 1);
 
-    private:
+  int sizex() { return _sizex; }
 
-    void regroup_vecs(); //fills in the linear lists 
+  int sizey() { return _sizey; }
 
-    //void CreateFUArray(int,int);
-    
-    //void SetTotalFUByRatio();
-    //void RandDistributeFUs();
-    void build_substrate(int x, int y);
-    void connect_substrate(int x, int y, PortType pt, int ips, int ops,bool multi_config,int temp_x, int temp_y, int temp_width, int temp_height);
+  sbswitch *switchAt(int x, int y) { return &(_switches[x][y]); }
 
-    int _sizex, _sizey;  //size of SB cgra
-    bool _multi_config;
-    std::vector<sbinput> _inputs;
-    std::vector<sboutput> _outputs;
-    std::vector<std::vector<sbfu> > _fus;
-    std::vector<std::vector<sbswitch> > _switches;
+  std::vector<sbinput> &inputs() { return _inputs; }
 
-    //These are only valid after regroup_vecs()
-    std::vector<sbnode*> _io_list;
-    std::vector<sbfu*> _fu_list;
-    std::vector<sbswitch*> _switch_list;
-    std::vector<sbnode*> _node_list;
-    std::vector<sblink*> _link_list;
+  std::vector<sboutput> &outputs() { return _outputs; }
 
-    sbswitch _cross_switch;
-    sbnode _load_slice;
-    sbio_interface _sbio_interf;
+  std::vector<std::vector<sbfu> > &fus() { return _fus; }
+
+  std::vector<std::vector<sbswitch> > &switches() { return _switches; }
+
+  bool multi_config() { return _multi_config; }
+
+  sbswitch *cross_switch() { return &_cross_switch; }
+
+  sbnode *load_slice() { return &_load_slice; }
+
+  size_t num_fu() { return _fus.size(); }
+
+  void parse_io(std::istream &istream);
+
+  sbio_interface &io_interf() { return _sbio_interf; }
+
+  void clear_all_runtime_vals();
+
+  void clear_fu_runtime_vals();
+
+  const std::vector<sblink *> &link_list() { return _link_list; }
+
+  const std::vector<sbnode *> &node_list() { return _node_list; }
+
+private:
+
+  void regroup_vecs(); //fills in the linear lists
+
+  //void CreateFUArray(int,int);
+
+  //void SetTotalFUByRatio();
+  //void RandDistributeFUs();
+  void build_substrate(int x, int y);
+
+  void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config, int temp_x, int temp_y,
+                         int temp_width, int temp_height);
+
+  int _sizex, _sizey;  //size of SB cgra
+  bool _multi_config;
+  std::vector<sbinput> _inputs;
+  std::vector<sboutput> _outputs;
+  std::vector<std::vector<sbfu> > _fus;
+  std::vector<std::vector<sbswitch> > _switches;
+
+  //These are only valid after regroup_vecs()
+  std::vector<sbnode *> _io_list;
+  std::vector<sbnode *> _node_list;
+  std::vector<sblink *> _link_list;
+
+  sbswitch _cross_switch;
+  sbnode _load_slice;
+  sbio_interface _sbio_interf;
 };
 
 }

@@ -30,10 +30,10 @@ static void yyerror(parse_param*, const char *);
 
 %parse-param {struct parse_param* p}
 
-%token	 INPUT OUTPUT EOLN NEW_DFG PRAGMA ARROW
+%token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL 
 %token<d> F_CONST
-%token<i> I_CONST
+%token<i> I_CONST INPUT OUTPUT
 
 
 
@@ -74,18 +74,14 @@ statement_list
 statement
     : INPUT ':' io_def  eol {
         if(p->syms.has_sym($3->first)) {
-          printf("Symbol \"%s\" already exists\n",$3->first.c_str());
+          printf("Symbol \"%s\" already exists\n", $3->first.c_str());
           assert(0);
         }
-        if($3->second==0) p->dfg->addScalarInput($3->first.c_str(),p->syms);
-        else p->dfg->addVecInput($3->first.c_str(),$3->second,p->syms);
-        //printf("input  %s, %d\n",$3->first.c_str(),$3->second);
+        p->dfg->addVecInput($3->first, $3->second, p->syms, $1);
         delete $3;
       }
     | OUTPUT ':' io_def eol {
-        if($3->second==0) p->dfg->addScalarOutput($3->first.c_str(),p->syms);
-        else p->dfg->addVecOutput($3->first.c_str(),$3->second,p->syms);
-        //printf("output %s, %d\n",$3->first.c_str(),$3->second);
+        p->dfg->addVecOutput($3->first.c_str(), $3->second, p->syms, $1);
         delete $3;
       }
     | IDENT '=' rhs eol {
@@ -169,8 +165,8 @@ arg_expr
             $$ = $3;
             $$.set_flag(*$1);
             $$.set_control_list(*$5); delete $5;
-          }
-        ;
+      }
+    ;
 
 arg_list
     : arg_expr {
@@ -204,24 +200,25 @@ ident_list
     ;
 
 edge_list
-        : edge {
-            $$ = $1;
-          }
-        | edge_list edge {
-            $1.take_union($2);
-            $$ = $1;
-          }
-        ;
+    : edge {
+        $$ = $1;
+      }
+    | edge_list edge {
+        $1.take_union($2);
+        $$ = $1;
+      }
+    ;
 
 /*edge is a pdgnode annotated with bitwidth/index information*/
-edge    : IDENT {
-            $$ = p->syms.get_sym(*$1);
-          }
-        | IDENT ':' I_CONST ':' I_CONST {
-            $$ = p->syms.get_sym(*$1);
-            $$.set_bitslice_params($3, $5);
-          }
-        ;
+edge
+    : IDENT {
+        $$ = p->syms.get_sym(*$1);
+      }
+    | IDENT ':' I_CONST ':' I_CONST {
+        $$ = p->syms.get_sym(*$1);
+        $$.set_bitslice_params($3, $5);
+      }
+    ;
 
 %%
 

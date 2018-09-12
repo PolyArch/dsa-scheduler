@@ -61,24 +61,9 @@ public:
 
   void compute_after_pop(bool print, bool verif);
 
-  void print_buf_state() {
-    /*std::cout << _data_buffer.front() << " ";
-    if(_data_buffer.size()>1)
-      std::cout << _data_buffer.back() << "\n";
-      */
-  }
-
   void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
-    // std::cout << "data already in the buffer: " << _data_buffer.size() << " and max_size allowed is: " << buf_len << "\n";
-    // std::cout << "val I was trying to push: " << v << "\n";
     assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
-    // std::cout << "Before push state: \n";
-    print_buf_state();
-
     _data_buffer.push(std::make_pair(v, valid));
-    // std::cout <<  " and the size of buffer after push: " << _data_buffer.size() << "\n";
-
-    // std::cout << "pushed new value of: " << v << " here and top is: "<<_data_buffer.front()<<"\n";
     compute_after_push(print, verif);
   }
 
@@ -94,25 +79,19 @@ public:
   uint64_t extract_value(uint64_t v_in);
 
   uint64_t get_buffer_val() {
-    assert(_data_buffer.size() > 0);
+    assert(!_data_buffer.empty());
     return extract_value(_data_buffer.front().first);
   }
 
   bool get_buffer_valid() {
-    assert(_data_buffer.size() > 0);
+    assert(!_data_buffer.empty());
     return _data_buffer.front().second;
   }
 
   void pop_buffer_val(bool print, bool verif) {
     assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
-    // std::cout << "pop data from input buffer with buffer size now: " << _data_buffer.size() << "\n";
-    // std::cout << "Before pop state: \n";
-    print_buf_state();
-
-    // std::cout <<  " and will it lead to compute? " << (_data_buffer.size()>0) << "\n";
     _data_buffer.pop();
     compute_after_pop(print, verif);
-
   }
 
   int bitwidth() { return _r - _l + 1; }
@@ -149,19 +128,21 @@ class SbPDG_Inst;
 struct SbPDG_Operand {
   SbPDG_Operand() {}
 
-  SbPDG_Operand(SbPDG_Edge* e) {
+  SbPDG_Operand(SbPDG_Edge *e) {
     edges.push_back(e);
   }
-  SbPDG_Operand(std::vector<SbPDG_Edge*> es) {
-    edges=es;
+
+  SbPDG_Operand(std::vector<SbPDG_Edge *> es) {
+    edges = es;
   }
+
   SbPDG_Operand(uint64_t i) {
-    imm=i;
+    imm = i;
   }
 
   //Helper functions
-  SbPDG_Edge* get_first_edge() const {
-    if(edges.size()==0) {
+  SbPDG_Edge *get_first_edge() const {
+    if (edges.empty()) {
       return nullptr;
     } else {
       return edges[0];
@@ -169,49 +150,50 @@ struct SbPDG_Operand {
   }
 
   void clear() {
-    imm=0;
+    imm = 0;
     edges.clear();
   }
 
   bool is_ctrl() {
-    for(SbPDG_Edge* e : edges) {
-      if(e->etype() == SbPDG_Edge::ctrl) {
+    for (SbPDG_Edge *e : edges) {
+      if (e->etype() == SbPDG_Edge::ctrl) {
         return true;
       }
     }
     return false;
   }
 
-  bool is_imm() {return edges.size()==0;}
-  bool is_composed() {return edges.size()>1;}
+  bool is_imm() { return edges.empty(); }
+
+  bool is_composed() { return edges.size() > 1; }
 
 
   //Functions which manipulate dynamic state
   uint64_t get_value() { //used by simple simulator
     uint64_t base = imm;
-    int cur_bit_pos=0;
-    for(SbPDG_Edge* e : edges) {
-      base|=e->get_value()<<cur_bit_pos;
-      cur_bit_pos+=e->bitwidth();
+    int cur_bit_pos = 0;
+    for (SbPDG_Edge *e : edges) {
+      base |= e->get_value() << cur_bit_pos;
+      cur_bit_pos += e->bitwidth();
     }
-    assert(cur_bit_pos<=64); // max bitwidth is 64
+    assert(cur_bit_pos <= 64); // max bitwidth is 64
     return base;
   }
 
   uint64_t get_buffer_val() { //used by backcgra simulator
     uint64_t base = imm;
-    int cur_bit_pos=0;
-    for(SbPDG_Edge* e : edges) {
-      base|=e->get_buffer_val()<<cur_bit_pos;
-      cur_bit_pos+=e->bitwidth();
+    int cur_bit_pos = 0;
+    for (SbPDG_Edge *e : edges) {
+      base |= e->get_buffer_val() << cur_bit_pos;
+      cur_bit_pos += e->bitwidth();
     }
-    assert(cur_bit_pos<=64); // max bitwidth is 64
+    assert(cur_bit_pos <= 64); // max bitwidth is 64
     return base;
   }
 
   uint64_t get_buffer_valid() { //used by backcgra simulator
-    for(SbPDG_Edge* e : edges) {
-      if(e->get_buffer_valid()==false) {
+    for (SbPDG_Edge *e : edges) {
+      if (!e->get_buffer_valid()) {
         return false;
       }
     }
@@ -219,8 +201,8 @@ struct SbPDG_Operand {
   }
 
   uint64_t is_buffer_empty() { //used by backcgra simulator
-    for(SbPDG_Edge* e : edges) {
-      if(e->is_buffer_empty()) {
+    for (SbPDG_Edge *e : edges) {
+      if (e->is_buffer_empty()) {
         return true;
       }
     }
@@ -228,7 +210,7 @@ struct SbPDG_Operand {
   }
 
   void pop_buffer_val(bool print, bool verif) {
-    for(SbPDG_Edge* e : edges) {
+    for (SbPDG_Edge *e : edges) {
       e->pop_buffer_val(print, verif);
     }
   }
@@ -237,12 +219,13 @@ struct SbPDG_Operand {
   bool valid();
 
   friend class boost::serialization::access;
+
   template<class Archive>
-  void serialize(Archive & ar, const unsigned int version);
+  void serialize(Archive &ar, const unsigned int version);
 
   //Edges concatenated in bit order from least to most significant
-  std::vector<SbPDG_Edge*> edges; 
-  uint64_t imm=0;
+  std::vector<SbPDG_Edge *> edges;
+  uint64_t imm = 0;
 };
 
 //PDG Node -- abstract base class
@@ -261,6 +244,7 @@ public:
   virtual uint64_t invalid() { return _invalid; } //execution-related
 
   SbPDG_Node(SbPDG *sbpdg, V_TYPE v);
+  SbPDG_Node(SbPDG *sbpdg, V_TYPE v, const std::string &name);
 
   typedef std::vector<SbPDG_Edge *>::const_iterator const_edge_iterator;
   typedef std::vector<SbPDG_Operand>::const_iterator const_op_iterator;
@@ -713,6 +697,17 @@ struct SymEntry {
     width = 1;
   }
 
+  SymEntry(SbPDG_Node *node, int l, int r) {
+    type = SYM_NODE;
+    edge_entries = new std::vector<EdgeEntry>();
+    EdgeEntry e;
+    e.node = node;
+    e.l = l;
+    e.r = r;
+    edge_entries->push_back(e);
+    width = 1;
+  }
+
   void set_flag(std::string &s) {
     if (s == std::string("pred")) {
       flag = FLAG_PRED;
@@ -959,24 +954,35 @@ private:
   SB_CONFIG::sb_inst_t _sbinst;
 };
 
+class SbPDG_Vec;
 class SbPDG_IO : public SbPDG_Node {
 public:
   SbPDG_IO() {}
 
-  int vport() { return _vport; }
-
-  SbPDG_IO(SbPDG *sbpdg, V_TYPE v) : SbPDG_Node(sbpdg, v) {}
+  SbPDG_IO(SbPDG *sbpdg, const std::string& name, SbPDG_Vec *vec_, V_TYPE v);
 
   friend class boost::serialization::access;
 
   template<class Archive>
   void serialize(Archive &ar, const unsigned version);
+  SbPDG_Vec *vector() { return vec_; }
+
+  std::string name() {
+    std::stringstream ss;
+    ss << _name << ":";
+    ss << i_or_o() << id();
+    ss << _name;
+    return ss.str();
+  }
 
 protected:
-  int _vport;
-  std::string _realName;
-  int _subIter;
-  int _size;
+  SbPDG_Vec *vec_;
+
+  char i_or_o() {
+    if (_vtype == V_INPUT || _vtype == V_OUTPUT)
+      return "IO"[_vtype == V_OUTPUT];
+    return 'X';
+  }
 };
 
 class SbPDG_VecInput;
@@ -986,21 +992,10 @@ public:
   SbPDG_Input() {}
 
   void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
-  //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* input_sizes);
 
-  SbPDG_Input(SbPDG *sbpdg) : SbPDG_IO(sbpdg, V_INPUT) {}
+  SbPDG_Input(SbPDG *sbpdg, const std::string &name, SbPDG_Vec *vec_) : SbPDG_IO(sbpdg, name, vec_, V_INPUT) {}
 
-  void setVPort(SbPDG_VecInput *v) { _input_vec = v; }
-
-  SbPDG_VecInput *input_vec() { return _input_vec; }
-
-  std::string name() {
-    std::stringstream ss;
-    ss << _name << ":";
-    ss << "I" << _vport;
-    ss << _name;
-    return ss.str();
-  }
+  SbPDG_VecInput *input_vec();
 
   std::string gamsName();
 
@@ -1033,7 +1028,6 @@ private:
   template<class Archive>
   void serialize(Archive &ar, const unsigned int version);
 
-  SbPDG_VecInput *_input_vec = nullptr;
 };
 
 class SbPDG_VecOutput;
@@ -1046,19 +1040,10 @@ public:
   void printDirectAssignments(std::ostream &os, std::string dfg_name);
   //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
-  SbPDG_Output(SbPDG *sbpdg) : SbPDG_IO(sbpdg, V_OUTPUT) {}
+  SbPDG_Output(SbPDG *sbpdg, const std::string &name, SbPDG_Vec *vec_) : SbPDG_IO(sbpdg, name, vec_, V_OUTPUT) {}
 
-  void setVPort(SbPDG_VecOutput *v) { _output_vec = v; }
 
-  SbPDG_VecOutput *output_vec() { return _output_vec; }
-
-  std::string name() {
-    std::stringstream ss;
-    ss << _name << ":";
-    ss << "O" << _vport;
-    ss << _name;
-    return ss.str();
-  }
+  SbPDG_VecOutput *output_vec();
 
   std::string gamsName();
 
@@ -1090,8 +1075,6 @@ private:
   template<class Archive>
   void serialize(Archive &ar, const unsigned int version);
 
-  SbPDG_VecOutput *_output_vec = nullptr;
-
 };
 
 //vector class
@@ -1099,7 +1082,7 @@ class SbPDG_Vec {
 public:
   SbPDG_Vec() {}
 
-  SbPDG_Vec(std::string name, int id, SbPDG *sbpdg);
+  SbPDG_Vec(int len, const std::string &name, int id, SbPDG *sbpdg);
 
   void setLocMap(std::vector<std::vector<int> > &vec) { _locMap = vec; }
 
@@ -1131,27 +1114,11 @@ protected:
   int _group_id = 0; //which group do I belong to
 };
 
-static std::vector<std::vector<int>> simple_pm(int vec_len) {
-  std::vector<std::vector<int>> pm;
-  for (int i = 0; i < vec_len; ++i) {
-    std::vector<int> m;
-    m.push_back(i);
-    pm.push_back(m);
-  }
-  return pm;
-}
-//static std::vector<std::vector<int>> simple_pm(std::string& s) {
-//  int vec_len;
-//  std::istringstream(s)>>vec_len;
-//  return simple_pm(vec_len);
-//}
-
 class SbPDG_VecInput : public SbPDG_Vec {
 public:
   SbPDG_VecInput() {}
 
-  SbPDG_VecInput(std::string name, int id, SbPDG *sbpdg)
-          : SbPDG_Vec(name, id, sbpdg) {}
+  SbPDG_VecInput(int len, const std::string &name, int id, SbPDG *sbpdg) : SbPDG_Vec(len, name, id, sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -1179,8 +1146,7 @@ class SbPDG_VecOutput : public SbPDG_Vec {
 public:
   SbPDG_VecOutput() {}
 
-  SbPDG_VecOutput(std::string name, int id, SbPDG *sbpdg) :
-          SbPDG_Vec(name, id, sbpdg) {}
+  SbPDG_VecOutput(int len, const std::string &name, int id, SbPDG *sbpdg) : SbPDG_Vec(len, name, id, sbpdg) {}
 
   virtual std::string gamsName() {
     std::stringstream ss;
@@ -1212,7 +1178,7 @@ private:
 };
 
 class SymTab {
-  void assert_exists(std::string &s) {
+  void assert_exists(const std::string &s) {
     if (_sym_tab.count(s) == 0) {
       std::cerr << "Could not find" + s + "\n";
       assert(false);
@@ -1220,12 +1186,12 @@ class SymTab {
   }
 
 public:
-  void set(std::string &s, SymEntry n) {
+  void set(const std::string &s, const SymEntry &n) {
     //std::cout << "setting symbol " << s << " #ent:" << n.edge_entries->size() << "\n";
     _sym_tab[s] = n;
   }
 
-  void set(std::string &s, SbPDG_Node *n) {
+  void set(const std::string &s, SbPDG_Node *n) {
     //std::cout << "setting symbol " << s << " to node " << n->name() << "\n";
     _sym_tab[s] = n;
 
@@ -1240,7 +1206,7 @@ public:
     return _sym_tab.count(s);
   }
 
-  SymEntry get_sym(std::string &s) {
+  SymEntry get_sym(const std::string &s) {
     assert_exists(s);
     return _sym_tab[s];
   }
@@ -1353,108 +1319,51 @@ public:
     _nodes.push_back(output);
   }
 
-  void addScalarInput(std::string name, SymTab &syms) {
-    SbPDG_VecInput *vec_input =
-            new SbPDG_VecInput(name, _vecInputs.size(), this);
 
-    insert_vec_in(vec_input);
+  void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
+    SbPDG_VecOutput *vec_output = new SbPDG_VecOutput(std::max(1, len), name, (int) _vecOutputs.size(), this);
+    insert_vec_out(vec_output);
 
-    SbPDG_Input *pdg_in = new SbPDG_Input(this);  //new input nodes
-    syms.set(name, pdg_in);
-    pdg_in->setName(name);
-    pdg_in->setVPort(vec_input);
-    addInput(pdg_in);
-    vec_input->addInput(pdg_in);
-  }
+    for (int i = 0, cnt = 0; i < std::max(1, len); i += 64 / width) {
+      SbPDG_Output *pdg_out = new SbPDG_Output(this, name + "_out", vec_output);
+      vec_output->addOutput(pdg_out);
+      addOutput(pdg_out);
+      for (int j = 0; j < 64; j += width) {
+        std::stringstream ss;
+        ss << name;
+        if (len)
+          ss << cnt++;
+        auto sym = syms.get_sym(ss.str());
+        int num_entries = (int) sym.edge_entries->size();
+        assert(num_entries > 0 && num_entries <= 16);
 
-  void addOutputFromSym(std::string name, SbPDG_VecOutput *vec_output, SymEntry sym) {
-    int num_entries = (int) sym.edge_entries->size();
-    assert(num_entries > 0 && num_entries <= 16);
-
-    SbPDG_Output *pdg_out = new SbPDG_Output(this);
-    pdg_out->setName(name + std::string("_out"));
-    pdg_out->setVPort(vec_output);
-    addOutput(pdg_out);
-    vec_output->addOutput(pdg_out);
-
-    for (int e = 0; e < num_entries; ++e) {
-      auto &edge_entry = sym.edge_entries->at(e);
-      SbPDG_Node *out_node = edge_entry.node;
-
-      connect(out_node, pdg_out, 0, SbPDG_Edge::data, edge_entry.l, edge_entry.r);
+        for (auto edge_entry : *sym.edge_entries) {
+          SbPDG_Node *out_node = edge_entry.node;
+          connect(out_node, pdg_out, 0, SbPDG_Edge::data, edge_entry.l, edge_entry.r);
+        }
+      }
     }
   }
 
-  //scalar output node
-  void addScalarOutput(std::string name, SymTab &syms) {
-    //new vector output
-    SbPDG_VecOutput *vec_output
-            = new SbPDG_VecOutput(name, _vecOutputs.size(), this);
-
-    insert_vec_out(vec_output);
-
-    SymEntry sym = syms.get_sym(name);
-    addOutputFromSym(name, vec_output, sym);
-  }
-
-  void addVecOutput(std::string name,
-                    std::vector<std::vector<int> > &pm,
-                    SymTab &syms) {
-
-    SbPDG_VecOutput *vec_output = new SbPDG_VecOutput(name, _vecOutputs.size(),
-                                                      this);
-    vec_output->setLocMap(pm);
-    insert_vec_out(vec_output);
-
-    int entries = pm.size();
-    //std::cout << "entries: " << entries << "\n";
-
-    for (int i = 0; i < entries; ++i) {
-      std::stringstream ss;
-      ss << name << i;
-      //std::cout << "name: " << name << "\n";
-      std::string dep_name = ss.str();
-
-      SymEntry sym = syms.get_sym(dep_name);
-      addOutputFromSym(dep_name, vec_output, sym);
-    }
-  }
-
-  void addVecOutput(std::string name, int len, SymTab &syms) {
-    std::vector<std::vector<int>> pm = simple_pm(len);
-    addVecOutput(name, pm, syms);
-  }
-
-  void addVecInput(std::string name,
-                   std::vector<std::vector<int> > &pm,
-                   SymTab &syms) {
-
-    SbPDG_VecInput *vec_input = new SbPDG_VecInput(name, _vecInputs.size(),
-                                                   this);
-    vec_input->setLocMap(pm);
+  void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
+    int n = std::max(1, len);
+    assert(n % (64 / width) == 0);
+    SbPDG_VecInput *vec_input = new SbPDG_VecInput(n / (64 / width), name, (int) _vecInputs.size(), this);
     insert_vec_in(vec_input);
 
-    //number of vector entries -- each vector element is a input node
-    int entries = pm.size();
-    //std::cout << "entries: " << entries << "\n";
-
-    for (int i = 0; i < entries; ++i) {
-      std::stringstream ss;
-      ss << name << i;                //Vector input names: A0, A1
-      //std::cout << "name: " << name << "\n";
-      SbPDG_Input *pdg_in = new SbPDG_Input(this);
-      std::string name = ss.str();
-      syms.set(name, pdg_in);
-      pdg_in->setName(name);
-      pdg_in->setVPort(vec_input);
+    for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+      SbPDG_Input *pdg_in = new SbPDG_Input(this, name, vec_input);
       addInput(pdg_in);
       vec_input->addInput(pdg_in);
+      for (int j = 0; j < 64; j += width) {
+        std::stringstream ss;
+        ss << name;
+        if (len)
+          ss << cnt++;
+        SymEntry entry(pdg_in, j, j + width - 1);
+        syms.set(ss.str(), entry);
+      }
     }
-  }
-
-  void addVecInput(std::string name, int len, SymTab &syms) {
-    std::vector<std::vector<int>> pm = simple_pm(len);
-    this->addVecInput(name, pm, syms);
   }
 
   SbPDG_Edge *connect(SbPDG_Node *orig, SbPDG_Node *dest, int slot,
@@ -1505,12 +1414,12 @@ public:
     _vecInputs.push_back(in);
     // add to the group we are creating right now
     // std::cout << "It does come in inserting vec_in" << "\n";
-    _vecInputGroups[_vecInputGroups.size() - 1].push_back(in);
+    _vecInputGroups.back().push_back(in);
   }
 
   void insert_vec_out(SbPDG_VecOutput *out) {
     _vecOutputs.push_back(out);
-    _vecOutputGroups[_vecOutputGroups.size() - 1].push_back(out);
+    _vecOutputGroups.back().push_back(out);
   }
 
   void insert_vec_in_group(SbPDG_VecInput *in, unsigned group) {

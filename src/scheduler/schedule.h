@@ -785,8 +785,8 @@ public:
       _edgeProp.resize((size_t) _sbPDG->num_edge_ids());
     }
     if (_sbModel) {
-      _nodeProp.resize((size_t) _sbModel->subModel()->num_node_ids());
-      _linkProp.resize((size_t) _sbModel->subModel()->num_link_ids());
+      _nodeProp.resize((size_t) _sbModel->subModel()->node_list().size());
+      _linkProp.resize((size_t) _sbModel->subModel()->link_list().size());
     }
   }
 

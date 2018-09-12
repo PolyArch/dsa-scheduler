@@ -1181,86 +1181,72 @@ void SubModel::build_substrate(int sizex, int sizey) {
 //Group Nodes/Links and Set IDs
 //This should be done after all the links are added
 void SubModel::regroup_vecs() {
-  _fu_list.clear();
-  _switch_list.clear();
   _node_list.clear();
   _io_list.clear();
 
-  for(unsigned i = 0; i < _inputs.size(); ++i) {
-    _inputs[i].set_id(_node_list,_link_list);
-    _io_list.push_back(&_inputs[i]);
+  for (auto &elem: _inputs) {
+    elem.set_id(_node_list, _link_list);
+    _io_list.push_back(&elem);
   }
 
-  for(unsigned i = 0; i < _fus.size(); ++i) {
-    for(unsigned j = 0; j < _fus[i].size(); ++j) {
-      _fus[i][j].set_id(_node_list,_link_list);
-      _fu_list.push_back(&(_fus[i][j]));
-    }
-  }
-  for(unsigned i = 0; i < _switches.size(); ++i) {
-    for(unsigned j = 0; j < _switches[i].size(); ++j) {
-      _switches[i][j].set_id(_node_list,_link_list);
-      _switch_list.push_back(&_switches[i][j]);
-    }
-  }
-  for(unsigned i = 0; i < _outputs.size(); ++i) {
-    _outputs[i].set_id(_node_list,_link_list);
-    _io_list.push_back(&_outputs[i]);
+  for (auto &row : _fus)
+    for (auto &elem : row)
+      elem.set_id(_node_list, _link_list);
+
+  for (auto &row: _switches)
+    for (auto &elem: row)
+      elem.set_id(_node_list, _link_list);
+
+  for (auto &elem: _outputs) {
+    elem.set_id(_node_list, _link_list);
+    _io_list.push_back(&elem);
   }
 }
 
 void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips, int ops, bool multi_config, int temp_x, int temp_y, int temp_width, int temp_height) {
-  
-  //first connect switches to FUs
-  for(int i = 0; i < _sizex; i++) {
-    for(int j = 0; j < _sizey; j++) {
 
-      sbfu* endItem = &_fus[i][j];
-      
-      //inputs to FU -- link objects
-      _switches[i+0][j+0].add_link(endItem)->setdir(SbDIR::SE);
-      _switches[i+1][j+0].add_link(endItem)->setdir(SbDIR::SW);
-      _switches[i+1][j+1].add_link(endItem)->setdir(SbDIR::NW);
-      _switches[i+0][j+1].add_link(endItem)->setdir(SbDIR::NE);
+  {
+    const int di[] = {0, 1, 1, 0};
+    const int dj[] = {0, 0, 1, 1};
+    const SbDIR::DIR dir[] = {SbDIR::SE, SbDIR::SW, SbDIR::NW, SbDIR::NE};
 
-      //output from FU -- SE
-      endItem->add_link(&_switches[i+1][j+1])->setdir(SbDIR::SE);
+    const int t_di[] = {0, 1, 0};
+    const int t_dj[] = {0, 0, 1};
+    const SbDIR::DIR t_dir[] = {SbDIR::NW, SbDIR::NE, SbDIR::SW};
+    //first connect switches to FUs
+    for (int i = 0; i < _sizex; i++) {
+      for (int j = 0; j < _sizey; j++) {
 
-      //For temporal region, lets add some extra outputs!
-      if(i>=temp_x && i<temp_x+temp_width && j>=temp_y && j <temp_y+temp_width) {
-        endItem->add_link(&_switches[i+0][j+0])->setdir(SbDIR::NW);
-        endItem->add_link(&_switches[i+1][j+0])->setdir(SbDIR::NE);
-        endItem->add_link(&_switches[i+0][j+1])->setdir(SbDIR::SW);
+        for (int k = 0; k < 4; ++k)
+          _switches[i + di[k]][j + dj[k]].add_link(&_fus[i][j])->setdir(dir[k]);
+
+        //output from FU -- SE
+        _fus[i][j].add_link(&_switches[i + 1][j + 1])->setdir(SbDIR::SE);
+
+        //For temporal region, lets add some extra outputs!
+        if (i >= temp_x && i < temp_x + temp_width
+             && j >= temp_y && j < temp_y + temp_width) {
+          for (int k = 0; k < 3; ++k)
+            _fus[i][j].add_link(&_switches[i + t_di[k]][j + t_dj[k]])->setdir(t_dir[k]);
+        }
       }
     }
   }
 
   //Now Switches to eachother
-  for(int i = 0; i < _sizex+1; i++) {
-    for(int j = 0; j < _sizey+1; j++) {
-
-      sbswitch* startItem = &_switches[i][j];
-
-      //non-left edge switches
-      if(i!=0) {
-        startItem->add_link(&_switches[i-1][j])->setdir(SbDIR::W);
+  {
+    const int di[] = {-1, 0, 1, 0};
+    const int dj[] = {0, -1, 0, 1};
+    const SbDIR::DIR dir[] = {SbDIR::W, SbDIR::N, SbDIR::E, SbDIR::S};
+    for (int i = 0; i < _sizex + 1; i++) {
+      for (int j = 0; j < _sizey + 1; j++) {
+        for (int k = 0; k < 4; ++k) {
+          int _i = i + di[k];
+          int _j = j + dj[k];
+          if (_i >= 0 && _i <= _sizex && _j >= 0 && _j <= _sizey)
+            _switches[i][j].add_link(&_switches[_i][_j])->setdir(dir[k]);
+        }
       }
-
-      //non-top switches
-      if(j!=0) {
-        startItem->add_link(&_switches[i][j-1])->setdir(SbDIR::N);
-      }
-
-      //non-rght edge switches
-      if(i!=_sizex) {
-        startItem->add_link(&_switches[i+1][j])->setdir(SbDIR::E);
-      }
-
-      //non-bottom switches
-      if(j!=_sizey) {
-        startItem->add_link(&_switches[i][j+1])->setdir(SbDIR::S);
-      }
-
     }
   }
 

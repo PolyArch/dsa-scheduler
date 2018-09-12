@@ -15,6 +15,7 @@
 #include <chrono>
 #include <random>
 #include <stdlib.h>
+#include <memory>
 #include <boost/functional.hpp>
 
 #define MAX_ROUTE 100000000
@@ -118,14 +119,6 @@ public:
 
   virtual bool schedule(SbPDG *sbPDG, Schedule *&schedule) = 0;
 
-  int numFASched;
-  int numInputSched;
-  int numOutputSched;
-
-  int bestFASched;
-  int bestInputSched;
-  int bestOutputSched;
-
   bool verbose;
   bool suppress_timing_print = false;
 
@@ -162,7 +155,7 @@ public:
 
   void setTimeout(float timeout) { _reslim = timeout; }
 
-  //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode, 
+  //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode,
   //                     SB_CONFIG::sbnode* source);
 
   bool running() {return !_should_stop;}
@@ -178,6 +171,8 @@ protected:
 
   float _optcr, _optca, _reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;
+
+  std::shared_ptr<Schedule*> best, current;
 };
 
 
@@ -195,14 +190,16 @@ public:
                                            CandidateRouting &) = 0;
 
   virtual std::pair<int, int> route(Schedule *sched, SbPDG_Edge *pdgnode,
-                                    std::pair<int, SB_CONFIG::sbnode *> source, std::pair<int, SB_CONFIG::sbnode *> dest,
+                                    std::pair<int, SB_CONFIG::sbnode *> source,
+                                    std::pair<int, SB_CONFIG::sbnode *> dest,
                                     CandidateRouting &) = 0;
 
-  virtual int routing_cost(SbPDG_Edge *, int, int, sblink *, Schedule *, CandidateRouting &, const std::pair<int, sbnode *> &);
+  virtual int
+  routing_cost(SbPDG_Edge *, int, int, sblink *, Schedule *, CandidateRouting &, const std::pair<int, sbnode *> &);
 
   std::pair<int, int> route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgnode,
-                                              std::pair<int, SB_CONFIG::sbnode*> source,
-                                              std::pair<int, SB_CONFIG::sbnode*> dest,
+                                              std::pair<int, SB_CONFIG::sbnode *> source,
+                                              std::pair<int, SB_CONFIG::sbnode *> dest,
                                               CandidateRouting &);
 
 protected:

@@ -107,7 +107,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
         for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
           //Get the sbnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m].first;
-          sbinput *cgra_in_port = subModel->get_input(cgra_port_num);
+          sbinput *cgra_in_port = &subModel->inputs()[cgra_port_num];
 
           if (sched->pdgNodeOf(cgra_in_port) != nullptr) {
             ports_okay_to_use = false;
@@ -124,7 +124,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 
           //Get the sbnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m].first;
-          sbinput *cgra_in_port = subModel->get_input(cgra_port_num);
+          sbinput *cgra_in_port = &subModel->inputs()[cgra_port_num];
 
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_input = vec_in->inputs()[m];
@@ -181,7 +181,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
         for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
           //Get the sbnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m].first;
-          sboutput *cgra_out_port = subModel->get_output(cgra_port_num);
+          sboutput *cgra_out_port = &subModel->outputs()[cgra_port_num];
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
           if (sched->pdgNodeOf(cgra_out_port) != nullptr) {
@@ -205,7 +205,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
 
           //Get the sbnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m].first;
-          sboutput *cgra_out_port = subModel->get_output(cgra_port_num);
+          sboutput *cgra_out_port = &subModel->outputs()[cgra_port_num];
 
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
@@ -283,12 +283,11 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_input_spots(Schedule* sched,
   vector<pair<int, sbnode*>> spots;
 
   SubModel::const_input_iterator I, E;
-  for (I = _sbModel->subModel()->input_begin(),
-               E = _sbModel->subModel()->input_end(); I != E; ++I) {
-    sbinput *cand_input = const_cast<sbinput *>(&(*I));
+  for (auto &elem : _sbModel->subModel()->inputs()) {
+    sbinput *cand_input = &elem;
 
     if (sched->pdgNodeOf(cand_input) == nullptr) {
-      spots.push_back(make_pair(0, cand_input));
+      spots.emplace_back(make_pair(0, cand_input));
     }
   }
   return spots;
@@ -298,12 +297,11 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched
   vector<pair<int, sbnode*>> spots;
 
   SubModel::const_output_iterator I, E;
-  for (I = _sbModel->subModel()->output_begin(),
-               E = _sbModel->subModel()->output_end(); I != E; ++I) {
-    sboutput *cand_output = const_cast<sboutput *>(&(*I));
+  for (auto &elem : _sbModel->subModel()->outputs()) {
+    sboutput *cand_output = &elem;
 
     if (sched->pdgNodeOf(cand_output) == nullptr) {
-      spots.push_back(make_pair(0, cand_output));
+      spots.emplace_back(make_pair(0, cand_output));
     }
 
   }
@@ -316,7 +314,7 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
   //For Dedicated-required Instructions
   for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu *cand_fu = _sbModel->subModel()->fuAt(i, j);
+      sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
 
       if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(pdginst->inst())) {
         continue;
@@ -339,8 +337,9 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
         }
         for (int k = 0; k < 8; k += pdginst->bitwidth() / 8) {
           auto begin = occupied.begin() + k;
-          auto end   = occupied.begin() + k + pdginst->bitwidth() / 8;
-          if (!accumulate(begin, end, false, [](bool a, bool b) -> bool { return a || b; })) {
+          auto end = occupied.begin() + k + pdginst->bitwidth() / 8;
+          int util = accumulate(begin, end, false, [](bool a, bool b) -> int { return (int) a + (int) b; });
+          if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
             spots.emplace_back(make_pair(k, cand_fu));
           }
         }
@@ -545,13 +544,11 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
 
   int temporal_fus = 0;
   int temporal_inst_slots = 0;
-  auto fu_list = _sbModel->subModel()->fu_list();
-  for (sbfu *inst : fu_list) {
-    if (inst->max_util() > 1) {
-      temporal_inst_slots += inst->max_util();
+  for (auto row: _sbModel->subModel()->fus())
+    for (auto elem: row) {
+      temporal_inst_slots += elem.max_util();
       temporal_fus += 1;
     }
-  }
 
   //int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
   //if (dedicated_insts > nfus) {
@@ -585,7 +582,7 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     int fu_count = 0;
     for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
       for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-        sbfu *cand_fu = _sbModel->subModel()->fuAt(i, j);
+        sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
         if (cand_fu->fu_def()->is_cap(sb_inst)) {
           fu_count += 64 / SB_CONFIG::bitwidth[sb_inst];
         }
@@ -606,7 +603,7 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     int fu_count = 0;
     for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
       for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-        sbfu *cand_fu = _sbModel->subModel()->fuAt(i, j);
+        sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
         if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(sb_inst)) {
           fu_count += cand_fu->max_util(sb_inst);
         }

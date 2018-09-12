@@ -96,7 +96,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
   for(int i = 0; i < (int)_linkProp.size(); ++i) {
     for (int j = 0; j < 8; ++j) {
       auto &lp = _linkProp[i];
-      sblink *link = _sbModel->subModel()->get_link_by_id(i);
+      sblink *link = _sbModel->subModel()->link_list()[i];
       for (SbPDG_Edge *e : lp.slots[j].edges) {
         _edgeProp[e->id()].links.insert(make_pair(j, link));
       }
@@ -104,7 +104,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
   }
   for(int i = 0; i < (int)_nodeProp.size(); ++i) {
     auto& np = _nodeProp[i];
-    sbnode* node = _sbModel->subModel()->get_node_by_id(i);
+    sbnode* node = _sbModel->subModel()->node_list()[i];
     for(auto elem : np.vertices) {
       auto v = elem.second;
       _vertexProp[v->id()].node = node;
@@ -113,7 +113,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = _sbModel->subModel()->fuAt(i,j);
+      sbfu* sbfu_node = &_sbModel->subModel()->fus()[i][j];
       auto* pdg_inst = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
       if(pdg_inst) {
         auto inst=pdg_inst->inst();
@@ -961,22 +961,29 @@ void Schedule::printGraphviz(const char* name) {
 
   ofs << "digraph sched {\n";
 
-  for(sbswitch* sw : sub->switch_list()) printSwitchGraphviz(ofs,sw);
-  for(sbfu* fu : sub->fu_list())         printFUGraphviz(ofs,fu);
+  for (auto &row: sub->switches())
+    for (auto &elem: row)
+      printSwitchGraphviz(ofs, &elem);
+
+  for (auto row : sub->fus())
+    for (auto elem : row)
+      printFUGraphviz(ofs, &elem);
+
   for(sbinput& in : sub->inputs()) {
     NodeProp& np = _nodeProp[in.id()];
-    if(np.vertices.size() != 0) {
+    if(!np.vertices.empty()) {
       printInputGraphviz(ofs,&in);
     }
   }
   for(sboutput& out : sub->outputs()) {
     NodeProp& np = _nodeProp[out.id()];
-    if(np.vertices.size() != 0) {
+    if(!np.vertices.empty()) {
       printOutputGraphviz(ofs,&out);
     }
   }
  
-  for(sbnode* node : sub->node_list())    printMelGraphviz(ofs,node); 
+  for(sbnode* node : sub->node_list())
+    printMelGraphviz(ofs,node);
 
   ofs << "}\n\n";
 }
@@ -1009,9 +1016,8 @@ void Schedule::reconstructSchedule(
                   ) {
   //iterate over inputs (sbinputs)
   SubModel::const_input_iterator Iin,Ein;
-  for(Iin=_sbModel->subModel()->input_begin(), 
-      Ein=_sbModel->subModel()->input_end(); Iin!=Ein; ++Iin) {
-    sbinput* sbinput_node = (sbinput*) &(*Iin);
+  for (auto elem : _sbModel->subModel()->inputs()) {
+    sbinput* sbinput_node = (sbinput*) &elem;
    
     //get the pdg node for sbinput
     if(pdgnode_for.count(sbinput_node)!=0) {

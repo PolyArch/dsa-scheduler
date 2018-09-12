@@ -19,6 +19,7 @@
   static int check_type(void);
   void si(YYSTYPE* lval,  char* yytext);
   void sf(YYSTYPE* lval,  char* yytext);
+  void iow(YYSTYPE* lval,  char* yytext);
 
 %}
 
@@ -43,17 +44,19 @@ M   [-]
 
 %%
 "/*"                                    { comment(); }
-"#"[^\n]*                               { if(strlen(yytext) >6 && 
-                                             strncmp(&yytext[1],"pragma",6)==0) {
-                                             REJECT; }
-                                          /* consume //-comment */ }
+"#"[^\n]*                               {
+                                          /* consume //-comment */
+                                          if(strlen(yytext) > 6 && strncmp(&yytext[1],"pragma",6) == 0) {
+                                            REJECT;
+                                          }
+                                        }
 "---"[^\n]*                             { return NEW_DFG; }
 
-"Input"                                 { return(INPUT); }
-"InputVec"                              { return(INPUT); }
-"Output"                                { return(OUTPUT); }
-"OutputVec"                             { return(OUTPUT); }
-\n 					{ return EOLN; }
+"Input"("8"|"16"|"32"|"64")*            { iow(&yylval, yytext); return(INPUT); }
+"InputVec"                              { yylval.i = 64; return(INPUT); }
+"Output"("8"|"16"|"32"|"64")*           { iow(&yylval, yytext); return(OUTPUT); }
+"OutputVec"                             { yylval.i = 64; return(OUTPUT); }
+\n                                      { return EOLN; }
 
 
 {L}{A}*					{ yylval.s = new std::string(yytext); return IDENT; }
@@ -121,6 +124,19 @@ void si(YYSTYPE* lval,  char* yytext) {
 
 void sf(YYSTYPE* lval,char* yytext) {
   lval->d = strtod(yytext,NULL);
+}
+
+void iow(YYSTYPE* lval,char* yytext) {
+  if (strcmp(yytext, "Input") == 0 || strcmp(yytext, "Output") == 0) {
+    lval->i = 64;
+    return;
+  }
+  int n = strlen(yytext);
+  if (yytext[n - 1] == '8') {
+    lval->i = 8;
+    return;
+  }
+  lval->i = (yytext[n - 2] - '0') * 10 + (yytext[n - 1] - '0');
 }
 
 int yywrap(void) {      /* called at end of input */
