@@ -1310,7 +1310,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
   } else if(portType == PortType::threein || portType == PortType::threetwo) {  //Three sides have inputs
 
-    bool bonus_middle = true;    
+    bool bonus_middle = false;    
 
     //Inputs to Switches
     _inputs.resize((_sizex*(1+bonus_middle)+_sizey*2)*ips);
@@ -1348,10 +1348,10 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     }
 
     if(bonus_middle) {  //TODO: make an option for this
-      cout << "bonus inputs: ";
+      //cout << "bonus inputs: ";
       for(int sw = 0; sw < _sizex; sw++) {
         for(int p = 0; p < ips; p++) {
-          cout << in_index << " ";
+          //cout << in_index << " ";
           assert((unsigned)in_index < _inputs.size());
           sblink* link = _inputs[in_index++].add_link(&_switches[sw+1][_sizey]);
           if(p==0) link->setdir(SbDIR::IP0);

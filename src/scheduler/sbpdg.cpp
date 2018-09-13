@@ -471,10 +471,8 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   if(print) {
     _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
-  // cout << name() << " (" << _ID << "): ";
 
   uint64_t discard=0;
-  // bool discard=0;
   uint64_t output = 0;
 
   _invalid=false;
@@ -515,9 +513,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   //   std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
   //}
 
-  // std::cout << "init values of back_array, b1: " << _back_array[0] << " b2: " << _back_array[1] << "\n";
-  // std::cout << "init values of discard: " << discard << " pred: " << pred << "\n";
-
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
    
@@ -537,7 +532,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
      std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
   }
   if(this->name() == ":Phi") {
-	// std::cout << "came here to execute Phi instruction\n";
     _sbpdg->inc_total_dyn_insts();
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
@@ -1065,6 +1059,19 @@ void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
     }
   }
 }
+
+//TODO: @vidushi, does this clear all the transient state, in case we need to do a reset?
+void SbPDG::reset_simulation_state() {
+  for(auto& list : transient_values) {
+    list.clear();
+  }
+  for(auto& list : buf_transient_values) {
+    list.clear();
+  }
+  _complex_fu_free_cycle.clear();
+  _ready_nodes.clear();
+}
+
 
 
 

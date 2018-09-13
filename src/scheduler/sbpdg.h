@@ -1260,6 +1260,8 @@ public:
 
   void removeDummies();
 
+  void reset_simulation_state();
+
   static void order_insts(SbPDG_Inst *inst,
                           std::set<SbPDG_Inst *> &done_nodes,         //done insts
                           std::vector<SbPDG_Inst *> &ordered_insts);
@@ -1735,10 +1737,6 @@ private:
   std::list<struct buffer_pop_info *> buf_transient_values[1000];
 
   std::unordered_map<int, uint64_t> _complex_fu_free_cycle;
-
-  // std::list<SbPDG_Edge*> buf_transient_values[1000];
-  //--------------------------------------
-
 
   //stats
   int _total_dyn_insts = 0;

@@ -646,6 +646,8 @@ public:
 
   void clear_sbpdg();
 
+  void reset_simulation_state();
+
   bitslices<uint64_t> &slices() { return _bitslices; }
 
   void add_passthrough_node(sbnode *n) {

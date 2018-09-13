@@ -26,6 +26,12 @@ void Schedule::clear_sbpdg() {
   }
 }
 
+void Schedule::reset_simulation_state() {
+  if(_sbPDG) {
+    _sbPDG->reset_simulation_state();
+  }
+}
+
 //For a given pdgnode return the input or ouput port num if the pdfgnode is a
 //sbinput ot sboutput
 int Schedule::getPortFor(SbPDG_Node* sbpdg_in)  { 
