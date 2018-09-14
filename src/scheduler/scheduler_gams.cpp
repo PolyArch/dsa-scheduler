@@ -58,10 +58,10 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     }
   }
 
-  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  vector< vector<sbswitch*> >& switches = _sbModel->subModel()->switches();
   for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
-      sbswitch* sbsw = &switches[i][j];
+      sbswitch* sbsw = switches[i][j];
       auto link_map = sched->link_map_for_sw(sbsw);
       for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
         sblink* outlink=I->first;
@@ -469,9 +469,9 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
       unsigned size_of_vp;
       if(pn.first) {
-       size_of_vp = _sbModel->subModel()->io_interf().in_vports[pn.second].size();
+       size_of_vp = _sbModel->subModel()->io_interf().in_vports[pn.second]->size();
       } else {
-       size_of_vp = _sbModel->subModel()->io_interf().out_vports[pn.second].size();
+       size_of_vp = _sbModel->subModel()->io_interf().out_vports[pn.second]->size();
       }
 
       std::vector<bool> mask;

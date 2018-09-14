@@ -81,7 +81,6 @@ void SbPDG_Output::serialize(Archive & ar, const unsigned version) {
 template<class Archive>
 void SbPDG_Vec::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_name); 
-  ar & BOOST_SERIALIZATION_NVP(_locMap); 
   ar & BOOST_SERIALIZATION_NVP(_ID);
   ar & BOOST_SERIALIZATION_NVP(_sbpdg); 
   ar & BOOST_SERIALIZATION_NVP(_group_id);

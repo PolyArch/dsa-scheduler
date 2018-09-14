@@ -144,10 +144,11 @@ int main(int argc, char* argv[])
   if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
     pdg_dir += "/";
   }
-  string viz_dir = pdg_dir + "viz/iter/";
+  string viz_dir = pdg_dir + "viz/";
+  string iter_dir = pdg_dir + "viz/iter/";
   string verif_dir = pdg_dir + "verif/";
   string sched_dir = pdg_dir + "sched/"; // Directory for cheating on the scheduler
-  System(("mkdir -p " + viz_dir).c_str());
+  System(("mkdir -p " + iter_dir).c_str());
   System(("mkdir -p " + verif_dir).c_str());
   System(("mkdir -p " + sched_dir).c_str());
   System("mkdir -p gams/"); // gams will remain at top level

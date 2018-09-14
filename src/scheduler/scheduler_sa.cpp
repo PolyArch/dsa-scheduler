@@ -42,11 +42,12 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
     sched->get_overprov(ovr,agg_ovr,max_util);
 
-    bool succeed_ovr = (ovr ==0);
+    //bool succeed_ovr = (ovr ==0);
 
-    bool succeed_timing = false;
+    //bool succeed_timing = false;
     if (succeed_sched) { 
-      succeed_timing = sched->fixLatency(lat,latmis);
+      //succeed_timing = 
+      sched->fixLatency(lat,latmis);
     } else {
       latmis = 1000;
       lat = 1000;
@@ -222,13 +223,14 @@ void SchedulerSimulatedAnnealing::findFirstIndex(vector<pair<int,int>>& sd,
   for (; index < sd.size(); index++) {
     pair<int,int> j = sd[index];
     int vn = j.first; 
-    vector<pair<int, vector<int>>>& vdesc = (!is_input ? si.getDesc_O(vn) : si.getDesc_I(vn));
+    auto* vdesc = (!is_input ? si.getDesc_O(vn) : si.getDesc_I(vn));
     //Check if the vetcor port is 1. big enough
-    if (numIO <= vdesc.size()) { break;}
+    if (numIO <= vdesc->size()) { break;}
   }
 }
 
-bool SchedulerSimulatedAnnealing::genRandomIndexBW(pair<bool, int>& vport_id, vector<pair<int, vector<int>>>& vport_desc,  vector<pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool is_input) {
+bool SchedulerSimulatedAnnealing::genRandomIndexBW(pair<bool, int>& vport_id, 
+    vector<int>& vport_desc,  vector<pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool is_input) {
   unsigned int k;
   pair<int, int> p;
   int vport_num;
@@ -243,7 +245,8 @@ bool SchedulerSimulatedAnnealing::genRandomIndexBW(pair<bool, int>& vport_id, ve
     
     success = sched->vportOf(vport_id) == nullptr;
 
-    vport_desc = (!is_input ? si.getDesc_O(vport_num) : si.getDesc_I(vport_num));
+    vport_desc = (!is_input ? 
+        si.getDesc_O(vport_num) : si.getDesc_I(vport_num))->port_vec();
   }
 
   return success;
@@ -278,7 +281,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
 
   while (num_found < 8 &&  (attempt++ < _sd_in.size())) {
     pair<bool, int> vport_id;
-    vector<pair<int, vector<int>>> vport_desc;
+    vector<int> vport_desc;
 
     //TODO: put this code in schedule_output as well
     bool found=false;
@@ -296,8 +299,8 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
     std::vector<sbnode*> possInputs;
 
     for (unsigned m = 0; m < vport_desc.size(); m++) {
-      int cgra_port_num = vport_desc[m].first;
-      sbinput *in = &subModel->inputs()[cgra_port_num];
+      int cgra_port_num = vport_desc[m];
+      sbinput *in = subModel->inputs()[cgra_port_num];
       if (sched->pdgNodeOf(in) == nullptr) {
         possInputs.push_back(in);
       }
@@ -360,7 +363,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
       bestMask.resize(vport_desc.size());
       int num_cgra_ports = 0; //for debugging
       for (int m = 0; m < (int) vport_desc.size(); m++) {
-        int cgra_port_num = vport_desc[m].first;
+        int cgra_port_num = vport_desc[m];
         for (int i = 0; i < (int) candInputs.size(); ++i) {
           if (static_cast<sbinput *>(candInputs[i])->port() == cgra_port_num) {
             assert(bestMask[m] == false);
@@ -417,7 +420,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
 
   while (num_found < 10 &&  (attempt++ < _sd_out.size())) {
     pair<bool, int> vport_id;
-    vector<pair<int, vector<int>>> vport_desc;
+    vector<int> vport_desc;
     if(!genRandomIndexBW(vport_id, vport_desc, _sd_out, si, _sd_out.size(), index, sched, false /*output*/)) {
       return false;
     }
@@ -426,8 +429,8 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
     std::vector<sbnode*> possOutputs;
 
     for (unsigned m=0; m < vport_desc.size(); m++) {
-      int cgra_port_num = vport_desc[m].first;
-      sboutput* out = &subModel->outputs()[cgra_port_num];
+      int cgra_port_num = vport_desc[m];
+      sboutput* out = subModel->outputs()[cgra_port_num];
       if (sched->pdgNodeOf(out) == nullptr) {
         possOutputs.push_back(out);
       }
@@ -482,7 +485,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SbPDG_VecOutput*  vec_out,
       bestMask.resize(vport_desc.size());
       int num_cgra_ports=0; //for debugging
       for (int m=0; m < (int)vport_desc.size(); m++) {
-        int cgra_port_num = vport_desc[m].first;
+        int cgra_port_num = vport_desc[m];
         for(int i = 0; i < (int)candOutputs.size(); ++i) {
           if(static_cast<sboutput*>(candOutputs[i])->port()==cgra_port_num) {
             bestMask[m]=true;
@@ -553,7 +556,7 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
   std::vector<SbPDG_Inst *> &inst_vec = sbPDG->inst_vec();
   size_t n = inst_vec.size();
 
-  int p = rand_bt(0, n);
+  size_t p = rand_bt(0, n);
   for (size_t i = 0; i < n; ++i) {
     if (++p == n) { p = 0; }
     SbPDG_Inst *inst = inst_vec[p];
@@ -660,7 +663,7 @@ void SchedulerSimulatedAnnealing::unmap_one_input(SbPDG* sbPDG, Schedule* sched)
       SbPDG_VecInput* vec_in = sbPDG->vec_in(p);
       if(sched->vecMapped(vec_in)) {
         //TODO: do this for outputs too, or just eliminate
-        int hw_port_size = _sbModel->subModel()->io_interf().in_vports[sched->vecPortOf(vec_in).second].size();
+        int hw_port_size = _sbModel->subModel()->io_interf().in_vports[sched->vecPortOf(vec_in).second]->size();
         int extra = hw_port_size - vec_in->inputs().size();
         assert(extra>=0 && extra < 32); //don't expect this large of inputs
         int r = rand_bt(0,extra*extra+hw_port_size);

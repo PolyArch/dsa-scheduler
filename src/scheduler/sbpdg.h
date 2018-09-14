@@ -1084,10 +1084,6 @@ public:
 
   SbPDG_Vec(int len, const std::string &name, int id, SbPDG *sbpdg);
 
-  void setLocMap(std::vector<std::vector<int> > &vec) { _locMap = vec; }
-
-  std::vector<std::vector<int> > &locMap() { return _locMap; }
-
   int id() { return _ID; }
 
   void set_group_id(int id) { _group_id = id; }
@@ -1108,7 +1104,6 @@ private:
 
 protected:
   std::string _name;
-  std::vector<std::vector<int>> _locMap;
   int _ID;
   SbPDG *_sbpdg;
   int _group_id = 0; //which group do I belong to
@@ -1522,7 +1517,7 @@ SbPDG_VecInput* get_vector_input(int i){
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SbPDG_VecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
     assert(data.size() == vec_in->inputs().size() && "insufficient data available");
-    for (auto i = 0; i < vec_in->inputs().size(); ++i) {
+    for (unsigned i = 0; i < vec_in->inputs().size(); ++i) {
       SbPDG_Input *sb_node = vec_in->inputs()[i];
       sb_node->set_node(data[i], valid[i], true, print, verif);
     }

@@ -251,9 +251,9 @@ public:
     //for assert
     auto &io_interf = _sbModel->subModel()->io_interf();
     if (pn.first) {
-      assert(mask.size() == io_interf.in_vports[pn.second].size());
+      assert(mask.size() == io_interf.in_vports[pn.second]->size());
     } else {
-      assert(mask.size() == io_interf.out_vports[pn.second].size());
+      assert(mask.size() == io_interf.out_vports[pn.second]->size());
     }
   }
 
@@ -605,11 +605,11 @@ public:
       return;
     }
 
-    vector<vector<sbswitch> > &switches = _sbModel->subModel()->switches();  //2d switches
+    vector<vector<sbswitch*> > &switches = _sbModel->subModel()->switches();  //2d switches
     for (int i = 0; i < _sbModel->subModel()->sizex() + 1; ++i) {
       for (int j = 0; j < _sbModel->subModel()->sizey() + 1; ++j) {
 
-        sbswitch *sbsw = &switches[i][j];
+        sbswitch *sbsw = switches[i][j];
 
         for (auto &inlink: sbsw->in_links()) {
           for (int slot_in = 0; slot_in < 8; ++slot_in) {

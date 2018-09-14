@@ -19,7 +19,7 @@ bool SbPDG_VecInput::backPressureOn() {
 }
 
 SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg, int l, int r) :
-    _def(def), _use(use), _etype(etype), _ID(sbpdg->inc_edge_id()), _sbpdg(sbpdg), _l(l), _r(r) {
+   _ID(sbpdg->inc_edge_id()), _sbpdg(sbpdg), _def(def), _use(use), _etype(etype),  _l(l), _r(r) {
 }
 
 bool SbPDG_Node::is_temporal() {
@@ -264,6 +264,8 @@ SymEntry SbPDG::create_inst(std::string opcode, std::vector<SymEntry> &args) {
           case SymEntry::FLAG_INV_PRED:
             etype = SbPDG_Edge::EdgeType::ctrl_false;
             break;
+          default:
+            etype = SbPDG_Edge::data;
         }
 
         // flag should not work if it is control
@@ -618,9 +620,6 @@ SbPDG_IO::SbPDG_IO(SbPDG *sbpdg, const std::string &name, SbPDG_Vec *vec_, SbPDG
 
 SbPDG_Vec::SbPDG_Vec(int len, const std::string &name, int id, SbPDG* sbpdg) : _name(name), _ID(id), _sbpdg(sbpdg) {
   _group_id = sbpdg->num_groups() - 1;
-  for (int i = 0; i < len; ++i) {
-    _locMap.push_back({i});
-  }
 }
 
 SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
@@ -632,7 +631,7 @@ SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) :
 }
 
 SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v, const std::string &name) :
-        _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v), _name(name) {
+        _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _name(name), _vtype(v)  {
   //TODO:FIXME: This will likely be incorrect while rebuilding the
   //DFG from a config file, but might work for now
   _group_id = _sbpdg->num_groups() - 1;
@@ -1197,64 +1196,45 @@ void SbPDG::printEmuDFG(ostream& os, string dfg_name)
  
 
 
-//TODO: Fix this for more complex patterns
-bool is_compatible(const vector<vector<int>>& vec_m, const vector<pair<int, vector<int>>>& port_m) {
-  return vec_m.size() <= port_m.size();
-  
-/*  for(unsigned i = 0; i < vec_m.size(); ++i) {
-    if(vec_m[i].size() != port_m[i].second.size()) {
-      return false;
-    }
-
-    for(unsigned j = 0; j < vec_m[i].size(); ++j) {
-      if(vec_m[i][j] != port_m[i].second[j]) {
-        return false;
-      }
-    }
-  }*/
-}
-
 //IO-Model has the hardware vector io interface mapping
 void SbPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbModel) {
   os << "set cp(pv,pn) \"Port Compatibility\" \n /";   // Print the port compatibility
-  bool first = true;
+  bool first=true;  
 
-  for (auto &vec_in : _vecInputs) {
-    vector<vector<int> > &vec_m = vec_in->locMap();
+  for(auto& vec_in : _vecInputs) {
     std::vector<int> matching_ports;
 
-    for (auto &port_interf : sbModel->subModel()->io_interf().in_vports) {
-      std::vector<std::pair<int, std::vector<int> > > &port_m = port_interf.second;
-
-      if (is_compatible(vec_m, port_m)) {
+    for(auto& port_interf : sbModel->subModel()->io_interf().in_vports) {
+      const std::vector<int>& port_m = port_interf.second->port_vec();
+       
+      if(port_m.size() >= vec_in->inputs().size()) {
         matching_ports.push_back(port_interf.first);
-        CINF(os, first);
+        CINF(os,first);
         os << vec_in->gamsName() << ".ip" << port_interf.first << " ";
       }
     }
 
-    if (matching_ports.empty()) {
+    if(matching_ports.size()==0) {
       cout << "IN PORT \"" << vec_in->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
       assert(0);
     }
   }
 
-  for (auto &vec_out : _vecOutputs) {
-    vector<vector<int> > &vec_m = vec_out->locMap();
+  for(auto& vec_out : _vecOutputs) {
     std::vector<int> matching_ports;
 
-    for (auto &port_interf : sbModel->subModel()->io_interf().out_vports) {
+    for(auto& port_interf : sbModel->subModel()->io_interf().out_vports) {
 
-      std::vector<std::pair<int, std::vector<int> > > &port_m = port_interf.second;
+      const std::vector<int>& port_m = port_interf.second->port_vec();
 
-      if (is_compatible(vec_m, port_m)) {
+      if(port_m.size() >= vec_out->outputs().size()) {
         matching_ports.push_back(port_interf.first);
-        CINF(os, first);
+        CINF(os,first);
         os << vec_out->gamsName() << ".op" << port_interf.first << " ";
       }
     }
 
-    if (matching_ports.empty()) {
+    if(matching_ports.size()==0) {
       cout << "OUT PORT \"" << vec_out->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
       assert(0);
     }

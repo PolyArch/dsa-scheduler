@@ -8,7 +8,7 @@ lat_eq="0"
 time_eq="0"
 
 if [ -z "$1" ]; then
-alg="sg"
+alg="sa"
 else
 alg=$1
 fi

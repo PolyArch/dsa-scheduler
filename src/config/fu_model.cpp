@@ -94,7 +94,7 @@ void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
         sb_inst_t sb_inst = inst_from_string(cap.c_str());
         
         if(sb_inst==SB_NONE || sb_inst==SB_ERR) {
-            cerr << "ERROR IN PARSING SOFTBRAIN INSTRUCTION: \"" << cap << "\"\n";
+            cerr << "ERROR IN PARSING INSTRUCTION: \"" << cap << "\"\n";
             assert(0);
             return;
         }

@@ -94,7 +94,7 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
     for (auto &i : sd) {
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/, vport_num);
-      vector<pair<int, vector<int>>> &vport_desc = si.getDesc_I(vport_num);
+      const vector<int> &vport_desc = si.getDesc_I(vport_num)->port_vec();
 
       //Check if the vetcor port is 1. big enough & 2. unassigned
       if (vec_in->inputs().size() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
@@ -106,8 +106,8 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
         //Check if it's okay to assign to these ports
         for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
           //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sbinput *cgra_in_port = &subModel->inputs()[cgra_port_num];
+          int cgra_port_num = vport_desc[m];
+          sbinput *cgra_in_port = subModel->inputs()[cgra_port_num];
 
           if (sched->pdgNodeOf(cgra_in_port) != nullptr) {
             ports_okay_to_use = false;
@@ -123,8 +123,8 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
           mask[m] = true;
 
           //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sbinput *cgra_in_port = &subModel->inputs()[cgra_port_num];
+          int cgra_port_num = vport_desc[m];
+          sbinput *cgra_in_port = subModel->inputs()[cgra_port_num];
 
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_input = vec_in->inputs()[m];
@@ -168,7 +168,7 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
     for (auto &i : sd) {
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/, vport_num);
-      vector<pair<int, vector<int>>> &vport_desc = si.getDesc_I(vport_num);
+      const vector<int> &vport_desc = si.getDesc_I(vport_num)->port_vec();
 
       //Check if the vetcor port is 1. big enough & 2. unassigned
       if (vec_out->outputs().size() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
@@ -180,8 +180,8 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
         //Check if it's okay to assign to these ports
         for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
           //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sboutput *cgra_out_port = &subModel->outputs()[cgra_port_num];
+          int cgra_port_num = vport_desc[m];
+          sboutput *cgra_out_port = subModel->outputs()[cgra_port_num];
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
           if (sched->pdgNodeOf(cgra_out_port) != nullptr) {
@@ -204,8 +204,8 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
           mask[m] = true;
 
           //Get the sbnode corresponding to mask[m]
-          int cgra_port_num = vport_desc[m].first;
-          sboutput *cgra_out_port = &subModel->outputs()[cgra_port_num];
+          int cgra_port_num = vport_desc[m];
+          sboutput *cgra_out_port = subModel->outputs()[cgra_port_num];
 
           //Get the input pdgnode corresponding to m
           SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
@@ -284,7 +284,7 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_input_spots(Schedule* sched,
 
   SubModel::const_input_iterator I, E;
   for (auto &elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = &elem;
+    sbinput *cand_input = elem;
 
     if (sched->pdgNodeOf(cand_input) == nullptr) {
       spots.emplace_back(make_pair(0, cand_input));
@@ -298,7 +298,7 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched
 
   SubModel::const_output_iterator I, E;
   for (auto &elem : _sbModel->subModel()->outputs()) {
-    sboutput *cand_output = &elem;
+    sboutput *cand_output = elem;
 
     if (sched->pdgNodeOf(cand_output) == nullptr) {
       spots.emplace_back(make_pair(0, cand_output));
@@ -312,48 +312,45 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
   vector<pair<int, sbnode*>> spots;
 
   //For Dedicated-required Instructions
-  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
-
-      if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(pdginst->inst())) {
-        continue;
-      }
-
-      if (!pdginst->is_temporal()) {
-        if (sched->isPassthrough(cand_fu))
-          continue;
-        //Normal Dedidated Instructions
-        
-        //integrate this later!
-        //int util=sched->thingsAssigned(cand_fu);
-        //if(util==0 || (rand_bt(0,3+util*util) ==0) ) {
-        //   spots.push_back(cand_fu);
-        auto status = sched->pdg_nodes_of(cand_fu);
-        vector<bool> occupied(8, false);
-        for (auto elem : status) {
-          for (int k = 0; k < elem.second->bitwidth() / 8; ++k)
-            occupied[k + elem.first] = true;
-        }
-        for (int k = 0; k < 8; k += pdginst->bitwidth() / 8) {
-          auto begin = occupied.begin() + k;
-          auto end = occupied.begin() + k + pdginst->bitwidth() / 8;
-          int util = accumulate(begin, end, false, [](bool a, bool b) -> int { return (int) a + (int) b; });
-          if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
-            spots.emplace_back(make_pair(k, cand_fu));
-          }
-        }
-
-      } else {
-        //For temporaly-shared instructions
-        //For now the approach is to *not* consume dedicated resources, although
-        //this can be changed later if that's helpful.
-        if (sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
-          spots.emplace_back(make_pair(0, cand_fu));
-        }
-      }
-      
+  for (sbfu *cand_fu : _sbModel->subModel()->fu_list()) {
+    if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(pdginst->inst())) {
+      continue;
     }
+
+    if (!pdginst->is_temporal()) {
+      if (sched->isPassthrough(cand_fu))
+        continue;
+      //Normal Dedidated Instructions
+      
+      //integrate this later!
+      //int util=sched->thingsAssigned(cand_fu);
+      //if(util==0 || (rand_bt(0,3+util*util) ==0) ) {
+      //   spots.push_back(cand_fu);
+      auto status = sched->pdg_nodes_of(cand_fu);
+      vector<bool> occupied(8, false);
+      for (auto elem : status) {
+        for (int k = 0; k < elem.second->bitwidth() / 8; ++k)
+          occupied[k + elem.first] = true;
+      }
+      for (int k = 0; k < 8; k += pdginst->bitwidth() / 8) {
+        auto begin = occupied.begin() + k;
+        auto end = occupied.begin() + k + pdginst->bitwidth() / 8;
+        int util = accumulate(begin, end, false, [](bool a, bool b) -> int { return (int) a + (int) b; });
+        if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
+          spots.emplace_back(make_pair(k, cand_fu));
+        }
+      }
+
+    } else {
+      //For temporaly-shared instructions
+      //For now the approach is to *not* consume dedicated resources, although
+      //this can be changed later if that's helpful.
+      if ((int)sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
+        spots.emplace_back(make_pair(0, cand_fu));
+      }
+    }
+    
+    
   }
 
   if (pdginst->is_temporal() && spots.empty()) {
@@ -544,11 +541,10 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
 
   int temporal_fus = 0;
   int temporal_inst_slots = 0;
-  for (auto row: _sbModel->subModel()->fus())
-    for (auto elem: row) {
-      temporal_inst_slots += elem.max_util();
-      temporal_fus += 1;
-    }
+  for (auto elem: _sbModel->subModel()->fu_list()) {
+    temporal_inst_slots += elem->max_util();
+    temporal_fus += 1;
+  }
 
   //int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
   //if (dedicated_insts > nfus) {
@@ -580,12 +576,9 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     int pdg_count = pair.second;
 
     int fu_count = 0;
-    for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-      for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-        sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
-        if (cand_fu->fu_def()->is_cap(sb_inst)) {
-          fu_count += 64 / SB_CONFIG::bitwidth[sb_inst];
-        }
+    for (sbfu* cand_fu : _sbModel->subModel()->fu_list()) {
+      if (cand_fu->fu_def()->is_cap(sb_inst)) {
+        fu_count += 64 / SB_CONFIG::bitwidth[sb_inst];
       }
     }
     if (fu_count < pdg_count) {
@@ -603,7 +596,7 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
     int fu_count = 0;
     for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
       for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-        sbfu *cand_fu = &_sbModel->subModel()->fus()[i][j];
+        sbfu *cand_fu = _sbModel->subModel()->fus()[i][j];
         if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(sb_inst)) {
           fu_count += cand_fu->max_util(sb_inst);
         }

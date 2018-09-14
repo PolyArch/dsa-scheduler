@@ -119,7 +119,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = &_sbModel->subModel()->fus()[i][j];
+      sbfu* sbfu_node = _sbModel->subModel()->fus()[i][j];
       auto* pdg_inst = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
       if(pdg_inst) {
         auto inst=pdg_inst->inst();
@@ -391,7 +391,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //  cur_slice = SWITCH_SLICE;
 //  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
 //    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
-//      sbfu *sbfu_node = &fus[i][j];
+//      sbfu *sbfu_node = fus[i][j];
 //
 //      //opcode
 //      uint64_t op = _bitslices.read_slice(cur_slice, OPCODE_LOC, OPCODE_LOC + OPCODE_BITS - 1);
@@ -442,7 +442,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //
 //    assert(row < _sbModel->subModel()->sizey());
 //    assert(col < _sbModel->subModel()->sizex());
-//    sbfu *sbfu_node = &fus[col][row];
+//    sbfu *sbfu_node = fus[col][row];
 //    assert(sbfu_node);
 
 //    //cout << "row,col" << row << " " << col << "\n";
@@ -478,7 +478,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //  cur_slice = SWITCH_SLICE;
 //  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
 //    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
-//      sbfu *sbfu_node = &fus[i][j];
+//      sbfu *sbfu_node = fus[i][j];
 //      if (nodeAssigned(sbfu_node) != 0) {
 //        SbPDG_Inst *pdg_node = dynamic_cast<SbPDG_Inst *>(pdgNodeOf(sbfu_node));
 //
@@ -614,8 +614,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   int total_bits_vp_mask=0;
   int slice=VP_MAP_SLICE_1;
   for(auto& port_pair : _sbModel->subModel()->io_interf().in_vports) {
-    // pair<cgra_port_location, vector<indicies_into_vec>>
-    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+    const std::vector<int>& port_m = port_pair.second->port_vec();
     total_bits_vp_mask+=port_m.size();
  
     if(start_bits_vp_mask < 64 && total_bits_vp_mask >64) {
@@ -640,7 +639,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   total_bits_vp_mask=0;
   for(auto& port_pair : _sbModel->subModel()->io_interf().out_vports) {
     // pair<cgra_port_location, vector<indicies_into_vec>>
-    std::vector<std::pair<int, std::vector<int> > >& port_m = port_pair.second;
+    const std::vector<int>& port_m = port_pair.second->port_vec();
     total_bits_vp_mask+=port_m.size();
  
     //Is this port assigned?  if not can skip 
@@ -658,10 +657,10 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   xfer_link_to_switch(); // makes sure we have switch representation of routing
   int cur_slice=SWITCH_SLICE;
 
-  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+  vector< vector<sbfu*> >& fus = _sbModel->subModel()->fus();
 
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
-  vector< vector<sbswitch> >& switches = _sbModel->subModel()->switches();
+  vector< vector<sbswitch*> >& switches = _sbModel->subModel()->switches();
   for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
     
     bool left = (i==0);                 //left edge switch
@@ -678,7 +677,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
 
       //---------------------------------ENCODE SWITCHES -------------------------------
-      sbswitch* sbsw = &switches[i][j];
+      sbswitch* sbsw = switches[i][j];
 
       //after switch respresntation
       std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map = _assignSwitch[sbsw]; 
@@ -738,7 +737,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       //---------------------------------ENCODE FUNC UNITS ---------------------------
       //
       if(i < _sbModel->subModel()->sizex() && j < _sbModel->subModel()->sizey()) {
-        sbfu* sbfu_node = &fus[i][j];
+        sbfu* sbfu_node = fus[i][j];
 
         if(isPassthrough(sbfu_node)) {
           int cur_bit_pos=FU_DIR_LOC;
@@ -840,7 +839,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //--------------------------------------- ENCODE CONSTANTS ------------------------
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {    
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = &fus[i][j];
+      sbfu* sbfu_node = fus[i][j];
       if(nodeAssigned(sbfu_node)!=0) {
         SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
         bool has_imm_slot = pdg_node->immSlot()!=-1;
@@ -967,24 +966,22 @@ void Schedule::printGraphviz(const char* name) {
 
   ofs << "digraph sched {\n";
 
-  for (auto &row: sub->switches())
-    for (auto &elem: row)
-      printSwitchGraphviz(ofs, &elem);
+  for (auto &elem: sub->switch_list())
+    printSwitchGraphviz(ofs, elem);
 
-  for (auto row : sub->fus())
-    for (auto elem : row)
-      printFUGraphviz(ofs, &elem);
+  for (auto elem : sub->fu_list())
+    printFUGraphviz(ofs, elem);
 
-  for(sbinput& in : sub->inputs()) {
-    NodeProp& np = _nodeProp[in.id()];
+  for(sbinput* in : sub->inputs()) {
+    NodeProp& np = _nodeProp[in->id()];
     if(!np.vertices.empty()) {
-      printInputGraphviz(ofs,&in);
+      printInputGraphviz(ofs,in);
     }
   }
-  for(sboutput& out : sub->outputs()) {
-    NodeProp& np = _nodeProp[out.id()];
+  for(sboutput* out : sub->outputs()) {
+    NodeProp& np = _nodeProp[out->id()];
     if(!np.vertices.empty()) {
-      printOutputGraphviz(ofs,&out);
+      printOutputGraphviz(ofs,out);
     }
   }
  
@@ -1034,10 +1031,10 @@ void Schedule::reconstructSchedule(
   }
 
   //iterate over fus
-  vector< vector<sbfu> >& fus = _sbModel->subModel()->fus();
+  vector< vector<sbfu*> >& fus = _sbModel->subModel()->fus();
   for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = &fus[i][j];
+      sbfu* sbfu_node = fus[i][j];
       if(pdgnode_for.count(sbfu_node)!=0) {
         //cout << "reconstruct from fu " << i << " " << j << "\n";
         SbPDG_Node* pdg_node = pdgnode_for[sbfu_node];
@@ -1075,7 +1072,7 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     if(is_scheduled(source_pdgnode)) {
       sbnode::const_iterator Il,El;
       for(auto& link: node.second->in_links()) {
-        for (int slot; slot < 8; ++slot) {
+        for (int slot=0; slot < 8; ++slot) {
           if (pdgNodeOf(slot, link) == source_pdgnode) {
             openset.emplace_back(make_tuple(slot, link, source_pdgedge));
           }
@@ -1395,7 +1392,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
 
   SubModel::const_input_iterator I, E;
   for (auto elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = const_cast<sbinput *>(&elem);
+    sbinput *cand_input = const_cast<sbinput *>(elem);
 
     SbPDG_Node *pdgnode = pdgNodeOf(cand_input);
     if (pdgnode != nullptr) {
@@ -1535,7 +1532,7 @@ void Schedule::iterativeFixLatency() {
 
   // TODO: We didn't quite fix the problem of IO vectors in temporal region, though hopefully this isn't necessary
 
-  std::vector<SbPDG_Inst *> ordered_non_temp = std::move(ordered_non_temporal());
+  std::vector<SbPDG_Inst *> ordered_non_temp = ordered_non_temporal();
 
   while (changed || overflow) {
     changed = false;
@@ -1722,7 +1719,7 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   max_lat=0;
   _groupMismatch.clear();
 
-  std::vector<SbPDG_Inst*> ordered_non_temp = std::move(ordered_non_temporal());
+  std::vector<SbPDG_Inst*> ordered_non_temp = ordered_non_temporal();
 
   for(SbPDG_Inst* inst : ordered_non_temp) {
     calcNodeLatency(inst,max_lat,max_lat_mis,set_delay);
@@ -1862,7 +1859,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
   SubModel::const_input_iterator I,E;
   for(auto elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = const_cast<sbinput *>(&elem);
+    sbinput *cand_input = const_cast<sbinput *>(elem);
 
     SbPDG_Node *pdgnode = pdgNodeOf(cand_input);
     if (pdgnode != nullptr) {

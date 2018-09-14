@@ -50,6 +50,8 @@ class SbModel {
     int _maxEdgeDelay = 15;
 
     void parse_exec(std::istream& istream);
+
+    void parse_json(std::istream& istream);
 };
     
 }

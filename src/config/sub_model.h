@@ -17,18 +17,14 @@ namespace SB_CONFIG {
 class sbnode;
 class sbinput;
 class sboutput;
+class sbvport;
 
 class sbio_interface {
     public:
-    //interf_vec_port_num -> [cgra port_num -> vector_offset_elements]
-    std::map<int, std::vector<std::pair<int, std::vector<int> > > > in_vports;
-    std::map<int, std::vector<std::pair<int, std::vector<int> > > > out_vports;
+    //interf_vec_port_num -> vec<cgra_port_num>
+    std::map<int, sbvport*> in_vports;
+    std::map<int, sbvport*> out_vports;
 
-    //intef_port_num -> possible_elements
-    std::map<int, std::vector<int> > in_ports;
-    std::map<int, std::vector<int> > out_ports;
-
-      
     void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
       sort(portID2size, in_vports);    
     }
@@ -37,31 +33,17 @@ class sbio_interface {
       sort(portID2size, out_vports);    
     }
     
-    std::vector<std::pair<int, std::vector<int> > >& getDesc_I(int id) {
+    sbvport* getDesc_I(int id) {
         assert(in_vports.count(id) != 0);
         return in_vports[id];
     }  
-    std::vector<std::pair<int, std::vector<int> > >& getDesc_O(int id) {
+    sbvport* getDesc_O(int id) {
         assert(out_vports.count(id) != 0);
         return out_vports[id];
     }  
     private:        
     void sort(std::vector<std::pair<int,int>>& portID2size, 
-         std::map<int,std::vector<std::pair<int,std::vector<int>>>>& vports) {
-      int index = 0;
-      portID2size.resize(vports.size());
-      for(auto i : vports) {
-        int id = i.first;
-        int size = i.second.size();
-        portID2size[index++] = std::make_pair(id,size);
-      }
-      std::sort(portID2size.begin(), portID2size.end(), 
-                [](std::pair<int,int>& left, std::pair<int,int>& right){
-        return left.second < right.second;
-      });
-    }
-  
-
+         std::map<int,sbvport*>& vports);
 };
 
 class sblink {
@@ -356,6 +338,16 @@ class sboutput : public sbnode {
     int _port;
 };
 
+//This should be improved later
+class sbvport : public sbnode {
+public:
+  std::vector<int>& port_vec() {return _port_vec;}
+  void set_port_vec(std::vector<int> p) {_port_vec=p;}
+  size_t size() {return _port_vec.size();}
+
+private:
+  std::vector<int> _port_vec;
+};
 
 class SubModel {
 public:
@@ -370,6 +362,8 @@ public:
 
   typedef std::vector<sbinput>::const_iterator const_input_iterator;
   typedef std::vector<sboutput>::const_iterator const_output_iterator;
+
+  SubModel() {}
 
   SubModel(std::istream &istream, FuModel *, bool multi_config = true);
 
@@ -388,15 +382,19 @@ public:
 
   int sizey() { return _sizey; }
 
-  sbswitch *switchAt(int x, int y) { return &(_switches[x][y]); }
+  sbswitch *switchAt(int x, int y) { return _switches[x][y]; }
 
-  std::vector<sbinput> &inputs() { return _inputs; }
+  std::vector<sbinput*> &inputs() { return _inputs; }
 
-  std::vector<sboutput> &outputs() { return _outputs; }
+  std::vector<sboutput*> &outputs() { return _outputs; }
 
-  std::vector<std::vector<sbfu> > &fus() { return _fus; }
+  std::vector<std::vector<sbfu*> > &fus() { return _fus; }
 
-  std::vector<std::vector<sbswitch> > &switches() { return _switches; }
+  std::vector<sbfu* > &fu_list() { return _fu_list; }
+
+  std::vector<sbswitch* > &switch_list() { return _switch_list; }
+
+  std::vector<std::vector<sbswitch*> > &switches() { return _switches; }
 
   bool multi_config() { return _multi_config; }
 
@@ -418,9 +416,67 @@ public:
 
   const std::vector<sbnode *> &node_list() { return _node_list; }
 
-private:
+  void add_inputs(int n) {
+    _inputs.resize(n+1);
+    //Port num to each switch
+    for(unsigned i = 0; i < _inputs.size(); ++i) {
+      add_input(i);
+    }
+  }
+
+  void add_outputs(int n) {
+    _outputs.resize(n+1);
+    //Port num to each switch
+    for(unsigned i = 0; i < _outputs.size(); ++i) {
+      add_output(i);
+    }
+  }
+
+
+  sbinput* add_input(int i) {
+    auto* in = new sbinput();
+    if(i >= (int)_inputs.size()) _inputs.resize(i+1);
+    assert(_inputs[i]==NULL);
+    _inputs[i]=in;
+    in->setPort(i);
+    return in;
+  }
+
+  sboutput* add_output(int i) {
+    auto* out = new sboutput();
+    if(i >= (int)_outputs.size()) _outputs.resize(i+1);
+    assert(_outputs[i]==NULL);
+    _outputs[i]=out;
+    out->setPort(i);
+    return out;
+  }
+
+  sbfu* add_fu(int x, int y) {
+    auto * fu = new sbfu();
+    if(x >= (int)_fus.size()) _fus.resize(x+1);
+    if(y >= (int)_fus[x].size()) _fus[x].resize(y+1);
+    _fus[x][y]=fu;
+    _fu_list.push_back(fu);
+    fu->setXY(x,y);
+    fu->setFUDef(nullptr);
+    return fu;
+  }
+
+  sbswitch* add_switch(int x, int y) {
+    auto* sw = new sbswitch();
+    if(x >= (int)_switches.size()) _switches.resize(x+1);
+    if(y >= (int)_switches[x].size()) _switches[x].resize(y+1);
+    _switches[x][y]=sw;
+    _switch_list.push_back(sw);
+    sw->setXY(x,y);
+    return sw;
+  }
 
   void regroup_vecs(); //fills in the linear lists
+
+
+private:
+
 
   //void CreateFUArray(int,int);
 
@@ -433,15 +489,18 @@ private:
 
   int _sizex, _sizey;  //size of SB cgra
   bool _multi_config;
-  std::vector<sbinput> _inputs;
-  std::vector<sboutput> _outputs;
-  std::vector<std::vector<sbfu> > _fus;
-  std::vector<std::vector<sbswitch> > _switches;
+  std::vector<sbinput*> _inputs;
+  std::vector<sboutput*> _outputs;
+  std::vector<std::vector<sbfu*> > _fus;
+  std::vector<std::vector<sbswitch*> > _switches;
 
   //These are only valid after regroup_vecs()
   std::vector<sbnode *> _io_list;
   std::vector<sbnode *> _node_list;
   std::vector<sblink *> _link_list;
+
+  std::vector<sbfu *> _fu_list;
+  std::vector<sbswitch *> _switch_list;
 
   sbswitch _cross_switch;
   sbnode _load_slice;
