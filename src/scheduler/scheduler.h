@@ -75,8 +75,8 @@ public:
     SbPDG_Node *n = (*edge_prop.begin()).first->use();
     bool output = dynamic_cast<SbPDG_Output *>(n);
 
-    for (auto I = edge_prop.begin(), E = edge_prop.end(); I != E; ++I) {
-      SbPDG_Edge *source_pdgedge = (*I).first;
+    for (auto edge : edge_prop) {
+      SbPDG_Edge *source_pdgedge = edge.first;
       auto i = edge_prop[source_pdgedge];
       int num_links = i.num_links;
       int num_passthroughs = i.num_passthroughs;

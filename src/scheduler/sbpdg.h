@@ -395,11 +395,8 @@ public:
   const std::vector<SbPDG_Operand> &ops() {return _ops; }
 
   const std::vector<SbPDG_Edge*> &in_edges() { return _inc_edge_list; }
+
   const std::vector<SbPDG_Edge*> &uses() { return _uses; }
-
-  const_edge_iterator uses_begin() const { return _uses.begin(); }
-
-  const_edge_iterator uses_end() const { return _uses.end(); }
 
   int id() { return _ID; }
 
@@ -821,11 +818,12 @@ class SbPDG_Inst : public SbPDG_Node {
 public:
   SbPDG_Inst() {}
 
-  SbPDG_Inst(SbPDG *sbpdg, SB_CONFIG::sb_inst_t inst) : SbPDG_Node(sbpdg, V_INST),
-                                                        _predInv(false), _isDummy(false),
+  SbPDG_Inst(SbPDG *sbpdg, SB_CONFIG::sb_inst_t inst, bool is_dummy = false) : SbPDG_Node(sbpdg, V_INST),
+                                                        _predInv(false), _isDummy(is_dummy),
                                                         _imm_slot(-1), _subFunc(0), _sbinst(inst) {
     _reg.resize(8, 0);
   }
+
 
   SbPDG_Inst(SbPDG *sbpdg) : SbPDG_Node(sbpdg, V_INST),
                              _predInv(false), _isDummy(false),
@@ -842,15 +840,11 @@ public:
 
   void setImm(uint64_t val) { _imm = val; }
 
-  int getImmInt() { return _imm; }
-
   uint64_t imm() { return _imm; }
 
   void setPredInv(bool predInv) { _predInv = predInv; }
 
   bool predInv() { return _predInv; }
-
-  void setIsDummy(bool d) { _isDummy = d; }
 
   bool isDummy() { return _isDummy; }
 
@@ -1249,7 +1243,7 @@ public:
 
   void remap(int num_HW_FU);
 
-  int remappingNeeded(int num_HW_FU);
+  bool remappingNeeded();
 
   void rememberDummies(std::set<SbPDG_Output *> d);
 
@@ -1370,38 +1364,15 @@ public:
 
   SymEntry create_inst(std::string opcode, std::vector<SymEntry> &args);
 
-  typedef std::vector<SbPDG_Node *>::const_iterator const_node_iterator;
-  typedef std::vector<SbPDG_Inst *>::const_iterator const_inst_iterator;
-  typedef std::vector<SbPDG_Input *>::const_iterator const_input_iterator;
   typedef std::vector<SbPDG_Output *>::const_iterator const_output_iterator;
-  typedef std::vector<SbPDG_Edge *>::const_iterator const_edge_iterator;
 
-  const_node_iterator nodes_begin() { return _nodes.begin(); }
+  const std::vector<SbPDG_Node*> &nodes() { return _nodes; }
 
-  const_node_iterator nodes_end() { return _nodes.end(); }
+  const std::vector<SbPDG_Inst *> &inst_vec() { return _insts; }
 
-  int num_nodes() { return _nodes.size(); }
+  const std::vector<SbPDG_Input*> &inputs() { return _inputs; }
 
-  const_inst_iterator inst_begin() { return _insts.begin(); }
-
-  const_inst_iterator inst_end() { return _insts.end(); }
-
-  std::vector<SbPDG_Inst *> &inst_vec() { return _insts; }
-
-  int num_insts() { return _insts.size(); }
-
-  const_input_iterator input_begin() { return _inputs.begin(); }
-
-  const_input_iterator input_end() { return _inputs.end(); }
-
-  int num_inputs() { return _inputs.size(); }
-
-  const_output_iterator output_begin() { return _outputs.begin(); }
-
-  const_output_iterator output_end() { return _outputs.end(); }
-
-  int num_outputs() { return _outputs.size(); }
-
+  const std::vector<SbPDG_Output*> &outputs() { return _outputs; }
 
   int num_vec_input() { return _vecInputs.size(); }
 

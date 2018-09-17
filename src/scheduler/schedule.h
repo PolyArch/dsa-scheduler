@@ -189,9 +189,9 @@ public:
 
     assert(pdgnode->type() < SbPDG_Node::V_NUM_TYPES);
     _num_mapped[pdgnode->type()]++;
-    assert(_num_mapped[SbPDG_Node::V_INPUT] <= _sbPDG->num_inputs());
-    assert(_num_mapped[SbPDG_Node::V_OUTPUT] <= _sbPDG->num_outputs());
-    assert(_num_mapped[SbPDG_Node::V_INST] <= _sbPDG->num_insts());
+    assert(_num_mapped[SbPDG_Node::V_INPUT] <= _sbPDG->inputs().size());
+    assert(_num_mapped[SbPDG_Node::V_OUTPUT] <= _sbPDG->outputs().size());
+    assert(_num_mapped[SbPDG_Node::V_INST] <= _sbPDG->inst_vec().size());
 
     assert(num_left() >= 0);
     //std::cout << "node " << pdgnode->name() << " assigned to "
@@ -423,17 +423,19 @@ public:
     //Check all slots will be occupied empty.
     bool empty = true;
     for (int i = 0; i < node->bitwidth() / 8; ++i) {
-      if (! _linkProp[link.second->id()].slots[link.first].edges.empty())
+      if (!_linkProp[link.second->id()].slots[link.first].edges.empty())
         empty = false;
     }
     if (empty)
       return 1;
-    auto &vec = _linkProp[link.second->id()].slots[link.first].edges;
-    for (auto elem : vec) {
-      if (elem->def() == node)
-        return 0;
+    int res = 0;
+    for (int i = 0; i < 8; ++i) {
+      for (auto elem : _linkProp[link.second->id()].slots[i].edges)
+        if (elem->def() == node && (i + elem->l() / 8) % 8 == link.first)
+          return 0;
+      res += _linkProp[link.second->id()].slots[i].edges.size();
     }
-    return vec.size()+1;  //2 or greater depending on how many links are mapped
+    return res + 1;  //2 or greater depending on how many links are mapped
   }
 
   bool input_matching_vector(SbPDG_Node *node, SbPDG_VecInput *in_v) {
@@ -704,13 +706,13 @@ public:
   void set_decode_lat_mis(int i) { _decode_lat_mis = i; }
 
   void reset_lat_bounds() {
-    for (auto I = _sbPDG->input_begin(), E = _sbPDG->input_end(); I != E; ++I) {
-      auto &vp = _vertexProp[(*I)->id()];
+    for (auto elem : _sbPDG->inputs()) {
+      auto &vp = _vertexProp[elem->id()];
       vp.min_lat = 0;
       vp.max_lat = 0;
     }
-    for (auto I = _sbPDG->inst_begin(), E = _sbPDG->inst_end(); I != E; ++I) {
-      auto &vp = _vertexProp[(*I)->id()];
+    for (auto elem : _sbPDG->inst_vec()) {
+      auto &vp = _vertexProp[elem->id()];
       vp.min_lat = 0;
       vp.max_lat = INT_MAX - 1000;
     }
@@ -763,20 +765,20 @@ public:
            _num_mapped[SbPDG_Node::V_OUTPUT];
   }
 
-  int inputs_complete() { return num_inputs_mapped() == _sbPDG->num_inputs(); }
+  int inputs_complete() { return num_inputs_mapped() == _sbPDG->inputs().size(); }
 
-  int outputs_complete() { return num_outputs_mapped() == _sbPDG->num_outputs(); }
+  int outputs_complete() { return num_outputs_mapped() == _sbPDG->outputs().size(); }
 
-  int insts_complete() { return num_insts_mapped() == _sbPDG->num_insts(); }
+  int insts_complete() { return num_insts_mapped() == _sbPDG->inst_vec().size(); }
 
-  int isComplete() { return num_mapped() == _sbPDG->num_nodes(); }
+  int isComplete() { return num_mapped() == _sbPDG->nodes().size(); }
 
   int num_links_mapped() { return _links_mapped; }
 
   int num_edge_links_mapped() { return _edge_links_mapped; }
 
   int num_left() {
-    int num = _sbPDG->num_nodes() - num_mapped();
+    int num = _sbPDG->nodes().size() - num_mapped();
     assert(num >= 0);
     return num;
   }

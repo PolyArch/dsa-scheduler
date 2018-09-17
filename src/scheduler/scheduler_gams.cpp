@@ -33,8 +33,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 
   int config=0;
   //Mapping Variables
-  for(auto I = sbPDG->nodes_begin(), E=sbPDG->nodes_end(); I!=E; ++I) {
-    SbPDG_Node* pdgnode = *I;
+  for (auto pdgnode : sbPDG->nodes()) {
     sbnode* spot = sched->locationOf(pdgnode);
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
@@ -100,8 +99,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   //Timing
   int d1,d2;
   sched->calcLatency(d1,d2); //make sure stuff is filled in
-  for (auto Ii=sbPDG->nodes_begin(),Ei=sbPDG->nodes_end();Ii!=Ei;++Ii)  { 
-    SbPDG_Node* n = *Ii;
+  for (auto n : sbPDG->nodes()) {
     int l = sched->latOf(n);
     if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
       l -= inst_lat(inst->inst());
@@ -348,9 +346,9 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
   schedule->clearAll();
 
-  cout << "Total Nodes: " << sbPDG->num_nodes() << "\n";
+  cout << "Total Nodes: " << sbPDG->nodes().size() << "\n";
   
-  int numInsts = sbPDG->inst_end()-sbPDG->inst_begin();
+  int numInsts = sbPDG->inst_vec().size();
   cout << "Total Insts: " <<  numInsts << "\n";
   //assert(numInsts > 0);
 

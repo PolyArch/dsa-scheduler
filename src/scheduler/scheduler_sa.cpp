@@ -96,14 +96,14 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
   _best_lat=MAX_ROUTE;
   _best_violation=MAX_ROUTE;
 
-  int presize = sbPDG->num_insts();
+  int presize = sbPDG->inst_vec().size();
   int postsize = presize;
 
   // An attempt to remap SbPDG
   SB_CONFIG::SubModel* subModel = _sbModel->subModel();
   int hw_num_fu = subModel->sizex()*subModel->sizey();
 
-  int remapNeeded = false; //sbPDG->remappingNeeded(hw_num_fu); //setup remap structres 
+  int remapNeeded = false; //sbPDG->remappingNeeded(); //setup remap structres
   int iter = 0;
   while (iter < _max_iters) {
     if( (total_msec() > _reslim * 1000) || _should_stop ) {
@@ -122,15 +122,14 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
      
       if(remapNeeded) { //remap every so often to try new possible dummy positions
         sbPDG->remap(hw_num_fu);
-        postsize = sbPDG->num_insts();
+        postsize = sbPDG->inst_vec().size();
         cur_sched->allocate_space();
       }
     }
 
     // every so often you can reset?
-    if( (iter & (512-1)) == 1) {
+    if(iter - last_improvement_iter > 1023) {
       *cur_sched = *sched; //shallow copy of sched should work?
-
     }
 
 
@@ -158,8 +157,8 @@ bool SchedulerSimulatedAnnealing::schedule(SbPDG* sbPDG, Schedule*& sched) {
               cur_sched->num_left(), lat, 
               cur_sched->violation(), latmis, ovr, agg_ovr, 
               max_util, -score.second,
-              cur_sched->num_inputs_mapped(),  sbPDG->num_inputs(),
-              cur_sched->num_outputs_mapped(), sbPDG->num_outputs(),
+              cur_sched->num_inputs_mapped(),  (int) sbPDG->inputs().size(),
+              cur_sched->num_outputs_mapped(), (int) sbPDG->outputs().size(),
               cur_sched->num_insts_mapped(),  presize, postsize,
               cur_sched->num_links_mapped(),
               cur_sched->num_edge_links_mapped(),
@@ -553,7 +552,7 @@ bool SchedulerSimulatedAnnealing::map_one_inst(SbPDG* sbPDG, Schedule* sched) {
     cout << "map_one_inst ("
          << sched->num_insts_mapped() << " mapped)\n";
 
-  std::vector<SbPDG_Inst *> &inst_vec = sbPDG->inst_vec();
+  const std::vector<SbPDG_Inst *> &inst_vec = sbPDG->inst_vec();
   size_t n = inst_vec.size();
 
   size_t p = rand_bt(0, n);
@@ -697,7 +696,7 @@ void SchedulerSimulatedAnnealing::unmap_one_output(SbPDG* sbPDG, Schedule* sched
 }
 
 void SchedulerSimulatedAnnealing::unmap_one_inst(SbPDG* sbPDG, Schedule* sched) {
-  std::vector<SbPDG_Inst*>& inst_vec = sbPDG->inst_vec();
+  const std::vector<SbPDG_Inst*>& inst_vec = sbPDG->inst_vec();
   int n = inst_vec.size();
   if(DEBUG_SCHED) cout << "unmap_one_inst(" 
                        << sched->num_insts_mapped() << " left)\n";
@@ -908,8 +907,6 @@ std::pair<int,int> SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
 
   pair<int, int> score = make_pair(0, 0);
 
-  //cout << "Schedule Here "  << n->name() << " to here: " << here->name() << "\n";
-
   //TODO: make work for decomp-CGRA
   for (auto source_pdgedge : n->in_edges()) {
     SbPDG_Node *source_pdgnode = source_pdgedge->def();     //could be input node also
@@ -1008,8 +1005,18 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, int from_slot, i
   }
 
   if (t_cost != 0) { //empty
+    for (int slot = 0; slot < 8; ++slot) {
+      for (auto elem : candRouting.routing[make_pair(slot, link)]) {
+        if (elem->def() == def_pdgnode && (slot + elem->l() / 8) % 8 == from_slot) {
+          t_cost = 0;
+          break;
+        }
+        if (!t_cost)
+          break;
+      }
+    }
     if (candRouting.routing.count(make_pair(from_slot, link))) {
-      for (auto *elem : candRouting.routing[make_pair(from_slot, link)]) {
+      for (auto elem : candRouting.routing[make_pair(from_slot, link)]) {
         auto *cur_node = elem->def();
         if (cur_node == def_pdgnode) {
           t_cost = 0;
@@ -1027,17 +1034,16 @@ int SchedulerSimulatedAnnealing::routing_cost(SbPDG_Edge* edge, int from_slot, i
 
         }
       }
-      t_cost=2;
       //TODO: FIXME OH NOOOOO
       //if (t_cost==1) t_cost=1+edges.size(); //empty before
       //t_cost+=edges.size();
     }
   }
 
-  if(t_cost>=2) { //square law avoidance of existing routes
-    if(!is_temporal_inst) {
-      return (t_cost)*(t_cost)*10;
-    } 
+  if (t_cost >= 2) { //square law avoidance of existing routes
+    if (!is_temporal_inst) {
+      return (t_cost) * (t_cost) * 10;
+    }
   }
   bool is_dest = (next == dest.second && next_slot == dest.first);
 

@@ -130,8 +130,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 
   //Lets also just throw the node id at the pdg for now to make temporal
   //simulation work
-  for(auto i = _sbPDG->inst_begin(), e=_sbPDG->inst_end(); i!=e;++i) {
-    SbPDG_Inst* inst = *i;
+  for(auto inst : _sbPDG->inst_vec()) {
     if(locationOf(inst)) {
       inst->set_node_id(locationOf(inst)->id());
     }
@@ -1129,15 +1128,11 @@ void Schedule::calcAssignEdgeLink() {
   //  i.second.edges.clear();
   //}
   
-  SbPDG::const_inst_iterator Ii,Ei;
-  for(Ii=_sbPDG->inst_begin(), Ei=_sbPDG->inst_end(); Ii!=Ei; ++Ii) {
-    SbPDG_Inst* pdginst = *Ii; 
+  for (SbPDG_Inst* pdginst : _sbPDG->inst_vec()) {
     calcAssignEdgeLink_single(pdginst);
   }
   
-  SbPDG::const_output_iterator Io,Eo;
-  for(Io=_sbPDG->output_begin(),Eo=_sbPDG->output_end();Io!=Eo;++Io) {
-    SbPDG_Output* pdgout = *Io;
+  for (auto pdgout : _sbPDG->outputs()) {
     calcAssignEdgeLink_single(pdgout);
   }
   

@@ -428,7 +428,11 @@ pair<int,int>
 HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge,
         pair<int, sbnode*> source, pair<int, sbnode*> dest, CandidateRouting &candRouting) {
 
-  int bitwidth = std::min(pdgedge->def()->bitwidth(), pdgedge->use()->bitwidth());
+  int bitwidth = pdgedge->bitwidth();
+
+  if (pdgedge->def()->bitwidth() > pdgedge->bitwidth() && source.first != pdgedge->l() / 8) {
+    source.first = pdgedge->l() / 8;
+  }
 
   _route_times++;
 
@@ -458,8 +462,9 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge
 
     for (auto link : node->out_links()) {
       sbnode *next = link->dest();
+      bool is_fu = dynamic_cast<sbfu*>(next) != nullptr;
 
-      for (int delta  = 0; delta <= 1; ++delta) {
+      for (int delta  = 0; delta <= (is_fu ? 7 : 1); ++delta) {
         int next_slot = slot + delta * bitwidth / 8;
         next_slot = (next_slot + 8) % 8;
         int route_cost = routing_cost(pdgedge, slot, next_slot, link, sched, candRouting, dest);
@@ -530,8 +535,7 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge
 bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
   int dedicated_insts = 0;
   int temporal_insts = 0;
-  for (auto I = sbPDG->inst_begin(), E = sbPDG->inst_end(); I != E; ++I) {
-    SbPDG_Inst *i = *I;
+  for (auto i : sbPDG->inst_vec()) {
     if (!i->is_temporal()) {
       dedicated_insts++;
     } else {
@@ -563,11 +567,11 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
   bool failed_count_check = false;
 
   std::map<sb_inst_t, int> dedicated_count_types, temporal_count_types;
-  for (auto Ii = sbPDG->inst_begin(), Ei = sbPDG->inst_end(); Ii != Ei; ++Ii) {
-    if (!(*Ii)->is_temporal()) {
-      dedicated_count_types[(*Ii)->inst()]++;
+  for (auto elem : sbPDG->inst_vec()) {
+    if (!elem->is_temporal()) {
+      dedicated_count_types[elem->inst()]++;
     } else {
-      temporal_count_types[(*Ii)->inst()]++;
+      temporal_count_types[elem->inst()]++;
     }
   }
 

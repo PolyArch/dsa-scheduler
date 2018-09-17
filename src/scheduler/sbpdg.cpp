@@ -958,29 +958,26 @@ void SbPDG::disconnect(SbPDG_Node* orig, SbPDG_Node* dest) {
   assert(false && "edge was not found");
 }
 
-int SbPDG::remappingNeeded(int num_HW_FU) {
-  if(dummy_map.size()==0) {
+bool SbPDG::remappingNeeded() {
+  if(dummy_map.empty()) {
     //Count the number of dummy nodes needed
-    const_output_iterator Iout,Eout;
-    for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
-      SbPDG_Output* pdg_out = (*Iout);
+    for (auto pdg_out : _outputs) {
       SbPDG_Inst* inst = pdg_out->out_inst();
       SbPDG_Node* node = pdg_out->first_op_node();
       //if producing instruction is an input or
       // if producing instruction has more than one uses
       if (!inst || inst->num_out() > 1) {
-        SbPDG_Inst* newNode = new SbPDG_Inst(this, SB_CONFIG::sb_inst_t::SB_Copy);
+        SbPDG_Inst* newNode = new SbPDG_Inst(this, SB_CONFIG::sb_inst_t::SB_Copy, true);
         //TODO: insert information about this dummy node
         disconnect(node, pdg_out);
         connect(node, newNode, 0, SbPDG_Edge::data);
         connect(newNode, pdg_out, 0, SbPDG_Edge::data);
         addInst(newNode);
-        newNode->setIsDummy(true);
         dummy_map[pdg_out] = newNode;
       }
     }
   }
-  return dummy_map.size();
+  return !dummy_map.empty();
 }
 
 void SbPDG::removeDummies() {
@@ -1027,7 +1024,7 @@ void SbPDG::remap(int num_HW_FU) {
       dummies.insert(newNode);
       dummiesOutputs.insert(pdg_out);
 
-      if (num_insts() + (int)dummies.size() > num_HW_FU) {
+      if ((int)_insts.size() + (int)dummies.size() > num_HW_FU) {
         //cerr <<"No more FUs left, so we can't put more dummy nodes,\n"
         //     <<"  so probabily we will face problems when it comes to fix timing!\n";
         break;
@@ -1250,9 +1247,9 @@ void SbPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbM
 void SbPDG::calc_minLats() {
   list<SbPDG_Node* > openset;
   set<bool> seen;
-  for(auto I=input_begin(), E=input_end(); I!=E; ++I) {
-    openset.push_back(*I);
-    seen.insert(*I);
+  for (auto elem : _inputs) {
+    openset.push_back(elem);
+    seen.insert(elem);
   }
 
   //populate the schedule object
@@ -1305,47 +1302,59 @@ void SbPDG::printGams(std::ostream& os,
                       std::unordered_map<std::string, SbPDG_Vec*>& port_map) {
   
   os << "$onempty\n";
-  
-  os << "set v \"verticies\" \n /";   // Print the set of Nodes:
-  
-  for (auto Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
-    if(Ii!=_nodes.begin()) os << ", ";
-    os << (*Ii)->gamsName();
-    assert(*Ii);
-    node_map[(*Ii)->gamsName()]=*Ii;
-  }
-  os << "/;\n";
 
-  os << "set inV(v) \"input verticies\" /" ;   // Print the set of Nodes:
-  const_input_iterator Iin,Ein;
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  { 
-    if(Iin!=_inputs.begin()) os << ", ";
-    assert(*Iin);
-    os << (*Iin)->gamsName();
-  }
-  os << "/;\n";
-  
-  os << "set outV(v) \"output verticies\" /" ;   // Print the set of Nodes:
-  const_output_iterator Iout,Eout;
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { 
-    if(Iout!=_outputs.begin()) os << ", ";
-    os << (*Iout)->gamsName();
-    assert(*Iout);
-  }
-  os << "/;\n";
-  
-
-  os << "parameter minT(v) \"Minimum Vertex Times\" \n /";
-  for (auto Ii=_nodes.begin(),Ei=_nodes.end();Ii!=Ei;++Ii)  { 
-    if(Ii!=_nodes.begin()) os << ", ";
-    SbPDG_Node* n = *Ii;
-    int l = n->min_lat();
-    if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
-      l -= inst_lat(inst->inst());
+  {
+    bool is_first = true;
+    os << "set v \"verticies\" \n /";   // Print the set of Nodes:
+    for (auto elem : _nodes) {
+      if (!is_first) os << ", ";
+      os << elem->gamsName();
+      assert(elem);
+      node_map[elem->gamsName()] = elem;
+      is_first = false;
     }
-    os << n->gamsName() << " " << l;
+    os << "/;\n";
   }
-  os << "/;\n";
+
+  {
+    bool is_first = true;
+    os << "set inV(v) \"input verticies\" /";   // Print the set of Nodes:
+    for (auto elem : _inputs) {
+      if (!is_first)
+        os << ", ";
+      assert(elem);
+      os << elem->gamsName();
+      is_first = false;
+    }
+    os << "/;\n";
+  }
+
+  {
+    bool is_first = true;
+    os << "set outV(v) \"output verticies\" /";   // Print the set of Nodes:
+    for (auto elem : _outputs) {
+      if (!is_first)
+        os << ", ";
+      os << elem->gamsName();
+      assert(elem);
+      is_first = false;
+    }
+    os << "/;\n";
+  }
+
+  {
+    os << "parameter minT(v) \"Minimum Vertex Times\" \n /";
+    for (auto Ii = _nodes.begin(), Ei = _nodes.end(); Ii != Ei; ++Ii) {
+      if (Ii != _nodes.begin()) os << ", ";
+      SbPDG_Node *n = *Ii;
+      int l = n->min_lat();
+      if (SbPDG_Inst *inst = dynamic_cast<SbPDG_Inst *>(n)) {
+        l -= inst_lat(inst->inst());
+      }
+      os << n->gamsName() << " " << l;
+    }
+    os << "/;\n";
+  }
 
 
   os << "set iv(v) \"instruction verticies\";\n";
@@ -1357,10 +1366,8 @@ void SbPDG::printGams(std::ostream& os,
     os << "set " << name_of_inst(sb_inst) << "V(v) /";
     bool first=true;
     
-    const_inst_iterator Ii,Ei;
-    for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  { 
-      SbPDG_Inst* pdg_inst= *Ii;
-      
+    for (auto pdg_inst : _insts) {
+
       if(sb_inst == pdg_inst->inst()) {
         CINF(os,first);
         os << pdg_inst->gamsName();
