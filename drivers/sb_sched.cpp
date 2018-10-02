@@ -28,6 +28,7 @@ static struct option long_options[] = {
   { "algorithm", required_argument, nullptr, 'a', },
   { "sub-alg", required_argument, nullptr, 's', },
   { "verbose", no_argument, nullptr, 'v', },
+  { "print-bits", no_argument, nullptr, 'b', },
 
   { "show-gams", no_argument, nullptr, 'G', },
   { "mipstart", no_argument, nullptr, 'm', },
@@ -84,6 +85,7 @@ int main(int argc, char* argv[])
   bool show_gams = false, mipstart=false, sll=false;
   string str_schedType = string("sa"); 
   string str_subalg = string("");
+  bool print_bits = false;
 
   float absolute_gap=1.0f;
   float relative_gap=0.1f;
@@ -99,6 +101,7 @@ int main(int argc, char* argv[])
     case 'G': show_gams = true; break;
     case 'm': mipstart=true; break;
     case 'S': sll=true; break;
+    case 'b': print_bits=true; break;
 
     case 'r': relative_gap=atof(optarg); break;
     case 'g': absolute_gap=atof(optarg); break;
@@ -257,6 +260,13 @@ int main(int argc, char* argv[])
   std::ofstream osh(config_header);     
   assert(osh.good()); 
   sched->printConfigHeader(osh, dfg_base);
+
+  if(print_bits) {
+    std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
+    std::ofstream oshb(config_header_bits);     
+    assert(oshb.good()); 
+    sched->printConfigHeader(oshb, dfg_base,false);
+  }
 
 
   delete sched; // just to calm HEAPCHECK
