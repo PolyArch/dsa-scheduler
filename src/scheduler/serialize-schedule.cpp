@@ -55,9 +55,9 @@ void Schedule::VecProp::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void Schedule::serialize(Archive & ar, const unsigned version) {
-  //Note: sbmodel not serialized 
+  //Note: ssmodel not serialized 
   ar & BOOST_SERIALIZATION_NVP(_name);
-  ar & BOOST_SERIALIZATION_NVP(_sbPDG);
+  ar & BOOST_SERIALIZATION_NVP(_ssPDG);
   ar & BOOST_SERIALIZATION_NVP(_num_mapped);
   ar & BOOST_SERIALIZATION_NVP(_links_mapped);
   ar & BOOST_SERIALIZATION_NVP(_edge_links_mapped);

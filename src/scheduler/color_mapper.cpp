@@ -1,7 +1,7 @@
 #include "color_mapper.h"
 #include <math.h>
 #include <stdlib.h>
-#include "sbpdg.h"
+#include "sspdg.h"
 
 int getrgb(int r, int g, int b) {
   return ((r  << 16)|(g << 8)| b);
@@ -11,7 +11,7 @@ int getrgb(int r, int g, int b) {
 Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B)
 Luminance (perceived option 2, slower to calculate): sqrt( 0.241*R^2 + 0.691*G^2 + 0.068*B^2 )
 */
-int ColorMapper::colorOf(SbPDG_Node* item, bool reset) {
+int ColorMapper::colorOf(SSDfgNode* item, bool reset) {
     if(item->num_inc()==1 && item->ops()[0].edges.size()==1) {
       return colorOf(item->ops()[0].get_first_edge()->def());
     }

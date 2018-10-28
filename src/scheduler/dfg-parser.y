@@ -1,7 +1,7 @@
 %code requires {
   #include <stdint.h>
-  #include "sbpdg.h"
-  int parse_dfg(const char* dfgfile, SbPDG* dfg);
+  #include "sspdg.h"
+  int parse_dfg(const char* dfgfile, SSDfg* dfg);
   typedef std::pair<std::string,int> io_pair_t;
 }
 
@@ -21,7 +21,7 @@ void yyrestart(FILE *);
 
 struct parse_param {
   SymTab syms;
-  SbPDG* dfg;
+  SSDfg* dfg;
 };
 
 int yylex();     
@@ -90,7 +90,7 @@ statement
           assert(s.edge_entries);
           assert(s.edge_entries->size());
           for(int i = 0; i < s.edge_entries->size(); ++i) {
-            SbPDG_Node* n = s.edge_entries->at(i).node;
+            SSDfgNode* n = s.edge_entries->at(i).node;
             n->setName(*$1);
           }
           //printf("%s assigned to instruction\n",$1->c_str());
@@ -224,7 +224,7 @@ edge
 
 
 
-int parse_dfg(const char* filename, SbPDG* _dfg) {
+int parse_dfg(const char* filename, SSDfg* _dfg) {
   FILE* dfg_file = fopen(filename, "r");
   if (dfg_file == NULL) {
       perror(" Failed ");

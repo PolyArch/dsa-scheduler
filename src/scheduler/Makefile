@@ -13,7 +13,7 @@ OPT ?= -O3
 LEX = lex
 YACC = yacc -d
 
-SOURCES= sbpdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_sa.cpp scheduler_gams.cpp serialize-schedule.cpp serialize-sbpdg.cpp
+SOURCES= sspdg.cpp schedule.cpp scheduler.cpp color_mapper.cpp scheduler_sa.cpp scheduler_gams.cpp serialize-schedule.cpp serialize-sspdg.cpp
 
 GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
@@ -29,14 +29,14 @@ OBJECTS = $(patsubst %,$(OBJ_DEST)/%,$(PRE_OBJECTS)) dfg-parser.tab.o dfg-lex.yy
 
 BOOST_PATH=${boost}
 
-all: $(LIB_DEST)/libsbscheduler.a $(LIB_DEST)/libsbscheduler.so
+all: $(LIB_DEST)/libssscheduler.a $(LIB_DEST)/libssscheduler.so
 
 CXXFLAGS += -I$(INCLUDE_CONFIG) -L$(BOOST_PATH) -fPIC 
 
-$(LIB_DEST)/libsbscheduler.a: $(OBJECTS)
+$(LIB_DEST)/libssscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 
     
-$(LIB_DEST)/libsbscheduler.so: $(OBJECTS)
+$(LIB_DEST)/libssscheduler.so: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -shared -o $@ $^ $(LIBS)
 
 $(OBJ_DEST)/scheduler_gams.o: scheduler_gams.cpp  $(DEPDIR)/scheduler_gams.d $(GAMS_INC) dfg-parser.tab.h
@@ -54,7 +54,7 @@ $(GAMS_DIR)/%.h: $(GAMS_DIR)/%.gms
 include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SOURCES))))
 
 #-------- stuff to do with dfg-parser/lexer -----------
-dfg-parser.tab.o: dfg-parser.tab.c sbpdg.h
+dfg-parser.tab.o: dfg-parser.tab.c sspdg.h
 	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -g -c -o $@ $<
 	@$(POSTCOMPILE)
 

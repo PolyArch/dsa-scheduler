@@ -11,13 +11,13 @@ include make.rules
 
 program: scheduler-program config-program
 
-src/config/sbinst.h:
-	make -C src/config sbinst.h
+src/config/ssinst.h:
+	make -C src/config ssinst.h
 
-scheduler-program: src/config/sbinst.h
+scheduler-program: src/config/ssinst.h
 	+make -C src/scheduler
 
-config-program: src/config/sbinst.h
+config-program: src/config/ssinst.h
 	+make -C src/config
 
 make_drivers: program
@@ -32,7 +32,7 @@ install_headers:
 
 install_drivers: make_drivers
 	${MKDIR_P} ${prefix}/bin
-	cp -p drivers/sb_sched ${prefix}/bin
+	cp -p drivers/ss_sched ${prefix}/bin
 
 
 install_scheduler: scheduler-program

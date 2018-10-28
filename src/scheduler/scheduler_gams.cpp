@@ -1,6 +1,6 @@
 #include "scheduler_gams.h"
 
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 using namespace std;
 
 #include <unordered_map>
@@ -26,15 +26,15 @@ using namespace std;
 
 #include "scheduler_sa.h"
 
-void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
+void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SSDfg* ssPDG, 
                                    bool fix) {
 
   sched->xfer_link_to_switch(); // makes sure we have switch representation of routing
 
   int config=0;
   //Mapping Variables
-  for (auto pdgnode : sbPDG->nodes()) {
-    sbnode* spot = sched->locationOf(pdgnode);
+  for (auto pdgnode : ssPDG->nodes()) {
+    ssnode* spot = sched->locationOf(pdgnode);
     ofs << "Mn.l('" << pdgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
 
@@ -42,7 +42,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
       auto& link_set = sched->links_of(pdgedge);
     
       for(auto elem : link_set) {
-        sblink* link = elem.second;
+        sslink* link = elem.second;
         ofs << "Mvl.l('" << pdgnode->gamsName() 
             << "','" << link->gams_name(config) << "')=1;\n";
         ofs << "Mel.l('" << pdgedge->gamsName() << "','" 
@@ -57,14 +57,14 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
     }
   }
 
-  vector< vector<sbswitch*> >& switches = _sbModel->subModel()->switches();
-  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
-    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j) {
-      sbswitch* sbsw = switches[i][j];
-      auto link_map = sched->link_map_for_sw(sbsw);
+  vector< vector<ssswitch*> >& switches = _ssModel->subModel()->switches();
+  for(int i = 0; i < _ssModel->subModel()->sizex()+1; ++i) {
+    for(int j = 0; j < _ssModel->subModel()->sizey()+1; ++j) {
+      ssswitch* sssw = switches[i][j];
+      auto link_map = sched->link_map_for_sw(sssw);
       for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-        sblink* outlink=I->first;
-        sblink* inlink=I->second;
+        sslink* outlink=I->first;
+        sslink* inlink=I->second;
         ofs << "Sll.l('" << inlink->gams_name(config) << "','"
                          << outlink->gams_name(config) << "')=1;\n";
       }
@@ -72,15 +72,15 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   }//end for switch y            
 
   //Ports
-  for(int i = 0; i < sbPDG->num_vec_input(); ++i) {
-    SbPDG_VecInput* vec_in = sbPDG->vec_in(i);
+  for(int i = 0; i < ssPDG->num_vec_input(); ++i) {
+    SSDfgVecInput* vec_in = ssPDG->vec_in(i);
     pair<bool,int> vecPort = sched->vecPortOf(vec_in); 
     ofs << "Mp.l('" << vec_in->gamsName() << "','"
         << "ip" << vecPort.second << "')=1;\n";
   }
 
-  for(int i = 0; i < sbPDG->num_vec_output(); ++i) {
-    SbPDG_VecOutput* vec_out = sbPDG->vec_out(i);
+  for(int i = 0; i < ssPDG->num_vec_output(); ++i) {
+    SSDfgVecOutput* vec_out = ssPDG->vec_out(i);
     pair<bool,int> vecPort = sched->vecPortOf(vec_out); 
     ofs << "Mp.l('" << vec_out->gamsName() << "','"
         << "op" << vecPort.second << "')=1;\n";
@@ -89,7 +89,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   //Ordering
   //auto link_order = sched->get_link_prop();
   //for(auto i : link_order) {
-  //  sblink* l = i.first;
+  //  sslink* l = i.first;
   //  int order = i.second.order;
   //  if(order!=-1) {
   //    ofs << "O.l('" << l->gams_name(config) << "')=" << order << ";\n";
@@ -99,9 +99,9 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
   //Timing
   int d1,d2;
   sched->calcLatency(d1,d2); //make sure stuff is filled in
-  for (auto n : sbPDG->nodes()) {
+  for (auto n : ssPDG->nodes()) {
     int l = sched->latOf(n);
-    if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(n)) {
+    if(SSDfgInst* inst = dynamic_cast<SSDfgInst*>(n)) {
       l -= inst_lat(inst->inst());
     }
     ofs << "Tv.l('" << n->gamsName() << "')=" << l << ";\n";
@@ -141,14 +141,14 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SbPDG* sbPDG
 
 }
 
-bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
+bool GamsScheduler::schedule(SSDfg* ssPDG,Schedule*& schedule) {
   int iters=0;
 
   Schedule* best_schedule=nullptr;
   Schedule* cur_schedule=nullptr;
 
   while(total_msec() < _reslim * 1000) {
-    bool success = schedule_internal(sbPDG,cur_schedule);
+    bool success = schedule_internal(ssPDG,cur_schedule);
     
     int lat,latmis;
     cur_schedule->calcLatency(lat,latmis);
@@ -179,7 +179,7 @@ bool GamsScheduler::schedule(SbPDG* sbPDG,Schedule*& schedule) {
 }
 
 
-bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
+bool GamsScheduler::schedule_internal(SSDfg* ssPDG,Schedule*& schedule) {
 
   //Get the heuristic scheduling done first
   Schedule* heur_sched=nullptr;
@@ -190,7 +190,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   bool heur_fix = mrt_heur || mr_heur;
 
   if(_mipstart || heur_fix) {
-    SchedulerSimulatedAnnealing heur_scheduler(_sbModel);
+    SchedulerSimulatedAnnealing heur_scheduler(_ssModel);
     heur_scheduler.suppress_timing_print=true;
     heur_scheduler.verbose=verbose;
     heur_scheduler.set_max_iters(_max_iters);
@@ -200,7 +200,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     //} else if(mr_heur) {
     //  heur_scheduler.set_integrate_timing(false);
     //}
-    heur_success=heur_scheduler.schedule_timed(sbPDG,heur_sched);
+    heur_success=heur_scheduler.schedule_timed(ssPDG,heur_sched);
     //heur_sched->calcAssignEdgeLink();
   }
 
@@ -236,12 +236,12 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   System(("rm -f " + gams_out_file).c_str());
   
   // New schedule to work on
-  schedule = new Schedule(_sbModel,sbPDG);
+  schedule = new Schedule(_ssModel,ssPDG);
 
   //bool use_hw=true;
   bool use_hw=false;
 
-  // ----------------- setup the sbmodel gams files --------------------------
+  // ----------------- setup the ssmodel gams files --------------------------
   if(!_gams_files_setup) {
         
     // Print the Constraints
@@ -252,7 +252,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     ofs_constraints << "set stages(stages_opt);\n";
 
     ofs_constraints << "stages('passthrough')=1;\n";
-    ofs_constraints << "scalar max_edge_delay /" << _sbModel->maxEdgeDelay() << "/;\n";
+    ofs_constraints << "scalar max_edge_delay /" << _ssModel->maxEdgeDelay() << "/;\n";
 
     if(_mipstart || heur_fix) {
       ofs_constraints << "stages('mipstart')=1;\n";
@@ -308,15 +308,15 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
      // Print the kinds of instructions
     ofstream ofs_kinds(_gams_work_dir+"/softbrain_kind.gams", ios::out);
     assert(ofs_kinds.good());
-    _sbModel->printGamsKinds(ofs_kinds);
+    _ssModel->printGamsKinds(ofs_kinds);
     ofs_kinds.close();
   
     _gams_files_setup=true;
   }
   
   // Print the controlling file
-  ofstream ofs_sb_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
-  assert(ofs_sb_gams.good());
+  ofstream ofs_ss_gams(_gams_work_dir+"/"+gams_file_name, ios::out);
+  assert(ofs_ss_gams.good());
  
   double timeout = _reslim - (total_msec()/1000);
 
@@ -324,53 +324,53 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     timeout = std::min(timeout,300.0);
   }
 
-  ofs_sb_gams << "option reslim=" << timeout << ";\n"
+  ofs_ss_gams << "option reslim=" << timeout << ";\n"
               << "option optcr="  <<  _optcr << ";\n"   
               << "option optca="  <<  _optca << ";\n";
 
   if(use_hw) {
-    ofs_sb_gams << softbrain_gams_hw;
+    ofs_ss_gams << softbrain_gams_hw;
   } else {
-    ofs_sb_gams << softbrain_gams;
+    ofs_ss_gams << softbrain_gams;
   }
-  ofs_sb_gams.close();
+  ofs_ss_gams.close();
   
   ofstream ofs_mipstart(_gams_work_dir+"/mip_start.gams", ios::out);
   assert(ofs_mipstart.good());
 
   if(heur_sched && (_mipstart || heur_fix)) {
-    print_mipstart(ofs_mipstart,heur_sched,sbPDG,true/* fix */);
+    print_mipstart(ofs_mipstart,heur_sched,ssPDG,true/* fix */);
   }
   ofs_mipstart.close();
   
 
   schedule->clearAll();
 
-  cout << "Total Nodes: " << sbPDG->nodes().size() << "\n";
+  cout << "Total Nodes: " << ssPDG->nodes().size() << "\n";
   
-  int numInsts = sbPDG->inst_vec().size();
+  int numInsts = ssPDG->inst_vec().size();
   cout << "Total Insts: " <<  numInsts << "\n";
   //assert(numInsts > 0);
 
   // Print the softbrain model   
-  ofstream ofs_sb_model(_gams_work_dir + "/softbrain_model.gams", ios::out);
-  assert(ofs_sb_model.good());
-  gamsToSbnode.clear(); gamsToSblink.clear();
+  ofstream ofs_ss_model(_gams_work_dir + "/softbrain_model.gams", ios::out);
+  assert(ofs_ss_model.good());
+  gamsToNode.clear(); gamsToLink.clear();
 
   
 
-  cout << _sbModel->subModel()->sizex() << " is the x size \n";
+  cout << _ssModel->subModel()->sizex() << " is the x size \n";
 
-  _sbModel->subModel()->PrintGamsModel(ofs_sb_model,gamsToSbnode,gamsToSblink,
-                                       gamsToSbswitch,gamsToPortN,1/*nconfigs*/);
+  _ssModel->subModel()->PrintGamsModel(ofs_ss_model,gamsToNode,gamsToLink,
+                                       gamsToSwitch,gamsToPortN,1/*nconfigs*/);
 
-  cout << gamsToSbnode.size() << " " << gamsToSblink.size() << " " << gamsToSbswitch.size() << "\n";
+  cout << gamsToNode.size() << " " << gamsToLink.size() << " " << gamsToSwitch.size() << "\n";
 
-  ofs_sb_model.close();
+  ofs_ss_model.close();
   
   // ----------------- setup the pdg gams files ------------------------------
-  ofstream ofs_sb_pdg(_gams_work_dir + "/softbrain_pdg.gams", ios::out);
-  if(ofs_sb_pdg.fail()) {
+  ofstream ofs_ss_pdg(_gams_work_dir + "/softbrain_pdg.gams", ios::out);
+  if(ofs_ss_pdg.fail()) {
     cerr << "could not open " + _gams_work_dir + "/softbrain_pdg.gams";
     return false;
   }
@@ -382,9 +382,9 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   //--gamsToPdgnode
   //--gamsToPdgegde
   //--gamsToPortV
-  sbPDG->printGams(ofs_sb_pdg,gamsToPdgnode,gamsToPdgedge,gamsToPortV);
-  sbPDG->printPortCompatibilityWith(ofs_sb_pdg,_sbModel);
-  ofs_sb_pdg.close();
+  ssPDG->printGams(ofs_ss_pdg,gamsToPdgnode,gamsToPdgedge,gamsToPortV);
+  ssPDG->printPortCompatibilityWith(ofs_ss_pdg,_ssModel);
+  ofs_ss_pdg.close();
   
   // ----------------- run gams! --------------------------------------------
   stringstream ss_cmd;
@@ -400,7 +400,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   // ----------------- parse output -----------------------------------------
 
 
-  string line, edge_name, vertex_name, switch_name, link_name, out_link_name, sbnode_name,list_of_links,latency_str;
+  string line, edge_name, vertex_name, switch_name, link_name, out_link_name, ssnode_name,list_of_links,latency_str;
   ifstream gamsout(gams_out_file.c_str());
   enum {VtoN,EtoL,LtoL,EL,EDGE_DELAY,TIMING,PortMap,PASSTHROUGH,Parse_None}parse_stage;
   parse_stage=Parse_None;
@@ -451,25 +451,25 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       stringstream ss(line);
       getline(ss, vertex_name, ':');
       ss >> std::ws;
-      getline(ss, sbnode_name, ' ');
+      getline(ss, ssnode_name, ' ');
 
       ModelParsing::trim(vertex_name);
-      ModelParsing::trim(sbnode_name);
+      ModelParsing::trim(ssnode_name);
 
-      if(sbnode_name.empty()) {
+      if(ssnode_name.empty()) {
         cout << "failed to parse line: \"" << line << "\"\n";
         assert(0);
       }
 
-      SbPDG_Vec* pv = gamsToPortV[vertex_name];
+      SSDfgVec* pv = gamsToPortV[vertex_name];
       assert(pv);
-      std::pair<bool,int> pn = gamsToPortN[sbnode_name];  
+      std::pair<bool,int> pn = gamsToPortN[ssnode_name];  
 
       unsigned size_of_vp;
       if(pn.first) {
-       size_of_vp = _sbModel->subModel()->io_interf().in_vports[pn.second]->size();
+       size_of_vp = _ssModel->subModel()->io_interf().in_vports[pn.second]->size();
       } else {
-       size_of_vp = _sbModel->subModel()->io_interf().out_vports[pn.second]->size();
+       size_of_vp = _ssModel->subModel()->io_interf().out_vports[pn.second]->size();
       }
 
       std::vector<bool> mask;
@@ -483,7 +483,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
         if(ind_str.empty()) continue;
         unsigned ind = (int)(stof(ind_str))-1;
         
-        //cout << vertex_name << " " << sbnode_name << " " << ind << " " << size_of_vp << "\n";
+        //cout << vertex_name << " " << ssnode_name << " " << ind << " " << size_of_vp << "\n";
         assert(ind < size_of_vp && "went off end of vec");
         assert(mask[ind]==false && "I already assigned this place in the vec!");
 
@@ -497,15 +497,15 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       stringstream ss(line);
       
       while(ss.good()) {
-        getline(ss,sbnode_name, ' ');
-        ModelParsing::trim(sbnode_name);
-        if(sbnode_name.empty()) continue;
+        getline(ss,ssnode_name, ' ');
+        ModelParsing::trim(ssnode_name);
+        if(ssnode_name.empty()) continue;
         
-        sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
-        if(sbnode==nullptr) {
-          cerr << "null sbnode:\"" << sbnode_name << "\"\n";
+        ssnode* ssnode  = gamsToNode[ssnode_name].first;
+        if(ssnode==nullptr) {
+          cerr << "null ssnode:\"" << ssnode_name << "\"\n";
         }
-        schedule->add_passthrough_node(sbnode);
+        schedule->add_passthrough_node(ssnode);
 
       }
 
@@ -515,7 +515,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       getline(ss, latency_str, '.');
       ModelParsing::trim(vertex_name);
       ModelParsing::trim(latency_str);
-      SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
+      SSDfgNode* pdgnode = gamsToPdgnode[vertex_name];
 
       int lat = stoi(latency_str);
       schedule->assign_lat(pdgnode,lat);
@@ -523,7 +523,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     } else if(parse_stage==EL) {
       stringstream ss(line);
       getline(ss, edge_name, ':');
-      getline(ss, sbnode_name);
+      getline(ss, ssnode_name);
       //TODO: FINISH THIS IF EVER NEED EDGE -> LINK MAPPING
 
     } else if(parse_stage==EDGE_DELAY) {
@@ -531,7 +531,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       getline(ss, edge_name, ':');
 
       ModelParsing::trim(edge_name);
-      SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
+      SSDfgEdge* pdgedge = gamsToPdgedge[edge_name];
       assert(pdgedge);
 
       string delay_str;
@@ -546,23 +546,23 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     } else if(parse_stage==VtoN) {
       stringstream ss(line);
       getline(ss, vertex_name, ':');
-      getline(ss, sbnode_name);
+      getline(ss, ssnode_name);
       ModelParsing::trim(vertex_name);
-      ModelParsing::trim(sbnode_name);
+      ModelParsing::trim(ssnode_name);
       
-      if(sbnode_name.empty()) {
+      if(ssnode_name.empty()) {
         return false;
       }
 
-      SbPDG_Node* pdgnode = gamsToPdgnode[vertex_name];
-      sbnode* sbnode  = gamsToSbnode[sbnode_name].first;  
+      SSDfgNode* pdgnode = gamsToPdgnode[vertex_name];
+      ssnode* ssnode  = gamsToNode[ssnode_name].first;
       
       if(vertex_name.empty()) continue;
       
      
-      schedule->assign_node(pdgnode, make_pair(0, sbnode));
+      schedule->assign_node(pdgnode, make_pair(0, ssnode));
       
-        /*if(sboutput* sbout = dynamic_cast<sboutput*>(sbnode) ) {
+        /*if(ssoutput* ssout = dynamic_cast<ssoutput*>(ssnode) ) {
            cout << pdgnode->name() << " new=" << schedule->getPortFor(pdgnode) << "\n";
         }*/
         
@@ -573,9 +573,9 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       ModelParsing::trim(switch_name);
       if(switch_name.empty()) continue;
 
-      sbswitch* sbsw = gamsToSbswitch[switch_name].first;
-      if(sbsw==nullptr) {
-        cerr << "null sbsw:\"" << switch_name << "\"\n";
+      ssswitch* sssw = gamsToSwitch[switch_name].first;
+      if(sssw==nullptr) {
+        cerr << "null sssw:\"" << switch_name << "\"\n";
       }
 
       while(ss.good()) {
@@ -588,11 +588,11 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
 
         if(link_name.empty()) continue;
         if(out_link_name.empty()) continue;
-        sblink* slink = gamsToSblink[link_name].first;
-        sblink* slink_out = gamsToSblink[out_link_name].first;
+        sslink* slink = gamsToLink[link_name].first;
+        sslink* slink_out = gamsToLink[out_link_name].first;
         assert(slink);
         assert(slink_out);
-        schedule->assign_switch(sbsw,slink,slink_out);
+        schedule->assign_switch(sssw,slink,slink_out);
 
       }
       
@@ -608,8 +608,8 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
       ModelParsing::trim(edge_name);
       if(edge_name.empty()) continue;
       
-      SbPDG_Edge* pdgedge = gamsToPdgedge[edge_name];
-      SbPDG_Node* pdgnode = pdgedge->def(); 
+      SSDfgEdge* pdgedge = gamsToPdgedge[edge_name];
+      SSDfgNode* pdgnode = pdgedge->def(); 
       if(pdgnode==nullptr) {
         cerr << "null pdgnode:\"" << vertex_name << "\"\n";
       }
@@ -619,7 +619,7 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
         getline(ss, link_name, ' ');
         ModelParsing::trim(link_name);
         if(link_name.empty()) continue;
-        sblink* slink = gamsToSblink[link_name].first;
+        sslink* slink = gamsToLink[link_name].first;
         
         if(slink==nullptr) {
           cerr << "null slink:\"" << link_name << "\"\n";
@@ -627,13 +627,13 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
         
         schedule->assign_edgelink(pdgedge, 0, slink);
         
-        if(sbinput* sbin = dynamic_cast<sbinput*>(slink->orig())) {
-          schedule->assign_node(pdgnode, make_pair(0, sbin));
-        } else if(sboutput* sbout = dynamic_cast<sboutput*>(slink->dest())) {
+        if(ssinput* ssin = dynamic_cast<ssinput*>(slink->orig())) {
+          schedule->assign_node(pdgnode, make_pair(0, ssin));
+        } else if(ssoutput* ssout = dynamic_cast<ssoutput*>(slink->dest())) {
           //find output for this output edge
           for(auto elem : pdgnode->uses()) {
-            if(SbPDG_Output* pdg_out = dynamic_cast<SbPDG_Output*>(elem->use())) {
-              schedule->assign_node(pdg_out, make_pair(0, sbout));
+            if(SSDfgOutput* pdg_out = dynamic_cast<SSDfgOutput*>(elem->use())) {
+              schedule->assign_node(pdg_out, make_pair(0, ssout));
             }
           }
         }
@@ -647,10 +647,10 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
     cerr << "\n\nError: Scheduling Not Started -- Likely Error in Gams Code Gen\n\n";
     exit(1);
   } else if (!message_fus_ok) {
-    cerr << "\n\nError: Combination of FUs requested are NOT satisfiable with given SBCONFIG.\n\n";
+    cerr << "\n\nError: Combination of FUs requested are NOT satisfiable with given SSCONFIG.\n\n";
     exit(1);
   } else if (!message_ports_ok) {
-    cerr << "\n\nError: Port specifications are NOT satisfiable with given SBCONFIG.\n\n";
+    cerr << "\n\nError: Port specifications are NOT satisfiable with given SSCONFIG.\n\n";
     exit(1);
   }  else if (!message_complete) {
     return false; 
@@ -660,16 +660,16 @@ bool GamsScheduler::schedule_internal(SbPDG* sbPDG,Schedule*& schedule) {
   //  //Print the I/Os
   //  std::cout << "in/out mapping:";
 
-  //  SbPDG::const_input_iterator Ii,Ei;
-  //  for(Ii=schedule->sbpdg()->input_begin(),Ei=schedule->sbpdg()->input_end();Ii!=Ei;++Ii) {
-  //    SbPDG_Input* in = *Ii;
+  //  SSDfg::const_input_iterator Ii,Ei;
+  //  for(Ii=schedule->sspdg()->input_begin(),Ei=schedule->sspdg()->input_end();Ii!=Ei;++Ii) {
+  //    SSDfgInput* in = *Ii;
   //    int p = schedule->getPortFor(in);
   //    cout << in->name() << " " << p << ", ";
   //  }
 
-  //  SbPDG::const_output_iterator Io,Eo;
-  //  for(Io=schedule->sbpdg()->output_begin(),Eo=schedule->sbpdg()->output_end();Io!=Eo;++Io) {
-  //    SbPDG_Output* out = *Io;
+  //  SSDfg::const_output_iterator Io,Eo;
+  //  for(Io=schedule->sspdg()->output_begin(),Eo=schedule->sspdg()->output_end();Io!=Eo;++Io) {
+  //    SSDfgOutput* out = *Io;
   //    int p = schedule->getPortFor(out);
   //    cout << out->name() << " " << p << ", ";
   //  }
