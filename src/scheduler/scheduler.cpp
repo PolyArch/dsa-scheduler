@@ -252,8 +252,9 @@ void HeuristicScheduler::apply_routing(Schedule *sched, CandidateRouting *candRo
 void HeuristicScheduler::apply_routing(Schedule *sched, SbPDG_Node *pdgnode,
                                        pair<int, sbnode *> here, CandidateRouting *candRouting){
   
-  //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here->name() 
-  //<< " nlinks: " << candRouting->routing.size() << "\n";  
+  //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here.second->name()
+      //<< " nlinks: " << candRouting->routing.size() << "\n";
+
   assert(pdgnode);
 
   int min_node_lat, max_node_lat;
@@ -274,6 +275,9 @@ void HeuristicScheduler::apply_routing(Schedule *sched, SbPDG_Node *pdgnode,
   }
 
   sched->assign_lat_bounds(pdgnode,min_node_lat,max_node_lat);
+  if (auto vec = dynamic_cast<SbPDG_Vec*>(pdgnode)) {
+    sched->assign_lat_bounds(vec, min_node_lat, max_node_lat);
+  }
 
   sched->assign_node(pdgnode,here);
   apply_routing(sched, candRouting);

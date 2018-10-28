@@ -26,11 +26,11 @@ class sbio_interface {
     std::map<int, sbvport*> out_vports;
 
     void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
-      sort(portID2size, in_vports);    
+      sort(portID2size, in_vports);
     }
     
     void sort_out_vports(std::vector<std::pair<int,int>>& portID2size) {
-      sort(portID2size, out_vports);    
+      sort(portID2size, out_vports);
     }
     
     sbvport* getDesc_I(int id) {

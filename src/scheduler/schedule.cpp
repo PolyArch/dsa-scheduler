@@ -1730,11 +1730,14 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   
         if(is_scheduled(pdgout)) {
           int lat = latOf(edge->def()) + edge_delay(edge) + link_count(edge)-1;
-          //cout << "C " << vec_out->name() << m << " " << lat << " -- " 
-          //     << " def_lat:" << latOf(edge->def()) <<" ed:"<< edge_delay(edge) 
-          //     << " link_count:" << link_count(edge) << "inst: " 
+          //cout << edge->name() << "\n";
+          //cout << edge->def()->name() << "\n";
+          //cout << edge->use()->name() << "\n";
+          //cout << "C " << vec_out->name() << " " << lat << " -- "
+          //     << " def_lat:" << latOf(edge->def()) << " ed:" << edge_delay(edge)
+          //     << " link_count:" << link_count(edge) << "inst: "
           //     << edge->def() << " " << edge->def()->name() << "\n";
-        
+
           assign_lat(pdgout,lat);
 
           if(lat>up_lat) up_lat=lat;
@@ -2221,11 +2224,11 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
       for(int i = 0; i<8; ++i) {
         int cur_util = cnt[i] + np.num_passthroughs + unique_io;
         int cur_ovr = cur_util - v.node->max_util();
-        agg_ovr+=std::max(cur_ovr,0);
+        agg_ovr += std::max(cur_ovr, 0);
+        ovr = max(ovr, cur_ovr);
       }
       max_cnt += unique_io + np.num_passthroughs;
       max_util = max(max_util, max_cnt);
-      ovr = max(v.node->max_util() - max_cnt, ovr);
     }
   }
 
@@ -2261,10 +2264,11 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
         util = count_unique(nodes) + count_unique(vecs);
         int cur_ovr = util - n->max_util();
         ovr = std::max(cur_ovr, ovr);
-        agg_ovr += std::max(cur_ovr,0); 
+        agg_ovr += std::max(cur_ovr, 0);
         max_util = std::max(util, max_util);
       }
     }
   }
+
 }
 

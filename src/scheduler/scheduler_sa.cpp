@@ -55,7 +55,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
   int violation = sched->violation();
 
-    int obj = agg_ovr*100000 + latmis*10000+violation*100+lat + max_util;
+    int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
 
 //        fprintf(stdout, "objective rt:%d, left: %3d, " 
 //                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
@@ -228,8 +228,15 @@ void SchedulerSimulatedAnnealing::findFirstIndex(vector<pair<int,int>>& sd,
   }
 }
 
-bool SchedulerSimulatedAnnealing::genRandomIndexBW(pair<bool, int>& vport_id, 
-    vector<int>& vport_desc,  vector<pair<int,int>>& sd, sbio_interface& si, unsigned int size, unsigned int index, Schedule*& sched, bool is_input) {
+bool SchedulerSimulatedAnnealing::genRandomIndexBW(
+        pair<bool, int>& vport_id,
+        vector<int>& vport_desc,
+        vector<pair<int,int>>& sd,
+        sbio_interface& si,
+        unsigned int size,
+        unsigned int index,
+        Schedule*& sched,
+        bool is_input) {
   unsigned int k;
   pair<int, int> p;
   int vport_num;
@@ -285,12 +292,11 @@ bool SchedulerSimulatedAnnealing::schedule_input( SbPDG_VecInput*  vec_in, SbPDG
     //TODO: put this code in schedule_output as well
     bool found=false;
     while(!found) {
-      if(!genRandomIndexBW(vport_id, vport_desc, _sd_in, si, 
-                       _sd_in.size(), index, sched, true /*input*/)) {
-        unmap_one_input(sbPDG,sched);
+      if (!genRandomIndexBW(vport_id, vport_desc, _sd_in, si, _sd_in.size(), index, sched, true /*input*/)) {
+        unmap_one_input(sbPDG, sched);
       } else {
-        found=true;
-      } 
+        found = vec_in->is_temporal() || si.in_vports[vport_id.second]->size() >= vec_in->inputs().size();
+      }
     }
 
 
@@ -656,18 +662,19 @@ void SchedulerSimulatedAnnealing::unmap_one_input(SbPDG* sbPDG, Schedule* sched)
 
   int p = rand_bt(0,n);
   while(true) {
-    for(int i = 0; i < n; ++i) {
-      if(++p ==n) {p=0;}
-  
-      SbPDG_VecInput* vec_in = sbPDG->vec_in(p);
-      if(sched->vecMapped(vec_in)) {
+    for (int i = 0; i < n; ++i) {
+      if (++p == n) { p = 0; }
+
+      SbPDG_VecInput *vec_in = sbPDG->vec_in(p);
+      if (sched->vecMapped(vec_in)) {
         //TODO: do this for outputs too, or just eliminate
         int hw_port_size = _sbModel->subModel()->io_interf().in_vports[sched->vecPortOf(vec_in).second]->size();
         int extra = hw_port_size - vec_in->inputs().size();
-        assert(extra>=0 && extra < 32); //don't expect this large of inputs
-        int r = rand_bt(0,extra*extra+hw_port_size);
+        if (!vec_in->is_temporal())
+          assert(extra >= 0 && extra < 32); //don't expect this large of inputs
+        int r = rand_bt(0, extra * extra + hw_port_size);
         //cout << "extra: " << extra << " for vport " << vec_in->name() << "\n";
-        if(r<extra*extra+1) {
+        if (r < extra * extra + 1) {
           sched->unassign_input_vec(vec_in);
           return;
         }

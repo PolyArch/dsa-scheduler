@@ -592,6 +592,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
       _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
       _verif_stream.flush();
     } else {
+      system("mkdir -p verif");
       _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
       assert(_verif_stream.is_open());
     }
