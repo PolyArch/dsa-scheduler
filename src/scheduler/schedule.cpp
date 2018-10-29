@@ -5,49 +5,49 @@
 #include <fstream>
 
 #include "model_parsing.h"
-#include "sbpdg.h"
-#include "sbinst.h"
+#include "ssdfg.h"
+#include "ssinst.h"
 #include <assert.h>
 #include <list>
 #include  <iomanip>
 #include <unordered_set>
 
 using namespace std;
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 
 //Scheduling Interface
 
-extern "C" void libsbscheduler_is_present() {}
+extern "C" void libssscheduler_is_present() {}
 
-void Schedule::clear_sbpdg() {
-  if (_sbPDG) {
-    delete _sbPDG;
-    _sbPDG = nullptr;
+void Schedule::clear_ssdfg() {
+  if (_ssDFG) {
+    delete _ssDFG;
+    _ssDFG = nullptr;
   }
 }
 
 void Schedule::reset_simulation_state() {
-  if(_sbPDG) {
-    _sbPDG->reset_simulation_state();
+  if(_ssDFG) {
+    _ssDFG->reset_simulation_state();
   }
 }
 
-//For a given pdgnode return the input or ouput port num if the pdfgnode is a
-//sbinput ot sboutput
-int Schedule::getPortFor(SbPDG_Node* sbpdg_in)  { 
-  if (sbnode* n = locationOf(sbpdg_in)) {
-    if (sbinput *assigned_sbinput = dynamic_cast<sbinput*>(n)) {
-      return assigned_sbinput->port();
+//For a given dfgnode return the input or ouput port num if the pdfgnode is a
+//ssinput ot ssoutput
+int Schedule::getPortFor(SSDfgNode* ssdfg_in)  { 
+  if (ssnode* n = locationOf(ssdfg_in)) {
+    if (ssinput *assigned_ssinput = dynamic_cast<ssinput*>(n)) {
+      return assigned_ssinput->port();
     }
 
-    if (sboutput *assigned_sboutput = dynamic_cast<sboutput*>(n)) {
-      return assigned_sboutput->port();
+    if (ssoutput *assigned_ssoutput = dynamic_cast<ssoutput*>(n)) {
+      return assigned_ssoutput->port();
     }
   }
   return -1; 
 }
 
-std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits(int size,
+std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBits(int size,
     uint64_t* bits) {
 
   //Figure out if this configuration is real or not
@@ -60,13 +60,13 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBits(int size,
     for (int i = 0; i < size; ++i) { //load in 64bit slices
       slices().write(i, bits[i]);
     }
-    return map<SB_CONFIG::sb_inst_t, int>();
+    return map<SS_CONFIG::ss_inst_t, int>();
     //return interpretConfigBitsDedicated();
   }
 }
 
-std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
-  std::map<SB_CONFIG::sb_inst_t,int> inst_histo;
+std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
+  std::map<SS_CONFIG::ss_inst_t,int> inst_histo;
 
   ifstream config_file;
 
@@ -94,7 +94,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
   //I think this should work okay, its a little kludgey, but w/e
   Schedule sched2;
   ia >> BOOST_SERIALIZATION_NVP(sched2); //magic
-  sched2._sbModel = _sbModel;
+  sched2._ssModel = _ssModel;
   *this = sched2;
 
   //Now lets patch up the schedule to get recover
@@ -102,35 +102,35 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
   for(int i = 0; i < (int)_linkProp.size(); ++i) {
     for (int j = 0; j < 8; ++j) {
       auto &lp = _linkProp[i];
-      sblink *link = _sbModel->subModel()->link_list()[i];
-      for (SbPDG_Edge *e : lp.slots[j].edges) {
+      sslink *link = _ssModel->subModel()->link_list()[i];
+      for (SSDfgEdge *e : lp.slots[j].edges) {
         _edgeProp[e->id()].links.insert(make_pair(j, link));
       }
     }
   }
   for(int i = 0; i < (int)_nodeProp.size(); ++i) {
     auto& np = _nodeProp[i];
-    sbnode* node = _sbModel->subModel()->node_list()[i];
+    ssnode* node = _ssModel->subModel()->node_list()[i];
     for(auto elem : np.vertices) {
       auto v = elem.second;
       _vertexProp[v->id()].node = node;
     }
   }
 
-  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = _sbModel->subModel()->fus()[i][j];
-      auto* pdg_inst = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
-      if(pdg_inst) {
-        auto inst=pdg_inst->inst();
+  for(int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
+      ssfu* ssfu_node = _ssModel->subModel()->fus()[i][j];
+      auto* dfg_inst = dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
+      if(dfg_inst) {
+        auto inst=dfg_inst->inst();
         inst_histo[inst]+=1;
       }
     }
   }
 
-  //Lets also just throw the node id at the pdg for now to make temporal
+  //Lets also just throw the node id at the dfg for now to make temporal
   //simulation work
-  for(auto inst : _sbPDG->inst_vec()) {
+  for(auto inst : _ssDFG->inst_vec()) {
     if(locationOf(inst)) {
       inst->set_node_id(locationOf(inst)->id());
     }
@@ -140,28 +140,28 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 }
 
 //TODO: Later we uncomment these bunch of codes to do real CGRA config.
-//std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsDedicated() {
-//  std::map<SB_CONFIG::sb_inst_t, int> inst_histo;
+//std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBitsDedicated() {
+//  std::map<SS_CONFIG::ss_inst_t, int> inst_histo;
 //
-//  SbDIR sbdir;
-//  vector<vector<sbfu> > &fus = _sbModel->subModel()->fus();
-//  SbPDG_Inst *pdg_inst;
+//  SwitchDir ssdir;
+//  vector<vector<ssfu> > &fus = _ssModel->subModel()->fus();
+//  SSDfgInst *dfg_inst;
 //
-//  map<sbnode *, map<SbDIR::DIR, SbDIR::DIR> > routeMap;
-//  map<SbPDG_Node *, vector<SbDIR::DIR> > posMap;
-//  map<sbnode *, SbPDG_Node *> pdgnode_for;
-//  _sbPDG = new SbPDG();
+//  map<ssnode *, map<SwitchDir::DIR, SwitchDir::DIR> > routeMap;
+//  map<SSDfgNode *, vector<SwitchDir::DIR> > posMap;
+//  map<ssnode *, SSDfgNode *> dfgnode_for;
+//  _ssDFG = new SSDfg();
 //
 //  std::set<uint64_t> inputs_used;   //vector ports used
 //  std::set<uint64_t> outputs_used;
 //
 //  _decode_lat_mis = slices().read_slice(IN_ACT_SLICE, 56, 63);
 //
-//  //Associating the PDG Nodes from the configuration bits, with the vector ports defined by the hardware
+//  //Associating the DFG Nodes from the configuration bits, with the vector ports defined by the hardware
 //  int start_bits_vp_mask = 0;
 //  int total_bits_vp_mask = 0;
 //  int slice = VP_MAP_SLICE_1;
-//  for (auto &port_pair : _sbModel->subModel()->io_interf().in_vports) {
+//  for (auto &port_pair : _ssModel->subModel()->io_interf().in_vports) {
 //    int i = port_pair.first; //index of port
 //    std::vector<std::pair<int, std::vector<int> > > &port_m = port_pair.second;
 //
@@ -175,10 +175,10 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //    }
 //
 //    if (slices().read_slice(IN_ACT_SLICE, i, i)) {
-//      SbPDG_VecInput *vec_input = new SbPDG_VecInput("I", _sbPDG->num_vec_input(),
-//                                                     _sbPDG);
+//      SSDfgVecInput *vec_input = new SSDfgVecInput("I", _ssDFG->num_vec_input(),
+//                                                     _ssDFG);
 //      //vec_input->setLocMap(pm);
-//      //_sbPDG->insert_vec_in(vec_input); -- don't need this, stored in group
+//      //_ssDFG->insert_vec_in(vec_input); -- don't need this, stored in group
 //
 //      //cout << "vp" << i << "  ";
 //
@@ -188,13 +188,13 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //        mask[mi] = slices().read_slice(slice,
 //                                       start_bits_vp_mask + mi, start_bits_vp_mask + mi);
 //        if (mask[mi]) {
-//          int sb_in_port = port_m[mi].first;
-//          sbinput *in = _sbModel->subModel()->get_input(sb_in_port);
-//          SbPDG_Input *pdg_in = new SbPDG_Input(_sbPDG);
-//          pdg_in->setVPort(vec_input);
-//          pdgnode_for[in] = pdg_in;
-//          _sbPDG->addInput(pdg_in); //add input to pdg
-//          vec_input->addInput(pdg_in); //add input to vector
+//          int ss_in_port = port_m[mi].first;
+//          ssinput *in = _ssModel->subModel()->get_input(ss_in_port);
+//          SSDfgInput *dfg_in = new SSDfgInput(_ssDFG);
+//          dfg_in->setVPort(vec_input);
+//          dfgnode_for[in] = dfg_in;
+//          _ssDFG->addInput(dfg_in); //add input to dfg
+//          vec_input->addInput(dfg_in); //add input to vector
 //
 //          //cout << mi << " (" << in->port() << ")";
 //        }
@@ -209,17 +209,17 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //  start_bits_vp_mask = 0;
 //  total_bits_vp_mask = 0;
 //
-//  for (auto &port_pair : _sbModel->subModel()->io_interf().out_vports) {
+//  for (auto &port_pair : _ssModel->subModel()->io_interf().out_vports) {
 //    int i = port_pair.first; //index of port
 //    std::vector<std::pair<int, std::vector<int> > > &port_m = port_pair.second;
 //
 //    total_bits_vp_mask += port_m.size();
 //
 //    if (slices().read_slice(OUT_ACT_SLICE, i, i)) { //activate output port
-//      SbPDG_VecOutput *vec_output = new SbPDG_VecOutput("O", _sbPDG->num_vec_output(),
-//                                                        _sbPDG);
+//      SSDfgVecOutput *vec_output = new SSDfgVecOutput("O", _ssDFG->num_vec_output(),
+//                                                        _ssDFG);
 //
-//      //_sbPDG->insert_vec_out(vec_output); don't do this, this is in group
+//      //_ssDFG->insert_vec_out(vec_output); don't do this, this is in group
 //
 //      vector<bool> mask;
 //      mask.resize(port_m.size());
@@ -227,12 +227,12 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //        mask[mi] = slices().read_slice(VP_MAP_SLICE_OUT,
 //                                       start_bits_vp_mask + mi, start_bits_vp_mask + mi);
 //        if (mask[mi]) {
-//          sboutput *out = _sbModel->subModel()->get_output(port_m[mi].first);
-//          SbPDG_Output *pdg_out = new SbPDG_Output(_sbPDG);
-//          pdg_out->setVPort(vec_output);
-//          pdgnode_for[out] = pdg_out;
-//          _sbPDG->addOutput(pdg_out);
-//          vec_output->addOutput(pdg_out); //add output to vector
+//          ssoutput *out = _ssModel->subModel()->get_output(port_m[mi].first);
+//          SSDfgOutput *dfg_out = new SSDfgOutput(_ssDFG);
+//          dfg_out->setVPort(vec_output);
+//          dfgnode_for[out] = dfg_out;
+//          _ssDFG->addOutput(dfg_out);
+//          vec_output->addOutput(dfg_out); //add output to vector
 //        }
 //      }
 //      assign_vport(vec_output, make_pair(false/*input*/, i), mask);
@@ -248,7 +248,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //    uint64_t inact = _bitslices.read_slice(IN_ACT_SLICE, i, i);
 //
 //    if (inact) {
-//      auto &vp = _sbModel->subModel()->io_interf().in_vports[i];
+//      auto &vp = _ssModel->subModel()->io_interf().in_vports[i];
 //      for (auto &p : vp) {     //iterate through ports of vector port i
 //        inputs_used.insert(p.first);        //cgra port
 //      }
@@ -261,7 +261,7 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //
 //    //If the outport !=0
 //    if (outact) {
-//      auto &vp = _sbModel->subModel()->io_interf().out_vports[i];
+//      auto &vp = _ssModel->subModel()->io_interf().out_vports[i];
 //      for (auto &p : vp) {     //iterate through ports of vector port i
 //        outputs_used.insert(p.first);
 //      }
@@ -271,15 +271,15 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //  int cur_slice = SWITCH_SLICE;       //5th slice in bitslice
 //
 //  //In1, In2, In3, Opcode, S1, S2, ... S8, Row
-//  vector<vector<sbswitch> > &switches = _sbModel->subModel()->switches();
+//  vector<vector<ssswitch> > &switches = _ssModel->subModel()->switches();
 //
-//  for (int i = 0; i < _sbModel->subModel()->sizex() + 1; ++i) {
+//  for (int i = 0; i < _ssModel->subModel()->sizex() + 1; ++i) {
 //    bool left = (i == 0);
-//    bool right = (i == _sbModel->subModel()->sizex());
-//    for (int j = 0; j < _sbModel->subModel()->sizey() + 1; ++j, ++cur_slice) {
+//    bool right = (i == _ssModel->subModel()->sizex());
+//    for (int j = 0; j < _ssModel->subModel()->sizey() + 1; ++j, ++cur_slice) {
 //      bool top = (j == 0);
-//      bool bottom = (j == _sbModel->subModel()->sizey());
-//      sbswitch *sbsw = &switches[i][j];
+//      bool bottom = (j == _ssModel->subModel()->sizey());
+//      ssswitch *sssw = &switches[i][j];
 //
 //      //cout << "Decode switch: " << i << "," << j << "\n";
 //
@@ -294,64 +294,64 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //
 //        uint64_t b = _bitslices.read_slice(cur_slice, cur_bit_pos,
 //                                           cur_bit_pos + BITS_PER_DIR - 1);
-//        SbDIR::DIR out_dir = sbdir.dir_for_slot(o, top, bottom, left, right);
-//        SbDIR::DIR in_dir = sbdir.decode(b, top, bottom, left, right);
-//        in_dir = SbDIR::reverse(in_dir);
+//        SwitchDir::DIR out_dir = ssdir.dir_for_slot(o, top, bottom, left, right);
+//        SwitchDir::DIR in_dir = ssdir.decode(b, top, bottom, left, right);
+//        in_dir = SwitchDir::reverse(in_dir);
 //
-//        sblink *inlink = sbsw->getInLink(in_dir);      //get the link object with that dir
+//        sslink *inlink = sssw->getInLink(in_dir);      //get the link object with that dir
 //        if (!inlink) {
-//          //cout << "no in_dir:" << SbDIR::dirName(in_dir) << " bits:" << b << " (pos:" << o << ")\n";
+//          //cout << "no in_dir:" << SwitchDir::dirName(in_dir) << " bits:" << b << " (pos:" << o << ")\n";
 //          continue; //no worries, this wasn't even a valid inlink
 //        }
 //
-//        sblink *outlink = sbsw->getOutLink(out_dir);
+//        sslink *outlink = sssw->getOutLink(out_dir);
 //        if (!outlink) {
-//          //cout << "no out_dir:" << SbDIR::dirNameDBG(out_dir) << " loc:" << o << "\n";
+//          //cout << "no out_dir:" << SwitchDir::dirNameDBG(out_dir) << " loc:" << o << "\n";
 //          continue; //skip if no corresponding link
 //        }
 //
-//        //cout << SbDIR::dirName(in_dir) << "->" <<
-//        //        SbDIR::dirName(out_dir) << ":";
+//        //cout << SwitchDir::dirName(in_dir) << "->" <<
+//        //        SwitchDir::dirName(out_dir) << ":";
 //
 //        //cout << b << " @pos: " << o << " " << out_dir << "\n";
 //
-//        inst_histo[SB_CONFIG::SB_Switch] += 1;
+//        inst_histo[SS_CONFIG::SS_Switch] += 1;
 //
 //        assert(outlink->orig() == inlink->dest());
-//        assign_switch(sbsw, inlink, outlink);
+//        assign_switch(sssw, inlink, outlink);
 //        //For better or worse, reconstruct takes in a route map, yes, this is redundant
 //        //with assign_switch
-//        routeMap[sbsw][out_dir] = in_dir;
+//        routeMap[sssw][out_dir] = in_dir;
 //
-//        //if(sbfu* fu =dynamic_cast<sbfu*>(outlink->dest())) {
-//        //  //create corresponding PDG Node
-//        //  pdg_inst = new SbPDG_Inst();
-//        //  pdgnode_for[fu]=pdg_inst;
-//        //  _sbPDG->addInst(pdg_inst);
+//        //if(ssfu* fu =dynamic_cast<ssfu*>(outlink->dest())) {
+//        //  //create corresponding DFG Node
+//        //  dfg_inst = new SSDfgInst();
+//        //  dfgnode_for[fu]=dfg_inst;
+//        //  _ssDFG->addInst(dfg_inst);
 //        //} else
 //
 //        ////if the swithces out is an output node
-//        //if(sboutput* out = dynamic_cast<sboutput*>(outlink->dest())) {
-//        //  SbPDG_Output* pdg_out = new SbPDG_Output();
-//        //  pdgnode_for[out]=pdg_out;
-//        //  _sbPDG->addOutput(pdg_out);
-//        //  pdg_out->setVPort(out->port());
+//        //if(ssoutput* out = dynamic_cast<ssoutput*>(outlink->dest())) {
+//        //  SSDfgOutput* dfg_out = new SSDfgOutput();
+//        //  dfgnode_for[out]=dfg_out;
+//        //  _ssDFG->addOutput(dfg_out);
+//        //  dfg_out->setVPort(out->port());
 //        //}
 //
-//        ////if the incoming node was from sbinput node
-//        //if (sbinput* in=dynamic_cast<sbinput*>(inlink->orig())) {
-//        //  SbPDG_Input* pdg_in;
+//        ////if the incoming node was from ssinput node
+//        //if (ssinput* in=dynamic_cast<ssinput*>(inlink->orig())) {
+//        //  SSDfgInput* dfg_in;
 //        //  //Need to check if this is actually one of the useful inputs
 //        //  if(inputs_used.count(in->port())) {
-//        //    if(pdgnode_for.count(in)==0) {
+//        //    if(dfgnode_for.count(in)==0) {
 //        //      cout << "Creating node for port " << in->port() << "\n";
-//        //      pdg_in = new SbPDG_Input();
-//        //      pdgnode_for[in]=pdg_in;
-//        //      _sbPDG->addInput(pdg_in);
+//        //      dfg_in = new SSDfgInput();
+//        //      dfgnode_for[in]=dfg_in;
+//        //      _ssDFG->addInput(dfg_in);
 //        //    } else {
-//        //      pdg_in = dynamic_cast<SbPDG_Input*>(pdgnode_for[in]);
+//        //      dfg_in = dynamic_cast<SSDfgInput*>(dfgnode_for[in]);
 //        //    }
-//        //    pdg_in->setVPort(in->port());
+//        //    dfg_in->setVPort(in->port());
 //        //  }
 //        //}//end if
 //
@@ -367,10 +367,10 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //      int i_adj = (g % 2) * 32 + i;
 //      uint64_t inact = _bitslices.read_slice(IN_ACT_GROUP12 + g / 2, i_adj, i_adj);
 //      if (inact) {
-//        SbPDG_VecInput *in_vec =
-//                dynamic_cast<SbPDG_VecInput *>(vportOf(make_pair(true, i)));
+//        SSDfgVecInput *in_vec =
+//                dynamic_cast<SSDfgVecInput *>(vportOf(make_pair(true, i)));
 //        assert(in_vec);
-//        _sbPDG->insert_vec_in_group(in_vec, g);
+//        _ssDFG->insert_vec_in_group(in_vec, g);
 //      }
 //    }
 //    for (int i = 0; i < 32; ++i) {  //32 ports ?
@@ -378,31 +378,31 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //      uint64_t outact = _bitslices.read_slice(OUT_ACT_GROUP12 + g / 2, i_adj, i_adj);
 //
 //      if (outact) {
-//        SbPDG_VecOutput *out_vec =
-//                dynamic_cast<SbPDG_VecOutput *>(vportOf(make_pair(false, i)));
+//        SSDfgVecOutput *out_vec =
+//                dynamic_cast<SSDfgVecOutput *>(vportOf(make_pair(false, i)));
 //        assert(out_vec);
-//        _sbPDG->insert_vec_out_group(out_vec, g);
+//        _ssDFG->insert_vec_out_group(out_vec, g);
 //      }
 //    }
 //  }
 //
 //  //---------------------------------DECODE FUNC UNITS ---------------------------
 //  cur_slice = SWITCH_SLICE;
-//  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-//    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
-//      sbfu *sbfu_node = fus[i][j];
+//  for (int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
+//    for (int j = 0; j < _ssModel->subModel()->sizey(); ++j, ++cur_slice) {
+//      ssfu *ssfu_node = fus[i][j];
 //
 //      //opcode
 //      uint64_t op = _bitslices.read_slice(cur_slice, OPCODE_LOC, OPCODE_LOC + OPCODE_BITS - 1);
 //      if (op != 0) { //if O
-//        auto inst = sbfu_node->fu_def()->inst_of_encoding(op);
-//        pdg_inst = new SbPDG_Inst(_sbPDG, inst);
+//        auto inst = ssfu_node->fu_def()->inst_of_encoding(op);
+//        dfg_inst = new SSDfgInst(_ssDFG, inst);
 //        stringstream verif_name;
 //        verif_name << i << "-" << j;
-//        pdg_inst->set_verif_id(verif_name.str());
+//        dfg_inst->set_verif_id(verif_name.str());
 //
-//        pdgnode_for[sbfu_node] = pdg_inst;
-//        _sbPDG->addInst(pdg_inst);
+//        dfgnode_for[ssfu_node] = dfg_inst;
+//        _ssDFG->addInst(dfg_inst);
 //
 //        inst_histo[inst] += 1;
 //
@@ -412,18 +412,18 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //        for (int f = 0; f < NUM_IN_FU_DIRS; ++f, cur_bit_pos += BITS_PER_FU_DIR) {
 //          uint64_t b = _bitslices.read_slice(cur_slice, cur_bit_pos,
 //                                             cur_bit_pos + BITS_PER_FU_DIR - 1);
-//          SbDIR::DIR dir = sbdir.fu_dir_of(b);
-//          assert(f != 0 || (f == 0 && dir != SbDIR::END_DIR));
-//          posMap[pdg_inst].push_back(dir);      //incoming FU dir
-//          if (dir == SbDIR::IM) {
-//            pdg_inst->setImmSlot(f);
+//          SwitchDir::DIR dir = ssdir.fu_dir_of(b);
+//          assert(f != 0 || (f == 0 && dir != SwitchDir::END_DIR));
+//          posMap[dfg_inst].push_back(dir);      //incoming FU dir
+//          if (dir == SwitchDir::IM) {
+//            dfg_inst->setImmSlot(f);
 //          }
 //        }//end for input fu dirs
 //
 //        //predictate inverse
 //        uint64_t p = _bitslices.read_slice(cur_slice, FU_PRED_INV_LOC,
 //                                           FU_PRED_INV_LOC + FU_PRED_INV_BITS - 1);
-//        pdg_inst->setPredInv(p);
+//        dfg_inst->setPredInv(p);
 //      } else {
 //        //cout << i << " " << j << " not mapped\n";
 //      }
@@ -432,22 +432,22 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //  }
 //
 //  cur_slice = SWITCH_SLICE +
-//              (_sbModel->subModel()->sizex() + 1) * (_sbModel->subModel()->sizey() + 1);
+//              (_ssModel->subModel()->sizex() + 1) * (_ssModel->subModel()->sizey() + 1);
 //
 //  //--------------------------------------- DECODE CONSTANTS ------------------------
 //  while ((unsigned) cur_slice < _bitslices.size()) {
 //    int row = _bitslices.read_slice(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1);
 //    int col = _bitslices.read_slice(cur_slice, COL_LOC, COL_LOC + COL_BITS - 1);
 //
-//    assert(row < _sbModel->subModel()->sizey());
-//    assert(col < _sbModel->subModel()->sizex());
-//    sbfu *sbfu_node = fus[col][row];
-//    assert(sbfu_node);
+//    assert(row < _ssModel->subModel()->sizey());
+//    assert(col < _ssModel->subModel()->sizex());
+//    ssfu *ssfu_node = fus[col][row];
+//    assert(ssfu_node);
 
 //    //cout << "row,col" << row << " " << col << "\n";
-//    SbPDG_Node *node = pdgnode_for[sbfu_node];
+//    SSDfgNode *node = dfgnode_for[ssfu_node];
 //    assert(node);
-//    SbPDG_Inst *inst = dynamic_cast<SbPDG_Inst *>(node);
+//    SSDfgInst *inst = dynamic_cast<SSDfgInst *>(node);
 //
 //
 //    uint64_t ctrl_bits = _bitslices.read_slice(cur_slice, CTRL_LOC,
@@ -467,25 +467,25 @@ std::map<SB_CONFIG::sb_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 //    ++cur_slice;
 //  }
 //
-//  //routemap -- for each sbnode - inlink and outlinks
-//  //pdgnode_for -- sbnode to pdgnode mapping
-//  //posMap -- for each pdgnode, vector of incoming dirs
+//  //routemap -- for each ssnode - inlink and outlinks
+//  //dfgnode_for -- ssnode to dfgnode mapping
+//  //posMap -- for each dfgnode, vector of incoming dirs
 //
-//  reconstructSchedule(routeMap, pdgnode_for, posMap);
+//  reconstructSchedule(routeMap, dfgnode_for, posMap);
 //
 //  // Iterate over FUs, get the inc_edge assoc. with each FU_INPUT, set extra lat.
 //  cur_slice = SWITCH_SLICE;
-//  for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-//    for (int j = 0; j < _sbModel->subModel()->sizey(); ++j, ++cur_slice) {
-//      sbfu *sbfu_node = fus[i][j];
-//      if (nodeAssigned(sbfu_node) != 0) {
-//        SbPDG_Inst *pdg_node = dynamic_cast<SbPDG_Inst *>(pdgNodeOf(sbfu_node));
+//  for (int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
+//    for (int j = 0; j < _ssModel->subModel()->sizey(); ++j, ++cur_slice) {
+//      ssfu *ssfu_node = fus[i][j];
+//      if (nodeAssigned(ssfu_node) != 0) {
+//        SSDfgInst *dfg_node = dynamic_cast<SSDfgInst *>(dfgNodeOf(ssfu_node));
 //
 //        for (int n = 0; n < NUM_IN_FU_DIRS; ++n) {
-//          if (pdg_node->immSlot() == n) {
+//          if (dfg_node->immSlot() == n) {
 //            //Do Nothing
-//          } else if (n < (pdg_node->ops_end() - pdg_node->ops_begin())) {
-//            SbPDG_Edge *inc_edge = (pdg_node->ops_begin() + n)->get_first_edge();
+//          } else if (n < (dfg_node->ops_end() - dfg_node->ops_begin())) {
+//            SSDfgEdge *inc_edge = (dfg_node->ops_begin() + n)->get_first_edge();
 //            if (!inc_edge) {
 //              continue;
 //            }
@@ -527,7 +527,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name,
 
   for(auto& i : _assignVPort) {
     std::pair<bool,int> pn = i.first;
-    SbPDG_Vec* pv = i.second;
+    SSDfgVec* pv = i.second;
     os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n"; 
   }
   os<< "\n";
@@ -555,8 +555,8 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
      << "// corresponding dfg is in: " << full_file_name << "\n\n";
 
   //Approximate number of config words, good enough for now
-  int config_words  = (_sbModel->subModel()->sizex()+1) *
-                      (_sbModel->subModel()->sizey()+1)  + 16;
+  int config_words  = (_ssModel->subModel()->sizex()+1) *
+                      (_ssModel->subModel()->sizey()+1)  + 16;
 
   //Negative size indicates funny thing
   os << "#define " << cfg_name << "_size " << config_words << "\n\n";
@@ -573,7 +573,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //Active Input Ports
   for(auto& i : _assignVPort) {
     std::pair<bool,int> pn = i.first;
-    //SbPDG_Vec* pv = i.second;
+    //SSDfgVec* pv = i.second;
     
     if(pn.first) { //INPUT
       _bitslices.write(IN_ACT_SLICE, pn.second,pn.second,1);
@@ -586,10 +586,10 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   cheapCalcLatency(max_lat,max_lat_mis);
   _bitslices.write(IN_ACT_SLICE, 56, 63, max_lat_mis);
 
-  int num_vec_groups = _sbPDG->num_groups();
+  int num_vec_groups = _ssDFG->num_groups();
   assert(num_vec_groups <= NUM_DFG_GROUPS);
   for(int g = 0; g < num_vec_groups; ++g) {
-    vector<SbPDG_VecInput*>& vec = _sbPDG->vec_in_group(g);
+    vector<SSDfgVecInput*>& vec = _ssDFG->vec_in_group(g);
     for(auto* vec_in : vec) {
       int port_num = vecPortOf(vec_in).second;
       int bit_pos=(g%2)*32+port_num;
@@ -598,7 +598,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   }
 
   for(int g = 0; g < num_vec_groups; ++g) {
-    vector<SbPDG_VecOutput*>& vec = _sbPDG->vec_out_group(g);
+    vector<SSDfgVecOutput*>& vec = _ssDFG->vec_out_group(g);
     for(auto* vec_out : vec) {
       int port_num = vecPortOf(vec_out).second;
       int bit_pos=(g%2)*32+port_num;
@@ -612,7 +612,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   int start_bits_vp_mask=0;
   int total_bits_vp_mask=0;
   int slice=VP_MAP_SLICE_1;
-  for(auto& port_pair : _sbModel->subModel()->io_interf().in_vports) {
+  for(auto& port_pair : _ssModel->subModel()->io_interf().in_vports) {
     const std::vector<int>& port_m = port_pair.second->port_vec();
     total_bits_vp_mask+=port_m.size();
  
@@ -623,8 +623,8 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     }
 
     //Is this port assigned?  if not can skip 
-    if(SbPDG_Vec* pdg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
-      vector<bool> mask = maskOf(pdg_vec_in);
+    if(SSDfgVec* dfg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
+      vector<bool> mask = maskOf(dfg_vec_in);
 
       for(unsigned i = 0; i < port_m.size(); ++i) {
         _bitslices.write(slice, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
@@ -636,14 +636,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
   start_bits_vp_mask=0;
   total_bits_vp_mask=0;
-  for(auto& port_pair : _sbModel->subModel()->io_interf().out_vports) {
+  for(auto& port_pair : _ssModel->subModel()->io_interf().out_vports) {
     // pair<cgra_port_location, vector<indicies_into_vec>>
     const std::vector<int>& port_m = port_pair.second->port_vec();
     total_bits_vp_mask+=port_m.size();
  
     //Is this port assigned?  if not can skip 
-    if(SbPDG_Vec* pdg_vec_out = vportOf(make_pair(false/*output*/,port_pair.first))) {
-      vector<bool> mask = maskOf(pdg_vec_out);
+    if(SSDfgVec* dfg_vec_out = vportOf(make_pair(false/*output*/,port_pair.first))) {
+      vector<bool> mask = maskOf(dfg_vec_out);
 
       for(unsigned i = 0; i < port_m.size(); ++i) {
         _bitslices.write(VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
@@ -656,30 +656,30 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   xfer_link_to_switch(); // makes sure we have switch representation of routing
   int cur_slice=SWITCH_SLICE;
 
-  vector< vector<sbfu*> >& fus = _sbModel->subModel()->fus();
+  vector< vector<ssfu*> >& fus = _ssModel->subModel()->fus();
 
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
-  vector< vector<sbswitch*> >& switches = _sbModel->subModel()->switches();
-  for(int i = 0; i < _sbModel->subModel()->sizex()+1; ++i) {
+  vector< vector<ssswitch*> >& switches = _ssModel->subModel()->switches();
+  for(int i = 0; i < _ssModel->subModel()->sizex()+1; ++i) {
     
     bool left = (i==0);                 //left edge switch
-    bool right = (i==_sbModel->subModel()->sizex());    //right edge switch
+    bool right = (i==_ssModel->subModel()->sizex());    //right edge switch
     
-    for(int j = 0; j < _sbModel->subModel()->sizey()+1; ++j,++cur_slice) {
+    for(int j = 0; j < _ssModel->subModel()->sizey()+1; ++j,++cur_slice) {
       
       //cout << "Encode switch: " << i << "," << j << "\n";
 
       bool top = (j==0);
-      bool bottom = (j==_sbModel->subModel()->sizey());
+      bool bottom = (j==_ssModel->subModel()->sizey());
 
       //Write the [Row] -- corresponding row of the siwtch based on the j 
       _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
 
       //---------------------------------ENCODE SWITCHES -------------------------------
-      sbswitch* sbsw = switches[i][j];
+      ssswitch* sssw = switches[i][j];
 
       //after switch respresntation
-      std::map<SB_CONFIG::sblink*,SB_CONFIG::sblink*>& link_map = _assignSwitch[sbsw]; 
+      std::map<SS_CONFIG::sslink*,SS_CONFIG::sslink*>& link_map = _assignSwitch[sssw];
       if(link_map.size()!=0) {
 
         //Step 1: Encode all output switches with unused input
@@ -687,9 +687,9 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
         //get used inputs
         std::set<int> used_in_enc;
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          sblink* inlink=I->second;
-          auto in_port  = SbDIR::reverse(inlink->dir());
-          int in_encode = sbdir.encode(in_port,top,bottom,left,right);
+          sslink* inlink=I->second;
+          auto in_port  = SwitchDir::reverse(inlink->dir());
+          int in_encode = ssdir.encode(in_port,top,bottom,left,right);
           used_in_enc.insert(in_encode);
         }
 
@@ -712,15 +712,15 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
         //Step 2: Fill in correct switches
         for(auto I=link_map.begin(), E=link_map.end();I!=E;++I) {
-          sblink* outlink=I->first;
-          sblink* inlink=I->second;
+          sslink* outlink=I->first;
+          sslink* inlink=I->second;
          
-          auto in_port  = SbDIR::reverse(inlink->dir());
-          int in_encode = sbdir.encode(in_port,top,bottom,left,right);
-          int out_pos   = sbdir.slot_for_dir(outlink->dir(),top,bottom,left,right);
+          auto in_port  = SwitchDir::reverse(inlink->dir());
+          int in_encode = ssdir.encode(in_port,top,bottom,left,right);
+          int out_pos   = ssdir.slot_for_dir(outlink->dir(),top,bottom,left,right);
          
-          //cout << SbDIR::dirName(inlink->dir()) << "->" <<
-          //        SbDIR::dirName(outlink->dir()) << ":";
+          //cout << SwitchDir::dirName(inlink->dir()) << "->" <<
+          //        SwitchDir::dirName(outlink->dir()) << ":";
 
           //cout << in_encode << " @pos: " << out_pos << "\n";
 
@@ -735,20 +735,20 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
       //---------------------------------ENCODE FUNC UNITS ---------------------------
       //
-      if(i < _sbModel->subModel()->sizex() && j < _sbModel->subModel()->sizey()) {
-        sbfu* sbfu_node = fus[i][j];
+      if(i < _ssModel->subModel()->sizex() && j < _ssModel->subModel()->sizey()) {
+        ssfu* ssfu_node = fus[i][j];
 
-        if(isPassthrough(sbfu_node)) {
+        if(isPassthrough(ssfu_node)) {
           int cur_bit_pos=FU_DIR_LOC;
           int i = 0; //only one dir allowed
           unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*i;
           unsigned p2 = p1 + BITS_PER_FU_DIR-1;
 
 
-          for(auto &inlink: sbfu_node->in_links()) {
+          for(auto &inlink: ssfu_node->in_links()) {
             for (int slot = 0; slot < 8; ++slot) {
               if (linkAssigned(slot, inlink)) {
-                int in_encode = sbdir.encode_fu_dir(inlink->dir()); //get encoding of dir
+                int in_encode = ssdir.encode_fu_dir(inlink->dir()); //get encoding of dir
                 _bitslices.write(cur_slice, p1, p2, in_encode);   //input dir for each FU in
                 break;
               }
@@ -756,14 +756,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           }
 
           //opcode encdoing
-          unsigned op_encode = sbfu_node->fu_def()->encoding_of(SB_CONFIG::SB_Copy);
+          unsigned op_encode = ssfu_node->fu_def()->encoding_of(SS_CONFIG::SS_Copy);
           _bitslices.write(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1,op_encode);
         }
        
-        //get the pdg node assigned to that FU  
-        if(nodeAssigned(sbfu_node)!=0) {
-          SbPDG_Inst* pdg_node = 
-            dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
+        //get the dfg node assigned to that FU  
+        if(nodeAssigned(ssfu_node)!=0) {
+          SSDfgInst* dfg_node = 
+            dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
           
           int cur_bit_pos=FU_DIR_LOC;
 
@@ -771,19 +771,19 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
             unsigned p1 = cur_bit_pos+BITS_PER_FU_DIR*n;
             unsigned p2 = p1 + BITS_PER_FU_DIR-1;
 
-            if(pdg_node->immSlot()==n) {
-              _bitslices.write(cur_slice,p1,p2,sbdir.encode_fu_dir(SbDIR::IM));  //imm slot for FU
-            } else if(n  < (pdg_node->ops().end()-pdg_node->ops().begin())) {
-              SbPDG_Edge* inc_edge = pdg_node->ops()[n].get_first_edge();
+            if(dfg_node->immSlot()==n) {
+              _bitslices.write(cur_slice,p1,p2,ssdir.encode_fu_dir(SwitchDir::IM));  //imm slot for FU
+            } else if(n  < (dfg_node->ops().end()-dfg_node->ops().begin())) {
+              SSDfgEdge* inc_edge = dfg_node->ops()[n].get_first_edge();
               if(!inc_edge) {continue;}
-              SbPDG_Node* inc_pdg_node = inc_edge->def();
+              SSDfgNode* inc_dfg_node = inc_edge->def();
               
               bool assigned=false;
-              for(auto inlink: sbfu_node->in_links()) {
+              for(auto inlink: ssfu_node->in_links()) {
                 for (int slot = 0; slot < 8; ++slot) {
-                  if (linkAssigned(slot, inlink) && pdgNodeOf(slot, inlink) == inc_pdg_node) {
-                    assert(inlink->dir() != SbDIR::END_DIR);
-                    int in_encode = sbdir.encode_fu_dir(inlink->dir()); //get the encoding of the dir
+                  if (linkAssigned(slot, inlink) && dfgNodeOf(slot, inlink) == inc_dfg_node) {
+                    assert(inlink->dir() != SwitchDir::END_DIR);
+                    int in_encode = ssdir.encode_fu_dir(inlink->dir()); //get the encoding of the dir
                     _bitslices.write(cur_slice, p1, p2, in_encode);      //input direction for each FU in
                     assigned = true;
                     break;
@@ -792,7 +792,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
               }
               if(!assigned) {
                 cout << "Could not find mapped input link for mapped edge: " 
-                     << inc_edge->name() << " at loc: " << sbfu_node->name() 
+                     << inc_edge->name() << " at loc: " << ssfu_node->name() 
                      << "\n";
                 printGraphviz("viz/sched-fail-connection.gv");
                 assert(assigned);
@@ -823,10 +823,10 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           //print predicate
           _bitslices.write(cur_slice,FU_PRED_INV_LOC,
                                      FU_PRED_INV_LOC+FU_PRED_INV_BITS-1,
-                                     pdg_node->predInv());
+                                     dfg_node->predInv());
          
           //opcode encdoing
-          unsigned op_encode = sbfu_node->fu_def()->encoding_of(pdg_node->inst());
+          unsigned op_encode = ssfu_node->fu_def()->encoding_of(dfg_node->inst());
           _bitslices.write(cur_slice,OPCODE_LOC,OPCODE_LOC+OPCODE_BITS-1,op_encode);
         }
 
@@ -836,15 +836,15 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   }//end for switch y 
 
   //--------------------------------------- ENCODE CONSTANTS ------------------------
-  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {    
-    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = fus[i][j];
-      if(nodeAssigned(sbfu_node)!=0) {
-        SbPDG_Inst* pdg_node = dynamic_cast<SbPDG_Inst*>(pdgNodeOf(sbfu_node));
-        bool has_imm_slot = pdg_node->immSlot()!=-1;
-        uint64_t ctrl_bits = pdg_node->ctrl_bits();
+  for(int i = 0; i < _ssModel->subModel()->sizex(); ++i) {    
+    for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
+      ssfu* ssfu_node = fus[i][j];
+      if(nodeAssigned(ssfu_node)!=0) {
+        SSDfgInst* dfg_node = dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
+        bool has_imm_slot = dfg_node->immSlot()!=-1;
+        uint64_t ctrl_bits = dfg_node->ctrl_bits();
         if(has_imm_slot || ctrl_bits) {
-           //cout << i << " " << j << " " << pdg_node->immSlot() << "\n";
+           //cout << i << " " << j << " " << dfg_node->immSlot() << "\n";
            _bitslices.write(cur_slice,ROW_LOC,ROW_LOC+ROW_BITS-1,j);
            _bitslices.write(cur_slice,COL_LOC,COL_LOC+COL_BITS-1,i);
            _bitslices.write(cur_slice,IS_IMM_LOC,
@@ -853,7 +853,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
            ++cur_slice;
         }
         if(has_imm_slot) {
-           _bitslices.write(cur_slice,0,63,pdg_node->imm());
+           _bitslices.write(cur_slice,0,63,dfg_node->imm());
            ++cur_slice;
         }
       }
@@ -878,7 +878,7 @@ void Schedule::printConfigVerif(ostream& os) {
   }
 }
 
-void Schedule::printMvnGraphviz(std::ofstream& ofs, sbnode* node) {
+void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
   auto& np = _nodeProp[node->id()];
 
   if(np.vertices.size() == 0) {
@@ -896,11 +896,11 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, sbnode* node) {
 
 }
 
-void Schedule::printMelGraphviz(std::ofstream& ofs, sbnode* node) {
+void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
   for(auto link: node->out_links()) {
     for (int slot= 0; slot < 8; ++slot) {
       auto &lp = _linkProp[link->id()];
-      vector<SbPDG_Node*> temp;
+      vector<SSDfgNode*> temp;
       for (auto *e : lp.slots[slot].edges)
         temp.push_back(e->def());
       sort(temp.begin(), temp.end());
@@ -915,8 +915,8 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, sbnode* node) {
 }
 
 
-void Schedule::printFUGraphviz(std::ofstream& ofs, sbfu* fu) {
-  int sy = _sbModel->subModel()->sizey();
+void Schedule::printFUGraphviz(std::ofstream& ofs, ssfu* fu) {
+  int sy = _ssModel->subModel()->sizey();
 
   ofs << fu->name() << "[shape=plaintext, ";
   ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
@@ -928,15 +928,15 @@ void Schedule::printFUGraphviz(std::ofstream& ofs, sbfu* fu) {
   ofs << "];\n";  
 }
 
-void Schedule::printSwitchGraphviz(std::ofstream& ofs, sbswitch* sw) {
-  int sy = _sbModel->subModel()->sizey();
+void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
+  int sy = _ssModel->subModel()->sizey();
 
   ofs << sw->name() << " [shape=diamond, ";
   ofs << "pos = \"" << gvsf*sw->x()  << "," << sy-gvsf*sw->y()-1 << "!\"";
   ofs << "];\n";  
 }
 
-void Schedule::printInputGraphviz(std::ofstream& ofs, sbnode* node) {
+void Schedule::printInputGraphviz(std::ofstream& ofs, ssnode* node) {
   ofs << node->name() << "[shape=plaintext, ";
   ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
 
@@ -945,7 +945,7 @@ void Schedule::printInputGraphviz(std::ofstream& ofs, sbnode* node) {
   ofs << "\n</table>>";
   ofs << "];\n"; 
 }
-void Schedule::printOutputGraphviz(std::ofstream& ofs, sbnode* node) {
+void Schedule::printOutputGraphviz(std::ofstream& ofs, ssnode* node) {
   ofs << node->name() << "[shape=plaintext, ";
   ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
 
@@ -961,7 +961,7 @@ void Schedule::printGraphviz(const char* name) {
   ofstream ofs(name);
   assert(ofs.good());
   
-  SB_CONFIG::SubModel* sub = _sbModel->subModel();
+  SS_CONFIG::SubModel* sub = _ssModel->subModel();
 
   ofs << "digraph sched {\n";
 
@@ -971,38 +971,38 @@ void Schedule::printGraphviz(const char* name) {
   for (auto elem : sub->fu_list())
     printFUGraphviz(ofs, elem);
 
-  for(sbinput* in : sub->inputs()) {
+  for(ssinput* in : sub->inputs()) {
     NodeProp& np = _nodeProp[in->id()];
     if(!np.vertices.empty()) {
       printInputGraphviz(ofs,in);
     }
   }
-  for(sboutput* out : sub->outputs()) {
+  for(ssoutput* out : sub->outputs()) {
     NodeProp& np = _nodeProp[out->id()];
     if(!np.vertices.empty()) {
       printOutputGraphviz(ofs,out);
     }
   }
  
-  for(sbnode* node : sub->node_list())
+  for(ssnode* node : sub->node_list())
     printMelGraphviz(ofs,node);
 
   ofs << "}\n\n";
 }
 
 //for(auto& p : _vecProp) {
-//  SbPDG_Vec* vec = p.first;
+//  SSDfgVec* vec = p.first;
 //  ofs << "subgraph cluster" << vec->name() << " {\n";
-//  if(SbPDG_VecInput* invec = dynamic_cast<SbPDG_VecInput*>(vec)) {
+//  if(SSDfgVecInput* invec = dynamic_cast<SSDfgVecInput*>(vec)) {
 //    for(auto I = invec->input_begin(), E = invec->input_end(); I!=E; ++I) {
-//      SbPDG_Input* in = *I;
+//      SSDfgInput* in = *I;
 //      auto& vp = _vertexProp[in->id()];
 //      printInputGraphviz(ofs,vp.node);
 //    }
 //  }
-//  if(SbPDG_VecOutput* outvec = dynamic_cast<SbPDG_VecOutput*>(vec)) {
+//  if(SSDfgVecOutput* outvec = dynamic_cast<SSDfgVecOutput*>(vec)) {
 //    for(auto I = outvec->output_begin(), E = outvec->output_end(); I!=E; ++I) {
-//      SbPDG_Output* out = *I;
+//      SSDfgOutput* out = *I;
 //      auto& vp = _vertexProp[out->id()];
 //      printOutputGraphviz(ofs,vp.node);
 //    }
@@ -1012,32 +1012,32 @@ void Schedule::printGraphviz(const char* name) {
 
 //reconstruct the schedule
 void Schedule::reconstructSchedule(
-                  map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
-                  map<sbnode*, SbPDG_Node* >& pdgnode_for, 
-                  map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap
+                  map<ssnode*, map<SwitchDir::DIR,SwitchDir::DIR> >& routeMap,
+                  map<ssnode*, SSDfgNode* >& dfgnode_for, 
+                  map<SSDfgNode*, vector<SwitchDir::DIR> >& posMap
                   ) {
-  //iterate over inputs (sbinputs)
+  //iterate over inputs (ssinputs)
   SubModel::const_input_iterator Iin,Ein;
-  for (auto elem : _sbModel->subModel()->inputs()) {
-    sbinput* sbinput_node = (sbinput*) &elem;
+  for (auto elem : _ssModel->subModel()->inputs()) {
+    ssinput* ssinput_node = (ssinput*) &elem;
    
-    //get the pdg node for sbinput
-    if(pdgnode_for.count(sbinput_node)!=0) {
-        //cout << "reconstruction from input" << sbinput_node->name() << " " << sbinput_node->port() << "\n";
-        SbPDG_Node* pdg_node = pdgnode_for[sbinput_node];
-        tracePath(sbinput_node, pdg_node, routeMap, pdgnode_for, posMap);
+    //get the dfg node for ssinput
+    if(dfgnode_for.count(ssinput_node)!=0) {
+        //cout << "reconstruction from input" << ssinput_node->name() << " " << ssinput_node->port() << "\n";
+        SSDfgNode* dfg_node = dfgnode_for[ssinput_node];
+        tracePath(ssinput_node, dfg_node, routeMap, dfgnode_for, posMap);
     }
   }
 
   //iterate over fus
-  vector< vector<sbfu*> >& fus = _sbModel->subModel()->fus();
-  for(int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-      sbfu* sbfu_node = fus[i][j];
-      if(pdgnode_for.count(sbfu_node)!=0) {
+  vector< vector<ssfu*> >& fus = _ssModel->subModel()->fus();
+  for(int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
+    for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
+      ssfu* ssfu_node = fus[i][j];
+      if(dfgnode_for.count(ssfu_node)!=0) {
         //cout << "reconstruct from fu " << i << " " << j << "\n";
-        SbPDG_Node* pdg_node = pdgnode_for[sbfu_node];
-        tracePath(sbfu_node, pdg_node, routeMap, pdgnode_for, posMap);
+        SSDfgNode* dfg_node = dfgnode_for[ssfu_node];
+        tracePath(ssfu_node, dfg_node, routeMap, dfgnode_for, posMap);
       }
         
     }
@@ -1047,33 +1047,33 @@ void Schedule::reconstructSchedule(
 
 /*
 struct edgeLinkItem{ 
-  sblink* dlink;
-  int SbPDG_Edge*
+  sslink* dlink;
+  int SSDfgEdge*
 }
 */
-void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
+void Schedule::calcAssignEdgeLink_single(SSDfgNode* dfgnode) {
   //_assignEdgeLink
 
   //paris of link to edge
-  list<tuple<int, sblink*,SbPDG_Edge*>> openset;
+  list<tuple<int, sslink*,SSDfgEdge*>> openset;
 
-  auto node = location_of(pdgnode);
+  auto node = location_of(dfgnode);
 
   if(!node.second) {
-    //cerr << "SbPDG_Node: " << pdgnode->name() << " is not scheduled\n";
+    //cerr << "SSDfgNode: " << dfgnode->name() << " is not scheduled\n";
     return;
   }
   
-  for(auto source_pdgedge : pdgnode->in_edges()) {
-    SbPDG_Node* source_pdgnode = source_pdgedge->def();
+  for(auto source_dfgedge : dfgnode->in_edges()) {
+    SSDfgNode* source_dfgnode = source_dfgedge->def();
 
-    //route edge if source pdgnode is scheduled
-    if(is_scheduled(source_pdgnode)) {
-      sbnode::const_iterator Il,El;
+    //route edge if source dfgnode is scheduled
+    if(is_scheduled(source_dfgnode)) {
+      ssnode::const_iterator Il,El;
       for(auto& link: node.second->in_links()) {
         for (int slot=0; slot < 8; ++slot) {
-          if (pdgNodeOf(slot, link) == source_pdgnode) {
-            openset.emplace_back(make_tuple(slot, link, source_pdgedge));
+          if (dfgNodeOf(slot, link) == source_dfgnode) {
+            openset.emplace_back(make_tuple(slot, link, source_dfgedge));
           }
         }
       }
@@ -1082,25 +1082,25 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
   /*
 
   
-  sbnode::const_iterator Il,El;
+  ssnode::const_iterator Il,El;
   for(Il = node->ibegin(), El = node->iend(); Il!=El; ++Il) {
-      sblink* link = *Il;
-      if(pdgNodeOf(link,config)!=nullptr) {
-        set<SbPDG_Edge*>& edgelist = _assignEdgeLink[make_pair(link,config)];
-        set<SbPDG_Edge*>::iterator Ie,Ee;
+      sslink* link = *Il;
+      if(dfgNodeOf(link,config)!=nullptr) {
+        set<SSDfgEdge*>& edgelist = _assignEdgeLink[make_pair(link,config)];
+        set<SSDfgEdge*>::iterator Ie,Ee;
         for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; Ie++) {
-          SbPDG_Edge* pdgedge = *Ie;
-          openset.push_back(make_pair(make_pair(link,config),source_pdgedge));
+          SSDfgEdge* dfgedge = *Ie;
+          openset.push_back(make_pair(make_pair(link,config),source_dfgedge));
         }
       }
   }*/
   
   while(!openset.empty()) {
     int slot = get<0>(openset.front());
-    sblink* cur_link = get<1>(openset.front());
-    SbPDG_Edge* cur_edge = get<2>(openset.front());
-    sbnode* cur_node = cur_link->orig();
-    SbPDG_Node* cur_pdgnode = cur_edge->def();
+    sslink* cur_link = get<1>(openset.front());
+    SSDfgEdge* cur_edge = get<2>(openset.front());
+    ssnode* cur_node = cur_link->orig();
+    SSDfgNode* cur_dfgnode = cur_edge->def();
     openset.pop_front();
     
     //cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
@@ -1110,10 +1110,10 @@ void Schedule::calcAssignEdgeLink_single(SbPDG_Node* pdgnode) {
     
     for(auto &from_link: cur_node->in_links()) {
 
-        if(from_link->orig()==_sbModel->subModel()->cross_switch()) continue;
-        if(from_link->orig()==_sbModel->subModel()->load_slice()  ) continue;
+        if(from_link->orig()==_ssModel->subModel()->cross_switch()) continue;
+        if(from_link->orig()==_ssModel->subModel()->load_slice()  ) continue;
 
-        if(pdgNodeOf(slot, from_link)==cur_pdgnode) {
+        if(dfgNodeOf(slot, from_link)==cur_dfgnode) {
           openset.push_back(make_tuple(slot, from_link,cur_edge));
         }
     }
@@ -1128,24 +1128,24 @@ void Schedule::calcAssignEdgeLink() {
   //  i.second.edges.clear();
   //}
   
-  for (SbPDG_Inst* pdginst : _sbPDG->inst_vec()) {
-    calcAssignEdgeLink_single(pdginst);
+  for (SSDfgInst* dfginst : _ssDFG->inst_vec()) {
+    calcAssignEdgeLink_single(dfginst);
   }
   
-  for (auto pdgout : _sbPDG->outputs()) {
-    calcAssignEdgeLink_single(pdgout);
+  for (auto dfgout : _ssDFG->outputs()) {
+    calcAssignEdgeLink_single(dfgout);
   }
   
   
   /*
   
   SubModel::const_input_iterator I,E;
-  for(I=_sbModel->subModel()->input_begin(),
-      E=_sbModel->subModel()->input_end(); I!=E; ++I) {
-     sbinput* cand_input = const_cast<sbinput*>(&(*I));
+  for(I=_ssModel->subModel()->input_begin(),
+      E=_ssModel->subModel()->input_end(); I!=E; ++I) {
+     ssinput* cand_input = const_cast<ssinput*>(&(*I));
     
-    if(pdgNodeOf(cand_input,config)!=nullptr) {
-       sblink* firstOutLink = cand_input->getFirstOutLink();
+    if(dfgNodeOf(cand_input,config)!=nullptr) {
+       sslink* firstOutLink = cand_input->getFirstOutLink();
        openset.push_back(firstOutLink);
        lat_edge[firstOutLink]=0;
     }
@@ -1154,27 +1154,27 @@ void Schedule::calcAssignEdgeLink() {
     
   
   while(!openset.empty()) {
-    sblink* inc_link = openset.front(); 
+    sslink* inc_link = openset.front(); 
     openset.pop_front();
     
-    sbnode* node = inc_link->dest();
-    sbnode::const_iterator I,E,II,EE;
+    ssnode* node = inc_link->dest();
+    ssnode::const_iterator I,E,II,EE;
     
-    SbPDG_Node* cur_pdgnode = pdgNodeOf(inc_link,config);
-    assert(cur_pdgnode);
+    SSDfgNode* cur_dfgnode = dfgNodeOf(inc_link,config);
+    assert(cur_dfgnode);
     
-    if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
-      SbPDG_Node* next_pdgnode = pdgNodeOf(node,config);
+    if(ssfu* next_fu = dynamic_cast<ssfu*>(node)) {
+      SSDfgNode* next_dfgnode = dfgNodeOf(node,config);
       //cout << next_fu->name() << "\n"; 
-      assert(next_pdgnode);
-      SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
-      assert(next_pdginst);
+      assert(next_dfgnode);
+      SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode); 
+      assert(next_dfginst);
     
       bool everyone_is_here = true;
       int latency=0;
       for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
-        sblink* inlink = *II;
-        if(pdgNodeOf(inlink,config) != nullptr) {
+        sslink* inlink = *II;
+        if(dfgNodeOf(inlink,config) != nullptr) {
           if(lat_edge.count(inlink)==1) {
             if(lat_edge[inlink]>latency) {
               latency=lat_edge[inlink];
@@ -1186,20 +1186,20 @@ void Schedule::calcAssignEdgeLink() {
         }
       }
       if(everyone_is_here) {
-        sblink* new_link = next_fu->getFirstOutLink();
-        lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());;
+        sslink* new_link = next_fu->getFirstOutLink();
+        lat_edge[new_link] = latency + inst_lat(next_dfginst->inst());;
         openset.push_back(new_link);
       }
-    } else if (dynamic_cast<sboutput*>(node)) {
+    } else if (dynamic_cast<ssoutput*>(node)) {
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
       }
     } else {
     
       for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
-        sblink* link = *I;
+        sslink* link = *I;
         
-        if(pdgNodeOf(link,config) == pdgNodeOf(inc_link,config)) {
+        if(dfgNodeOf(link,config) == dfgNodeOf(inc_link,config)) {
           lat_edge[link] = lat_edge[inc_link] + 1;
           openset.push_back(link);
         }
@@ -1213,13 +1213,13 @@ void Schedule::calcAssignEdgeLink() {
 }
 
 void Schedule::stat_printOutputLatency() {
-  int n = _sbPDG->num_vec_output();
+  int n = _ssDFG->num_vec_output();
   cout << "** Output Vector Latencies **\n";
   for (int i = 0; i < n; i++) {
-    SbPDG_VecOutput *vec_out = _sbPDG->vec_out(i);
+    SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
     cout << vec_out->gamsName() << ": ";
-    for (auto pdgout: vec_out->outputs()) {
-      cout << latOf(pdgout) << " ";
+    for (auto dfgout: vec_out->outputs()) {
+      cout << latOf(dfgout) << " ";
     }
     cout << endl;
   }
@@ -1229,11 +1229,11 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
 
   //int violation=0;
 
-  for (int i=0; i<_sbPDG->num_vec_output(); i++) {
-    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+  for (int i=0; i<_ssDFG->num_vec_output(); i++) {
+    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int low_lat=10000, up_lat=0;
-    for (auto pdgout: vec_out->outputs()) {
-      int lat = latOf(pdgout);
+    for (auto dfgout: vec_out->outputs()) {
+      int lat = latOf(dfgout);
       if(lat < low_lat) {
         low_lat = lat;
       }
@@ -1249,9 +1249,9 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
     //int min_vec_lat = 0;
     //int max_vec_lat = 1000000;
     //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-    //   SbPDG_Output* pdgout = vec_out->getOutput(m);
+    //   SSDfgOutput* dfgout = vec_out->getOutput(m);
 
-    //   auto p = _latBounds[pdgout];
+    //   auto p = _latBounds[dfgout];
     //   int min_inc_lat = p.first; 
     //   int max_inc_lat = p.second;
  
@@ -1266,8 +1266,8 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
     //}
 
     //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-    //   SbPDG_Output* pdgout = vec_out->getOutput(m);
-    //   assign_lat_bounds(pdgout,min_vec_lat,max_vec_lat);
+    //   SSDfgOutput* dfgout = vec_out->getOutput(m);
+    //   assign_lat_bounds(dfgout,min_vec_lat,max_vec_lat);
     //}
 
 
@@ -1310,7 +1310,7 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
     //  cout << "max_lat2: " << max_lat2 << " mis2:" << max_lat_mis2 << "\n";
     //}
 
-    //_sbPDG->printGraphviz("viz/remap-fail.dot");
+    //_ssDFG->printGraphviz("viz/remap-fail.dot");
     //printGraphviz("viz/sched.gv");
     //cout << "-------------------------------------------------------------------\n";
     //cout << "-------------------------------------------------------------------\n"; 
@@ -1323,23 +1323,23 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
 }
 
 bool Schedule::fixLatency_bwd() {
-  int n = _sbPDG->num_vec_output();
+  int n = _ssDFG->num_vec_output();
   for (int i=0; i<n; i++) { //iterate over output vectors
-    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int maxLat = 0;
     
-    for (auto pdgout : vec_out->outputs()) {
-      if (latOf(pdgout) > maxLat) {
-        maxLat = latOf(pdgout);
+    for (auto dfgout : vec_out->outputs()) {
+      if (latOf(dfgout) > maxLat) {
+        maxLat = latOf(dfgout);
       }
     }
-    unordered_set<SbPDG_Node*> visited;
+    unordered_set<SSDfgNode*> visited;
     //TODO: sort ports from small to large latency
-    for (auto pdgout: vec_out->outputs()) {
-      int ed = maxLat - latOf(pdgout); //extra delay to insert
-      //cout<<"Output "<<pdgout->name()<<"  maxLat: "<<maxLat<<" _latOf: "<<_latOf[pdgout]<<" ed: "<<ed<<endl;
+    for (auto dfgout: vec_out->outputs()) {
+      int ed = maxLat - latOf(dfgout); //extra delay to insert
+      //cout<<"Output "<<dfgout->name()<<"  maxLat: "<<maxLat<<" _latOf: "<<_latOf[dfgout]<<" ed: "<<ed<<endl;
       if (ed > 0) {
-        bool succ = fixDelay(pdgout, ed, visited);
+        bool succ = fixDelay(dfgout, ed, visited);
         if (!succ) return false;
       }
     }
@@ -1348,28 +1348,28 @@ bool Schedule::fixLatency_bwd() {
 }
 
 
-bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>& visited) {
+bool Schedule::fixDelay(SSDfgOutput* dfgout, int ed, unordered_set<SSDfgNode*>& visited) {
 
-  SbPDG_Inst* n = pdgout->out_inst();
+  SSDfgInst* n = dfgout->out_inst();
   if(!n || n->num_out()>1) { //bail if orig is input or has >1 use
     return false;
   }
 
   //assert(n && "output is always associated with an instruction node or input node");
-  //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<pdgout->name()<<endl;
+  //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<dfgout->name()<<endl;
   if (visited.count(n) == 1) {
-    cout<<"PDGNode "<<n->name()<<" is already visited!"<<endl;
+    cout<<"DFGNode "<<n->name()<<" is already visited!"<<endl;
     assert(0);
     return false;
   }
   visited.insert(n);
 
-  for(auto source_pdgedge : n->in_edges()) {
+  for(auto source_dfgedge : n->in_edges()) {
 
-    _edgeProp[source_pdgedge->id()].extra_lat = std::min(_sbModel->maxEdgeDelay(),
-        _edgeProp[source_pdgedge->id()].extra_lat + ed);
+    _edgeProp[source_dfgedge->id()].extra_lat = std::min(_ssModel->maxEdgeDelay(),
+        _edgeProp[source_dfgedge->id()].extra_lat + ed);
 
-    if (_edgeProp[source_pdgedge->id()].extra_lat + ed > _sbModel->maxEdgeDelay()) {
+    if (_edgeProp[source_dfgedge->id()].extra_lat + ed > _ssModel->maxEdgeDelay()) {
       return false;
     }
   }
@@ -1378,49 +1378,49 @@ bool Schedule::fixDelay(SbPDG_Output* pdgout, int ed, unordered_set<SbPDG_Node*>
 
 
 bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
-  list<sblink*> openset;
-  //map<sbnode*,sblink*> came_from;
-  map<sblink *, int> lat_edge;
+  list<sslink*> openset;
+  //map<ssnode*,sslink*> came_from;
+  map<sslink *, int> lat_edge;
 
   max_lat = 0;
   max_lat_mis = 0;
 
   SubModel::const_input_iterator I, E;
-  for (auto elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = const_cast<sbinput *>(elem);
+  for (auto elem : _ssModel->subModel()->inputs()) {
+    ssinput *cand_input = const_cast<ssinput *>(elem);
 
-    SbPDG_Node *pdgnode = pdgNodeOf(cand_input);
-    if (pdgnode != nullptr) {
-      sblink *firstOutLink = cand_input->getFirstOutLink();
+    SSDfgNode *dfgnode = dfgNodeOf(cand_input);
+    if (dfgnode != nullptr) {
+      sslink *firstOutLink = cand_input->getFirstOutLink();
       assert(firstOutLink);
       openset.push_back(firstOutLink);
-      lat_edge[firstOutLink] = latOf(pdgnode);
+      lat_edge[firstOutLink] = latOf(dfgnode);
     }
   }
 
 
   //Outlinks of all the inputs
   while (!openset.empty()) {
-    sblink *inc_link = openset.front();
+    sslink *inc_link = openset.front();
     openset.pop_front();
 
     //dest node
-    sbnode *node = inc_link->dest();
+    ssnode *node = inc_link->dest();
 
-    if (sbfu *next_fu = dynamic_cast<sbfu *>(node)) {
-      SbPDG_Node *next_pdgnode = pdgNodeOf(node);
+    if (ssfu *next_fu = dynamic_cast<ssfu *>(node)) {
+      SSDfgNode *next_dfgnode = dfgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
-      if (!next_pdgnode && !isPassthrough(node)) {
+      if (!next_dfgnode && !isPassthrough(node)) {
         cout << "problem with latency calculation!\n";
         cout << node->name() << " has no mapping\n";
         max_lat = -1;
         max_lat_mis = -1;
-        assert(next_pdgnode);
+        assert(next_dfgnode);
         return false;
       }
 
-      SbPDG_Inst *next_pdginst = dynamic_cast<SbPDG_Inst *>(next_pdgnode);
-      assert(next_pdginst || isPassthrough(node));
+      SSDfgInst *next_dfginst = dynamic_cast<SSDfgInst *>(next_dfgnode);
+      assert(next_dfginst || isPassthrough(node));
 
       bool everyone_is_here = true;
 
@@ -1428,7 +1428,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
       int low_latency = 100000000;  //magic number, forgive me
       for (auto &inlink: next_fu->in_links()) {
         for (int slot = 0; slot < 8; ++slot) {
-          if (pdgNodeOf(slot, inlink) != nullptr) {
+          if (dfgNodeOf(slot, inlink) != nullptr) {
             if (lat_edge.count(inlink) == 1) {
               if (lat_edge[inlink] > latency) {
                 latency = lat_edge[inlink];
@@ -1447,15 +1447,15 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
       if (everyone_is_here && !isPassthrough(node)) {
         for (auto &inlink: next_fu->in_links()) {
           for (int slot = 0; slot < 8; ++slot) {
-            SbPDG_Node *origNode = pdgNodeOf(slot, inlink);
+            SSDfgNode *origNode = dfgNodeOf(slot, inlink);
             if (origNode != nullptr) {
-              SbPDG_Edge *edge = origNode->getLinkTowards(next_pdgnode);
+              SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
               if (lat_edge[inlink] < latency) {
                 int diff = latency - lat_edge[inlink]; //latency per edge
                 assert(edge);
-                if (diff > _sbModel->maxEdgeDelay()) {
+                if (diff > _ssModel->maxEdgeDelay()) {
 
-                  //cout << diff  << " > " << _sbModel->maxEdgeDelay() << "\n";
+                  //cout << diff  << " > " << _ssModel->maxEdgeDelay() << "\n";
                   return false;
                 }
                 set_edge_delay(diff, edge);
@@ -1469,11 +1469,11 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
       }
 
       if (everyone_is_here) {
-        sblink *new_link = next_fu->getFirstOutLink();
+        sslink *new_link = next_fu->getFirstOutLink();
         if (isPassthrough(node)) {
           lat_edge[new_link] = latency + 1; //TODO: Check this
         } else { //regular inst
-          lat_edge[new_link] = latency + inst_lat(next_pdginst->inst());
+          lat_edge[new_link] = latency + inst_lat(next_dfginst->inst());
         }
         openset.push_back(new_link);
 
@@ -1482,10 +1482,10 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
           max_lat_mis = diff;
         }
       }
-    } else if (dynamic_cast<sboutput *>(node)) {
-      sboutput *sb_out = dynamic_cast<sboutput *>(node);
-      SbPDG_Node *pdgnode = pdgNodeOf(sb_out);
-      assign_lat(pdgnode, lat_edge[inc_link]);
+    } else if (dynamic_cast<ssoutput *>(node)) {
+      ssoutput *ss_out = dynamic_cast<ssoutput *>(node);
+      SSDfgNode *dfgnode = dfgNodeOf(ss_out);
+      assign_lat(dfgnode, lat_edge[inc_link]);
 
       if (lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
@@ -1493,7 +1493,7 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
     } else {
       for (auto &link : node->out_links()) {
         for (int slot = 0; slot < 8; ++slot) {
-          if (pdgNodeOf(slot, link) == pdgNodeOf(0, inc_link)) {
+          if (dfgNodeOf(slot, link) == dfgNodeOf(0, inc_link)) {
             lat_edge[link] = lat_edge[inc_link] + 1;
             openset.push_back(link);
           }
@@ -1504,9 +1504,9 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   return true;
 }
 
-std::vector<SbPDG_Inst*> Schedule::ordered_non_temporal() {
-  std::vector<SbPDG_Inst*> res;
-  for (SbPDG_Inst *i : _sbPDG->ordered_insts()) {
+std::vector<SSDfgInst*> Schedule::ordered_non_temporal() {
+  std::vector<SSDfgInst*> res;
+  for (SSDfgInst *i : _ssDFG->ordered_insts()) {
     if (!i->is_temporal()) {
       res.push_back(i);
     }
@@ -1519,7 +1519,7 @@ void Schedule::iterativeFixLatency() {
   bool changed = true;
   reset_lat_bounds();
 
-  int max_ed = _sbModel->maxEdgeDelay();
+  int max_ed = _ssModel->maxEdgeDelay();
   int iters = 0;
 
   bool overflow = false;
@@ -1527,7 +1527,7 @@ void Schedule::iterativeFixLatency() {
 
   // TODO: We didn't quite fix the problem of IO vectors in temporal region, though hopefully this isn't necessary
 
-  std::vector<SbPDG_Inst *> ordered_non_temp = ordered_non_temporal();
+  std::vector<SSDfgInst *> ordered_non_temp = ordered_non_temporal();
 
   while (changed || overflow) {
     changed = false;
@@ -1540,13 +1540,13 @@ void Schedule::iterativeFixLatency() {
     }
 
     //FORWARD PASS -- INSTS
-    for (SbPDG_Inst *inst : ordered_non_temp) {
+    for (SSDfgInst *inst : ordered_non_temp) {
       auto &vp = _vertexProp[inst->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
 
       for (auto edge : inst->in_edges()) {
-        SbPDG_Node *origNode = edge->def();
+        SSDfgNode *origNode = edge->def();
         auto &orig_vp = _vertexProp[origNode->id()];
 
         int edge_lat = origNode->lat_of_inst() + link_count(edge) - 1;
@@ -1573,17 +1573,17 @@ void Schedule::iterativeFixLatency() {
     if (overflow) continue;
 
     //FORWARD PASS -- VEC_OUTPUTS 
-    for (int i = 0; i < _sbPDG->num_vec_output(); i++) {
-      SbPDG_VecOutput *vec_out = _sbPDG->vec_out(i);
+    for (int i = 0; i < _ssDFG->num_vec_output(); i++) {
+      SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
       auto &vecp = _vecProp[vec_out];
       int new_min = vecp.min_lat;
       int new_max = vecp.max_lat;
 
 
-      for (auto pdgout : vec_out->outputs()) {
-        SbPDG_Edge *edge = pdgout->first_inc_edge();
+      for (auto dfgout : vec_out->outputs()) {
+        SSDfgEdge *edge = dfgout->first_inc_edge();
 
-        SbPDG_Node *origNode = edge->def();
+        SSDfgNode *origNode = edge->def();
         auto &orig_vp = _vertexProp[origNode->id()];
 
         int edge_lat = origNode->lat_of_inst() + link_count(edge) - 1;
@@ -1600,8 +1600,8 @@ void Schedule::iterativeFixLatency() {
       vecp.min_lat = new_min;
       vecp.max_lat = new_max;
 
-      for (auto pdgout : vec_out->outputs()) {
-        auto &vp = _vertexProp[pdgout->id()];
+      for (auto dfgout : vec_out->outputs()) {
+        auto &vp = _vertexProp[dfgout->id()];
         vp.min_lat = new_min;
         vp.max_lat = new_max;
       }
@@ -1618,14 +1618,14 @@ void Schedule::iterativeFixLatency() {
 
     //BACKWARDS PASS
     for (int i = ordered_non_temp.size() - 1; i >= 0; i--) {
-      SbPDG_Inst *inst = ordered_non_temp[i];
+      SSDfgInst *inst = ordered_non_temp[i];
       auto &vp = _vertexProp[inst->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
 
       for (auto edge : inst->uses()) {
         if (edge == nullptr) continue;
-        SbPDG_Node *useNode = edge->use();
+        SSDfgNode *useNode = edge->use();
         auto &use_vp = _vertexProp[useNode->id()];
 
         int edge_lat = link_count(edge) - 1 + inst->lat_of_inst();
@@ -1650,7 +1650,7 @@ void Schedule::iterativeFixLatency() {
   //cout << "iters until converge: " << iters << ", mismatch: " << max_mis << "\n";
   // NOW SET THE LATENCY!
 
-  for (SbPDG_Inst *inst : ordered_non_temp) {
+  for (SSDfgInst *inst : ordered_non_temp) {
     auto &vp = _vertexProp[inst->id()];
     //cout << inst->name() << "  min_lat:" << vp.min_lat << " max_lat:" 
     //                                    << vp.max_lat << "\n";
@@ -1662,10 +1662,10 @@ void Schedule::iterativeFixLatency() {
     int mis = 0;
     for (auto edge : inst->in_edges()) {
       if (edge == nullptr) continue;
-      SbPDG_Node *origNode = edge->def();
+      SSDfgNode *origNode = edge->def();
 
       int lat = latOf(origNode) + link_count(edge) - 1;
-      int diff = std::max(std::min(_sbModel->maxEdgeDelay(), target - lat), 0);
+      int diff = std::max(std::min(_ssModel->maxEdgeDelay(), target - lat), 0);
       mis = std::max(mis, (target - lat) - diff);
       set_edge_delay(diff, edge);
 
@@ -1677,8 +1677,8 @@ void Schedule::iterativeFixLatency() {
     assign_lat(inst, inst->lat_of_inst() + max);
   }
 
-  for (int i = 0; i < _sbPDG->num_vec_output(); i++) {
-    SbPDG_VecOutput *vec_out = _sbPDG->vec_out(i);
+  for (int i = 0; i < _ssDFG->num_vec_output(); i++) {
+    SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
     auto &vp = _vecProp[vec_out];
 
     //cout << vec_out->name() << "  min_lat:" << vp.min_lat << " max_lat:" 
@@ -1690,13 +1690,13 @@ void Schedule::iterativeFixLatency() {
     //cout << "target : " << target << "\n";
 
     int mis = 0;
-    for (auto pdgout: vec_out->outputs()) {
-      SbPDG_Edge *edge = pdgout->first_inc_edge();
+    for (auto dfgout: vec_out->outputs()) {
+      SSDfgEdge *edge = dfgout->first_inc_edge();
 
-      SbPDG_Node *origNode = edge->def();
+      SSDfgNode *origNode = edge->def();
 
       int lat = latOf(origNode) + link_count(edge) - 1;
-      int diff = std::max(std::min(_sbModel->maxEdgeDelay(), target - lat), 0);
+      int diff = std::max(std::min(_ssModel->maxEdgeDelay(), target - lat), 0);
       mis = std::max(mis, (target - lat) - diff);
 
       set_edge_delay(diff, edge);
@@ -1714,21 +1714,21 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   max_lat=0;
   _groupMismatch.clear();
 
-  std::vector<SbPDG_Inst*> ordered_non_temp = ordered_non_temporal();
+  std::vector<SSDfgInst*> ordered_non_temp = ordered_non_temporal();
 
-  for(SbPDG_Inst* inst : ordered_non_temp) {
+  for(SSDfgInst* inst : ordered_non_temp) {
     calcNodeLatency(inst,max_lat,max_lat_mis,set_delay);
   }
 
-  for (int i=0; i<_sbPDG->num_vec_output(); i++) {
-    SbPDG_VecOutput* vec_out = _sbPDG->vec_out(i);
+  for (int i=0; i<_ssDFG->num_vec_output(); i++) {
+    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int low_lat=MAX_SCHED_LAT, up_lat=0;
 
     if(vecMapped(vec_out)) {
-      for (auto pdgout : vec_out->outputs()) {
-        SbPDG_Edge* edge = pdgout->first_inc_edge();
+      for (auto dfgout : vec_out->outputs()) {
+        SSDfgEdge* edge = dfgout->first_inc_edge();
   
-        if(is_scheduled(pdgout)) {
+        if(is_scheduled(dfgout)) {
           int lat = latOf(edge->def()) + edge_delay(edge) + link_count(edge)-1;
           //cout << edge->name() << "\n";
           //cout << edge->def()->name() << "\n";
@@ -1738,7 +1738,7 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
           //     << " link_count:" << link_count(edge) << "inst: "
           //     << edge->def() << " " << edge->def()->name() << "\n";
 
-          assign_lat(pdgout,lat);
+          assign_lat(dfgout,lat);
 
           if(lat>up_lat) up_lat=lat;
           if(lat<low_lat) low_lat=lat;
@@ -1764,12 +1764,12 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
     //Don't play with delay on output nodes because no delay fifos
     if(set_delay && vecMapped(vec_out)) { 
       for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
-        SbPDG_Output* pdgout = vec_out->getOutput(m);
-        SbPDG_Edge* edge = pdgout->first_inc_edge();
+        SSDfgOutput* dfgout = vec_out->getOutput(m);
+        SSDfgEdge* edge = dfgout->first_inc_edge();
   
-        if(is_scheduled(pdgout)) {
+        if(is_scheduled(dfgout)) {
           int lat = latOf(edge->def()) + link_count(edge)-1; 
-          int diff = std::min(_sbModel->maxEdgeDelay(), up_lat - lat);
+          int diff = std::min(_ssModel->maxEdgeDelay(), up_lat - lat);
           set_edge_delay(diff,edge);
         }
       }
@@ -1781,14 +1781,14 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   }
 }
 
-void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis, 
+void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis, 
     bool set_delay) {
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
   if(is_scheduled(inst)) {
     for(auto edge : inst->in_edges()) {
 
-      SbPDG_Node* origNode = edge->def();
+      SSDfgNode* origNode = edge->def();
 
       if(is_scheduled(origNode)) {
         if (origNode != nullptr) {
@@ -1806,7 +1806,7 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
 
   assign_lat_bounds(inst,low_lat,up_lat); //FIXME: turn off, just for debug
 
-  int diff = up_lat - low_lat; // - _sbModel->maxEdgeDelay();
+  int diff = up_lat - low_lat; // - _ssModel->maxEdgeDelay();
 
   if(diff>max_lat_mis) {max_lat_mis=diff;}
   if(diff>_groupMismatch[inst->group_id()]) {
@@ -1816,7 +1816,7 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
   int new_lat = inst->lat_of_inst() + up_lat;
   assign_lat(inst,new_lat);
 
-  //sbnode* n = locationOf(inst);
+  //ssnode* n = locationOf(inst);
   //cout << "C " << inst->name() << " node: " << n->name() 
   //  << " low_lat: " << low_lat << " up_lat:" << up_lat << " latmis:" 
   //  << max_lat_mis << "diff: " << diff << "\n";
@@ -1833,11 +1833,11 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
   if(set_delay && is_scheduled(inst)) {
     for (auto edge : inst->in_edges()) {
 
-      SbPDG_Node* origNode = edge->def();
+      SSDfgNode* origNode = edge->def();
       if(is_scheduled(origNode)) {
         if (origNode != nullptr) {
           int lat = latOf(origNode) + link_count(edge)-1; 
-          int diff = std::min(_sbModel->maxEdgeDelay(), up_lat - lat);
+          int diff = std::min(_ssModel->maxEdgeDelay(), up_lat - lat);
           set_edge_delay(diff,edge);
         }
       }
@@ -1848,60 +1848,60 @@ void Schedule::calcNodeLatency(SbPDG_Inst* inst, int &max_lat, int &max_lat_mis,
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, 
     bool warnMismatch) {
-  list<sblink*> openset;
-  //map<sbnode*,sblink*> came_from;
-  unordered_map<sblink*,int> lat_edge;
+  list<sslink*> openset;
+  //map<ssnode*,sslink*> came_from;
+  unordered_map<sslink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
 
   SubModel::const_input_iterator I,E;
-  for(auto elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = const_cast<sbinput *>(elem);
+  for(auto elem : _ssModel->subModel()->inputs()) {
+    ssinput *cand_input = const_cast<ssinput *>(elem);
 
-    SbPDG_Node *pdgnode = pdgNodeOf(cand_input);
-    if (pdgnode != nullptr) {
-      sblink *firstOutLink = cand_input->getFirstOutLink();
+    SSDfgNode *dfgnode = dfgNodeOf(cand_input);
+    if (dfgnode != nullptr) {
+      sslink *firstOutLink = cand_input->getFirstOutLink();
       openset.push_back(firstOutLink);
-      lat_edge[firstOutLink] = latOf(pdgnode);
+      lat_edge[firstOutLink] = latOf(dfgnode);
     }
   }
     
  //Outlinks of all the inputs 
   while(!openset.empty()) {
-    sblink* inc_link = openset.front(); 
+    sslink* inc_link = openset.front(); 
     openset.pop_front();
     //cout << inc_link->name() << "\n";   
 
     //dest node
-    sbnode* node = inc_link->dest();
-    sbnode::const_iterator I,E,II,EE;
+    ssnode* node = inc_link->dest();
+    ssnode::const_iterator I,E,II,EE;
     
-    if(sbfu* next_fu = dynamic_cast<sbfu*>(node)) {
-      sblink* new_link = next_fu->getFirstOutLink();
+    if(ssfu* next_fu = dynamic_cast<ssfu*>(node)) {
+      sslink* new_link = next_fu->getFirstOutLink();
       if(lat_edge.count(new_link)) {
         //cout << "skipping because full:" << new_link->name() << "\n";
         continue; //skip if we've done it already
       }
 
-      SbPDG_Node* next_pdgnode = pdgNodeOf(node);
+      SSDfgNode* next_dfgnode = dfgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
-      if(!next_pdgnode && !isPassthrough(node)) {
-        assert(next_pdgnode);
+      if(!next_dfgnode && !isPassthrough(node)) {
+        assert(next_dfgnode);
         cout << "problem with latency calculation!\n";
         max_lat=-1;
         max_lat_mis=-1;
         return;
       }
 
-      SbPDG_Inst* next_pdginst = dynamic_cast<SbPDG_Inst*>(next_pdgnode); 
-      assert(next_pdginst || isPassthrough(node));
+      SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode); 
+      assert(next_dfginst || isPassthrough(node));
     
       bool everyone_is_here = true;
 
       for(auto &inlink: next_fu->in_links()) {
         for (int slot = 0; slot < 8; ++slot) {
-          if (pdgNodeOf(slot, inlink) != nullptr) {
+          if (dfgNodeOf(slot, inlink) != nullptr) {
             if (!lat_edge.count(inlink)) {
               everyone_is_here = false;
               break;
@@ -1920,20 +1920,20 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
         // Latency should be the same across all the incoming edges
         for (auto &inlink: next_fu->in_links()) {
           for (int slot = 0; slot < 8; ++slot) {
-            SbPDG_Node *origNode = pdgNodeOf(slot, inlink);
+            SSDfgNode *origNode = dfgNodeOf(slot, inlink);
             if (origNode != nullptr) {
               int curLat = lat_edge[inlink];
               //cout << "reading: " << inlink->name() << "\n";
 
               if (!isPassthrough(node)) {
-                SbPDG_Edge *edge = origNode->getLinkTowards(next_pdgnode);
+                SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
                 if (!edge) {
                   cout << "Edge: " << origNode->name() << " has no edge towards "
-                       << next_pdgnode->name() << ", for link:"
+                       << next_dfgnode->name() << ", for link:"
                        << inlink->name() << "\n";
-                  if (next_pdginst->isDummy()) cout << "dummy!\n";
+                  if (next_dfginst->isDummy()) cout << "dummy!\n";
 
-                  _sbPDG->printGraphviz("viz/remap-fail2.dot");
+                  _ssDFG->printGraphviz("viz/remap-fail2.dot");
                   printGraphviz("viz/remap-fail2.gv");
 
                   assert(edge);
@@ -1955,7 +1955,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
                      << ", max_lat:" << max_latency
                      << ", link:" << inlink->name() << "\n";
                 if (!isPassthrough(node)) {
-                  SbPDG_Edge *edge = origNode->getLinkTowards(next_pdgnode);
+                  SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
                   cout << "(calcLat) Edge " << edge->name() << "  lat_edge: " << lat_edge[inlink] << "  extralat:"
                        << edge_delay(edge) << "\n";
                 } else {
@@ -1973,30 +1973,30 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
         if (isPassthrough(node)) {
           lat_edge[new_link] = max_latency + 1; //TODO: Check this
         } else { //regular inst
-          int l = max_latency + inst_lat(next_pdginst->inst());
+          int l = max_latency + inst_lat(next_dfginst->inst());
           lat_edge[new_link] = l;
 
-          //if(next_pdginst) {
-          //  cout << "L " << next_pdginst->name() << " lat:" << l
+          //if(next_dfginst) {
+          //  cout << "L " << next_dfginst->name() << " lat:" << l
           //       << " low:" << low_latency << " up:" << max_latency << " - "
-          //       << " lat:" << latOf(next_pdgnode)
-          //       << " low:" << lat_bounds(next_pdgnode).first << " up:"
-          //       << lat_bounds(next_pdgnode).second << "\n";
+          //       << " lat:" << latOf(next_dfgnode)
+          //       << " low:" << lat_bounds(next_dfgnode).first << " up:"
+          //       << lat_bounds(next_dfgnode).second << "\n";
           //}
 
 
-          assign_lat(next_pdgnode,l);
+          assign_lat(next_dfgnode,l);
         }
 
-        //if(next_pdginst) {
-        //  cout << "L " << next_pdginst->name() << " " << latOf(next_pdgnode) 
+        //if(next_dfginst) {
+        //  cout << "L " << next_dfginst->name() << " " << latOf(next_dfgnode) 
         //       << " up:" << max_latency << " low:" << low_latency << "\n";
         //}
 
         openset.push_back(new_link);
 
-        //cout << "lat of " << next_pdgnode->name() 
-        //     << ", old:" << _latOf[next_pdgnode]
+        //cout << "lat of " << next_dfgnode->name() 
+        //     << ", old:" << _latOf[next_dfgnode]
         //     << ", new:" << max_latency << " " << lat_edge[new_link] << "\n";
 
         int diff = max_latency-low_latency;
@@ -2004,20 +2004,20 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
           max_lat_mis=diff;
         }
       }
-    } else if (dynamic_cast<sboutput*>(node)) {
-      sboutput* sb_out = dynamic_cast<sboutput*>(node);
-      SbPDG_Node* pdgnode = pdgNodeOf(sb_out);
-      SbPDG_Edge* inc_edge = pdgnode->first_inc_edge();
+    } else if (dynamic_cast<ssoutput*>(node)) {
+      ssoutput* ss_out = dynamic_cast<ssoutput*>(node);
+      SSDfgNode* dfgnode = dfgNodeOf(ss_out);
+      SSDfgEdge* inc_edge = dfgnode->first_inc_edge();
 
       int l = lat_edge[inc_link] + edge_delay(inc_edge);
 
-      //cout<<"L output " << pdgnode->name() << " "
+      //cout<<"L output " << dfgnode->name() << " "
       //       <<inc_link->name()<<" lat: "<< l << " - " << 
-      //       "lat: " << latOf(pdgnode) << endl; 
+      //       "lat: " << latOf(dfgnode) << endl; 
 
-      assign_lat(pdgnode,l);
+      assign_lat(dfgnode,l);
 
-      pdgnode->set_sched_lat(l); //for graphviz printing
+      dfgnode->set_sched_lat(l); //for graphviz printing
 
       if(lat_edge[inc_link] > max_lat) {
         max_lat = lat_edge[inc_link];
@@ -2029,14 +2029,14 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
           //We'll need to check to make sure if there is ambiguity between links
           if (have_switch_links()) {
-            sbswitch *sbsw = dynamic_cast<sbswitch *>(node);
-            assert(sbsw);
-            sblink *new_inc_link = get_switch_in_link(sbsw, out_link);
+            ssswitch *sssw = dynamic_cast<ssswitch *>(node);
+            assert(sssw);
+            sslink *new_inc_link = get_switch_in_link(sssw, out_link);
             if (new_inc_link != inc_link) {
               continue;
             }
-            SbPDG_Node *n_out = pdgNodeOf(slot, out_link);
-            SbPDG_Node *n_inc = pdgNodeOf(0, inc_link);
+            SSDfgNode *n_out = dfgNodeOf(slot, out_link);
+            SSDfgNode *n_inc = dfgNodeOf(0, inc_link);
 
             if (n_out != n_inc) {
               cout << "ERROR: Links don't match!  "
@@ -2047,7 +2047,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
                    << "\n";
             }
             printGraphviz("viz/fail-link-match.gv");
-          } else if (pdgNodeOf(slot, out_link) != pdgNodeOf(0, inc_link)) {
+          } else if (dfgNodeOf(slot, out_link) != dfgNodeOf(0, inc_link)) {
             continue;
           }
 
@@ -2059,7 +2059,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
   }
 
   for(auto& i : lat_edge) {
-    sblink *link = i.first;
+    sslink *link = i.first;
     int lat = i.second;
     set_link_order(0, link, lat);
   }
@@ -2069,111 +2069,111 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
 
 }
 
-//Trace the path of a schedule to help re-create the PDG
+//Trace the path of a schedule to help re-create the DFG
 //This is not a high-performance implementation, but shouldn't have to be
 //because its not called often
-void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode, 
-    map<sbnode*, map<SbDIR::DIR,SbDIR::DIR> >& routeMap, 
-    map<sbnode*, SbPDG_Node* >& pdgnode_for, 
-    map<SbPDG_Node*, vector<SbDIR::DIR> >& posMap) {
+void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode, 
+    map<ssnode*, map<SwitchDir::DIR,SwitchDir::DIR> >& routeMap,
+    map<ssnode*, SSDfgNode* >& dfgnode_for, 
+    map<SSDfgNode*, vector<SwitchDir::DIR> >& posMap) {
 
   //FIXME: later put the value makes more sense
-  assign_node(pdgnode, make_pair(0, sbspot));
+  assign_node(dfgnode, make_pair(0, ssspot));
   
-  vector<tuple<sbnode*, SbDIR::DIR, std::vector<sblink*>> > worklist;
+  vector<tuple<ssnode*, SwitchDir::DIR, std::vector<sslink*>> > worklist;
 
-  sblink* firstLink = sbspot->getFirstOutLink();
+  sslink* firstLink = ssspot->getFirstOutLink();
 
-  //FIXME: assign_link(pdgnode,firstLink); //TODO: Check if broke anything
-  std::vector<sblink*> lvec;
+  //FIXME: assign_link(dfgnode,firstLink); //TODO: Check if broke anything
+  std::vector<sslink*> lvec;
   lvec.push_back(firstLink);
 
-  sbnode* startItem = firstLink->dest();
-  SbDIR::DIR initialDir = firstLink->dir();
+  ssnode* startItem = firstLink->dest();
+  SwitchDir::DIR initialDir = firstLink->dir();
   worklist.push_back(make_tuple(startItem,initialDir,lvec));
 
-  //cerr << "---   tracing " << sbspot->name() << "   ---\n"; 
+  //cerr << "---   tracing " << ssspot->name() << "   ---\n"; 
   
   while(!worklist.empty()) {
     
     //cerr << "worklist: ";
     //for(unsigned i = 0; i < worklist.size(); ++i) {
-    //  sbnode* item = worklist[i].first;
-    //  SbDIR::DIR dir = worklist[i].second;
-    //  cerr << SbDIR::dirName(dir) << ", " << item->name() << "";
+    //  ssnode* item = worklist[i].first;
+    //  SwitchDir::DIR dir = worklist[i].second;
+    //  cerr << SwitchDir::dirName(dir) << ", " << item->name() << "";
     //  cerr << " | ";
     //}
     //cerr << "\n";
    
     auto& item = worklist.back();
-    sbnode* curItem = std::get<0>(item);
-    SbDIR::DIR inDir = std::get<1>(item);
+    ssnode* curItem = std::get<0>(item);
+    SwitchDir::DIR inDir = std::get<1>(item);
 
     auto item_links = std::get<2>(item);
     worklist.pop_back();
     
-    map<SbDIR::DIR,SbDIR::DIR>::iterator I,E;
+    map<SwitchDir::DIR,SwitchDir::DIR>::iterator I,E;
     for(I=routeMap[curItem].begin(), E=routeMap[curItem].end(); I!=E; ++I) {
-      SbDIR::DIR newOutDir = I->first;
-      SbDIR::DIR newInDir = I->second;
+      SwitchDir::DIR newOutDir = I->first;
+      SwitchDir::DIR newInDir = I->second;
       
       if(inDir == newInDir) { //match!
 
-        //sblink* inLink = curItem->getInLink(newInDir);
+        //sslink* inLink = curItem->getInLink(newInDir);
         
-        sblink* outLink = curItem->getOutLink(newOutDir);
-        //FIXME: assign_link(pdgnode,outLink);
+        sslink* outLink = curItem->getOutLink(newOutDir);
+        //FIXME: assign_link(dfgnode,outLink);
 
         auto links = item_links;
         links.push_back(outLink);
         
         if(outLink==nullptr) {
           cerr << "outlink is null: ";
-          cerr << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) << "\n";
+          cerr << curItem->name() << " (dir:" << SwitchDir::dirName(newOutDir) << "\n";
           assert(0);
         }
 
-        sbnode* nextItem = outLink->dest();
+        ssnode* nextItem = outLink->dest();
 
-        //cerr << "match" << curItem->name() << " (dir:" << SbDIR::dirName(newOutDir) 
+        //cerr << "match" << curItem->name() << " (dir:" << SwitchDir::dirName(newOutDir)
         //     << " " << nextItem->name() << "\n";
 
 
        //Output node 
-        if(sboutput* sbout = dynamic_cast<sboutput*>(nextItem)) {
-          //cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
-          //     << "    out port" << sbout->port() << "\n";
+        if(ssoutput* ssout = dynamic_cast<ssoutput*>(nextItem)) {
+          //cerr << SwitchDir::dirName(newInDir) << " -> " << SwitchDir::dirName(newOutDir)
+          //     << "    out port" << ssout->port() << "\n";
 
-          SbPDG_Node* dest_pdgnode = pdgnode_for[sbout];
-          assert(dest_pdgnode);
+          SSDfgNode* dest_dfgnode = dfgnode_for[ssout];
+          assert(dest_dfgnode);
           
-          //_assignNode[sbout]=dest_pdgnode;  //perform the assignment
-          //_sbnodeOf[dest_pdgnode]=sbout;
-          assign_node(dest_pdgnode, make_pair(0, sbout));
+          //_assignNode[ssout]=dest_dfgnode;  //perform the assignment
+          //_ssnodeOf[dest_dfgnode]=ssout;
+          assign_node(dest_dfgnode, make_pair(0, ssout));
 
-          SbPDG_Edge* edge = _sbPDG->connect(pdgnode,dest_pdgnode,0, SbPDG_Edge::data); 
+          SSDfgEdge* edge = _ssDFG->connect(dfgnode,dest_dfgnode,0, SSDfgEdge::data); 
           for(auto& i : links) {
             //FIXME: for now, we do not use this function to rebuild the schedule, so I just put some random value for the slot
             assign_edgelink(edge, 0, i);
           }
 
-        } else if(sbfu* fu_node = dynamic_cast<sbfu*>(nextItem)) {
+        } else if(ssfu* fu_node = dynamic_cast<ssfu*>(nextItem)) {
 
-          //cerr << SbDIR::dirName(newInDir) << " -> " << SbDIR::dirName(newOutDir) 
+          //cerr << SwitchDir::dirName(newInDir) << " -> " << SwitchDir::dirName(newOutDir)
           //     << "    (" << fu_node->x() << " " << fu_node->y() << " .. FU)" << "\n";
 
-          SbPDG_Inst* dest_pdgnode = dynamic_cast<SbPDG_Inst*>(pdgnode_for[fu_node]);
-          assert(dest_pdgnode);
+          SSDfgInst* dest_dfgnode = dynamic_cast<SSDfgInst*>(dfgnode_for[fu_node]);
+          assert(dest_dfgnode);
 
-          int n_ops = SB_CONFIG::num_ops[dest_pdgnode->inst()];
+          int n_ops = SS_CONFIG::num_ops[dest_dfgnode->inst()];
 
           for(int slot = 0; slot < NUM_IN_FU_DIRS; ++slot) { 
-            if(posMap[dest_pdgnode][slot] == outLink->dir()) {
-              auto edge_type = SbPDG_Edge::data;
-              if(slot==n_ops) edge_type = dest_pdgnode->predInv()? 
-                             SbPDG_Edge::ctrl_false : SbPDG_Edge::ctrl_true;
+            if(posMap[dest_dfgnode][slot] == outLink->dir()) {
+              auto edge_type = SSDfgEdge::data;
+              if(slot==n_ops) edge_type = dest_dfgnode->predInv()? 
+                             SSDfgEdge::ctrl_false : SSDfgEdge::ctrl_true;
 
-              SbPDG_Edge * edge = _sbPDG->connect(pdgnode,dest_pdgnode, slot, edge_type);
+              SSDfgEdge * edge = _ssDFG->connect(dfgnode,dest_dfgnode, slot, edge_type);
               //FIXME: put a placeholder for the slot to pass compilation first. Later we will use this function to reconstruct the scheudle
               for(auto& i : links) {
                 assign_edgelink(edge, 0, i);
@@ -2181,7 +2181,7 @@ void Schedule::tracePath(sbnode* sbspot, SbPDG_Node* pdgnode,
             }
           }
         
-        } else if(dynamic_cast<sbswitch*>(nextItem)){ //must be switch
+        } else if(dynamic_cast<ssswitch*>(nextItem)){ //must be switch
           worklist.emplace_back(make_tuple(nextItem,newOutDir,links));
         } else {
           assert(0);
@@ -2207,12 +2207,12 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
       const auto &np = _nodeProp[v.node->id()];
       int cnt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
       int max_cnt = 0;
-      vector<SbPDG_Vec *> io;
+      vector<SSDfgVec *> io;
       for (auto elem: np.vertices) {
         if (elem.second->is_temporal()) {
-          if (auto in = dynamic_cast<SbPDG_Input *>(elem.second))
+          if (auto in = dynamic_cast<SSDfgInput *>(elem.second))
             io.push_back(in->input_vec());
-          else if (auto out = dynamic_cast<SbPDG_Output *>(elem.second))
+          else if (auto out = dynamic_cast<SSDfgOutput *>(elem.second))
             io.push_back(out->output_vec());
         } else {
           max_cnt = max(max_cnt, ++cnt[elem.first]);
@@ -2232,7 +2232,7 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
     }
   }
 
-  for (auto &n : _sbModel->subModel()->node_list()) {
+  for (auto &n : _ssModel->subModel()->node_list()) {
     for (auto &elem: n->out_links()) {
       for (int slot = 0; slot < 8; ++slot) {
         auto &lp = _linkProp[elem->id()];
@@ -2240,19 +2240,19 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
         //if (!lp.slots[slot].edges.empty())
           //std::cout << elem->name() << " " << slot << "\n";
 
-        std::vector<SbPDG_Vec *> vecs;
-        std::vector<SbPDG_Node*> nodes;
+        std::vector<SSDfgVec *> vecs;
+        std::vector<SSDfgNode*> nodes;
 
         for (auto edge : lp.slots[slot].edges) {
           //std::cout << edge->name() << "\n";
           auto v = edge->def();
           if (v->is_temporal()) {
-            if (auto input = dynamic_cast<SbPDG_Input *>(v)) {
+            if (auto input = dynamic_cast<SSDfgInput *>(v)) {
               vecs.push_back(input->input_vec());
               continue;
             }
             for (auto use : v->uses()) {
-              if (auto *out = dynamic_cast<SbPDG_Output *>(use->use())) {
+              if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
                 vecs.push_back(out->output_vec());
                 continue;
               }

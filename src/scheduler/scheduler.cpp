@@ -1,6 +1,6 @@
 #include "scheduler.h"
 
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 using namespace std;
 
 #include <unordered_map>
@@ -52,7 +52,7 @@ void HeuristicScheduler::random_order(int n, std::vector<int>& order) {
 
 //could make this a template really!
 vector<bool> HeuristicScheduler::rand_node_choose_k(int k, 
-    std::vector<sbnode*>& poss_nodes, std::vector<sbnode*>& chosen_nodes) {
+    std::vector<ssnode*>& poss_nodes, std::vector<ssnode*>& chosen_nodes) {
   std::vector<bool> mask; 
   int n = poss_nodes.size();
   mask.resize(n);
@@ -75,18 +75,18 @@ vector<bool> HeuristicScheduler::rand_node_choose_k(int k,
   return mask;
 }
 
-bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
-  SB_CONFIG::SubModel *subModel = _sbModel->subModel();
-  sbio_interface si = subModel->io_interf();
+bool HeuristicScheduler::assignVectorInputs(SSDfg* ssDFG, Schedule* sched) {
+  SS_CONFIG::SubModel *subModel = _ssModel->subModel();
+  ssio_interface si = subModel->io_interf();
   vector<pair<int, int>> sd;
 
-  int n = sbPDG->num_vec_input();
+  int n = ssDFG->num_vec_input();
 
-  sbPDG->sort_vec_in();
+  ssDFG->sort_vec_in();
   si.sort_in_vports(sd);
 
   for (int j = 0; j < n; ++j) {
-    SbPDG_VecInput *vec_in = sbPDG->vec_in(j);
+    SSDfgVecInput *vec_in = ssDFG->vec_in(j);
     //cout << "Assigning Vector Port:" << vec_in->gamsName() <<"\n";
 
     bool found_vector_port = false;
@@ -105,11 +105,11 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 
         //Check if it's okay to assign to these ports
         for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
-          //Get the sbnode corresponding to mask[m]
+          //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
-          sbinput *cgra_in_port = subModel->inputs()[cgra_port_num];
+          ssinput *cgra_in_port = subModel->inputs()[cgra_port_num];
 
-          if (sched->pdgNodeOf(cgra_in_port) != nullptr) {
+          if (sched->dfgNodeOf(cgra_in_port) != nullptr) {
             ports_okay_to_use = false;
             break;
           }
@@ -122,13 +122,13 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
         for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
           mask[m] = true;
 
-          //Get the sbnode corresponding to mask[m]
+          //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
-          sbinput *cgra_in_port = subModel->inputs()[cgra_port_num];
+          ssinput *cgra_in_port = subModel->inputs()[cgra_port_num];
 
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node *sbpdg_input = vec_in->inputs()[m];
-          sched->assign_node(sbpdg_input, make_pair(0, cgra_in_port));
+          //Get the input dfgnode corresponding to m
+          SSDfgNode *ssdfg_input = vec_in->inputs()[m];
+          sched->assign_node(ssdfg_input, make_pair(0, cgra_in_port));
         }
         //Perform the vector assignment
         sched->assign_vport(vec_in, vport_id, mask);
@@ -147,20 +147,20 @@ bool HeuristicScheduler::assignVectorInputs(SbPDG* sbPDG, Schedule* sched) {
 }
 
 
-bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
-  SB_CONFIG::SubModel *subModel = _sbModel->subModel();
+bool HeuristicScheduler::assignVectorOutputs(SSDfg* ssDFG, Schedule* sched) {
+  SS_CONFIG::SubModel *subModel = _ssModel->subModel();
   CandidateRouting candRouting;
-  sbio_interface si = subModel->io_interf();
+  ssio_interface si = subModel->io_interf();
   vector<pair<int, int>> sd;
 
-  int n = sbPDG->num_vec_output();
+  int n = ssDFG->num_vec_output();
 
 
-  sbPDG->sort_vec_out();
+  ssDFG->sort_vec_out();
   si.sort_out_vports(sd);
 
   for (int j = 0; j < n; ++j) {
-    SbPDG_VecOutput *vec_out = sbPDG->vec_out(j);
+    SSDfgVecOutput *vec_out = ssDFG->vec_out(j);
     //cout << "Assigning Vector Port:" << vec_out->gamsName() <<"\n";
 
     bool found_vector_port = false;
@@ -179,16 +179,16 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
         candRouting.clear();
         //Check if it's okay to assign to these ports
         for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
-          //Get the sbnode corresponding to mask[m]
+          //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
-          sboutput *cgra_out_port = subModel->outputs()[cgra_port_num];
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
-          if (sched->pdgNodeOf(cgra_out_port) != nullptr) {
+          ssoutput *cgra_out_port = subModel->outputs()[cgra_port_num];
+          //Get the input dfgnode corresponding to m
+          SSDfgNode *ssdfg_output = vec_out->outputs()[m];
+          if (sched->dfgNodeOf(cgra_out_port) != nullptr) {
             ports_okay_to_use = false;
             break;
           }
-          std::pair<int, int> curScore = scheduleHere(sched, sbpdg_output, make_pair(0, cgra_out_port), candRouting);
+          std::pair<int, int> curScore = scheduleHere(sched, ssdfg_output, make_pair(0, cgra_out_port), candRouting);
           if (curScore >= fscore) { //?????
             ports_okay_to_use = false;
             break;
@@ -203,13 +203,13 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
         for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
           mask[m] = true;
 
-          //Get the sbnode corresponding to mask[m]
+          //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
-          sboutput *cgra_out_port = subModel->outputs()[cgra_port_num];
+          ssoutput *cgra_out_port = subModel->outputs()[cgra_port_num];
 
-          //Get the input pdgnode corresponding to m
-          SbPDG_Node *sbpdg_output = vec_out->outputs()[m];
-          sched->assign_node(sbpdg_output, make_pair(0, cgra_out_port));
+          //Get the input dfgnode corresponding to m
+          SSDfgNode *ssdfg_output = vec_out->outputs()[m];
+          sched->assign_node(ssdfg_output, make_pair(0, cgra_out_port));
         }
         //Perform the vector assignment
         sched->assign_vport(vec_out, vport_id, mask);
@@ -230,11 +230,11 @@ bool HeuristicScheduler::assignVectorOutputs(SbPDG* sbPDG, Schedule* sched) {
 void HeuristicScheduler::apply_routing(Schedule *sched, CandidateRouting *candRouting) {
 
   for (auto elem : candRouting->routing) {
-    sblink *link = elem.first.second;
-    sbnode *dest = link->dest();
-    if (sbfu *fu = dynamic_cast<sbfu *>(dest)) {
-      SbPDG_Node *dest_pdgnode = sched->pdgNodeOf(fu);
-      if (!dest_pdgnode) {
+    sslink *link = elem.first.second;
+    ssnode *dest = link->dest();
+    if (ssfu *fu = dynamic_cast<ssfu *>(dest)) {
+      SSDfgNode *dest_dfgnode = sched->dfgNodeOf(fu);
+      if (!dest_dfgnode) {
         //sched->add_passthrough_node(dest);
         for (auto &e : elem.second) {
           //FIXME: make sure it is correct
@@ -242,69 +242,69 @@ void HeuristicScheduler::apply_routing(Schedule *sched, CandidateRouting *candRo
         }
       }
     }
-    //cout<<"pdgnode: "<< I->second->def()->name()<<" sblink: "<<link->name()<<endl; 
+    //cout<<"dfgnode: "<< I->second->def()->name()<<" sslink: "<<link->name()<<endl; 
     for (auto &e : elem.second) {
       sched->assign_edgelink(e, elem.first.first, elem.first.second);
     }
   }
 }
 
-void HeuristicScheduler::apply_routing(Schedule *sched, SbPDG_Node *pdgnode,
-                                       pair<int, sbnode *> here, CandidateRouting *candRouting){
+void HeuristicScheduler::apply_routing(Schedule *sched, SSDfgNode *dfgnode,
+                                       pair<int, ssnode *> here, CandidateRouting *candRouting){
   
-  //cout << "pdgnode: " << pdgnode->name()  << " sbnode: " << here.second->name()
+  //cout << "dfgnode: " << dfgnode->name()  << " ssnode: " << here.second->name()
       //<< " nlinks: " << candRouting->routing.size() << "\n";
 
-  assert(pdgnode);
+  assert(dfgnode);
 
   int min_node_lat, max_node_lat;
   candRouting->fill_lat(sched,min_node_lat,max_node_lat);
 
-  if(SbPDG_Inst* inst = dynamic_cast<SbPDG_Inst*>(pdgnode)) {
+  if(SSDfgInst* inst = dynamic_cast<SSDfgInst*>(dfgnode)) {
      int i = inst_lat(inst->inst());
      min_node_lat += i;
      max_node_lat += i;
   }
 
-  //cout << pdgnode->name() << " " << min_node_lat << " " << max_node_lat << "\n";
+  //cout << dfgnode->name() << " " << min_node_lat << " " << max_node_lat << "\n";
 
   if(min_node_lat > max_node_lat) {
     sched->add_violation(min_node_lat-max_node_lat);
-    sched->record_violation(pdgnode,min_node_lat-max_node_lat);
+    sched->record_violation(dfgnode,min_node_lat-max_node_lat);
     max_node_lat = min_node_lat;
   }
 
-  sched->assign_lat_bounds(pdgnode,min_node_lat,max_node_lat);
-  if (auto vec = dynamic_cast<SbPDG_Vec*>(pdgnode)) {
+  sched->assign_lat_bounds(dfgnode,min_node_lat,max_node_lat);
+  if (auto vec = dynamic_cast<SSDfgVec*>(dfgnode)) {
     sched->assign_lat_bounds(vec, min_node_lat, max_node_lat);
   }
 
-  sched->assign_node(pdgnode,here);
+  sched->assign_node(dfgnode,here);
   apply_routing(sched, candRouting);
 }
 
-vector<pair<int, sbnode*>> HeuristicScheduler::fill_input_spots(Schedule* sched, SbPDG_Input* pdginst) {
-  vector<pair<int, sbnode*>> spots;
+vector<pair<int, ssnode*>> HeuristicScheduler::fill_input_spots(Schedule* sched, SSDfgInput* dfginst) {
+  vector<pair<int, ssnode*>> spots;
 
   SubModel::const_input_iterator I, E;
-  for (auto &elem : _sbModel->subModel()->inputs()) {
-    sbinput *cand_input = elem;
+  for (auto &elem : _ssModel->subModel()->inputs()) {
+    ssinput *cand_input = elem;
 
-    if (sched->pdgNodeOf(cand_input) == nullptr) {
+    if (sched->dfgNodeOf(cand_input) == nullptr) {
       spots.emplace_back(make_pair(0, cand_input));
     }
   }
   return spots;
 }
 
-vector<pair<int, sbnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched,SbPDG_Output* pdginst) {
-  vector<pair<int, sbnode*>> spots;
+vector<pair<int, ssnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched,SSDfgOutput* dfginst) {
+  vector<pair<int, ssnode*>> spots;
 
   SubModel::const_output_iterator I, E;
-  for (auto &elem : _sbModel->subModel()->outputs()) {
-    sboutput *cand_output = elem;
+  for (auto &elem : _ssModel->subModel()->outputs()) {
+    ssoutput *cand_output = elem;
 
-    if (sched->pdgNodeOf(cand_output) == nullptr) {
+    if (sched->dfgNodeOf(cand_output) == nullptr) {
       spots.emplace_back(make_pair(0, cand_output));
     }
 
@@ -312,16 +312,16 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched
   return spots;
 }
 
-vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, SbPDG_Inst *pdginst) {
-  vector<pair<int, sbnode*>> spots;
+vector<pair<int, ssnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, SSDfgInst *dfginst) {
+  vector<pair<int, ssnode*>> spots;
 
   //For Dedicated-required Instructions
-  for (sbfu *cand_fu : _sbModel->subModel()->fu_list()) {
-    if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(pdginst->inst())) {
+  for (ssfu *cand_fu : _ssModel->subModel()->fu_list()) {
+    if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(dfginst->inst())) {
       continue;
     }
 
-    if (!pdginst->is_temporal()) {
+    if (!dfginst->is_temporal()) {
       if (sched->isPassthrough(cand_fu))
         continue;
       //Normal Dedidated Instructions
@@ -330,15 +330,15 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
       //int util=sched->thingsAssigned(cand_fu);
       //if(util==0 || (rand_bt(0,3+util*util) ==0) ) {
       //   spots.push_back(cand_fu);
-      auto status = sched->pdg_nodes_of(cand_fu);
+      auto status = sched->dfg_nodes_of(cand_fu);
       vector<bool> occupied(8, false);
       for (auto elem : status) {
         for (int k = 0; k < elem.second->bitwidth() / 8; ++k)
           occupied[k + elem.first] = true;
       }
-      for (int k = 0; k < 8; k += pdginst->bitwidth() / 8) {
+      for (int k = 0; k < 8; k += dfginst->bitwidth() / 8) {
         auto begin = occupied.begin() + k;
-        auto end = occupied.begin() + k + pdginst->bitwidth() / 8;
+        auto end = occupied.begin() + k + dfginst->bitwidth() / 8;
         int util = accumulate(begin, end, false, [](bool a, bool b) -> int { return (int) a + (int) b; });
         if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
           spots.emplace_back(make_pair(k, cand_fu));
@@ -357,33 +357,33 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
     
   }
 
-  if (pdginst->is_temporal() && spots.empty()) {
-    cout << "Warning, no spots for" << pdginst->name() << "\n";
+  if (dfginst->is_temporal() && spots.empty()) {
+    cout << "Warning, no spots for" << dfginst->name() << "\n";
   }
   return spots;
 }
 
-//void Scheduler::unroute(Schedule* sched, SbPDG_Edge* pdgedge, 
-//                        SB_CONFIG::sbnode* source) {
+//void Scheduler::unroute(Schedule* sched, SSDfgEdge* dfgedge, 
+//                        SS_CONFIG::ssnode* source) {
 // 
-//  std::queue<sbnode*> openset;
+//  std::queue<ssnode*> openset;
 //  openset.push(source);
 //
-//  _sbModel->subModel()->clear_all_runtime_vals();
+//  _ssModel->subModel()->clear_all_runtime_vals();
 //  
-//  SbPDG_Node* pdgnode = pdgedge->def();
+//  SSDfgNode* dfgnode = dfgedge->def();
 //
 //  while(!openset.empty()) {
-//    sbnode* node = openset.front();
+//    ssnode* node = openset.front();
 //    openset.pop();
 //    node->set_done(1);
 //
 //    for(auto I = node->obegin(), E = node->oend(); I!=E; ++I) {
-//      sblink* link = *I;
-//      sbnode* next = link->dest();
+//      sslink* link = *I;
+//      ssnode* next = link->dest();
 //   
-//      if(sched->pdgNodeOf(link) == pdgnode) {
-//        sched->unassign_link(pdgnode,link);
+//      if(sched->dfgNodeOf(link) == dfgnode) {
+//        sched->unassign_link(dfgnode,link);
 //        if(next->done()!=1) {
 //          openset.push(next);
 //        }
@@ -392,30 +392,30 @@ vector<pair<int, sbnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
 //  }
 //}
 
-int HeuristicScheduler::routing_cost(SbPDG_Edge* edge, int from_slot, int next_slot, sblink* link,
-      Schedule* sched, CandidateRouting& candRouting, const pair<int, sbnode*> &dest) {
+int HeuristicScheduler::routing_cost(SSDfgEdge* edge, int from_slot, int next_slot, sslink* link,
+      Schedule* sched, CandidateRouting& candRouting, const pair<int, ssnode*> &dest) {
 
-  SbPDG_Node *pdgnode = edge->def();
-  sbnode *next = link->dest();
+  SSDfgNode *dfgnode = edge->def();
+  ssnode *next = link->dest();
 
   //check if connection is closed..
-  SbPDG_Node *sched_node = sched->pdgNodeOf(next_slot, link);
-  if (sched_node != nullptr && sched_node != pdgnode)
+  SSDfgNode *sched_node = sched->dfgNodeOf(next_slot, link);
+  if (sched_node != nullptr && sched_node != dfgnode)
     return -1;
 
-  SbPDG_Node *cand_node = candRouting.routing.count(make_pair(next_slot, link)) == 0 ? nullptr :
+  SSDfgNode *cand_node = candRouting.routing.count(make_pair(next_slot, link)) == 0 ? nullptr :
                           (*candRouting.routing[make_pair(next_slot, link)].begin())->def();
-  if (cand_node != nullptr && cand_node != pdgnode)
+  if (cand_node != nullptr && cand_node != dfgnode)
     return -1;
 
   bool is_dest = (next == dest.second);
 
-  sbfu *fu = dynamic_cast<sbfu *>(next);
-  if (fu && sched->pdgNodeOf(fu) && !is_dest) {
+  ssfu *fu = dynamic_cast<ssfu *>(next);
+  if (fu && sched->dfgNodeOf(fu) && !is_dest) {
     return -1;  //stop if run into fu
   }
 
-  if (sched_node == pdgnode || cand_node == pdgnode) {
+  if (sched_node == dfgnode || cand_node == dfgnode) {
     return 0; //free link because schedule or candidate routing already maps
   } else {
     if (fu && sched->isPassthrough(fu)) {
@@ -429,25 +429,25 @@ int HeuristicScheduler::routing_cost(SbPDG_Edge* edge, int from_slot, int next_s
 
 //Dijkstra's Algorithm
 pair<int,int>
-HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge,
-        pair<int, sbnode*> source, pair<int, sbnode*> dest, CandidateRouting &candRouting) {
+HeuristicScheduler::route_minimize_distance(Schedule *sched, SSDfgEdge *dfgedge,
+        pair<int, ssnode*> source, pair<int, ssnode*> dest, CandidateRouting &candRouting) {
 
-  int bitwidth = pdgedge->bitwidth();
+  int bitwidth = dfgedge->bitwidth();
 
-  if (pdgedge->def()->bitwidth() > pdgedge->bitwidth() && source.first != pdgedge->l() / 8) {
-    source.first = pdgedge->l() / 8;
+  if (dfgedge->def()->bitwidth() > dfgedge->bitwidth() && source.first != dfgedge->l() / 8) {
+    source.first = dfgedge->l() / 8;
   }
 
   _route_times++;
 
-  if (sched->link_count(pdgedge) != 0) {
-    cerr << "Edge: " << pdgedge->name() << " is already routed!\n";
+  if (sched->link_count(dfgedge) != 0) {
+    cerr << "Edge: " << dfgedge->name() << " is already routed!\n";
     assert(0);
   }
 
-  set<std::tuple<int, int, sbnode*>> openset;
+  set<std::tuple<int, int, ssnode*>> openset;
 
-  _sbModel->subModel()->clear_all_runtime_vals();
+  _ssModel->subModel()->clear_all_runtime_vals();
 
   source.second->update_dist(source.first, 0, 0, nullptr);
   openset.emplace(0, source.first, source.second);
@@ -455,7 +455,7 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge
   while (!openset.empty()) {
     int cur_dist = std::get<0>(*openset.begin());
     int slot = std::get<1>(*openset.begin());
-    sbnode *node = std::get<2>(*openset.begin());
+    ssnode *node = std::get<2>(*openset.begin());
 
     //std::cout << "Finalize distance of " << node->name() << ", " << slot << ": " << cur_dist << std::endl;
 
@@ -465,13 +465,13 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge
       break;
 
     for (auto link : node->out_links()) {
-      sbnode *next = link->dest();
-      bool is_fu = dynamic_cast<sbfu*>(next) != nullptr;
+      ssnode *next = link->dest();
+      bool is_fu = dynamic_cast<ssfu*>(next) != nullptr;
 
       for (int delta  = 0; delta <= (is_fu ? 7 : 1); ++delta) {
         int next_slot = slot + delta * bitwidth / 8;
         next_slot = (next_slot + 8) % 8;
-        int route_cost = routing_cost(pdgedge, slot, next_slot, link, sched, candRouting, dest);
+        int route_cost = routing_cost(dfgedge, slot, next_slot, link, sched, candRouting, dest);
 
         if (route_cost == -1)
           continue;
@@ -499,47 +499,47 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgedge
 
   pair<int, int> score;
   score = make_pair(0, dest.second->node_dist(dest.first));
-  pair<int, sbnode*> x = dest;
+  pair<int, ssnode*> x = dest;
 
   int num_links = 0, pts = 0;
 
-  vector<pair<int, sbnode*>> path;
+  vector<pair<int, ssnode*>> path;
   path.emplace_back(x);
   while (x != source) {
-    pair<int, sblink*> link = x.second->came_from(x.first);
-    candRouting.routing[link].insert(pdgedge);
+    pair<int, sslink*> link = x.second->came_from(x.first);
+    candRouting.routing[link].insert(dfgedge);
     x = make_pair(link.first, link.second->orig());
-    sbnode *next = link.second->dest();
-    if (dynamic_cast<sbfu *>(next) && num_links != 0) {
+    ssnode *next = link.second->dest();
+    if (dynamic_cast<ssfu *>(next) && num_links != 0) {
       pts++;
     }
     num_links++;
     path.emplace_back(x);
   }
 
-  /*std::cout << "*** " << pdgedge->name() << " Path ***\n";
+  /*std::cout << "*** " << dfgedge->name() << " Path ***\n";
   for (auto iter = path.rbegin(); iter != path.rend(); ++iter) {
     std::cout << iter->second->name() << ", " << iter->first << ": " << iter->second->node_dist(iter->first) << std::endl;
   }
   std::cout << "\n";*/
 
   /*while (x != source) {
-    sblink *link = x->came_from();
+    sslink *link = x->came_from();
     num_links++;
-    candRouting.routing[link].insert(pdgedge);
+    candRouting.routing[link].insert(dfgedge);
     x = link->orig();
   }*/
 
-  auto &prop = candRouting.edge_prop[pdgedge];
+  auto &prop = candRouting.edge_prop[dfgedge];
   prop.num_links = num_links - 1;
   prop.num_passthroughs = pts;
   return score;
 }
 
-bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
+bool Scheduler::check_res(SSDfg* ssDFG, SSModel* ssmodel) {
   int dedicated_insts = 0;
   int temporal_insts = 0;
-  for (auto i : sbPDG->inst_vec()) {
+  for (auto i : ssDFG->inst_vec()) {
     if (!i->is_temporal()) {
       dedicated_insts++;
     } else {
@@ -549,29 +549,29 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
 
   int temporal_fus = 0;
   int temporal_inst_slots = 0;
-  for (auto elem: _sbModel->subModel()->fu_list()) {
+  for (auto elem: _ssModel->subModel()->fu_list()) {
     temporal_inst_slots += elem->max_util();
     temporal_fus += 1;
   }
 
-  //int nfus = sbmodel->subModel()->sizex() * sbmodel->subModel()->sizey();
+  //int nfus = ssmodel->subModel()->sizex() * ssmodel->subModel()->sizey();
   //if (dedicated_insts > nfus) {
   //  cerr << "\n\nError: Too many dedicated instructions ("
-  //       << dedicated_insts << ") in SbPDG for given SBCONFIG (has "
+  //       << dedicated_insts << ") in SSDfg for given SSCONFIG (has "
   //       << nfus << " fus)\n\n";
   //  return false;
   //}
   if (temporal_insts > temporal_inst_slots) {
     cerr << "\n\nError: Too many temporal instructions ("
-         << temporal_insts << ") in SbPDG for given SBCONFIG (has "
+         << temporal_insts << ") in SSDfg for given SSCONFIG (has "
          << temporal_inst_slots << " temporal slots)\n\n";
     return false;
   }
 
   bool failed_count_check = false;
 
-  std::map<sb_inst_t, int> dedicated_count_types, temporal_count_types;
-  for (auto elem : sbPDG->inst_vec()) {
+  std::map<ss_inst_t, int> dedicated_count_types, temporal_count_types;
+  for (auto elem : ssDFG->inst_vec()) {
     if (!elem->is_temporal()) {
       dedicated_count_types[elem->inst()]++;
     } else {
@@ -580,39 +580,39 @@ bool Scheduler::check_res(SbPDG* sbPDG, SbModel* sbmodel) {
   }
 
   for (auto &pair : dedicated_count_types) {
-    sb_inst_t sb_inst = pair.first;
-    int pdg_count = pair.second;
+    ss_inst_t ss_inst = pair.first;
+    int dfg_count = pair.second;
 
     int fu_count = 0;
-    for (sbfu* cand_fu : _sbModel->subModel()->fu_list()) {
-      if (cand_fu->fu_def()->is_cap(sb_inst)) {
-        fu_count += 64 / SB_CONFIG::bitwidth[sb_inst];
+    for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
+      if (cand_fu->fu_def()->is_cap(ss_inst)) {
+        fu_count += 64 / SS_CONFIG::bitwidth[ss_inst];
       }
     }
-    if (fu_count < pdg_count) {
+    if (fu_count < dfg_count) {
       failed_count_check = true;
-      cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst)
+      cerr << "Error: DFG has " << dfg_count << " " << name_of_inst(ss_inst)
            << " dedicated insts, but only " << fu_count
            << " dedicated fus to support them\n";
     }
   }
 
   for (auto &pair : temporal_count_types) {
-    sb_inst_t sb_inst = pair.first;
-    int pdg_count = pair.second;
+    ss_inst_t ss_inst = pair.first;
+    int dfg_count = pair.second;
 
     int fu_count = 0;
-    for (int i = 0; i < _sbModel->subModel()->sizex(); ++i) {
-      for (int j = 0; j < _sbModel->subModel()->sizey(); ++j) {
-        sbfu *cand_fu = _sbModel->subModel()->fus()[i][j];
-        if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(sb_inst)) {
-          fu_count += cand_fu->max_util(sb_inst);
+    for (int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
+      for (int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
+        ssfu *cand_fu = _ssModel->subModel()->fus()[i][j];
+        if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(ss_inst)) {
+          fu_count += cand_fu->max_util(ss_inst);
         }
       }
     }
-    if (fu_count < pdg_count) {
+    if (fu_count < dfg_count) {
       failed_count_check = true;
-      cerr << "Error: PDG has " << pdg_count << " " << name_of_inst(sb_inst)
+      cerr << "Error: DFG has " << dfg_count << " " << name_of_inst(ss_inst)
            << " temporal insts, but only "
            << fu_count << " temporal fu slots to support them\n";
     }

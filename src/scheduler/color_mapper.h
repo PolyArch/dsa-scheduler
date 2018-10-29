@@ -3,15 +3,15 @@
 
 #include <map>
 
-class SbPDG_Node;
+class SSDfgNode;
 
-//Maintain mapping between SbPDG_Node's and colors
+//Maintain mapping between SSDfgNode's and colors
 class ColorMapper {
 public:
-    int colorOf(SbPDG_Node* item, bool reset =false);
-    void setColor(int i, SbPDG_Node* item) {colorMap[item]=i;}
+    int colorOf(SSDfgNode* item, bool reset =false);
+    void setColor(int i, SSDfgNode* item) {colorMap[item]=i;}
     void clear() {colorMap.clear();}
 private:
-    std::map<SbPDG_Node*,int> colorMap;
+    std::map<SSDfgNode*,int> colorMap;
 };
 #endif

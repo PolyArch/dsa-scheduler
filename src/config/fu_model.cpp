@@ -2,10 +2,10 @@
 
 #include "fu_model.h"
 #include "model_parsing.h"
-#include "sbinst.h"
+#include "ssinst.h"
 #include "assert.h"
 
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 using namespace std;
 
 //FU_type(func_unit_def) capabilities 
@@ -85,27 +85,27 @@ void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
         }
 
         if(ModelParsing::stricmp(cap,"ALL")) {
-            for(int i = 0; i < SB_NUM_TYPES; ++i) {
-                fu.add_cap((sb_inst_t)i);
+            for(int i = 0; i < SS_NUM_TYPES; ++i) {
+                fu.add_cap((ss_inst_t)i);
             }
             return;
         }
 
-        sb_inst_t sb_inst = inst_from_string(cap.c_str());
+        ss_inst_t ss_inst = inst_from_string(cap.c_str());
         
-        if(sb_inst==SB_NONE || sb_inst==SB_ERR) {
+        if(ss_inst==SS_NONE || ss_inst==SS_ERR) {
             cerr << "ERROR IN PARSING INSTRUCTION: \"" << cap << "\"\n";
             assert(0);
             return;
         }
         
-        fu.add_cap(sb_inst);
+        fu.add_cap(ss_inst);
         
         if(pss.good()) { //then there must be an encoding string
             unsigned encoding;
             pss >> encoding;
             
-            fu.set_encoding(sb_inst,encoding);
+            fu.set_encoding(ss_inst,encoding);
         }
     }
 }
