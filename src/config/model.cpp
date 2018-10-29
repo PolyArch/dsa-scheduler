@@ -11,24 +11,24 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
-#include "ssinst.h"
+#include "sbinst.h"
 
 namespace pt = boost::property_tree;
 
 
 using namespace std;
-using namespace SS_CONFIG;
+using namespace SB_CONFIG;
 
-void SSModel::printGamsKinds(ostream& os) {
+void SbModel::printGamsKinds(ostream& os) {
   os << "set K \"Type of Node\" /Input,Output";
   
-  for(int i = 2; i < SS_NUM_TYPES; ++i) {
-    os << "," << name_of_inst((ss_inst_t)i);
+  for(int i = 2; i < SB_NUM_TYPES; ++i) {
+    os << "," << name_of_inst((sb_inst_t)i);
   }
   os << "/";
 }
 
-SSModel::SSModel(SubModel* subModel, bool multi_config) {
+SbModel::SbModel(SubModel* subModel, bool multi_config) {
   
   if (subModel) {
     _subModel = subModel;
@@ -37,11 +37,11 @@ SSModel::SSModel(SubModel* subModel, bool multi_config) {
   }
 }
 
-SSModel::SSModel(bool multi_config) {
+SbModel::SbModel(bool multi_config) {
   _subModel = new SubModel(5, 5, SubModel::PortType::everysw, multi_config);
 }
 
-void SSModel::parse_exec(std::istream& istream) {
+void SbModel::parse_exec(std::istream& istream) {
     string param,value;
     while(istream.good()) {
         if(istream.peek()=='[') break;  //break out if done
@@ -76,7 +76,7 @@ bool ends_with(string& s, string ending) {
 }
 
 //File constructor
-SSModel::SSModel(const char* filename, bool multi_config) {
+SbModel::SbModel(const char* filename, bool multi_config) {
     ifstream ifs(filename, ios::in);
     string param,value;
     
@@ -127,11 +127,11 @@ SSModel::SSModel(const char* filename, bool multi_config) {
 }
 
 //JSON Format is flat format with all objects defined
-void SSModel::parse_json(std::istream& istream) {
+void SbModel::parse_json(std::istream& istream) {
   pt::ptree root;
   read_json(istream,root);
 
-  std::map<std::string,ssnode*> sym_tab;
+  std::map<std::string,sbnode*> sym_tab;
 
   //Null Fu Model
   _fuModel = NULL;
@@ -144,22 +144,22 @@ void SSModel::parse_json(std::istream& istream) {
   printf("JSON Rows: %d, Cols %d\n", logical_rows, logical_cols);
 
 
-  std::map<int,ss_inst_t> inst_map;
+  std::map<int,sb_inst_t> inst_map;
   for(auto& p : root.get_child("ISAencode")) {
     std::string inst_name = p.first;
     int idx =  p.second.get_value<int>();
 
     if(inst_name=="numISA") continue;
 
-    ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
+    sb_inst_t sb_inst = SB_CONFIG::inst_from_string(inst_name.c_str());
         
-    if(ss_inst==SS_NONE || ss_inst==SS_ERR) {
+    if(sb_inst==SB_NONE || sb_inst==SB_ERR) {
       cerr << "ERROR IN PARSING INSTRUCTION: \"" << inst_name << "\"\n";
       assert(0);
       return;
     }
 
-    inst_map[idx] = ss_inst;
+    inst_map[idx] = sb_inst;
   }
 
   //Look through all of the children of grid IR
@@ -171,13 +171,13 @@ void SSModel::parse_json(std::istream& istream) {
 
     string type = node_def.get<std::string>("type", "");
     if(type=="Switch") {
-       ssswitch* sw = _subModel->add_switch(x,y);
+       sbswitch* sw = _subModel->add_switch(x,y);
        sym_tab[elem_name]=sw;
     } else if(type=="FU") {
-       ssfu* fu = _subModel->add_fu(x,y);
+       sbfu* fu = _subModel->add_fu(x,y);
 
        auto link = fu->add_link(fu); //For decomposability
-       link->setdir(SwitchDir::IP0);
+       link->setdir(SbDIR::IP0);
 
 
        sym_tab[elem_name]=fu;
@@ -191,7 +191,7 @@ void SSModel::parse_json(std::istream& istream) {
        for(auto& enc_def : fu_def2.get_child("subNet_0")) {
          int num = enc_def.second.get_value<int>();
 
-         ss_inst_t inst = inst_map[num];
+         sb_inst_t inst = inst_map[num];
          cout << "adding capability " << name_of_inst(inst) << "to fu" << elem_name << "\n";
 
          fudef->add_cap(inst);
@@ -217,15 +217,15 @@ void SSModel::parse_json(std::istream& istream) {
     auto& port_def = p.second;
     std::string type = port_def.get<std::string>("InOrOut", "");
 
-    auto* vp = new ssvport();
+    auto* vp = new sbvport();
     sym_tab[elem_name]=vp;
 
     cout << "new port: \"" << elem_name << "\" \n";
 
-    std::vector<ssnode*> nodes;
+    std::vector<sbnode*> nodes;
     for(auto& p : port_def.get_child("gridModules")) {
       string s = p.second.get_value<std::string>();
-      ssnode* n = sym_tab[s];
+      sbnode* n = sym_tab[s];
       assert(n);
       nodes.push_back(n);
     }
@@ -233,23 +233,23 @@ void SSModel::parse_json(std::istream& istream) {
     if(type=="InputPorts") {
       int port_num = num_ivp++;
       io.in_vports[port_num]=vp;
-      for(ssnode* n:nodes) {
+      for(sbnode* n:nodes) {
         int node_id = num_inputs++;
         cout << "added input to vec: " << node_id << "\n";
 
         vp->port_vec().push_back(node_id);
-        ssinput* in = _subModel->add_input(node_id);  
+        sbinput* in = _subModel->add_input(node_id);  
         in->add_link(n);
       }
     } else if(type=="OutputPorts") {
       int port_num = num_ovp++;
       io.out_vports[port_num]=vp;
-      for(ssnode* n:nodes) {
+      for(sbnode* n:nodes) {
         int node_id = num_outputs++;
         cout << "added output to vec: " << node_id << "\n";
 
         vp->port_vec().push_back(node_id);
-        ssoutput* out = _subModel->add_output(node_id);  
+        sboutput* out = _subModel->add_output(node_id);  
         n->add_link(out);
       }
     } else {
@@ -264,8 +264,8 @@ void SSModel::parse_json(std::istream& istream) {
     string from_str = p_def.get<std::string>("fromModule", "");
     string to_str   = p_def.get<std::string>("toModule", "");
 
-    ssnode* from_module = sym_tab[from_str]; 
-    ssnode* to_module   = sym_tab[to_str]; 
+    sbnode* from_module = sym_tab[from_str]; 
+    sbnode* to_module   = sym_tab[to_str]; 
     assert(from_module && to_module);
 
     from_module->add_link(to_module);
@@ -283,5 +283,5 @@ void SSModel::parse_json(std::istream& istream) {
 
 
 
-extern "C" void libssconfig_is_present() {}
+extern "C" void libsbconfig_is_present() {}
 

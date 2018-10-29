@@ -6,7 +6,7 @@
   #include <stdbool.h>
   #include <string.h>
   #include <cstdint>
-  #include "sspdg.h"
+  #include "sbpdg.h"
   #include <string>
 
   int yyparse();

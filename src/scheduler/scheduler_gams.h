@@ -1,5 +1,5 @@
-#ifndef __SS__SCHEDULE_GAMS_H__
-#define __SS__SCHEDULE_GAMS_H__
+#ifndef __SB__SCHEDULE_GAMS_H__
+#define __SB__SCHEDULE_GAMS_H__
 
 #include <iostream>
 #include <fstream>
@@ -8,13 +8,13 @@
 
 class GamsScheduler : public Scheduler {
 public:
-  GamsScheduler(SS_CONFIG::SSModel* ssModel) :
-    Scheduler(ssModel),
+  GamsScheduler(SB_CONFIG::SbModel* sbModel) :
+    Scheduler(sbModel),
     _gams_files_setup(false), _gams_work_dir("gams"),
     _showGams(true), _mipstart(false), _sll(false) { }
 
-  virtual bool schedule(SSDfg* ssPDG, Schedule*& schedule);
-  virtual bool schedule_internal(SSDfg* ssPDG, Schedule*& schedule);
+  virtual bool schedule(SbPDG* sbPDG, Schedule*& schedule);
+  virtual bool schedule_internal(SbPDG* sbPDG, Schedule*& schedule);
 
   void showGams(bool show) {
     _showGams=show; 
@@ -22,7 +22,7 @@ public:
   void setMipstart(bool mipstart) {_mipstart=mipstart;}
 
   void setSll(bool sll) {_sll=sll;}
-  void print_mipstart(std::ofstream& ofs,  Schedule* sched, SSDfg* ssPDG, 
+  void print_mipstart(std::ofstream& ofs,  Schedule* sched, SbPDG* sbPDG, 
                       bool fix);
 
   protected:
@@ -32,15 +32,15 @@ public:
   bool _showGams, _mipstart;
   bool _sll;
 
-  std::unordered_map<std::string, std::pair<SS_CONFIG::ssnode*,int> >  gamsToNode;
-  std::unordered_map<std::string, std::pair<SS_CONFIG::sslink*,int> > gamsToLink;
-  std::unordered_map<std::string, std::pair<SS_CONFIG::ssswitch*,int>>  gamsToSwitch;
+  std::unordered_map<std::string, std::pair<SB_CONFIG::sbnode*,int> >  gamsToSbnode;  
+  std::unordered_map<std::string, std::pair<SB_CONFIG::sblink*,int> > gamsToSblink;
+  std::unordered_map<std::string, std::pair<SB_CONFIG::sbswitch*,int>>  gamsToSbswitch;
 
 
-  std::unordered_map<std::string, SSDfgNode*> gamsToPdgnode;
-  std::unordered_map<std::string, SSDfgEdge*> gamsToPdgedge;
+  std::unordered_map<std::string, SbPDG_Node*> gamsToPdgnode;
+  std::unordered_map<std::string, SbPDG_Edge*> gamsToPdgedge;
   std::unordered_map<std::string, std::pair<bool,int> >  gamsToPortN;  
-  std::unordered_map<std::string, SSDfgVec*>  gamsToPortV;  
+  std::unordered_map<std::string, SbPDG_Vec*>  gamsToPortV;  
 
 };
 

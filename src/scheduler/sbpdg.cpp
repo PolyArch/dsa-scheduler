@@ -1,5 +1,5 @@
 #include "model_parsing.h"
-#include "sspdg.h"
+#include "sbpdg.h"
 #include <vector>
 #include <set>
 #include <iomanip>
@@ -9,36 +9,36 @@
 #include "dfg-parser.tab.h"
 
 using namespace std;
-using namespace SS_CONFIG;
+using namespace SB_CONFIG;
 
 CtrlMap CtrlBits::ctrl_map;
 
-bool SSDfgVecInput::backPressureOn() {
+bool SbPDG_VecInput::backPressureOn() {
     // return getBackBit();
     return false;
 }
 
-SSDfgEdge::SSDfgEdge(SSDfgNode* def, SSDfgNode* use, EdgeType etype, SSDfg* sspdg, int l, int r) :
-   _ID(sspdg->inc_edge_id()), _sspdg(sspdg), _def(def), _use(use), _etype(etype),  _l(l), _r(r) {
+SbPDG_Edge::SbPDG_Edge(SbPDG_Node* def, SbPDG_Node* use, EdgeType etype, SbPDG* sbpdg, int l, int r) :
+   _ID(sbpdg->inc_edge_id()), _sbpdg(sbpdg), _def(def), _use(use), _etype(etype),  _l(l), _r(r) {
 }
 
-bool SSDfgNode::is_temporal() {
-  return _sspdg->group_prop(_group_id).is_temporal;
+bool SbPDG_Node::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
 }
 
 /*
-void SSDfgEdge::compute_next(){
+void SbPDG_Edge::compute_next(){
   if(_data_buffer.size()==1){
         _use->inc_inputs_ready_backcgra(false, false);
   }
 }*/
-void SSDfgEdge::compute_after_push(bool print, bool verif){
+void SbPDG_Edge::compute_after_push(bool print, bool verif){
   //cout << this->name() << " is checking compute after push, buf size: " << _data_buffer.size() << "\n";
   if(_data_buffer.size()==1){
     _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
-void SSDfgEdge::compute_after_pop(bool print, bool verif){
+void SbPDG_Edge::compute_after_pop(bool print, bool verif){
   //cout << this->name() << " is checking compute after pop, buf size: " << _data_buffer.size() << "\n";
 
   if(_data_buffer.size()>0){
@@ -48,7 +48,7 @@ void SSDfgEdge::compute_after_pop(bool print, bool verif){
 
 //Calculate the value based on the origin's value, and the edge's
 //index and bitwidth fields
-uint64_t SSDfgEdge::extract_value(uint64_t val) {
+uint64_t SbPDG_Edge::extract_value(uint64_t val) {
   if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
     return val;
   } else {
@@ -57,27 +57,27 @@ uint64_t SSDfgEdge::extract_value(uint64_t val) {
   }
 }
 
-uint64_t SSDfgEdge::get_value() {
+uint64_t SbPDG_Edge::get_value() {
   assert(_def);
   return extract_value(_def->get_value()); //the whole value
 }
 
-bool SSDfgOperand::valid() {
-    for(SSDfgEdge* e : edges) {
-      SSDfgNode* n = e->def();
+bool SbPDG_Operand::valid() {
+    for(SbPDG_Edge* e : edges) {
+      SbPDG_Node* n = e->def();
       if(n->invalid()) return false;
     }
     return true;
 }
 
-void SSDfgNode::push_buf_dummy_node(){
-    _sspdg->push_buf_transient(this->first_inc_edge(), true, 1); // can it be immediate?
+void SbPDG_Node::push_buf_dummy_node(){
+    _sbpdg->push_buf_transient(this->first_inc_edge(), true, 1); // can it be immediate?
 }
 
 
-void SSDfg::order_insts(SSDfgInst* inst,
-                 std::set<SSDfgInst*>& done_nodes,         //done insts
-                 std::vector<SSDfgInst*>& ordered_insts) {
+void SbPDG::order_insts(SbPDG_Inst* inst,
+                 std::set<SbPDG_Inst*>& done_nodes,         //done insts
+                 std::vector<SbPDG_Inst*>& ordered_insts) {
 
   if(done_nodes.count(inst)) {
     return;
@@ -95,7 +95,7 @@ void SSDfg::order_insts(SSDfgInst* inst,
     }
    
     //if there is a defintion node
-    if(SSDfgInst* op_inst = dynamic_cast<SSDfgInst*>(edge->def()) ) {
+    if(SbPDG_Inst* op_inst = dynamic_cast<SbPDG_Inst*>(edge->def()) ) {
       order_insts(op_inst, done_nodes, ordered_insts);                  
       //recursive call until the top inst with the last incoming edge 
     }
@@ -105,7 +105,7 @@ void SSDfg::order_insts(SSDfgInst* inst,
   ordered_insts.push_back(inst);
 }
 
-void SSDfg::check_for_errors() {
+void SbPDG::check_for_errors() {
   printGraphviz("viz/error_check_pdg.dot");
 
   bool error = false;
@@ -138,24 +138,24 @@ void SSDfg::check_for_errors() {
 }
 
 // This function is called from the simulator to 
-int SSDfg::compute(bool print, bool verif, int g) {
+int SbPDG::compute(bool print, bool verif, int g) {
   //if(_orderedInstsGroup.size()<=(unsigned)g) {
   //  _orderedInstsGroup.resize(g+1);
   //}
 
   //if(_orderedInsts.size()==0) {
-  //  std::set<SSDfgInst*> done_nodes;
+  //  std::set<SbPDG_Inst*> done_nodes;
 
   //  //for each output node traverse 
   //  //the incoming node
-  //  for(SSDfgOutput* out : _outputs) {
-  //    if(SSDfgInst* producing_node = out->out_inst()) {
+  //  for(SbPDG_Output* out : _outputs) {
+  //    if(SbPDG_Inst* producing_node = out->out_inst()) {
   //      order_insts(producing_node, done_nodes, _orderedInsts);
   //    }
   //  } 
   //}
 
-  //for(SSDfgInst* inst : _orderedInsts) {
+  //for(SbPDG_Inst* inst : _orderedInsts) {
   //  inst->compute(print,verif);
   //}
 
@@ -166,7 +166,7 @@ int SSDfg::compute(bool print, bool verif, int g) {
 
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
-    SSDfgVecInput* vec = _vecInputGroups[g][i];
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
     for (auto elem : vec->inputs()) {
       num_computed += elem->compute(print,verif); //calling some other compute
     }
@@ -175,29 +175,29 @@ int SSDfg::compute(bool print, bool verif, int g) {
 }
 
 //Calculates max group throughput based on functional unit type
-int SSDfg::maxGroupThroughput(int g) {
+int SbPDG::maxGroupThroughput(int g) {
   int maxgt=0;
 
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
-    SSDfgVecInput* vec = _vecInputGroups[g][i];
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
     for (auto elem : vec->inputs())
       maxgt=std::max(maxgt, elem->maxThroughput());
   }
   return maxgt;
 }
 
-void SSDfg::instsForGroup(int g, std::vector<SSDfgInst*>& insts) {
+void SbPDG::instsForGroup(int g, std::vector<SbPDG_Inst*>& insts) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
-    SSDfgVecInput* vec = _vecInputGroups[g][i];
+    SbPDG_VecInput* vec = _vecInputGroups[g][i];
     for (auto elem : vec->inputs())
       elem->depInsts(insts);
   }
 }
 
 //Necessary for BOOST::SERIALIZATION
-SSDfg::SSDfg() {
+SbPDG::SbPDG() {
    
 } 
 
@@ -227,10 +227,10 @@ bool conv_to_double(std::string s, double& dval) {
   return false;
 }
 
-SymEntry SSDfg::create_inst(std::string opcode, std::vector<SymEntry> &args) {
+SymEntry SbPDG::create_inst(std::string opcode, std::vector<SymEntry> &args) {
 
-  SS_CONFIG::ss_inst_t inst = inst_from_string(opcode.c_str());
-  auto *pdg_inst = new SSDfgInst(this, inst);
+  SB_CONFIG::sb_inst_t inst = inst_from_string(opcode.c_str());
+  auto *pdg_inst = new SbPDG_Inst(this, inst);
 
   int imm_offset = 0;
   for (unsigned i = 0; i < args.size(); ++i) {
@@ -246,26 +246,26 @@ SymEntry SSDfg::create_inst(std::string opcode, std::vector<SymEntry> &args) {
       assert(num_entries > 0 && num_entries <= 16);
       for (int e = 0; e < num_entries; ++e) {
         auto &edge_entry = sym.edge_entries->at(e);
-        SSDfgNode *inc_node = edge_entry.node;
+        SbPDG_Node *inc_node = edge_entry.node;
         if (inc_node == nullptr) {
           cerr << "Could not find argument " << i << " for \""
                << opcode + "\" inst \n";
           assert(false);
         }
-        SSDfgEdge::EdgeType etype = SSDfgEdge::EdgeType::data;
+        SbPDG_Edge::EdgeType etype = SbPDG_Edge::EdgeType::data;
 
         switch (sym.flag) {
           case SymEntry::FLAG_CONTROL:
-            etype = SSDfgEdge::EdgeType::ctrl;
+            etype = SbPDG_Edge::EdgeType::ctrl;
             break;
           case SymEntry::FLAG_PRED:
-            etype = SSDfgEdge::EdgeType::ctrl_true;
+            etype = SbPDG_Edge::EdgeType::ctrl_true;
             break;
           case SymEntry::FLAG_INV_PRED:
-            etype = SSDfgEdge::EdgeType::ctrl_false;
+            etype = SbPDG_Edge::EdgeType::ctrl_false;
             break;
           default:
-            etype = SSDfgEdge::data;
+            etype = SbPDG_Edge::data;
         }
 
         // flag should not work if it is control
@@ -280,11 +280,11 @@ SymEntry SSDfg::create_inst(std::string opcode, std::vector<SymEntry> &args) {
 
   addInst(pdg_inst);
   SymEntry e(pdg_inst);
-  e.set_bitslice_params(0, SS_CONFIG::bitwidth[inst] - 1);
+  e.set_bitslice_params(0, SB_CONFIG::bitwidth[inst] - 1);
   return e;
 }
 
-void SSDfg::set_pragma(std::string& c, std::string& s) {
+void SbPDG::set_pragma(std::string& c, std::string& s) {
   if (c == string("dfg")) {
     cout << "No pragmas yet for dfg\n";
   } else if (c == string("group")) {
@@ -297,13 +297,13 @@ void SSDfg::set_pragma(std::string& c, std::string& s) {
   }
 }
 
-void SSDfg::start_new_dfg_group() {
-  _vecInputGroups.emplace_back(std::vector<SSDfgVecInput*>());
-  _vecOutputGroups.emplace_back(std::vector<SSDfgVecOutput*>());
+void SbPDG::start_new_dfg_group() {
+  _vecInputGroups.emplace_back(std::vector<SbPDG_VecInput*>());
+  _vecOutputGroups.emplace_back(std::vector<SbPDG_VecOutput*>());
   _groupProps.emplace_back(GroupProp());
 }
 
-SSDfg::SSDfg(string filename) : SSDfg() {
+SbPDG::SbPDG(string filename) : SbPDG() {
   string line;
   start_new_dfg_group();
   parse_dfg(filename.c_str(),this);
@@ -311,37 +311,37 @@ SSDfg::SSDfg(string filename) : SSDfg() {
   check_for_errors();
 }
 
-std::string SSDfgEdge::name() {
+std::string SbPDG_Edge::name() {
   std::stringstream ss;
   ss << _def->name() << "->" << _use->name();
   return ss.str();
 }
 
 // -- Gams names --
-std::string SSDfgEdge::gamsName() {
+std::string SbPDG_Edge::gamsName() {
   std::stringstream ss;
   ss << _def->gamsName() << "_" << _use->gamsName() << "i" << _ID ;
   return ss.str();
 }
 
-std::string SSDfgInput::gamsName() {
+std::string SbPDG_Input::gamsName() {
   std::stringstream ss;
   ss << "IV" << _ID;
   return ss.str();
 }
 
-std::string SSDfgOutput::gamsName() {
+std::string SbPDG_Output::gamsName() {
   std::stringstream ss;
   ss << "OV" << _ID;
   return ss.str();
 }
 
-std::string SSDfgInst::gamsName() {
+std::string SbPDG_Inst::gamsName() {
   std::stringstream ss;
   ss << "FV" << _ID;
   return ss.str();
 }
-void SSDfgInst::setImmSlot(int i) {
+void SbPDG_Inst::setImmSlot(int i) {
   assert(i < 4);
 
   if ((int) _ops.size() <= i) {
@@ -351,33 +351,33 @@ void SSDfgInst::setImmSlot(int i) {
   _imm_slot = i;
 }
 
-uint64_t SSDfgInst::do_compute(uint64_t &discard) {
+uint64_t SbPDG_Inst::do_compute(uint64_t &discard) {
   //This is a really cheezy way to do this, but i'm a little tired
   uint64_t output;
   switch(bitwidth()) {
     case 64: 
-     output=SS_CONFIG::execute64(_ssinst,_input_vals,_reg,discard,_back_array);
+     output=SB_CONFIG::execute64(_sbinst,_input_vals,_reg,discard,_back_array);
       break;
     case 32:
       _input_vals_32.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_32[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute32(_ssinst,_input_vals_32,_reg_32,discard,_back_array);
+      output=SB_CONFIG::execute32(_sbinst,_input_vals_32,_reg_32,discard,_back_array);
       break;
     case 16:
       _input_vals_16.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_16[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute16(_ssinst,_input_vals_16,_reg_16,discard,_back_array);
+      output=SB_CONFIG::execute16(_sbinst,_input_vals_16,_reg_16,discard,_back_array);
       break;
     case 8:
       _input_vals_8.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_8[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute8(_ssinst,_input_vals_8,_reg_8,discard,_back_array);
+      output=SB_CONFIG::execute8(_sbinst,_input_vals_8,_reg_8,discard,_back_array);
       break;
     default:
       cout << "Weird bitwidth: " << bitwidth() << "\n";
@@ -386,8 +386,8 @@ uint64_t SSDfgInst::do_compute(uint64_t &discard) {
   return output;
 }
 
-//compute:actual compute called from SSDfg class (slightly modify this)
-int SSDfgInst::compute(bool print, bool verif) {
+//compute:actual compute called from SbPDG class (slightly modify this)
+int SbPDG_Inst::compute(bool print, bool verif) {
   assert(_ops.size() <=3);
 
   if(_input_vals.size()==0) {
@@ -396,7 +396,7 @@ int SSDfgInst::compute(bool print, bool verif) {
   assert(_input_vals.size() <= _ops.size());
 
   if(print) {
-    _sspdg->dbg_stream() << name() << " (" << _ID << "): ";
+    _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
   _invalid=false;
@@ -411,14 +411,14 @@ int SSDfgInst::compute(bool print, bool verif) {
       }
     }
     if(print) {
-      _sspdg->dbg_stream() << std::hex << _input_vals[i] << " ";
+      _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
   
   _val = do_compute(_invalid);
 
   if(print) {
-    _sspdg->dbg_stream() << " = " << _val << "\n";
+    _sbpdg->dbg_stream() << " = " << _val << "\n";
   }
 
   if(verif) {
@@ -434,7 +434,7 @@ int SSDfgInst::compute(bool print, bool verif) {
   int num_computed=!_invalid;
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-      SSDfgNode* use = (*iter)->use();
+      SbPDG_Node* use = (*iter)->use();
       num_computed += use->inc_inputs_ready(print, verif); //recursively call compute
   }
 
@@ -443,7 +443,7 @@ int SSDfgInst::compute(bool print, bool verif) {
 }
 
 // new compute for back cgra-----------------------------
-int SSDfgInst::compute_backcgra(bool print, bool verif) {
+int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // std::cout << "came to compute for the node: " << this->gamsName() << " and the name: " << name() << "\n";
 
 
@@ -471,7 +471,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   }
   */
   if(print) {
-    _sspdg->dbg_stream() << name() << " (" << _ID << "): ";
+    _sbpdg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
   uint64_t discard=0;
@@ -501,7 +501,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     } 
 
     if(print) {
-      _sspdg->dbg_stream() << std::hex << _input_vals[i] << " ";
+      _sbpdg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
 
@@ -516,7 +516,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   //}
 
   if(!_invalid) { //IF VALID
-     _sspdg->inc_total_dyn_insts();
+     _sbpdg->inc_total_dyn_insts();
    
     // Read in some temp value and set _val after inst_lat cycles
     output=do_compute(discard);
@@ -525,7 +525,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
 	// std::cout << "invalid after compute (should be false): " << _invalid << "\n";
   
     if(print) {
-      _sspdg->dbg_stream() << " = " << output << "\n";
+      _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
   // if(reset) { _reg = 0; }
@@ -534,7 +534,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
      std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
   }
   if(this->name() == ":Phi") {
-    _sspdg->inc_total_dyn_insts();
+    _sbpdg->inc_total_dyn_insts();
     assert(_input_vals.size()==3 && "Not enough input in phi node");
     for(unsigned i = 0; i < _ops.size(); ++i) {
       if(_ops[i].get_buffer_valid()) {
@@ -543,7 +543,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     } 
 
     if(print) {
-      _sspdg->dbg_stream() << " = " << output << "\n";
+      _sbpdg->dbg_stream() << " = " << output << "\n";
     }
     discard=false;
     _invalid=false;
@@ -580,8 +580,8 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     else{
       //TODO:FIXME:CHECK:IMPORTANT
       //Iterate over edges in an operand and push transients for all of them?
-      for(SSDfgEdge* e : _ops[i].edges) {
-        _sspdg->push_buf_transient(e, false, inst_throughput);
+      for(SbPDG_Edge* e : _ops[i].edges) {
+        _sbpdg->push_buf_transient(e, false, inst_throughput);
       }
     }
   }
@@ -607,68 +607,68 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
 
 // Virtual function-------------------------------------------------
 
-int SSDfgInst::update_next_nodes(bool print, bool verif){
+int SbPDG_Inst::update_next_nodes(bool print, bool verif){
     return 0;
 }
 
-bool SSDfgVec::is_temporal() {
-  return _sspdg->group_prop(_group_id).is_temporal;
+bool SbPDG_Vec::is_temporal() {
+  return _sbpdg->group_prop(_group_id).is_temporal;
 }
 
-SSDfgIO::SSDfgIO(SSDfg *sspdg, const std::string &name, SSDfgVec *vec_, SSDfgNode::V_TYPE v) : SSDfgNode(sspdg, v, name), vec_(vec_) {
+SbPDG_IO::SbPDG_IO(SbPDG *sbpdg, const std::string &name, SbPDG_Vec *vec_, SbPDG_Node::V_TYPE v) : SbPDG_Node(sbpdg, v, name), vec_(vec_) {
 
 }
 
-SSDfgVec::SSDfgVec(int len, const std::string &name, int id, SSDfg* sspdg) : _name(name), _ID(id), _sspdg(sspdg) {
-  _group_id = sspdg->num_groups() - 1;
+SbPDG_Vec::SbPDG_Vec(int len, const std::string &name, int id, SbPDG* sbpdg) : _name(name), _ID(id), _sbpdg(sbpdg) {
+  _group_id = sbpdg->num_groups() - 1;
 }
 
-SSDfgNode::SSDfgNode(SSDfg* sspdg, V_TYPE v) : 
-      _sspdg(sspdg), _ID(sspdg->inc_node_id()),  _vtype(v) {
+SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v) : 
+      _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _vtype(v) {
   //TODO:FIXME: This will likely be incorrect while rebuilding the
   //DFG from a config file, but might work for now
-  _group_id = _sspdg->num_groups() - 1;
+  _group_id = _sbpdg->num_groups() - 1;
 
 }
 
-SSDfgNode::SSDfgNode(SSDfg* sspdg, V_TYPE v, const std::string &name) :
-        _sspdg(sspdg), _ID(sspdg->inc_node_id()),  _name(name), _vtype(v)  {
+SbPDG_Node::SbPDG_Node(SbPDG* sbpdg, V_TYPE v, const std::string &name) :
+        _sbpdg(sbpdg), _ID(sbpdg->inc_node_id()),  _name(name), _vtype(v)  {
   //TODO:FIXME: This will likely be incorrect while rebuilding the
   //DFG from a config file, but might work for now
-  _group_id = _sspdg->num_groups() - 1;
+  _group_id = _sbpdg->num_groups() - 1;
 
 }
 
-int SSDfgNode::inc_inputs_ready_backcgra(bool print, bool verif) {
+int SbPDG_Node::inc_inputs_ready_backcgra(bool print, bool verif) {
   _inputs_ready+=1;
    //std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<num_inc_edges()<<"\n";
   if(_inputs_ready == num_inc_edges()) {
-    _sspdg->push_ready_node(this);
+    _sbpdg->push_ready_node(this);
   }
   return 0;
 }
 
-SSDfgVecOutput *SSDfgOutput::output_vec() {
-  auto res = dynamic_cast<SSDfgVecOutput*>(vec_);
+SbPDG_VecOutput *SbPDG_Output::output_vec() {
+  auto res = dynamic_cast<SbPDG_VecOutput*>(vec_);
   assert(res);
   return res;
 }
 
-SSDfgVecInput *SSDfgInput::input_vec() {
-  auto res = dynamic_cast<SSDfgVecInput*>(vec_);
+SbPDG_VecInput *SbPDG_Input::input_vec() {
+  auto res = dynamic_cast<SbPDG_VecInput*>(vec_);
   assert(res);
   return res;
 }
 
 
-void SSDfgNode::set_value(uint64_t v, bool valid, bool avail, int cycle) {
-    _sspdg->push_transient(this, v,valid, avail, cycle);
+void SbPDG_Node::set_value(uint64_t v, bool valid, bool avail, int cycle) {
+    _sbpdg->push_transient(this, v,valid, avail, cycle);
 }
 
 //------------------------------------------------------------------
 
 
-void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
+void SbPDG_Node::printGraphviz(ostream& os, Schedule* sched) {
   
   string ncolor = "black";
   os << "N" << _ID << " [ label = \"" << name();
@@ -689,18 +689,18 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   os << "\n";
   
   //print edges
-  SSDfgNode::const_edge_iterator I,E;
+  SbPDG_Node::const_edge_iterator I,E;
   for (auto e : _uses) {
 
-    if(e->etype()==SSDfgEdge::data) {
+    if(e->etype()==SbPDG_Edge::data) {
        ncolor="black";
-    } else if(e->etype()==SSDfgEdge::ctrl_true) {
+    } else if(e->etype()==SbPDG_Edge::ctrl_true) {
        ncolor="blue";
-    } else if(e->etype()==SSDfgEdge::ctrl_false) {
+    } else if(e->etype()==SbPDG_Edge::ctrl_false) {
        ncolor="red";
     }
     
-    SSDfgNode* n = e->use();
+    SbPDG_Node* n = e->use();
     os << "N" << _ID << " -> N" << n->_ID << "[ color=";
     os << ncolor;
     os << " label = \"";
@@ -717,23 +717,23 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
 
 }
 
-void SSDfgInst::printGraphviz(ostream& os, Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
+void SbPDG_Inst::printGraphviz(ostream& os, Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
-void SSDfgOutput::printGraphviz(ostream& os,Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
+void SbPDG_Output::printGraphviz(ostream& os,Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
-void SSDfgInput::printGraphviz(ostream& os,Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
+void SbPDG_Input::printGraphviz(ostream& os,Schedule* sched) {
+  SbPDG_Node::printGraphviz(os,sched);
 }
 
 //TODO:FIXME: This doesn't work any more
 // ---------------------------------------------------------------------------
 // DFG Emulation -- not currently used ---------------------------------------
 #if 0
-void SSDfgNode::printEmuDFG(ostream& os, string dfg_name) { 
+void SbPDG_Node::printEmuDFG(ostream& os, string dfg_name) { 
   os << "The ID for this node is " << _ID << endl;
   os << "The name for this node is " << _name << endl;
   for(auto iter = _ops.begin(); iter != _ops.end(); iter++) {
@@ -746,7 +746,7 @@ void SSDfgNode::printEmuDFG(ostream& os, string dfg_name) {
   os << "\n";
 }
 
-int SSDfgNode::findDepth(ostream& os, string dfg_name, int level) {
+int SbPDG_Node::findDepth(ostream& os, string dfg_name, int level) {
   int returned_level = level;
   for(auto name_iter = _uses.begin(); name_iter != _uses.end(); name_iter++) {
     if((*name_iter)->use()->output) {
@@ -761,7 +761,7 @@ int SSDfgNode::findDepth(ostream& os, string dfg_name, int level) {
   return returned_level;
 }
 
-void SSDfgInst::printEmuDFG(ostream& os, string dfg_name) {
+void SbPDG_Inst::printEmuDFG(ostream& os, string dfg_name) {
   //os << "INSTRUCTION " << dfg_name << "_" << _name << endl;
   auto name_iter = _uses.begin();
   if((*name_iter)->use()->output) {
@@ -820,10 +820,10 @@ void SSDfgInst::printEmuDFG(ostream& os, string dfg_name) {
     }
     ops_amt++;
   }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
 }
 
-void SSDfgOutput::printDirectAssignments(ostream& os, string dfg_name) {
+void SbPDG_Output::printDirectAssignments(ostream& os, string dfg_name) {
   for(auto ops_iter = _ops.begin(); ops_iter != _ops.end(); ops_iter++) {
     if((*ops_iter)->def()->input) {
       //Print our formatted name and such
@@ -864,7 +864,7 @@ void SSDfgOutput::printDirectAssignments(ostream& os, string dfg_name) {
   }
 }
 
-void SSDfgOutput::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* output_sizes) {
+void SbPDG_Output::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* output_sizes) {
   output = true;
   //First, split name into realName and subIter
   if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
@@ -888,11 +888,11 @@ void SSDfgOutput::printEmuDFG(ostream& os, string dfg_name, string* realName, in
     os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
     output_sizes->push_back(_size);
   }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
   *realName = _realName;
 }
 
-void SSDfgInput::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* input_sizes) {
+void SbPDG_Input::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* input_sizes) {
   //First, split name into realName and subIter
   input = true;
   if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
@@ -914,7 +914,7 @@ void SSDfgInput::printEmuDFG(ostream& os, string dfg_name, string* realName, int
     os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
     input_sizes->push_back(_size);
   }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
+  //SbPDG_Node::printEmuDFG(os, dfg_name);
   *realName = _realName;
 }
 // End DFG Emulation -- not currently used -----------------------------------
@@ -924,16 +924,16 @@ void SSDfgInput::printEmuDFG(ostream& os, string dfg_name, string* realName, int
 //Connect two nodes in PDG
 //assumption is that each operand's edges are
 //added to in least to most significant order!
-SSDfgEdge* SSDfg::connect(SSDfgNode* orig, SSDfgNode* dest, int slot,
-                           SSDfgEdge::EdgeType etype, int l, int r) {
+SbPDG_Edge* SbPDG::connect(SbPDG_Node* orig, SbPDG_Node* dest, int slot,
+                           SbPDG_Edge::EdgeType etype, int l, int r) {
   assert(orig != dest && "we only allow acyclic pdgs");
 
-  SSDfgEdge* new_edge = 0; //check if it's a removed edge first
+  SbPDG_Edge* new_edge = 0; //check if it's a removed edge first
   auto edge_it = removed_edges.find(make_pair(orig,dest));
   if(edge_it != removed_edges.end()) {
     new_edge = edge_it->second;
   } else { 
-    new_edge = new SSDfgEdge(orig, dest, etype, this, l, r);
+    new_edge = new SbPDG_Edge(orig, dest, etype, this, l, r);
   }
 
   dest->addOperand(slot,new_edge);
@@ -944,7 +944,7 @@ SSDfgEdge* SSDfg::connect(SSDfgNode* orig, SSDfgNode* dest, int slot,
 }
 
 //Disconnect two nodes in PDG
-void SSDfg::disconnect(SSDfgNode* orig, SSDfgNode* dest) {
+void SbPDG::disconnect(SbPDG_Node* orig, SbPDG_Node* dest) {
   assert(orig != dest && "we only allow acyclic pdgs");
 
   dest->removeIncEdge(orig);
@@ -959,20 +959,20 @@ void SSDfg::disconnect(SSDfgNode* orig, SSDfgNode* dest) {
   assert(false && "edge was not found");
 }
 
-bool SSDfg::remappingNeeded() {
+bool SbPDG::remappingNeeded() {
   if(dummy_map.empty()) {
     //Count the number of dummy nodes needed
     for (auto pdg_out : _outputs) {
-      SSDfgInst* inst = pdg_out->out_inst();
-      SSDfgNode* node = pdg_out->first_op_node();
+      SbPDG_Inst* inst = pdg_out->out_inst();
+      SbPDG_Node* node = pdg_out->first_op_node();
       //if producing instruction is an input or
       // if producing instruction has more than one uses
       if (!inst || inst->num_out() > 1) {
-        SSDfgInst* newNode = new SSDfgInst(this, SS_CONFIG::ss_inst_t::SS_Copy, true);
+        SbPDG_Inst* newNode = new SbPDG_Inst(this, SB_CONFIG::sb_inst_t::SB_Copy, true);
         //TODO: insert information about this dummy node
         disconnect(node, pdg_out);
-        connect(node, newNode, 0, SSDfgEdge::data);
-        connect(newNode, pdg_out, 0, SSDfgEdge::data);
+        connect(node, newNode, 0, SbPDG_Edge::data);
+        connect(newNode, pdg_out, 0, SbPDG_Edge::data);
         addInst(newNode);
         dummy_map[pdg_out] = newNode;
       }
@@ -981,17 +981,17 @@ bool SSDfg::remappingNeeded() {
   return !dummy_map.empty();
 }
 
-void SSDfg::removeDummies() {
+void SbPDG::removeDummies() {
   _orderedInsts.clear(); //invalidate dummies
 
   for (auto Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {
-    SSDfgInst* inst = *Ii;
+    SbPDG_Inst* inst = *Ii;
     if(inst->isDummy()) {
-       SSDfgNode* input = inst->first_op_node();
-       SSDfgNode* output = inst->first_use();
+       SbPDG_Node* input = inst->first_op_node();
+       SbPDG_Node* output = inst->first_use();
        disconnect(input,inst);
        disconnect(inst,output);
-       connect(input,output,0,SSDfgEdge::data);
+       connect(input,output,0,SbPDG_Edge::data);
     }
   }
 
@@ -1005,22 +1005,22 @@ void SSDfg::removeDummies() {
 }
 
 
-void SSDfg::remap(int num_HW_FU) {
+void SbPDG::remap(int num_HW_FU) {
   //First Disconnect any Dummy Nodes  (this is n^2 because of remove, but w/e)
   removeDummies();
 
   for (auto Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
-    SSDfgOutput* pdg_out = (*Iout);
-    SSDfgInst* inst = pdg_out->out_inst();
-    SSDfgNode* node = pdg_out->first_op_node();
+    SbPDG_Output* pdg_out = (*Iout);
+    SbPDG_Inst* inst = pdg_out->out_inst();
+    SbPDG_Node* node = pdg_out->first_op_node();
     bool not_composed = !pdg_out->first_operand().is_composed();
 
     if (not_composed && (!inst || inst->num_out() > 1) && ((rand()&3)==0) ) { 
       //25% chance
       disconnect(node, pdg_out);
-      SSDfgInst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
-      connect(node, newNode, 0, SSDfgEdge::data);
-      connect(newNode, pdg_out, 0, SSDfgEdge::data);
+      SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
+      connect(node, newNode, 0, SbPDG_Edge::data);
+      connect(newNode, pdg_out, 0, SbPDG_Edge::data);
       addInst(newNode); //add to list of nodes 
       dummies.insert(newNode);
       dummiesOutputs.insert(pdg_out);
@@ -1038,18 +1038,18 @@ void SSDfg::remap(int num_HW_FU) {
 //We may have forgotten which dummies we included in the PDG, if we went on to
 //some other solution.  This function recalls dummies and reconnects things
 //appropriately
-void SSDfg::rememberDummies(std::set<SSDfgOutput*> d) {
+void SbPDG::rememberDummies(std::set<SbPDG_Output*> d) {
   removeDummies();
 
   for (auto Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
-    SSDfgOutput* pdg_out = (*Iout);
-    SSDfgNode* node = pdg_out->first_op_node();
+    SbPDG_Output* pdg_out = (*Iout);
+    SbPDG_Node* node = pdg_out->first_op_node();
 
     if (d.count(pdg_out)) {
       disconnect(node, pdg_out);
-      SSDfgInst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
-      connect(node, newNode, 0, SSDfgEdge::data);
-      connect(newNode, pdg_out, 0, SSDfgEdge::data);
+      SbPDG_Inst* newNode = dummy_map[pdg_out]; //get the one we saved earlier
+      connect(node, newNode, 0, SbPDG_Edge::data);
+      connect(newNode, pdg_out, 0, SbPDG_Edge::data);
       addInst(newNode); //add to list of nodes
       dummies.insert(newNode);
       dummiesOutputs.insert(pdg_out);
@@ -1058,7 +1058,7 @@ void SSDfg::rememberDummies(std::set<SSDfgOutput*> d) {
 }
 
 //TODO: @vidushi, does this clear all the transient state, in case we need to do a reset?
-void SSDfg::reset_simulation_state() {
+void SbPDG::reset_simulation_state() {
   for(auto& list : transient_values) {
     list.clear();
   }
@@ -1072,7 +1072,7 @@ void SSDfg::reset_simulation_state() {
 
 
 
-void SSDfg::printGraphviz(ostream& os, Schedule* sched)
+void SbPDG::printGraphviz(ostream& os, Schedule* sched)
 {
   os << "Digraph G { \nnewrank=true;\n " ;
 
@@ -1096,16 +1096,16 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
   os << "\n";
   for(auto& i : _vecInputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for (auto ssin : i->inputs()) {
-      os << "N" << ssin->id() << " ";
+    for (auto sbin : i->inputs()) {
+      os << "N" << sbin->id() << " ";
     }
     os << "}\n";
   }
 
   for(auto& i : _vecOutputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for (auto ssout : i->outputs()) {
-      os << "N" << ssout->id() << " ";
+    for (auto sbout : i->outputs()) {
+      os << "N" << sbout->id() << " ";
     }
     os << "}\n";
   }
@@ -1124,14 +1124,14 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 }
 
 #if 0
-void SSDfg::printEmuDFG(ostream& os, string dfg_name)
+void SbPDG::printEmuDFG(ostream& os, string dfg_name)
 {
   string realName = "";
   vector<int> input_sizes;
   int input_iter = 0;
   const_input_iterator Iin,Ein;
-  os << "#include \"ss_emu.h\"" << endl;
-  os << "#include \"ss_c_insts.h\" "<< endl << endl;
+  os << "#include \"sb_emu.h\"" << endl;
+  os << "#include \"sb_c_insts.h\" "<< endl << endl;
 
   os << "#define " << dfg_name << "_size 64" << endl;
 
@@ -1168,7 +1168,7 @@ void SSDfg::printEmuDFG(ostream& os, string dfg_name)
      (*Iout)->printDirectAssignments(os, dfg_name);
    }
    os << "}" << endl << endl << endl;
-  os << "static ss_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
+  os << "static sb_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
   iter = 1;
   for(auto viter = input_sizes.begin(); viter != input_sizes.end(); viter++) {
     os << *viter;
@@ -1195,14 +1195,14 @@ void SSDfg::printEmuDFG(ostream& os, string dfg_name)
 
 
 //IO-Model has the hardware vector io interface mapping
-void SSDfg::printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssModel) {
+void SbPDG::printPortCompatibilityWith(std::ostream& os, SB_CONFIG::SbModel* sbModel) {
   os << "set cp(pv,pn) \"Port Compatibility\" \n /";   // Print the port compatibility
   bool first=true;  
 
   for(auto& vec_in : _vecInputs) {
     std::vector<int> matching_ports;
 
-    for(auto& port_interf : ssModel->subModel()->io_interf().in_vports) {
+    for(auto& port_interf : sbModel->subModel()->io_interf().in_vports) {
       const std::vector<int>& port_m = port_interf.second->port_vec();
        
       if(port_m.size() >= vec_in->inputs().size()) {
@@ -1221,7 +1221,7 @@ void SSDfg::printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssM
   for(auto& vec_out : _vecOutputs) {
     std::vector<int> matching_ports;
 
-    for(auto& port_interf : ssModel->subModel()->io_interf().out_vports) {
+    for(auto& port_interf : sbModel->subModel()->io_interf().out_vports) {
 
       const std::vector<int>& port_m = port_interf.second->port_vec();
 
@@ -1245,8 +1245,8 @@ void SSDfg::printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssM
 
 
 
-void SSDfg::calc_minLats() {
-  list<SSDfgNode* > openset;
+void SbPDG::calc_minLats() {
+  list<SbPDG_Node* > openset;
   set<bool> seen;
   for (auto elem : _inputs) {
     openset.push_back(elem);
@@ -1255,34 +1255,34 @@ void SSDfg::calc_minLats() {
 
   //populate the schedule object
   while(!openset.empty()) {
-    SSDfgNode* n = openset.front(); 
+    SbPDG_Node* n = openset.front(); 
     openset.pop_front();
 
     int cur_lat = 0;
 
     for(auto elem : n->in_edges()) {
-      SSDfgNode* dn = elem->def();
+      SbPDG_Node* dn = elem->def();
       if(dn->min_lat() > cur_lat) {
         cur_lat = dn->min_lat();
       }
     }
 
-    if(SSDfgInst* inst_n = dynamic_cast<SSDfgInst*>(n)) {
+    if(SbPDG_Inst* inst_n = dynamic_cast<SbPDG_Inst*>(n)) {
       cur_lat += inst_lat(inst_n->inst()) + 1;
-    } else if(dynamic_cast<SSDfgInput*>(n)) {
+    } else if(dynamic_cast<SbPDG_Input*>(n)) {
       cur_lat=0;      
-    } else if(dynamic_cast<SSDfgOutput*>(n)) {
+    } else if(dynamic_cast<SbPDG_Output*>(n)) {
       cur_lat+=1;   
     }
 
     n->set_min_lat(cur_lat);
 
     for(auto elem : n->uses()) {
-      SSDfgNode* un = elem->use();
+      SbPDG_Node* un = elem->use();
 
       bool ready = true;
       for(auto elem : un->in_edges()) {
-        SSDfgNode* dn = elem->def();
+        SbPDG_Node* dn = elem->def();
         if(!seen.count(dn)) {
           ready = false;
           break;
@@ -1297,10 +1297,10 @@ void SSDfg::calc_minLats() {
 }
 
 //Gams related
-void SSDfg::printGams(std::ostream& os,
-                      std::unordered_map<string,SSDfgNode*>& node_map,
-                      std::unordered_map<std::string,SSDfgEdge*>& edge_map,
-                      std::unordered_map<std::string, SSDfgVec*>& port_map) {
+void SbPDG::printGams(std::ostream& os,
+                      std::unordered_map<string,SbPDG_Node*>& node_map,
+                      std::unordered_map<std::string,SbPDG_Edge*>& edge_map,
+                      std::unordered_map<std::string, SbPDG_Vec*>& port_map) {
   
   os << "$onempty\n";
 
@@ -1347,9 +1347,9 @@ void SSDfg::printGams(std::ostream& os,
     os << "parameter minT(v) \"Minimum Vertex Times\" \n /";
     for (auto Ii = _nodes.begin(), Ei = _nodes.end(); Ii != Ei; ++Ii) {
       if (Ii != _nodes.begin()) os << ", ";
-      SSDfgNode *n = *Ii;
+      SbPDG_Node *n = *Ii;
       int l = n->min_lat();
-      if (SSDfgInst *inst = dynamic_cast<SSDfgInst *>(n)) {
+      if (SbPDG_Inst *inst = dynamic_cast<SbPDG_Inst *>(n)) {
         l -= inst_lat(inst->inst());
       }
       os << n->gamsName() << " " << l;
@@ -1361,15 +1361,15 @@ void SSDfg::printGams(std::ostream& os,
   os << "set iv(v) \"instruction verticies\";\n";
   os << "iv(v) = (not inV(v)) and (not outV(v));\n";
   
-  for(int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
+  for(int i = 2; i < SB_NUM_TYPES; ++i) {
+    sb_inst_t sb_inst = (sb_inst_t)i;
     
-    os << "set " << name_of_inst(ss_inst) << "V(v) /";
+    os << "set " << name_of_inst(sb_inst) << "V(v) /";
     bool first=true;
     
     for (auto pdg_inst : _insts) {
 
-      if(ss_inst == pdg_inst->inst()) {
+      if(sb_inst == pdg_inst->inst()) {
         CINF(os,first);
         os << pdg_inst->gamsName();
       }
@@ -1395,16 +1395,16 @@ void SSDfg::printGams(std::ostream& os,
   os << "parameter VI(pv,v) \"Port Vector Definitions\" \n /";   // Print the set of port vertices mappings:
   for(auto& i : _vecInputs) {
     int ind=0;
-    for (auto ssin : i->inputs()) {
+    for (auto sbin : i->inputs()) {
       CINF(os,first);
-      os << i->gamsName() << "." << ssin->gamsName() << " " << ind+1;
+      os << i->gamsName() << "." << sbin->gamsName() << " " << ind+1;
     }
   }
   for(auto& i : _vecOutputs) {
     int ind=0;
-    for (auto ssout : i->outputs()) {
+    for (auto sbout : i->outputs()) {
       CINF(os,first);
-      os << i->gamsName() << "." << ssout->gamsName() << " " << ind+1;
+      os << i->gamsName() << "." << sbout->gamsName() << " " << ind+1;
     }
   }
   os << "/;\n";
@@ -1426,9 +1426,9 @@ void SSDfg::printGams(std::ostream& os,
   os << "kindV('Input', inV(v))=YES;\n";
   os << "kindV('Output', outV(v))=YES;\n";
 
-  for(int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
-    os << "kindV(\'" << name_of_inst(ss_inst) << "\', " << name_of_inst(ss_inst) << "V(v))=YES;\n";
+  for(int i = 2; i < SB_NUM_TYPES; ++i) {
+    sb_inst_t sb_inst = (sb_inst_t)i;
+    os << "kindV(\'" << name_of_inst(sb_inst) << "\', " << name_of_inst(sb_inst) << "V(v))=YES;\n";
   }
 
   // --------------------------- Print the linkage ------------------------
@@ -1436,7 +1436,7 @@ void SSDfg::printGams(std::ostream& os,
   for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     
-    SSDfgEdge* edge = *Ie;  
+    SbPDG_Edge* edge = *Ie;  
     os << edge->def()->gamsName() << "." << edge->gamsName() << " 1";
   }
   os << "/;\n";
@@ -1445,7 +1445,7 @@ void SSDfg::printGams(std::ostream& os,
   for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
     
-    SSDfgEdge* edge = *Ie;  
+    SbPDG_Edge* edge = *Ie;  
     os << edge->gamsName() << "." << edge->use()->gamsName() << " 1";
   }
   os << "/;\n";
@@ -1453,9 +1453,9 @@ void SSDfg::printGams(std::ostream& os,
   os << "set intedges(e) \"edges\" \n /";   // Internal Edges
   first =true;
   for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
-    SSDfgEdge* edge = *Ie;  
+    SbPDG_Edge* edge = *Ie;  
     
-    if(!dynamic_cast<SSDfgInput*>(edge->def()) && !dynamic_cast<SSDfgOutput*>(edge->use()) ) {
+    if(!dynamic_cast<SbPDG_Input*>(edge->def()) && !dynamic_cast<SbPDG_Output*>(edge->use()) ) {
       if (first) first = false;
       else os << ", ";
       os << edge->gamsName();
@@ -1466,9 +1466,9 @@ void SSDfg::printGams(std::ostream& os,
   os << "parameter delta(e) \"delay of edge\" \n /";   // Print the set of edges:
   for (auto Ie=_edges.begin(),Ee=_edges.end();Ie!=Ee;++Ie)  { 
     if(Ie!=_edges.begin()) os << ", ";
-    SSDfgEdge* edge = *Ie;
+    SbPDG_Edge* edge = *Ie;
     
-    if(SSDfgInst* pdginst = dynamic_cast<SSDfgInst*>(edge->def())) {       
+    if(SbPDG_Inst* pdginst = dynamic_cast<SbPDG_Inst*>(edge->def())) {       
        os << (*Ie)->gamsName() << " " << inst_lat(pdginst->inst());
     } else {
        os << (*Ie)->gamsName() << " " << "0";  //TODO: WHAT LATENCY SHOULD I USE??

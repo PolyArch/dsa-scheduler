@@ -3,7 +3,8 @@
 src/gams_models/*.h
 build/
 *.sw?
-drivers/ss_sched
+drivers/sb_dfg_emu
+drivers/sb_sched
 drivers/stat-config
 dfgs/*/*.h
 gams/

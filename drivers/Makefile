@@ -9,21 +9,25 @@ CXX = g++
 CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
 LIB_PATH=$(SS_TOOLS)/lib 
-INC_SSMODEL_PATH=$(SS_TOOLS)/include/ss-config
-INC_SSSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
+INC_SBMODEL_PATH=$(SS_TOOLS)/include/ss-config
+INC_SBSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
-CXXFLAGS += -I$(INC_SSMODEL_PATH) -I$(INC_SSSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
+CXXFLAGS += -I$(INC_SBMODEL_PATH) -I$(INC_SBSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig $(LIBS)
+LOCAL_LIBS = -ly -lfl -lsbscheduler -lsbconfig $(LIBS)
 
-all: ss_sched 
+all: sb_sched 
+#sb_dfg_emu
 
-ss_sched : ss_sched.cpp $(INC_SSMODEL_PATH)/*.h
+sb_sched : sb_sched.cpp $(INC_SBMODEL_PATH)/*.h
 	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
+
+#sb_dfg_emu : sb_dfg_emu.cpp
+#	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 
 clean:
-	rm -rf *.o ss_sched *.d
+	rm -rf *.o  sb_dfg_emu sb_sched *.d
 
 include ../make.rules
 

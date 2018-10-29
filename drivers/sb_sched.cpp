@@ -8,7 +8,7 @@
 #include "scheduler.h"
 #include "scheduler_gams.h"
 #include "scheduler_sa.h"
-#include "sspdg.h"
+#include "sbpdg.h"
 #include <cstdlib>
 #include <string>
 
@@ -22,7 +22,7 @@ using namespace std;
 using sec = chrono::seconds;
 using get_time = chrono::steady_clock ;
 
-using namespace SS_CONFIG;
+using namespace SB_CONFIG;
 
 static struct option long_options[] = {
   { "algorithm", required_argument, nullptr, 'a', },
@@ -118,7 +118,7 @@ int main(int argc, char* argv[])
   argv += optind;
 
   if(argc != 2) {
-    cerr <<  "Usage: ss_sched [FLAGS] config.ssmodel compute.sspdg \n";
+    cerr <<  "Usage: sb_sched [FLAGS] config.sbmodel compute.sbpdg \n";
     exit(1);
   }
 
@@ -128,13 +128,13 @@ int main(int argc, char* argv[])
   string model_base =
     model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
 
-  SSModel ssmodel(model_filename.c_str());
+  SbModel sbmodel(model_filename.c_str());
   cout << "Using max edge delay: " << max_edge_delay << "\n";
-  ssmodel.setMaxEdgeDelay(max_edge_delay);
-  ssmodel.maxEdgeDelay();
+  sbmodel.setMaxEdgeDelay(max_edge_delay);
+  sbmodel.maxEdgeDelay();
 
-  //cout << "Softbrain CGRA Size:" << ssmodel.subModel()->sizex() << "x"
-  //                               << ssmodel.subModel()->sizey() <<"\n";
+  //cout << "Softbrain CGRA Size:" << sbmodel.subModel()->sizex() << "x"
+  //                               << sbmodel.subModel()->sizey() <<"\n";
 
   std::string pdg_filename=argv[1];
   lastindex = pdg_filename.find_last_of("."); 
@@ -156,8 +156,8 @@ int main(int argc, char* argv[])
   System(("mkdir -p " + sched_dir).c_str());
   System("mkdir -p gams/"); // gams will remain at top level
 
-  //sspdg object based on the dfg
-  SSDfg sspdg(pdg_filename);
+  //sbpdg object based on the dfg
+  SbPDG sbpdg(pdg_filename);
 
   /* scheduler for testing purposes
   for (int i=0; i<100; i++){
@@ -171,20 +171,20 @@ int main(int argc, char* argv[])
   // ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);
   ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
   assert(ofs.good());
-  sspdg.printGraphviz(ofs);
+  sbpdg.printGraphviz(ofs);
   ofs.close();
 
   Schedule* sched=nullptr;
 
-  //Scheduler scheduler(&ssmodel);
+  //Scheduler scheduler(&sbmodel);
   if(str_schedType == "gams") {
-    auto* scheduler_gams = new GamsScheduler(&ssmodel);
+    auto* scheduler_gams = new GamsScheduler(&sbmodel);
     scheduler_gams->showGams(show_gams);
     scheduler_gams->setMipstart(mipstart);
     scheduler_gams->setSll(sll);
     scheduler = scheduler_gams;
   } else if(str_schedType == "sa") { /*simulated annealing*/
-    scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
+    scheduler = new SchedulerSimulatedAnnealing(&sbmodel);
   } else {
     cerr <<  "Something Went Wrong with Default Scheduler String";
     exit(1);
@@ -198,7 +198,7 @@ int main(int argc, char* argv[])
 
   bool succeed_sched = false;
 
-  if(scheduler->check_res(&sspdg,&ssmodel)) {
+  if(scheduler->check_res(&sbpdg,&sbmodel)) {
     // At least it's possible to schedule
 
     //Setup signal so we can stop if we need to
@@ -208,7 +208,7 @@ int main(int argc, char* argv[])
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL); 
 
-    succeed_sched = scheduler->schedule_timed(&sspdg,sched);
+    succeed_sched = scheduler->schedule_timed(&sbpdg,sched);
 
     int lat=0,latmis=0;
     if(succeed_sched){
@@ -232,7 +232,7 @@ int main(int argc, char* argv[])
         cout << "Scheduling Failed!\n";
       }
       sched->stat_printOutputLatency();
-      sspdg.printGraphviz("viz/final.dot",sched);
+      sbpdg.printGraphviz("viz/final.dot",sched);
     } 
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
@@ -247,12 +247,12 @@ int main(int argc, char* argv[])
   if(!succeed_sched || sched==nullptr) {
     cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
     //This is just a fake schedule!
-    //sched = new Schedule(&ssmodel,&sspdg);
-    SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(&ssmodel);
+    //sched = new Schedule(&sbmodel,&sbpdg);
+    SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(&sbmodel);
     s->set_fake_it();
 
-    s->initialize(&sspdg,sched);
-    succeed_sched = s->schedule_internal(&sspdg,sched);
+    s->initialize(&sbpdg,sched);
+    succeed_sched = s->schedule_internal(&sbpdg,sched);
   }
 
   sched->set_name(pdg_rawname);

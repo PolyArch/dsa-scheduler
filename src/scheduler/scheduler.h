@@ -1,7 +1,7 @@
-#ifndef __SS_SCHEDULER_H__
-#define __SS_SCHEDULER_H__
+#ifndef __SB_SCHEDULER_H__
+#define __SB_SCHEDULER_H__
 
-#include "sspdg.h"
+#include "sbpdg.h"
 #include "model.h"
 #include "schedule.h"
 
@@ -44,25 +44,25 @@ public:
   struct EdgeProp {
     int num_links = 0;
     int num_passthroughs = 0;
-    std::unordered_set<sslink *> links;
+    std::unordered_set<sblink *> links;
   };
 
 
   void take_union(CandidateRouting &r) {
     for (auto &link_iter : r.routing) {
-      for (SSDfgEdge *edge : link_iter.second) {
+      for (SbPDG_Edge *edge : link_iter.second) {
         routing[link_iter.first].insert(edge);
       }
     }
     for (auto &edge_iter : r.edge_prop) {
-      SSDfgEdge *edge = edge_iter.first;
+      SbPDG_Edge *edge = edge_iter.first;
       assert(edge_prop.count(edge) == 0);
       edge_prop[edge] = edge_iter.second;
     }
   }
 
-  std::unordered_map<std::pair<int, SS_CONFIG::sslink*>, std::unordered_set<SSDfgEdge*>, boost::hash<std::pair<int, SS_CONFIG::sslink*>>> routing;
-  std::unordered_map<SSDfgEdge *, EdgeProp> edge_prop;
+  std::unordered_map<std::pair<int, SB_CONFIG::sblink*>, std::unordered_set<SbPDG_Edge*>, boost::hash<std::pair<int, SB_CONFIG::sblink*>>> routing;
+  std::unordered_map<SbPDG_Edge *, EdgeProp> edge_prop;
 
   void fill_lat(Schedule *sched,
                 int &min_node_lat, int &max_node_lat, bool print = false) {
@@ -72,11 +72,11 @@ public:
     if (edge_prop.empty())
       return;
 
-    SSDfgNode *n = (*edge_prop.begin()).first->use();
-    bool output = dynamic_cast<SSDfgOutput *>(n);
+    SbPDG_Node *n = (*edge_prop.begin()).first->use();
+    bool output = dynamic_cast<SbPDG_Output *>(n);
 
     for (auto edge : edge_prop) {
-      SSDfgEdge *source_pdgedge = edge.first;
+      SbPDG_Edge *source_pdgedge = edge.first;
       auto i = edge_prop[source_pdgedge];
       int num_links = i.num_links;
       int num_passthroughs = i.num_passthroughs;
@@ -85,12 +85,12 @@ public:
 
       int min_inc_lat = p.first + num_links;
       int max_inc_lat = p.second + num_links +
-                        sched->ssModel()->maxEdgeDelay() * ((!output) + num_passthroughs);
+                        sched->sbModel()->maxEdgeDelay() * ((!output) + num_passthroughs);
 
       if (print) {
         std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
         std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
-        std::cout << "  max_extra:" << sched->ssModel()->maxEdgeDelay() * ((!output) + num_passthroughs) << "\n";
+        std::cout << "  max_extra:" << sched->sbModel()->maxEdgeDelay() * ((!output) + num_passthroughs) << "\n";
       }
 
       if (min_inc_lat > min_node_lat) min_node_lat = min_inc_lat;
@@ -112,12 +112,12 @@ public:
 
 class Scheduler {
 public:
-  Scheduler(SS_CONFIG::SSModel *ssModel) : _ssModel(ssModel),
+  Scheduler(SB_CONFIG::SbModel *sbModel) : _sbModel(sbModel),
                                            _optcr(0.1f), _optca(0.0f), _reslim(100000.0f) {}
 
-  bool check_res(SSDfg *ssPDG, SSModel *ssmodel);
+  bool check_res(SbPDG *sbPDG, SbModel *sbmodel);
 
-  virtual bool schedule(SSDfg *ssPDG, Schedule *&schedule) = 0;
+  virtual bool schedule(SbPDG *sbPDG, Schedule *&schedule) = 0;
 
   bool verbose;
   bool suppress_timing_print = false;
@@ -136,10 +136,10 @@ public:
     return ((double) std::chrono::duration_cast<usec>(diff).count()) / 1000.0;
   }
 
-  virtual bool schedule_timed(SSDfg *ssPDG, Schedule *&sched) {
+  virtual bool schedule_timed(SbPDG *sbPDG, Schedule *&sched) {
     _start = get_time::now();
 
-    bool succeed_sched = schedule(ssPDG, sched);
+    bool succeed_sched = schedule(sbPDG, sched);
 
     if (verbose && !suppress_timing_print) {
       printf("sched_time: %0.4f seconds\n", total_msec() / 1000.0);
@@ -155,16 +155,16 @@ public:
 
   void setTimeout(float timeout) { _reslim = timeout; }
 
-  //virtual void unroute(Schedule* sched, SSDfgEdge* pdgnode,
-  //                     SS_CONFIG::ssnode* source);
+  //virtual void unroute(Schedule* sched, SbPDG_Edge* pdgnode,
+  //                     SB_CONFIG::sbnode* source);
 
   bool running() {return !_should_stop;}
   void stop() {_should_stop=true;}
 
 protected:
-  SS_CONFIG::SSModel *getSSModel() { return _ssModel; }
+  SB_CONFIG::SbModel *getSBModel() { return _sbModel; }
 
-  SS_CONFIG::SSModel *_ssModel;
+  SB_CONFIG::SbModel *_sbModel;
 
   int _max_iters = 20000;
   bool _should_stop = false;
@@ -181,50 +181,50 @@ protected:
 class HeuristicScheduler : public Scheduler {
 public:
 
-  HeuristicScheduler(SS_CONFIG::SSModel *ssModel) : Scheduler(ssModel),
+  HeuristicScheduler(SB_CONFIG::SbModel *sbModel) : Scheduler(sbModel),
                                                     fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
 
-  virtual bool scheduleNode(Schedule *, SSDfgNode *) = 0;
+  virtual bool scheduleNode(Schedule *, SbPDG_Node *) = 0;
 
-  virtual std::pair<int, int> scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
+  virtual std::pair<int, int> scheduleHere(Schedule *, SbPDG_Node *, std::pair<int, SB_CONFIG::sbnode *>,
                                            CandidateRouting &) = 0;
 
-  virtual std::pair<int, int> route(Schedule *sched, SSDfgEdge *pdgnode,
-                                    std::pair<int, SS_CONFIG::ssnode *> source,
-                                    std::pair<int, SS_CONFIG::ssnode *> dest,
+  virtual std::pair<int, int> route(Schedule *sched, SbPDG_Edge *pdgnode,
+                                    std::pair<int, SB_CONFIG::sbnode *> source,
+                                    std::pair<int, SB_CONFIG::sbnode *> dest,
                                     CandidateRouting &) = 0;
 
   virtual int
-  routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, CandidateRouting &, const std::pair<int, ssnode *> &);
+  routing_cost(SbPDG_Edge *, int, int, sblink *, Schedule *, CandidateRouting &, const std::pair<int, sbnode *> &);
 
-  std::pair<int, int> route_minimize_distance(Schedule *sched, SSDfgEdge *pdgnode,
-                                              std::pair<int, SS_CONFIG::ssnode *> source,
-                                              std::pair<int, SS_CONFIG::ssnode *> dest,
+  std::pair<int, int> route_minimize_distance(Schedule *sched, SbPDG_Edge *pdgnode,
+                                              std::pair<int, SB_CONFIG::sbnode *> source,
+                                              std::pair<int, SB_CONFIG::sbnode *> dest,
                                               CandidateRouting &);
 
 protected:
-  bool assignVectorInputs(SSDfg *, Schedule *);
+  bool assignVectorInputs(SbPDG *, Schedule *);
 
-  bool assignVectorOutputs(SSDfg *, Schedule *);
+  bool assignVectorOutputs(SbPDG *, Schedule *);
 
   void apply_routing(Schedule *, CandidateRouting *);
 
-  void apply_routing(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>, CandidateRouting *);
+  void apply_routing(Schedule *, SbPDG_Node *, std::pair<int, SB_CONFIG::sbnode *>, CandidateRouting *);
 
-  std::vector<std::pair<int, ssnode *>> fill_input_spots(Schedule *, SSDfgInput *);
+  std::vector<std::pair<int, sbnode *>> fill_input_spots(Schedule *, SbPDG_Input *);
 
-  std::vector<std::pair<int, ssnode *>> fill_output_spots(Schedule *, SSDfgOutput *);
+  std::vector<std::pair<int, sbnode *>> fill_output_spots(Schedule *, SbPDG_Output *);
 
   // Find all the candidate spots for the given instruction.
-  std::vector<std::pair<int, SS_CONFIG::ssnode *>> fill_inst_spots(Schedule *, SSDfgInst *);
+  std::vector<std::pair<int, SB_CONFIG::sbnode *>> fill_inst_spots(Schedule *, SbPDG_Inst *);
 
   const std::pair<int, int> fscore;
 
   void random_order(int n, std::vector<int> &order);
 
   std::vector<bool> rand_node_choose_k(int k,
-                                       std::vector<ssnode *> &input_nodes,
-                                       std::vector<ssnode *> &output_nodes);
+                                       std::vector<sbnode *> &input_nodes,
+                                       std::vector<sbnode *> &output_nodes);
 
   void rand_n_choose_k(int n, int m, std::vector<int> &indices);
 

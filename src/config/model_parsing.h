@@ -1,12 +1,12 @@
-#ifndef __SS_MODEL_PARSING_H__
-#define __SS_MODEL_PARSING_H__
+#ifndef __SB_MODEL_PARSING_H__
+#define __SB_MODEL_PARSING_H__
 
 #include <string>
 #include <vector>
 #include <iostream>
 
 
-namespace SS_CONFIG {
+namespace SB_CONFIG {
   class ModelParsing {
   public:
       static bool StartsWith(const std::string& text,const std::string& token);

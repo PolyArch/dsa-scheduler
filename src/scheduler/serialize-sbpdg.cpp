@@ -1,4 +1,4 @@
-#include "sspdg.h"
+#include "sbpdg.h"
 #include "serialization.h"
 
 //Boost Includes
@@ -14,9 +14,9 @@
 
 
 template<class Archive>
-void SSDfgEdge::serialize(Archive & ar, const unsigned version) {
+void SbPDG_Edge::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ID);
-  ar & BOOST_SERIALIZATION_NVP(_sspdg); 
+  ar & BOOST_SERIALIZATION_NVP(_sbpdg); 
   ar & BOOST_SERIALIZATION_NVP(_def);
   ar & BOOST_SERIALIZATION_NVP(_use);
   ar & BOOST_SERIALIZATION_NVP(_etype); 
@@ -25,14 +25,14 @@ void SSDfgEdge::serialize(Archive & ar, const unsigned version) {
 }
 
 template<class Archive> 
-void SSDfgOperand::serialize(Archive & ar, const unsigned version) {
+void SbPDG_Operand::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(edges);
   ar & BOOST_SERIALIZATION_NVP(imm);
 }
 
 template<class Archive>
-void SSDfgNode::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_sspdg);
+void SbPDG_Node::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_NVP(_sbpdg);
   ar & BOOST_SERIALIZATION_NVP(_ID); 
   ar & BOOST_SERIALIZATION_NVP(_name); 
   ar & BOOST_SERIALIZATION_NVP(_ops);
@@ -50,8 +50,8 @@ void CtrlBits::serialize(Archive & ar, const unsigned version) {
 }
 
 template<class Archive>
-void SSDfgInst::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgNode);
+void SbPDG_Inst::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
   ar & BOOST_SERIALIZATION_NVP(_predInv);
   ar & BOOST_SERIALIZATION_NVP(_isDummy);
   ar & BOOST_SERIALIZATION_NVP(_imm_slot);
@@ -59,42 +59,42 @@ void SSDfgInst::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ctrl_bits);
   ar & BOOST_SERIALIZATION_NVP(_reg);
   ar & BOOST_SERIALIZATION_NVP(_imm);
-  ar & BOOST_SERIALIZATION_NVP(_ssinst);
+  ar & BOOST_SERIALIZATION_NVP(_sbinst);
 }
 
 template<class Archive>
-void SSDfgIO::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgNode);
+void SbPDG_IO::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Node);
   ar & BOOST_SERIALIZATION_NVP(vec_);
 }
 
 template<class Archive>
-void SSDfgInput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgIO);
+void SbPDG_Input::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
 }
 
 template<class Archive>
-void SSDfgOutput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgIO);
+void SbPDG_Output::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_IO);
 }
 
 template<class Archive>
-void SSDfgVec::serialize(Archive & ar, const unsigned version) {
+void SbPDG_Vec::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_name); 
   ar & BOOST_SERIALIZATION_NVP(_ID);
-  ar & BOOST_SERIALIZATION_NVP(_sspdg); 
+  ar & BOOST_SERIALIZATION_NVP(_sbpdg); 
   ar & BOOST_SERIALIZATION_NVP(_group_id);
 }
 
 template<class Archive>
-void SSDfgVecInput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgVec);
+void SbPDG_VecInput::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Vec);
   ar & BOOST_SERIALIZATION_NVP(_inputs);
 }
 
 template<class Archive>
-void SSDfgVecOutput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgVec);
+void SbPDG_VecOutput::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SbPDG_Vec);
   ar & BOOST_SERIALIZATION_NVP(_outputs);
 }
 
@@ -104,7 +104,7 @@ void GroupProp::serialize(Archive & ar, const unsigned version) {
 }
 
 template<class Archive>
-void SSDfg::serialize(Archive & ar, const unsigned version) {
+void SbPDG::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_nodes); 
   ar & BOOST_SERIALIZATION_NVP(_insts);
   ar & BOOST_SERIALIZATION_NVP(_inputs);
@@ -125,25 +125,25 @@ void SSDfg::serialize(Archive & ar, const unsigned version) {
 }
 
 //Boost Stuff
-BOOST_CLASS_EXPORT_GUID(SSDfgEdge,     "SSDfgEdge");
-BOOST_CLASS_EXPORT_GUID(SSDfgNode,     "SSDfgNode")
-BOOST_CLASS_EXPORT_GUID(SSDfgInst,     "SSDfgInst");
-BOOST_CLASS_EXPORT_GUID(SSDfgInput,    "SSDfgInput")
-BOOST_CLASS_EXPORT_GUID(SSDfgOutput,   "SSDfgOutput")
-BOOST_CLASS_EXPORT_GUID(SSDfgVec,      "SSDfgVec")
-BOOST_CLASS_EXPORT_GUID(SSDfgVecInput, "SSDfgVecInput")
-BOOST_CLASS_EXPORT_GUID(SSDfgVecOutput,"SSDfgVecOutput")
-BOOST_CLASS_EXPORT_GUID(SSDfg,         "SSDfg")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Edge,     "SbPDG_Edge");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Node,     "SbPDG_Node")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Inst,     "SbPDG_Inst");
+BOOST_CLASS_EXPORT_GUID(SbPDG_Input,    "SbPDG_Input")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Output,   "SbPDG_Output")
+BOOST_CLASS_EXPORT_GUID(SbPDG_Vec,      "SbPDG_Vec")
+BOOST_CLASS_EXPORT_GUID(SbPDG_VecInput, "SbPDG_VecInput")
+BOOST_CLASS_EXPORT_GUID(SbPDG_VecOutput,"SbPDG_VecOutput")
+BOOST_CLASS_EXPORT_GUID(SbPDG,          "SbPDG")
 
-SERIALIZABLE(SSDfgEdge);
-SERIALIZABLE(SSDfgNode);
-SERIALIZABLE(SSDfgInst);
-SERIALIZABLE(SSDfgInput);
-SERIALIZABLE(SSDfgOutput);
-SERIALIZABLE(SSDfgVec);
-SERIALIZABLE(SSDfgVecInput);
-SERIALIZABLE(SSDfgVecOutput);
-SERIALIZABLE(SSDfg);
+SERIALIZABLE(SbPDG_Edge);
+SERIALIZABLE(SbPDG_Node);
+SERIALIZABLE(SbPDG_Inst);
+SERIALIZABLE(SbPDG_Input);
+SERIALIZABLE(SbPDG_Output);
+SERIALIZABLE(SbPDG_Vec);
+SERIALIZABLE(SbPDG_VecInput);
+SERIALIZABLE(SbPDG_VecOutput);
+SERIALIZABLE(SbPDG);
 
 
 

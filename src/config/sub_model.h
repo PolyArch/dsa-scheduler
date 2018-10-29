@@ -1,5 +1,5 @@
-#ifndef __SS_SUB_MODEL_H__
-#define __SS_SUB_MODEL_H__
+#ifndef __SB_SUB_MODEL_H__
+#define __SB_SUB_MODEL_H__
 
 #include "fu_model.h"
 #include "direction.h"
@@ -12,18 +12,18 @@
 #include <utility>
 #include <algorithm>
 
-namespace SS_CONFIG {
+namespace SB_CONFIG {
 
-class ssnode;
-class ssinput;
-class ssoutput;
-class ssvport;
+class sbnode;
+class sbinput;
+class sboutput;
+class sbvport;
 
-class ssio_interface {
+class sbio_interface {
     public:
     //interf_vec_port_num -> vec<cgra_port_num>
-    std::map<int, ssvport*> in_vports;
-    std::map<int, ssvport*> out_vports;
+    std::map<int, sbvport*> in_vports;
+    std::map<int, sbvport*> out_vports;
 
     void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
       sort(portID2size, in_vports);
@@ -33,34 +33,34 @@ class ssio_interface {
       sort(portID2size, out_vports);
     }
     
-    ssvport* getDesc_I(int id) {
+    sbvport* getDesc_I(int id) {
         assert(in_vports.count(id) != 0);
         return in_vports[id];
     }  
-    ssvport* getDesc_O(int id) {
+    sbvport* getDesc_O(int id) {
         assert(out_vports.count(id) != 0);
         return out_vports[id];
     }  
     private:        
     void sort(std::vector<std::pair<int,int>>& portID2size, 
-         std::map<int,ssvport*>& vports);
+         std::map<int,sbvport*>& vports);
 };
 
-class sslink {
+class sblink {
 public:
 
-  sslink() {}
+  sblink() {}
 
-  ssnode *orig() const { return _orig; }
+  sbnode *orig() const { return _orig; }
 
-  ssnode *dest() const { return _dest; }
+  sbnode *dest() const { return _dest; }
 
-  SwitchDir::DIR dir() const { return _dir; }
+  SbDIR::DIR dir() const { return _dir; }
 
-  void setdir(SwitchDir::DIR dir) { _dir = dir; }
+  void setdir(SbDIR::DIR dir) { _dir = dir; }
 
   //Constructor
-  sslink(ssnode *orig, ssnode *dest) {
+  sblink(sbnode *orig, sbnode *dest) {
     _orig = orig;
     _dest = dest;
     _ID = -1;
@@ -85,27 +85,27 @@ protected:
 
   int _max_util = 1; // by default, assume its a dedicated link
 
-  ssnode *_orig;
-  ssnode *_dest;
-  SwitchDir::DIR _dir;
+  sbnode *_orig;
+  sbnode *_dest;
+  SbDIR::DIR _dir;
 
 private:
   friend class SubModel;
 };
     
     
-class ssnode {
+class sbnode {
 public:
-  ssnode() {}
+  sbnode() {}
 
-  sslink *add_link(ssnode *node) {
-    sslink *link = new sslink(this, node);
+  sblink *add_link(sbnode *node) {
+    sblink *link = new sblink(this, node);
     _out_links.push_back(link);
     node->add_back_link(link);
     return link;
   }
 
-  void add_back_link(sslink *link) {
+  void add_back_link(sblink *link) {
     _in_links.push_back(link);
   }
 
@@ -117,35 +117,35 @@ public:
     return std::string("loadslice");
   }
 
-  typedef std::vector<sslink *>::const_iterator const_iterator;
+  typedef std::vector<sblink *>::const_iterator const_iterator;
 
-  const std::vector<sslink *> &in_links() { return _in_links; }
+  const std::vector<sblink *> &in_links() { return _in_links; }
 
-  const std::vector<sslink *> &out_links() { return _out_links; }
+  const std::vector<sblink *> &out_links() { return _out_links; }
 
-  sslink *getFirstOutLink() {
+  sblink *getFirstOutLink() {
     return _out_links.empty() ? nullptr : _out_links[0];
   }
 
-  sslink *getFirstInLink() {
+  sblink *getFirstInLink() {
     return _in_links.empty() ? nullptr : _in_links[0];
   }
 
-  sslink *getInLink(SwitchDir::DIR dir) {
+  sblink *getInLink(SbDIR::DIR dir) {
     for (auto &dlink: in_links()) {
       if (dlink->dir() == dir) return dlink;
     }
     return nullptr;
   }
 
-  sslink *getOutLink(SwitchDir::DIR dir) {
+  sblink *getOutLink(SbDIR::DIR dir) {
     for (auto &dlink: out_links()) {
       if (dlink->dir() == dir) return dlink;
     }
     return nullptr;
   }
 
-  sslink *get_cycle_link() {
+  sblink *get_cycle_link() {
     for (auto &dlink: out_links()) {
       if (dlink->dest() == this) {
         return dlink;
@@ -157,12 +157,12 @@ public:
 
   int id() { return _ID; }
 
-  void set_id(std::vector<ssnode *> &node_list,
-              std::vector<sslink *> &link_list) {
+  void set_id(std::vector<sbnode *> &node_list,
+              std::vector<sblink *> &link_list) {
     _ID = (int) node_list.size();
     node_list.push_back(this);
     for (unsigned i = 0; i < _out_links.size(); ++i) {
-      sslink *link = _out_links[i];
+      sblink *link = _out_links[i];
       assert(link->id() == -1);
       link->set_id((int) link_list.size());
       link_list.push_back(link);
@@ -172,9 +172,9 @@ public:
   int node_dist(int slot) { return _node_dist[slot]; }
 
 
-  std::pair<int, sslink *> came_from(int slot) { return _came_from[slot]; }
+  std::pair<int, sblink *> came_from(int slot) { return _came_from[slot]; }
 
-  void update_dist(int slot, int dist, int from_slot, sslink *from) {
+  void update_dist(int slot, int dist, int from_slot, sblink *from) {
     _node_dist[slot] = dist;
     _came_from[slot] = std::make_pair(from_slot, from);
   }
@@ -186,7 +186,7 @@ public:
 
   int max_util() { return _max_util; }
 
-  int max_util(SS_CONFIG::ss_inst_t inst) { return _max_util * 64 / SS_CONFIG::bitwidth[inst]; }
+  int max_util(SB_CONFIG::sb_inst_t inst) { return _max_util * 64 / SB_CONFIG::bitwidth[inst]; }
 
   int set_max_util(int m) { return _max_util = m; }
 
@@ -194,20 +194,20 @@ protected:
   int _ID = -1;
 
   int _node_dist[8];
-  std::pair<int, sslink*>_came_from[8];
+  std::pair<int, sblink*>_came_from[8];
 
   int _max_util = 1; // by default, assume its a dedicated link
-  std::vector<sslink *> _in_links;
-  std::vector<sslink *> _out_links;
+  std::vector<sblink *> _in_links;
+  std::vector<sblink *> _out_links;
 
 private:
   friend class SubModel;
 };
     
-class ssswitch : public ssnode {
+class sbswitch : public sbnode {
 public:
 
-  ssswitch() : ssnode() {}
+  sbswitch() : sbnode() {}
 
   void setXY(int x, int y) {
     _x = x;
@@ -234,18 +234,18 @@ public:
     return ss.str();
   }
 
-  ssinput *getInput(int i);
+  sbinput *getInput(int i);
 
-  ssoutput *getOutput(int i);
+  sboutput *getOutput(int i);
 
 protected:
   int _x, _y;
 };
     
-class ssfu : public ssnode {
+class sbfu : public sbnode {
 public:
 
-  ssfu() : ssnode() {}
+  sbfu() : sbnode() {}
 
   void setFUDef(func_unit_def *fu_def) { _fu_def = fu_def; }
 
@@ -284,10 +284,10 @@ private:
   friend class SubModel;
 };
 
-class ssinput : public ssnode { 
+class sbinput : public sbnode { 
     public:
     
-    ssinput() : ssnode() {}
+    sbinput() : sbnode() {}
       
     void setPort(int port) {_port=port;}
     int port() const {return _port;}
@@ -311,9 +311,9 @@ class ssinput : public ssnode {
     int _port;
 };  
 
-class ssoutput : public ssnode {
+class sboutput : public sbnode {
     public:
-    ssoutput() : ssnode() {}
+    sboutput() : sbnode() {}
       
     void setPort(int port) {_port=port;}
     int port() const {return _port;}
@@ -339,7 +339,7 @@ class ssoutput : public ssnode {
 };
 
 //This should be improved later
-class ssvport : public ssnode {
+class sbvport : public sbnode {
 public:
   std::vector<int>& port_vec() {return _port_vec;}
   void set_port_vec(std::vector<int> p) {_port_vec=p;}
@@ -360,8 +360,8 @@ public:
     opensp, everysw, threein, threetwo
   };
 
-  typedef std::vector<ssinput>::const_iterator const_input_iterator;
-  typedef std::vector<ssoutput>::const_iterator const_output_iterator;
+  typedef std::vector<sbinput>::const_iterator const_input_iterator;
+  typedef std::vector<sboutput>::const_iterator const_output_iterator;
 
   SubModel() {}
 
@@ -372,9 +372,9 @@ public:
   void PrintGraphviz(std::ostream &ofs);
 
   void PrintGamsModel(std::ostream &ofs,
-                      std::unordered_map<std::string, std::pair<ssnode *, int> > &,
-                      std::unordered_map<std::string, std::pair<sslink *, int> > &,
-                      std::unordered_map<std::string, std::pair<ssswitch *, int> > &,
+                      std::unordered_map<std::string, std::pair<sbnode *, int> > &,
+                      std::unordered_map<std::string, std::pair<sblink *, int> > &,
+                      std::unordered_map<std::string, std::pair<sbswitch *, int> > &,
                       std::unordered_map<std::string, std::pair<bool, int>> &,  /*isInput, port*/
                       int n_configs = 1);
 
@@ -382,39 +382,39 @@ public:
 
   int sizey() { return _sizey; }
 
-  ssswitch *switchAt(int x, int y) { return _switches[x][y]; }
+  sbswitch *switchAt(int x, int y) { return _switches[x][y]; }
 
-  std::vector<ssinput*> &inputs() { return _inputs; }
+  std::vector<sbinput*> &inputs() { return _inputs; }
 
-  std::vector<ssoutput*> &outputs() { return _outputs; }
+  std::vector<sboutput*> &outputs() { return _outputs; }
 
-  std::vector<std::vector<ssfu*> > &fus() { return _fus; }
+  std::vector<std::vector<sbfu*> > &fus() { return _fus; }
 
-  std::vector<ssfu* > &fu_list() { return _fu_list; }
+  std::vector<sbfu* > &fu_list() { return _fu_list; }
 
-  std::vector<ssswitch* > &switch_list() { return _switch_list; }
+  std::vector<sbswitch* > &switch_list() { return _switch_list; }
 
-  std::vector<std::vector<ssswitch*> > &switches() { return _switches; }
+  std::vector<std::vector<sbswitch*> > &switches() { return _switches; }
 
   bool multi_config() { return _multi_config; }
 
-  ssswitch *cross_switch() { return &_cross_switch; }
+  sbswitch *cross_switch() { return &_cross_switch; }
 
-  ssnode *load_slice() { return &_load_slice; }
+  sbnode *load_slice() { return &_load_slice; }
 
   size_t num_fu() { return _fus.size(); }
 
   void parse_io(std::istream &istream);
 
-  ssio_interface &io_interf() { return _ssio_interf; }
+  sbio_interface &io_interf() { return _sbio_interf; }
 
   void clear_all_runtime_vals();
 
   void clear_fu_runtime_vals();
 
-  const std::vector<sslink *> &link_list() { return _link_list; }
+  const std::vector<sblink *> &link_list() { return _link_list; }
 
-  const std::vector<ssnode *> &node_list() { return _node_list; }
+  const std::vector<sbnode *> &node_list() { return _node_list; }
 
   void add_inputs(int n) {
     _inputs.resize(n+1);
@@ -433,8 +433,8 @@ public:
   }
 
 
-  ssinput* add_input(int i) {
-    auto* in = new ssinput();
+  sbinput* add_input(int i) {
+    auto* in = new sbinput();
     if(i >= (int)_inputs.size()) _inputs.resize(i+1);
     assert(_inputs[i]==NULL);
     _inputs[i]=in;
@@ -442,8 +442,8 @@ public:
     return in;
   }
 
-  ssoutput* add_output(int i) {
-    auto* out = new ssoutput();
+  sboutput* add_output(int i) {
+    auto* out = new sboutput();
     if(i >= (int)_outputs.size()) _outputs.resize(i+1);
     assert(_outputs[i]==NULL);
     _outputs[i]=out;
@@ -451,8 +451,8 @@ public:
     return out;
   }
 
-  ssfu* add_fu(int x, int y) {
-    auto * fu = new ssfu();
+  sbfu* add_fu(int x, int y) {
+    auto * fu = new sbfu();
     if(x >= (int)_fus.size()) _fus.resize(x+1);
     if(y >= (int)_fus[x].size()) _fus[x].resize(y+1);
     _fus[x][y]=fu;
@@ -462,8 +462,8 @@ public:
     return fu;
   }
 
-  ssswitch* add_switch(int x, int y) {
-    auto* sw = new ssswitch();
+  sbswitch* add_switch(int x, int y) {
+    auto* sw = new sbswitch();
     if(x >= (int)_switches.size()) _switches.resize(x+1);
     if(y >= (int)_switches[x].size()) _switches[x].resize(y+1);
     _switches[x][y]=sw;
@@ -487,24 +487,24 @@ private:
   void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config, int temp_x, int temp_y,
                          int temp_width, int temp_height);
 
-  int _sizex, _sizey;  //size of SS cgra
+  int _sizex, _sizey;  //size of SB cgra
   bool _multi_config;
-  std::vector<ssinput*> _inputs;
-  std::vector<ssoutput*> _outputs;
-  std::vector<std::vector<ssfu*> > _fus;
-  std::vector<std::vector<ssswitch*> > _switches;
+  std::vector<sbinput*> _inputs;
+  std::vector<sboutput*> _outputs;
+  std::vector<std::vector<sbfu*> > _fus;
+  std::vector<std::vector<sbswitch*> > _switches;
 
   //These are only valid after regroup_vecs()
-  std::vector<ssnode *> _io_list;
-  std::vector<ssnode *> _node_list;
-  std::vector<sslink *> _link_list;
+  std::vector<sbnode *> _io_list;
+  std::vector<sbnode *> _node_list;
+  std::vector<sblink *> _link_list;
 
-  std::vector<ssfu *> _fu_list;
-  std::vector<ssswitch *> _switch_list;
+  std::vector<sbfu *> _fu_list;
+  std::vector<sbswitch *> _switch_list;
 
-  ssswitch _cross_switch;
-  ssnode _load_slice;
-  ssio_interface _ssio_interf;
+  sbswitch _cross_switch;
+  sbnode _load_slice;
+  sbio_interface _sbio_interf;
 };
 
 }

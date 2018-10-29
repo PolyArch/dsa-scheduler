@@ -5,47 +5,47 @@
 #include <string.h>
 #include <assert.h>
 
-using namespace SS_CONFIG;
+using namespace SB_CONFIG;
 using namespace std;
 
-SwitchDir::SwitchDir() {
+SbDIR::SbDIR() {
 
   //Adding the encoding for each direction
-  add_encode(SwitchDir::N,3);
-  add_encode(SwitchDir::NE,4);
-  add_encode(SwitchDir::E,5);
-  add_encode(SwitchDir::SE,6);
-  add_encode(SwitchDir::S,7);
-  add_encode(SwitchDir::SW,0);
-  add_encode(SwitchDir::W,1);
-  add_encode(SwitchDir::NW,2);
+  add_encode(SbDIR::N,3);
+  add_encode(SbDIR::NE,4);
+  add_encode(SbDIR::E,5);
+  add_encode(SbDIR::SE,6);
+  add_encode(SbDIR::S,7);
+  add_encode(SbDIR::SW,0);
+  add_encode(SbDIR::W,1);
+  add_encode(SbDIR::NW,2);
  
   //The following functions map the input directions and correspoding tuple
   //to an index 
 
   //TOP bottom left right
-  add_encode(SwitchDir::IP0, std::make_tuple(true,false,false,false),encode(SwitchDir::NW)); 
-  add_encode(SwitchDir::IP1, std::make_tuple(true,false,false,false),encode(SwitchDir::N));
-  add_encode(SwitchDir::IP2, std::make_tuple(true,false,false,false),encode(SwitchDir::NE));
+  add_encode(SbDIR::IP0, std::make_tuple(true,false,false,false),encode(SbDIR::NW)); 
+  add_encode(SbDIR::IP1, std::make_tuple(true,false,false,false),encode(SbDIR::N));
+  add_encode(SbDIR::IP2, std::make_tuple(true,false,false,false),encode(SbDIR::NE));
   
   //top bottom LEFT right
-  add_encode(SwitchDir::IP0, std::make_tuple(false,false,true,false),encode(SwitchDir::SW)); 
-  add_encode(SwitchDir::IP1, std::make_tuple(false,false,true,false),encode(SwitchDir::W));
-  add_encode(SwitchDir::IP2, std::make_tuple(false,false,true,false),encode(SwitchDir::NW));
+  add_encode(SbDIR::IP0, std::make_tuple(false,false,true,false),encode(SbDIR::SW)); 
+  add_encode(SbDIR::IP1, std::make_tuple(false,false,true,false),encode(SbDIR::W));
+  add_encode(SbDIR::IP2, std::make_tuple(false,false,true,false),encode(SbDIR::NW));
   
   //top bottoSbleft RIGHT
-  add_encode(SwitchDir::IP0, std::make_tuple(false,false,false,true),encode(SwitchDir::SE)); 
-  add_encode(SwitchDir::IP1, std::make_tuple(false,false,false,true),encode(SwitchDir::E));
-  add_encode(SwitchDir::IP2, std::make_tuple(false,false,false,true),encode(SwitchDir::NE));
+  add_encode(SbDIR::IP0, std::make_tuple(false,false,false,true),encode(SbDIR::SE)); 
+  add_encode(SbDIR::IP1, std::make_tuple(false,false,false,true),encode(SbDIR::E));
+  add_encode(SbDIR::IP2, std::make_tuple(false,false,false,true),encode(SbDIR::NE));
   
   //top BOTTOSbleft right
-  add_encode(SwitchDir::IP0, std::make_tuple(false,true,false,false),encode(SwitchDir::SW)); 
-  add_encode(SwitchDir::IP1, std::make_tuple(false,true,false,false),encode(SwitchDir::S));
-  add_encode(SwitchDir::IP2, std::make_tuple(false,true,false,false),encode(SwitchDir::SE));
+  add_encode(SbDIR::IP0, std::make_tuple(false,true,false,false),encode(SbDIR::SW)); 
+  add_encode(SbDIR::IP1, std::make_tuple(false,true,false,false),encode(SbDIR::S));
+  add_encode(SbDIR::IP2, std::make_tuple(false,true,false,false),encode(SbDIR::SE));
 }
 
 
-int SwitchDir::encode(DIR myDir) {
+int SbDIR::encode(DIR myDir) {
   return encode(myDir,false,false,false,false);
 }
 
@@ -58,7 +58,7 @@ void set_pref_dirs(bool& top,bool& bottom, bool& left, bool& right) {
 }
 
 //returns index of the direction and tuple using the io_enc map
-int SwitchDir::encode(DIR myDir, bool top, bool bottom, bool left, bool right) {
+int SbDIR::encode(DIR myDir, bool top, bool bottom, bool left, bool right) {
   set_pref_dirs(top,bottom,left,right);
   std::pair<DIR,epos> pair = make_pair(myDir,epos(top,bottom,left,right));
   assert(io_enc.count(pair));
@@ -66,7 +66,7 @@ int SwitchDir::encode(DIR myDir, bool top, bool bottom, bool left, bool right) {
 }
 
 //decode func with index and tuple returning the direction
-SwitchDir::DIR SwitchDir::decode(int i, bool top, bool bottom, bool left, bool right) {
+SbDIR::DIR SbDIR::decode(int i, bool top, bool bottom, bool left, bool right) {
   set_pref_dirs(top,bottom,left,right);
 
   std::pair<int,epos> pair = make_pair(i,epos(top,bottom,left,right));
@@ -76,7 +76,7 @@ SwitchDir::DIR SwitchDir::decode(int i, bool top, bool bottom, bool left, bool r
 
 //position of output direction
 //TODO: generalize for more than one output side
-int SwitchDir::slot_for_dir(DIR myDir, bool top, bool bottom, bool left, bool right) {
+int SbDIR::slot_for_dir(DIR myDir, bool top, bool bottom, bool left, bool right) {
   set_pref_dirs(top,bottom,left,right);
 
   if(isOutputDir(myDir)) {
@@ -85,17 +85,17 @@ int SwitchDir::slot_for_dir(DIR myDir, bool top, bool bottom, bool left, bool ri
   return encode(myDir, top, bottom, left, right);
 }
 
-SwitchDir::DIR SwitchDir::dir_for_slot(int index, bool top, bool bottom, bool left, bool right) {
+SbDIR::DIR SbDIR::dir_for_slot(int index, bool top, bool bottom, bool left, bool right) {
   set_pref_dirs(top,bottom,left,right);
 
-  SwitchDir::DIR myDir = decode(index, top, bottom, left, right);
+  SbDIR::DIR myDir = decode(index, top, bottom, left, right);
   if(isInputDir(myDir)) {
     myDir=reverse(myDir,true);
   }
   return myDir;
 }
 
-int SwitchDir::encode_fu_dir(DIR myDir) {
+int SbDIR::encode_fu_dir(DIR myDir) {
   switch(myDir) {
     case NE:  return  1;
     case SE:  return  2;
@@ -107,7 +107,7 @@ int SwitchDir::encode_fu_dir(DIR myDir) {
   assert(0 && "not reachable");
 }
 
-SwitchDir::DIR SwitchDir::fu_dir_of(int i) {
+SbDIR::DIR SbDIR::fu_dir_of(int i) {
   switch(i) {
     case 0:  return  END_DIR;
     case 1:  return  NE;
@@ -137,7 +137,7 @@ SwitchDir::DIR SwitchDir::fu_dir_of(int i) {
 
 
 
-SwitchDir::DIR SwitchDir::toDir(string qs, bool outgoing) {
+SbDIR::DIR SbDIR::toDir(string qs, bool outgoing) {
     if (false) return END_DIR;
     else if(ModelParsing::StartsWith(qs,"NW")) return outgoing ? NW  : reverse(NW);  
     else if(ModelParsing::StartsWith(qs,"NE")) return outgoing ? NE  : reverse(NE);
@@ -156,7 +156,7 @@ SwitchDir::DIR SwitchDir::toDir(string qs, bool outgoing) {
 
 
 //returns the reverse direction of DIR
-SwitchDir::DIR SwitchDir::reverse(DIR myDir, bool reverseIO) {
+SbDIR::DIR SbDIR::reverse(DIR myDir, bool reverseIO) {
   switch(myDir) {
     case N:   return S;
     case NE:  return SW;
@@ -184,28 +184,28 @@ SwitchDir::DIR SwitchDir::reverse(DIR myDir, bool reverseIO) {
   }
 }
 
-const char*  SwitchDir::dirNameDBG(SwitchDir::DIR myDir, bool reverse) {
+const char*  SbDIR::dirNameDBG(SbDIR::DIR myDir, bool reverse) {
   if(isInputDir(myDir) || isOutputDir(myDir)) {
-  switch(reverse ? SwitchDir::reverse(myDir) : myDir) {
-    case SwitchDir::IP0:
+  switch(reverse ? SbDIR::reverse(myDir) : myDir) {
+    case SbDIR::IP0:
         return "IP0";
         break;
-    case SwitchDir::IP1:
+    case SbDIR::IP1:
         return "IP1";
         break;
-    case SwitchDir::IP2:
+    case SbDIR::IP2:
         return "IP2";
         break;
-    case SwitchDir::OP0:
+    case SbDIR::OP0:
         return "IP0";
         break;
-    case SwitchDir::OP1:
+    case SbDIR::OP1:
         return "IP1";
         break;
-    case SwitchDir::OP2:
+    case SbDIR::OP2:
         return "IP2";
         break;
-    case SwitchDir::IM:
+    case SbDIR::IM:
         return "IM";
         break;
     default:
@@ -213,60 +213,60 @@ const char*  SwitchDir::dirNameDBG(SwitchDir::DIR myDir, bool reverse) {
         break;
     }
   } else {
-    return SwitchDir::dirName(myDir,reverse);
+    return SbDIR::dirName(myDir,reverse);
   }
 }
 
 
-const char* SwitchDir::dirName(SwitchDir::DIR myDir, bool reverse) {
+const char* SbDIR::dirName(SbDIR::DIR myDir, bool reverse) {
 
-  switch(reverse ? SwitchDir::reverse(myDir) : myDir) {
-    case SwitchDir::N:
+  switch(reverse ? SbDIR::reverse(myDir) : myDir) {
+    case SbDIR::N:
         return "N";
         break;
-    case SwitchDir::NE:
+    case SbDIR::NE:
         return "NE";
         break;
-    case SwitchDir::E:
+    case SbDIR::E:
         return "E";
         break;
-    case SwitchDir::SE:
+    case SbDIR::SE:
         return "SE";
         break;
-    case SwitchDir::S:
+    case SbDIR::S:
         return "S";
         break;
-    case SwitchDir::SW:
+    case SbDIR::SW:
         return "SW";
         break;
-    case SwitchDir::W:
+    case SbDIR::W:
         return "W";
         break;
-    case SwitchDir::NW:
+    case SbDIR::NW:
         return "NW";
         break;
-    case SwitchDir::IP0:
+    case SbDIR::IP0:
         return "P0";
         break;
-    case SwitchDir::IP1:
+    case SbDIR::IP1:
         return "P1";
         break;
-    case SwitchDir::IP2:
+    case SbDIR::IP2:
         return "P2";
         break;
-    case SwitchDir::OP0:
+    case SbDIR::OP0:
         return "P0";
         break;
-    case SwitchDir::OP1:
+    case SbDIR::OP1:
         return "P1";
         break;
-    case SwitchDir::OP2:
+    case SbDIR::OP2:
         return "P2";
         break;
-    case SwitchDir::IM:
+    case SbDIR::IM:
         return "IM";
         break;
-    case SwitchDir::END_DIR:
+    case SbDIR::END_DIR:
         return "xxx";
         break;
     }
