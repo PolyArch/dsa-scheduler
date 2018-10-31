@@ -1,5 +1,5 @@
-#ifndef __SB_MODEL_H__
-#define __SB_MODEL_H__
+#ifndef __SS_MODEL_H__
+#define __SS_MODEL_H__
 
 #include <set>
 #include <vector>
@@ -13,14 +13,14 @@
 #include "fu_model.h"
 #include "sub_model.h"
 
-namespace SB_CONFIG {
+namespace SS_CONFIG {
 
-class SbModel {
+class SSModel {
     public:
     
-    SbModel(bool multi=false);
-    SbModel(const char* filename, bool multi=false);
-    SbModel(SubModel* sub, bool multi=false);
+    SSModel(bool multi=false);
+    SSModel(const char* filename, bool multi=false);
+    SSModel(SubModel* sub, bool multi=false);
     
     FuModel* fuModel() {return (_fuModel);}
     SubModel* subModel() {return (_subModel);}

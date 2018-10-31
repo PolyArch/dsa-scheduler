@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 using namespace std;
 
 bool ModelParsing::StartsWith(const std::string& text,const std::string& token) {

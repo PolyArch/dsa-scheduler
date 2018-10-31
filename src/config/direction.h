@@ -1,16 +1,16 @@
-#ifndef __SB_DIRECTION_H__
-#define __SB_DIRECTION_H__
+#ifndef __SS_DIRECTION_H__
+#define __SS_DIRECTION_H__
 
 #include <string>
 #include <map>
 #include <unordered_map>
 #include <utility>
 
-namespace SB_CONFIG {
+namespace SS_CONFIG {
 
   typedef std::tuple<bool,bool,bool,bool> epos; 
 
-  class SbDIR {
+  class SwitchDir {
   public:
      enum DIR { IP0, IP1, IP2, OP0, OP1, OP2, N, NE, E, SE, S, SW, W, NW, IM, END_DIR };
 
@@ -19,8 +19,8 @@ namespace SB_CONFIG {
 
      static DIR reverse(DIR myDir, bool reverseIO=false);
      static DIR toDir(std::string qs, bool outgoing);
-     static const char* dirName(SbDIR::DIR dir, bool reverse=false);
-     static const char* dirNameDBG(SbDIR::DIR dir, bool reverse=false);
+     static const char* dirName(SwitchDir::DIR dir, bool reverse=false);
+     static const char* dirNameDBG(SwitchDir::DIR dir, bool reverse=false);
 
      std::map<std::pair<DIR,epos>,int> io_enc;
      std::map<std::pair<int,epos>,DIR> io_dec;
@@ -44,7 +44,7 @@ namespace SB_CONFIG {
        }
      }
      
-     SbDIR();
+     SwitchDir();
 
 
      int encode(DIR i);

@@ -1,16 +1,16 @@
-#ifndef __SB_INST_MODEL_H__
-#define __SB_INST_MODEL_H__
+#ifndef __INST_MODEL_H__
+#define __INST_MODEL_H__
 
 #include <string>
 #include <vector>
 #include <iostream>
 #include <fstream>
 
-namespace SB_CONFIG {
+namespace SS_CONFIG {
 
-// SB Instruction Class
+// Instruction Class
 // Stores attributes like it's name, latency, etc...
-class SbInst {
+class ConfigInst {
     public:
         std::string name()               { return _name; }
         void setName(std::string& name) { _name=name; }
@@ -44,7 +44,7 @@ class InstModel {
         void printCFiles(char* header, char* cpp);
         
     private:
-        std::vector<SbInst*> _instList;
+        std::vector<ConfigInst*> _instList;
 };
 
 

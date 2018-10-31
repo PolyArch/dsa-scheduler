@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "model_parsing.h"
 
-using namespace SB_CONFIG;
+using namespace SS_CONFIG;
 using namespace std;
 
 //constructor based on input stream
@@ -30,7 +30,7 @@ InstModel::InstModel(char* filename) {
         //Empty line or the first line
         if(str_line[0]=='#' || str_line.empty()) continue;
         
-        SbInst* inst = new SbInst();
+        ConfigInst* inst = new ConfigInst();
         
         char* token;
         token = strtok (line," ");
@@ -61,8 +61,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofstream ofs(header_file, ios::out);
     ofs <<
     "//This file generated from inst_model.cpp -- Do not edit.  Do not commit to repo.\n"
-    "#ifndef __SB_INST_H__\n"
-    "#define __SB_INST_H__\n"
+    "#ifndef __SS_INST_H__\n"
+    "#define __SS_INST_H__\n"
     "\n"
     "#include <string>\n"
     "#include <string.h>\n"
@@ -78,7 +78,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     "\n"
     "using std::complex;\n"
     "\n"
-    "namespace SB_CONFIG {\n"
+    "namespace SS_CONFIG {\n"
     "\n"
 
     "float    as_float(std::uint32_t ui);\n"
@@ -93,15 +93,15 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     "\n"
 
 
-    "enum sb_inst_t {\n"
-    "SB_NONE=0,\n"
-    "SB_ERR,\n";
+    "enum ss_inst_t {\n"
+    "SS_NONE=0,\n"
+    "SS_ERR,\n";
     
     for(unsigned i = 0; i < _instList.size(); ++i) {
-        ofs << "SB_" << _instList[i]->name() << ", \n";
+        ofs << "SS_" << _instList[i]->name() << ", \n";
     };
     
-    ofs << "SB_NUM_TYPES\n};\n";
+    ofs << "SS_NUM_TYPES\n};\n";
 
     ofs << "\n";
     ofs << "extern int num_ops[" << _instList.size()+2 << "];\n";
@@ -110,10 +110,10 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
     ofs << 
     "\n"
-    "sb_inst_t inst_from_string(const char* str);\n"
-    "const char* name_of_inst(sb_inst_t inst);\n"
-    "int inst_lat(sb_inst_t inst);\n"
-    "int inst_thr(sb_inst_t inst);\n";
+    "ss_inst_t inst_from_string(const char* str);\n"
+    "const char* name_of_inst(ss_inst_t inst);\n"
+    "int inst_lat(ss_inst_t inst);\n"
+    "int inst_thr(ss_inst_t inst);\n";
 
     //Generate an execute function for all bitwidths
     int    bitwidths[4] = {64,         32,         16,          8};
@@ -124,7 +124,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string dtype = types[i];
       string suffix = suffixes[i];
     
-      ofs << dtype << " execute" << suffix << "(sb_inst_t inst, " 
+      ofs << dtype << " execute" << suffix << "(ss_inst_t inst, " 
           << "std::vector<" << dtype << ">& ops, std::vector<" << dtype << ">& reg, "
           << "uint64_t& discard, std::vector<bool>& back_array);\n";
     }
@@ -145,56 +145,56 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     "//This file generated from inst_model.cpp -- Do not edit.  Do not commit to repo.\n"
     "#include \"" << header_file << "\"\n\n"
 
-    "float SB_CONFIG::as_float(std::uint32_t ui) {\n"
+    "float SS_CONFIG::as_float(std::uint32_t ui) {\n"
     "  float f;\n"
     "  std::memcpy(&f, &ui, sizeof(float));\n"
     "  return f;\n"
     "}\n"
     "\n"
 
-    "uint32_t SB_CONFIG::as_uint32(float f) {\n"
+    "uint32_t SS_CONFIG::as_uint32(float f) {\n"
     "  uint32_t ui;\n"
     "  std::memcpy(&ui, &f, sizeof(float));\n"
     "  return ui;\n"
     "}\n"
     "\n"
 
-    "double SB_CONFIG::as_double(std::uint64_t ui) {\n"
+    "double SS_CONFIG::as_double(std::uint64_t ui) {\n"
     "  double f;\n"
     "  std::memcpy(&f, &ui, sizeof(double));\n"
     "  return f;\n"
     "}\n"
     "\n"
 
-    "uint64_t SB_CONFIG::as_uint64(double f) {\n"
+    "uint64_t SS_CONFIG::as_uint64(double f) {\n"
     "  uint64_t ui;\n"
     "  std::memcpy(&ui, &f, sizeof(double));\n"
     "  return ui;\n"
     "}\n"
     "\n"
 
-    "std::complex<float> SB_CONFIG::as_float_complex(uint64_t val) {\n"
+    "std::complex<float> SS_CONFIG::as_float_complex(uint64_t val) {\n"
     "  std::complex<float> res;\n"
     "  std::memcpy(&res, &val, sizeof(val));\n"
     "  return res;\n"
     "}\n"
     "\n"
 
-    "uint64_t SB_CONFIG::as_uint64(const std::complex<float> &val) {\n"
+    "uint64_t SS_CONFIG::as_uint64(const std::complex<float> &val) {\n"
     "  uint64_t res;\n"
     "  std::memcpy(&res, &val, sizeof(val));\n"
     "  return res;\n"
     "}\n"
     "\n"
 
-    "using namespace SB_CONFIG;\n\n"
-    "sb_inst_t SB_CONFIG::inst_from_string(const char* str) {\n"
-    "  if(strcmp(str,\"NONE\")==0) return SB_NONE;\n";
+    "using namespace SS_CONFIG;\n\n"
+    "ss_inst_t SS_CONFIG::inst_from_string(const char* str) {\n"
+    "  if(strcmp(str,\"NONE\")==0) return SS_NONE;\n";
     
     for(unsigned i = 0; i < _instList.size(); ++i) {
-        ofs << "  else if(strcmp(str,\"" << _instList[i]->name() << "\")==0) return SB_" << _instList[i]->name() << ";\n";
+        ofs << "  else if(strcmp(str,\"" << _instList[i]->name() << "\")==0) return SS_" << _instList[i]->name() << ";\n";
     }
-    ofs << "  else { fprintf(stderr,\"Config Library does not understand string\\\"%s\\\"\\n\",str); assert(0); return SB_ERR;}\n\n";
+    ofs << "  else { fprintf(stderr,\"Config Library does not understand string\\\"%s\\\"\\n\",str); assert(0); return SS_ERR;}\n\n";
     
     ofs << "}\n\n";
     
@@ -203,14 +203,14 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     
     // name_of_inst
     ofs << 
-    "const char* SB_CONFIG::name_of_inst(sb_inst_t inst) {\n"
+    "const char* SS_CONFIG::name_of_inst(ss_inst_t inst) {\n"
     "  switch(inst) {\n";
     for(unsigned i = 0; i < _instList.size(); ++i) {
-        ofs << "    case " << "SB_" << _instList[i]->name() << ": return \"" << _instList[i]->name() << "\";\n";
+        ofs << "    case " << "SS_" << _instList[i]->name() << ": return \"" << _instList[i]->name() << "\";\n";
     }
-    ofs << "case SB_NONE: return \"NONE\";\n";
-    ofs << "case SB_ERR:  assert(0); return \"ERR\";\n";
-    ofs << "case SB_NUM_TYPES:  assert(0); return \"ERR\";\n";
+    ofs << "case SS_NONE: return \"NONE\";\n";
+    ofs << "case SS_ERR:  assert(0); return \"ERR\";\n";
+    ofs << "case SS_NUM_TYPES:  assert(0); return \"ERR\";\n";
     ofs << "    default: assert(0); return \"DEFAULT\";\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";
@@ -218,10 +218,10 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     
     //FUNCTION: inst_lat 
     ofs <<
-    "int SB_CONFIG::inst_lat(sb_inst_t inst) {\n"
+    "int SS_CONFIG::inst_lat(ss_inst_t inst) {\n"
     "  switch(inst) {\n";
     for(unsigned i = 0; i < _instList.size(); ++i) {
-        ofs << "    case " << "SB_" << _instList[i]->name() << ": return " << _instList[i]->latency() << ";\n";
+        ofs << "    case " << "SS_" << _instList[i]->name() << ": return " << _instList[i]->latency() << ";\n";
     }
     ofs << "    default: return 1;\n";
     ofs << "  }\n\n";
@@ -229,17 +229,17 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
     //FUNCTION: inst_thr 
     ofs <<
-    "int SB_CONFIG::inst_thr(sb_inst_t inst) {\n"
+    "int SS_CONFIG::inst_thr(ss_inst_t inst) {\n"
     "  switch(inst) {\n";
     for(unsigned i = 0; i < _instList.size(); ++i) {
-        ofs << "    case " << "SB_" << _instList[i]->name() << ": return " << _instList[i]->throughput() << ";\n";
+        ofs << "    case " << "SS_" << _instList[i]->name() << ": return " << _instList[i]->throughput() << ";\n";
     }
     ofs << "    default: return 1;\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";
 
     // num_ops_array
-    ofs << "int SB_CONFIG::num_ops[" << _instList.size()+2 << "]={0, 0\n";
+    ofs << "int SS_CONFIG::num_ops[" << _instList.size()+2 << "]={0, 0\n";
     ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
     for(unsigned i = 0; i < _instList.size(); ++i) {
       ofs << ", " << _instList[i]->numOps();
@@ -251,7 +251,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofs << "};\n\n";
 
     // bitwidth_array
-    ofs << "int SB_CONFIG::bitwidth[" << _instList.size()+2 << "]={0, 0\n";
+    ofs << "int SS_CONFIG::bitwidth[" << _instList.size()+2 << "]={0, 0\n";
     ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
     for(unsigned i = 0; i < _instList.size(); ++i) {
       ofs << ", " << _instList[i]->bitwidth();
@@ -269,7 +269,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string dtype = types[i];
       string suffix = suffixes[i];
 
-      ofs << dtype << " " << "SB_CONFIG::execute" << suffix << "(sb_inst_t inst, " 
+      ofs << dtype << " " << "SS_CONFIG::execute" << suffix << "(ss_inst_t inst, " 
           << "std::vector<" << dtype << ">& ops, std::vector<" << dtype << ">& reg, "
           << "uint64_t& discard, std::vector<bool>& back_array) {\n";
 
@@ -284,11 +284,11 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
       "  switch(inst) {\n";
       for(unsigned i = 0; i < _instList.size(); ++i) {
-          SbInst* inst = _instList[i];
+          ConfigInst* inst = _instList[i];
 
           if(inst->bitwidth() != bitwidth) continue; // TODO: later implement autovectorization
          
-          ofs << "    case " << "SB_" << inst->name() << ": {";
+          ofs << "    case " << "SS_" << inst->name() << ": {";
           string inst_code_name = "insts" + suffix + "/" + inst->name() + ".h";
           ifstream f(inst_code_name.c_str());
 
