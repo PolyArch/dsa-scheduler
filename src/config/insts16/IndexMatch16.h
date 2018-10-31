@@ -3,8 +3,8 @@
 if(ops[0]==SENTINAL16 && ops[1]==SENTINAL16) {
     back_array[0]=0;
     back_array[1]=0;
-    return 0; // should not generate any backpressure
-	// generate backpressure on the value
+    // return 0; // should not generate any backpressure
+    return 3;
 } 
 else if(ops[0]==ops[1]){
     back_array[0]=0;

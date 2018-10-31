@@ -5,9 +5,16 @@ Add8                    8            2             1           1
 
 # 16-Bit Instructions
 Add16                   16           2             1           1
+Acc16                   16           2             1           1
 Mul16                   16           2             1           1
 Keep16                  16           2             1           1
+Min16                   16           2             1           1
 IndexMatch16            16           2             1           1
+Control16               16           2             1           1
+ICmpEq16                16           2             1           1
+ReLU16                  16           2             1           1
+ICmpNE16                16           2             1           1
+Select16                16           3             1           1
 
 # 32-Bit Instructions
 FMul32                  32           2             1           1
@@ -18,6 +25,9 @@ Mul32                   32           2             1           1
 
 
 # 64-Bit Instructions
+Extract16               64           1             1           1
+Concat16                64           1             1           1
+BitsliceAcc64           64           2             1           1
 Sig16                   64           2             3           1
 
 Add16x4                 64           2             1           1

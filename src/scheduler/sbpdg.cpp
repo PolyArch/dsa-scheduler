@@ -476,6 +476,7 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
 
   uint64_t discard=0;
   uint64_t output = 0;
+  bool reset = false;
 
   _invalid=false;
 
@@ -483,16 +484,15 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     if(_ops[i].is_imm()) {
       _input_vals[i]=imm();
     } else if (_ops[i].is_ctrl()) {
-        // std::cout << "Edge type is control\n";
-        int c_val = _ops[i].get_buffer_val();
-        // std::cout << "for control type, input value is: " << c_val << "\n";
-        // 65 means 0 is 10000 and 1 is 01000 => 1000001000 (num_ctrl should be 2 here?)
-        _back_array[0] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP1); // 2*5+0 = 10th pos in bitmap?
-        _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
-        discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
-        pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
-        //bool reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
-        //TODO: use reset somehow
+      int c_val = _ops[i].get_buffer_val();
+      _back_array[0] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP1); // 2*5+0 = 10th pos in bitmap?
+      _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
+      discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
+      pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
+	  // FIXME: confirm that this is correct
+	  _input_vals[i] = c_val;
+      reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
+      //TODO: use reset somehow
     } else {
       _input_vals[i] = _ops[i].get_buffer_val();
       if(!_ops[i].get_buffer_valid()) {
@@ -511,24 +511,33 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
     _invalid=true;
   }
 
-  //if(print) {
-  //   std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
-  //}
-
   if(!_invalid) { //IF VALID
      _sbpdg->inc_total_dyn_insts();
    
     // Read in some temp value and set _val after inst_lat cycles
     output=do_compute(discard);
 
-	// _invalid=false;
-	// std::cout << "invalid after compute (should be false): " << _invalid << "\n";
-  
     if(print) {
       _sbpdg->dbg_stream() << " = " << output << "\n";
     }
   } 
-  // if(reset) { _reg = 0; }
+  /*
+  if(reset) { 
+	switch(bitwidth()){
+	  case 64: _reg[0] = 0;
+			   break;
+	  case 32: _reg_32[0] = 0;
+			   break;
+	  case 16: _reg_16[0] = 0;
+			   break;
+	  case 8: _reg_8[0] = 0;
+			  break;
+	  default:
+      cout << "Weird bitwidth: " << bitwidth() << "\n";
+      assert(0 && "weird bitwidth");
+	}
+  }
+	*/
   if(print) {
      std::cout << (_back_array[0] ? "backpressure on 1st input\n" : "");
      std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
@@ -600,7 +609,6 @@ int SbPDG_Inst::compute_backcgra(bool print, bool verif) {
   // int num_computed=!discard;
   // return num_computed;
 
-  // should be recursively called here? update_next_nodes for that
   return 1;
 }
 

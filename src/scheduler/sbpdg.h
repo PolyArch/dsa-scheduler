@@ -1492,7 +1492,6 @@ SbPDG_VecInput* get_vector_input(int i){
       SbPDG_Input *sb_node = vec_in->inputs()[i];
       sb_node->set_node(data[i], valid[i], true, print, verif);
     }
-
     return true;
   }
 
