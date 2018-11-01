@@ -559,7 +559,7 @@ public:
       return _encode_map[s];
     } else {
       std::cout << "Bad Control Symobol: " << s <<"\n";
-      assert("Bad Control Symbol" && 0); 
+      assert("Bad Control Symbol" && 0);
     }
   }
 
@@ -572,17 +572,17 @@ private:
     _decode_map[c]=std::string(s);
   }
 };
- 
+
 typedef std::vector<std::string> string_vec_t;
 
 //post-parsing control signal definitions (mapping of string of flag to it's value?)
-typedef std::map<int,string_vec_t> ctrl_def_t; 
+typedef std::map<int,string_vec_t> ctrl_def_t;
 
 
 class CtrlBits {
 public:
   static int bit_loc(int c_val, CtrlMap::ctrl_flag flag) {
-    return c_val * CtrlMap::NUM_CTRL + flag; // should have returned NUM_CTRL should be 5 and flag should be 0? 
+    return c_val * CtrlMap::NUM_CTRL + flag; // should have returned NUM_CTRL should be 5 and flag should be 0?
   }
   CtrlBits(ctrl_def_t d) {
     for(auto i : d) {
@@ -607,8 +607,8 @@ public:
       printf("ctrl input %d:", i);
       for(int c = 0; c<CtrlMap::NUM_CTRL;++c) {
         if(isSet(i,(CtrlMap::ctrl_flag)c)) {
-          printf(" %s",ctrl_map.decode_control((CtrlMap::ctrl_flag)c).c_str()); 
-        } 
+          printf(" %s",ctrl_map.decode_control((CtrlMap::ctrl_flag)c).c_str());
+        }
       }
       printf("\n");
     }
@@ -622,7 +622,7 @@ public:
     // std::cout << "num_ctrl: " << (int)CtrlMap::NUM_CTRL << " and flag: " << (int)flag << "\n";
     return _bits.test(bit_loc(c_val,flag));
   }
- 
+
 private:
   friend class boost::serialization::access;
   template<class Archive>
@@ -1005,6 +1005,16 @@ public:
   }
   //---------------------------------------
 
+  /*
+  void set_port_width(int n){
+    _port_width=n;
+  }
+
+  int get_port_width(){
+	return _port_width;
+  }
+  */
+
   virtual int compute(bool print, bool verif) {
     int num_computed = 0;
     for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
@@ -1049,6 +1059,16 @@ public:
     return dynamic_cast<SSDfgInst *>(_ops[0].edges[0]->def());
   }
 
+  /*
+  void set_port_width(int n){
+    _port_width=n;
+  }
+
+  int get_port_width(){
+	return _port_width;
+  }
+  */
+
   //retrieve the value of the def
   uint64_t retrieve() {
     assert(_ops.size() == 1);
@@ -1090,6 +1110,14 @@ public:
 
   virtual std::string name() { return _name; }
 
+  void set_port_width(int n){
+    _port_width=n;
+  }
+
+  int get_port_width(){
+	return _port_width;
+  }
+
 private:
   friend class boost::serialization::access;
 
@@ -1101,6 +1129,7 @@ protected:
   int _ID;
   SSDfg *_ssdfg;
   int _group_id = 0; //which group do I belong to
+  int _port_width;
 };
 
 class SSDfgVecInput : public SSDfgVec {
@@ -1312,11 +1341,14 @@ public:
 
 
   void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
-    SSDfgVecOutput *vec_output = new SSDfgVecOutput(std::max(1, len), name, (int) _vecOutputs.size(), this);
+    int n = std::max(1, len);
+    SSDfgVecOutput *vec_output = new SSDfgVecOutput(n, name, (int) _vecOutputs.size(), this);
     insert_vec_out(vec_output);
+	vec_output->set_port_width(width);
 
     for (int i = 0, cnt = 0; i < std::max(1, len); i += 64 / width) {
       SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
+      // dfg_out->set_port_width(width);
       vec_output->addOutput(dfg_out);
       addOutput(dfg_out);
       for (int j = 0; j < 64; j += width) {
@@ -1338,12 +1370,14 @@ public:
 
   void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
     int n = std::max(1, len);
-    assert(n % (64 / width) == 0);
+    // assert(n % (64 / width) == 0); // not needed any more
     auto *vec_input = new SSDfgVecInput(n / (64 / width), name, (int) _vecInputs.size(), this);
     insert_vec_in(vec_input);
+	vec_input->set_port_width(width);
 
     for (int i = 0, cnt = 0; i < n; i += 64 / width) {
       auto *dfg_in = new SSDfgInput(this, name, vec_input);
+      // dfg_in->set_port_width(width);
       addInput(dfg_in);
       vec_input->addInput(dfg_in);
       for (int j = 0; j < 64; j += width) {

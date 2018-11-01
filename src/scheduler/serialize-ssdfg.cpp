@@ -16,15 +16,15 @@
 template<class Archive>
 void SSDfgEdge::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ID);
-  ar & BOOST_SERIALIZATION_NVP(_ssdfg); 
+  ar & BOOST_SERIALIZATION_NVP(_ssdfg);
   ar & BOOST_SERIALIZATION_NVP(_def);
   ar & BOOST_SERIALIZATION_NVP(_use);
-  ar & BOOST_SERIALIZATION_NVP(_etype); 
+  ar & BOOST_SERIALIZATION_NVP(_etype);
   ar & BOOST_SERIALIZATION_NVP(_l);
   ar & BOOST_SERIALIZATION_NVP(_r);
 }
 
-template<class Archive> 
+template<class Archive>
 void SSDfgOperand::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(edges);
   ar & BOOST_SERIALIZATION_NVP(imm);
@@ -33,14 +33,14 @@ void SSDfgOperand::serialize(Archive & ar, const unsigned version) {
 template<class Archive>
 void SSDfgNode::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ssdfg);
-  ar & BOOST_SERIALIZATION_NVP(_ID); 
-  ar & BOOST_SERIALIZATION_NVP(_name); 
+  ar & BOOST_SERIALIZATION_NVP(_ID);
+  ar & BOOST_SERIALIZATION_NVP(_name);
   ar & BOOST_SERIALIZATION_NVP(_ops);
   ar & BOOST_SERIALIZATION_NVP(_inc_edge_list);
   ar & BOOST_SERIALIZATION_NVP(_uses);
   ar & BOOST_SERIALIZATION_NVP(_min_lat);
-  ar & BOOST_SERIALIZATION_NVP(_sched_lat); 
-  ar & BOOST_SERIALIZATION_NVP(_max_thr); 
+  ar & BOOST_SERIALIZATION_NVP(_sched_lat);
+  ar & BOOST_SERIALIZATION_NVP(_max_thr);
   ar & BOOST_SERIALIZATION_NVP(_group_id);
 }
 
@@ -80,10 +80,11 @@ void SSDfgOutput::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void SSDfgVec::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_name); 
+  ar & BOOST_SERIALIZATION_NVP(_name);
   ar & BOOST_SERIALIZATION_NVP(_ID);
-  ar & BOOST_SERIALIZATION_NVP(_ssdfg); 
+  ar & BOOST_SERIALIZATION_NVP(_ssdfg);
   ar & BOOST_SERIALIZATION_NVP(_group_id);
+  ar & BOOST_SERIALIZATION_NVP(_port_width);
 }
 
 template<class Archive>
@@ -105,7 +106,7 @@ void GroupProp::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void SSDfg::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_nodes); 
+  ar & BOOST_SERIALIZATION_NVP(_nodes);
   ar & BOOST_SERIALIZATION_NVP(_insts);
   ar & BOOST_SERIALIZATION_NVP(_inputs);
   ar & BOOST_SERIALIZATION_NVP(_outputs);
@@ -144,7 +145,3 @@ SERIALIZABLE(SSDfgVec);
 SERIALIZABLE(SSDfgVecInput);
 SERIALIZABLE(SSDfgVecOutput);
 SERIALIZABLE(SSDfg);
-
-
-
-
