@@ -17,6 +17,7 @@
 #include "model.h"
 #include <bitset>
 #include <unordered_set>
+#include <math.h>
 
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -63,6 +64,7 @@ public:
 
   void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
     assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
+    std::cout << "The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
     _data_buffer.push(std::make_pair(v, valid));
     compute_after_push(print, verif);
   }
@@ -80,6 +82,8 @@ public:
 
   uint64_t get_buffer_val() {
     assert(!_data_buffer.empty());
+	// std::cout << "value at top of buffer: " << _data_buffer.front().first << "\n";
+	// std::cout << "value extracted: " << extract_value(_data_buffer.front().first) << "\n";
     return extract_value(_data_buffer.front().first);
   }
 
@@ -747,6 +751,7 @@ struct SymEntry {
    * \param l, r: The bit slice range [l, r]
    */
   void set_bitslice_params(int l, int r) {
+	  // std::cout << "IT CAME IN SET BITSLICE PARAMS FROM WHERE\n";
     assert(type == SymEntry::SYM_NODE && "trying to get node from wrong type");
     if (edge_entries->size() != 1) {
       assert(false && "Node must have exactly one entry to extract");
@@ -1004,17 +1009,6 @@ public:
     return num_computed;
   }
   //---------------------------------------
-
-  /*
-  void set_port_width(int n){
-    _port_width=n;
-  }
-
-  int get_port_width(){
-	return _port_width;
-  }
-  */
-
   virtual int compute(bool print, bool verif) {
     int num_computed = 0;
     for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
@@ -1058,16 +1052,6 @@ public:
   SSDfgInst *out_inst() {
     return dynamic_cast<SSDfgInst *>(_ops[0].edges[0]->def());
   }
-
-  /*
-  void set_port_width(int n){
-    _port_width=n;
-  }
-
-  int get_port_width(){
-	return _port_width;
-  }
-  */
 
   //retrieve the value of the def
   uint64_t retrieve() {
@@ -1339,60 +1323,95 @@ public:
     _nodes.push_back(output);
   }
 
+void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
+   int n = std::max(1, len);
+   int slice = 64 / width;
+   int t = ceil(n / float(slice));
+   SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
+   insert_vec_out(vec_output);
+   vec_output->set_port_width(width);
+   int left_len = 0;
+  for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+     SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
 
-  void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
-    int n = std::max(1, len);
-    SSDfgVecOutput *vec_output = new SSDfgVecOutput(n, name, (int) _vecOutputs.size(), this);
-    insert_vec_out(vec_output);
-	vec_output->set_port_width(width);
+	 /*
+     if(i==0){
+       // left_len = std::min(std::max(n,slice),slice); // A[2] = 2*1 = 2 (this should be max 64/width)
+       left_len = std::min(n,slice);
+     } else if(n-i>=slice) {
+	   left_len=slice;
+	 } else {
+       left_len = std::min(n%i,slice); // 15%12=3, less than that slice
+     }
+*/
+	 
+	 left_len = std::min(n-i,slice);
 
-    for (int i = 0, cnt = 0; i < std::max(1, len); i += 64 / width) {
-      SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
-      // dfg_out->set_port_width(width);
-      vec_output->addOutput(dfg_out);
-      addOutput(dfg_out);
-      for (int j = 0; j < 64; j += width) {
-        std::stringstream ss;
-        ss << name;
-        if (len)
-          ss << cnt++;
-        auto sym = syms.get_sym(ss.str());
-        int num_entries = (int) sym.edge_entries->size();
-        assert(num_entries > 0 && num_entries <= 16);
+     addOutput(dfg_out);
+     vec_output->addOutput(dfg_out);
 
-        for (auto edge_entry : *sym.edge_entries) {
-          SSDfgNode *out_node = edge_entry.node;
-          connect(out_node, dfg_out, 0, SSDfgEdge::data, edge_entry.l, edge_entry.r);
-        }
-      }
-    }
-  }
+     for (int j = 0; j < left_len*width; j += width) {
+       std::stringstream ss;
+       ss << name;
+       if (len)
+         ss << cnt++;
+       auto sym = syms.get_sym(ss.str());
+       std::cout << ss.str() << " ";
+       int num_entries = (int) sym.edge_entries->size();
+       assert(num_entries > 0 && num_entries <= 16);
+
+       for (auto edge_entry : *sym.edge_entries) {
+         SSDfgNode *out_node = edge_entry.node;
+         connect(out_node, dfg_out, 0, SSDfgEdge::data, edge_entry.l, edge_entry.r);
+       }
+     }
+   }
+ }
 
   void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
-    int n = std::max(1, len);
-    // assert(n % (64 / width) == 0); // not needed any more
-    auto *vec_input = new SSDfgVecInput(n / (64 / width), name, (int) _vecInputs.size(), this);
-    insert_vec_in(vec_input);
-	vec_input->set_port_width(width);
+   int n = std::max(1, len);
+   int slice = 64 / width;
+   int t = ceil(n / float(slice));
+   // std::cout << "t: " << t << "\n";
+   auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
+   insert_vec_in(vec_input);
+   vec_input->set_port_width(width);
+   int left_len=0;
 
-    for (int i = 0, cnt = 0; i < n; i += 64 / width) {
-      auto *dfg_in = new SSDfgInput(this, name, vec_input);
-      // dfg_in->set_port_width(width);
-      addInput(dfg_in);
-      vec_input->addInput(dfg_in);
-      for (int j = 0; j < 64; j += width) {
-        std::stringstream ss;
-        ss << name;
-        if (len)
-          ss << cnt++;
-        SymEntry entry(dfg_in, j, j + width - 1);
-        syms.set(ss.str(), entry);
-      }
-    }
-  }
+
+   for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+     auto *dfg_in = new SSDfgInput(this, name, vec_input);
+
+	 /*
+     if(i==0){
+       // left_len = std::min(std::max(n,slice),slice);
+       left_len = std::min(n,slice);
+     } else if(n-i>=slice) {
+	   left_len=slice;
+	 } else {
+       left_len = std::min(n%i,slice); // 15%12=3, less than that slice
+     }
+	 */
+
+	 left_len = std::min(n-i,slice);
+
+     addInput(dfg_in);
+     vec_input->addInput(dfg_in);
+     for (int j = 0; j < left_len*width; j += width) {
+       std::stringstream ss;
+       ss << name;
+       if (len)
+         ss << cnt++;
+       SymEntry entry(dfg_in, j, j + width - 1);
+       syms.set(ss.str(), entry);
+     }
+   }
+ }
+
 
   SSDfgEdge *connect(SSDfgNode *orig, SSDfgNode *dest, int slot,
-                      SSDfgEdge::EdgeType etype, int bitwidth = 64, int index = 0);
+                      SSDfgEdge::EdgeType etype, int l = 0, int r = 63);
+
 
   void disconnect(SSDfgNode *orig, SSDfgNode *dest);
 
@@ -1524,6 +1543,7 @@ SSDfgVecInput* get_vector_input(int i){
     assert(data.size() == vec_in->inputs().size() && "insufficient data available");
     for (unsigned i = 0; i < vec_in->inputs().size(); ++i) {
       SSDfgInput *ss_node = vec_in->inputs()[i];
+      std::cout << "Set the value of node to: " << data[i] << "\n";
       ss_node->set_node(data[i], valid[i], true, print, verif);
     }
     return true;
@@ -1552,6 +1572,7 @@ SSDfgVecInput* get_vector_input(int i){
         ready_outputs++;
       }
     }
+	// std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
     if (ready_outputs == len) {
       return true;
     } else {
@@ -1568,6 +1589,7 @@ SSDfgVecInput* get_vector_input(int i){
     // we don't need discard now!
     for (auto elem: vec_out->outputs()) {
       SSDfgOperand &operand = elem->first_operand();
+	  std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
       data.push_back(operand.get_buffer_val());
       data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
       //std::cout << e->get_buffer_valid();
