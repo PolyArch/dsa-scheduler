@@ -53,7 +53,7 @@ uint64_t SSDfgEdge::extract_value(uint64_t val) {
   if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
     return val;
   } else {
-	std::cout << "value to extract: " << val << " " << _l << " " << _r << "\n";
+	// std::cout << "value to extract: " << val << " " << _l << " " << _r << "\n";
     uint64_t mask = (((uint64_t) 1 << bitwidth()) - 1);
     return (val >> _l) & mask; // little endian machine
     // return (val >> (63-_r)) & mask;

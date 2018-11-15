@@ -22,7 +22,11 @@ FAdd32                  32           2             1           1
 FSub32                  32           2             1           1
 Add32                   32           2             1           1
 Mul32                   32           2             1           1
-
+Select32                32           2             1           1
+ICmpNE32                32           2             1           1
+And32                   32           2             1           1
+Or32                    32           2             1           1
+Xor32                   32           2             1           1
 
 # 64-Bit Instructions
 Extract16               64           1             1           1

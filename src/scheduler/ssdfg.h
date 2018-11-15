@@ -64,7 +64,7 @@ public:
 
   void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
     assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
-    std::cout << "The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
+    // std::cout << "The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
     _data_buffer.push(std::make_pair(v, valid));
     compute_after_push(print, verif);
   }
@@ -723,7 +723,9 @@ struct SymEntry {
   }
 
   void take_union(SymEntry entry) {
-    edge_entries->push_back(entry.firstEdge());
+    // edge_entries->push_back(entry.firstEdge());
+	// TODO: change edge_entries to deque
+	edge_entries->insert(edge_entries->begin(), entry.firstEdge());
   }
 
   EdgeEntry firstEdge() {
@@ -1543,7 +1545,7 @@ SSDfgVecInput* get_vector_input(int i){
     assert(data.size() == vec_in->inputs().size() && "insufficient data available");
     for (unsigned i = 0; i < vec_in->inputs().size(); ++i) {
       SSDfgInput *ss_node = vec_in->inputs()[i];
-      std::cout << "Set the value of node to: " << data[i] << "\n";
+      // std::cout << "Set the value of node to: " << data[i] << "\n";
       ss_node->set_node(data[i], valid[i], true, print, verif);
     }
     return true;
@@ -1589,7 +1591,7 @@ SSDfgVecInput* get_vector_input(int i){
     // we don't need discard now!
     for (auto elem: vec_out->outputs()) {
       SSDfgOperand &operand = elem->first_operand();
-	  std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
+	  // std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
       data.push_back(operand.get_buffer_val());
       data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
       //std::cout << e->get_buffer_valid();
