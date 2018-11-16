@@ -22,8 +22,7 @@ IN_DIRECTIONS: N:0 NE:1 E:2 S:3 W:4
 
 
 [sub-model]
-# DySER 8x8 Hetero Model File
-topology: grid
+# DySER 8x8 Hetero Model File topology: grid
 width: 5
 height: 5
 
@@ -78,8 +77,8 @@ VPORT_IN 17:  5:0, 11:1, 20:2, 26:3  #4-wide
 VPORT_IN 18:  3:0, 12:1, 18:2, 27:3  #4-wide
 VPORT_IN 19: 3:0, 18:1,  #2-wide
 VPORT_IN 20: 6:0, 24:1,  #2-wide
-VPORT_IN 21: 12:0, 15:1,  #2-wide
-VPORT_IN 22: 27:0, 32:1,  #2-wide
+#VPORT_IN 21: 12:0, 15:1,  #2-wide
+#VPORT_IN 22: 27:0, 32:1,  #2-wide
 
   
 
