@@ -22,8 +22,7 @@ IN_DIRECTIONS: N:0 NE:1 E:2 S:3 W:4
 
 
 [sub-model]
-# DySER 8x8 Hetero Model File
-topology: grid
+# DySER 8x8 Hetero Model File topology: grid
 width: 5
 height: 5
 
