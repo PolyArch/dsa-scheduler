@@ -58,6 +58,9 @@ void SSDfgInst::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_subFunc);
   ar & BOOST_SERIALIZATION_NVP(_ctrl_bits);
   ar & BOOST_SERIALIZATION_NVP(_reg);
+  ar & BOOST_SERIALIZATION_NVP(_reg_32);
+  ar & BOOST_SERIALIZATION_NVP(_reg_16);
+  ar & BOOST_SERIALIZATION_NVP(_reg_8);
   ar & BOOST_SERIALIZATION_NVP(_imm);
   ar & BOOST_SERIALIZATION_NVP(_ssinst);
 }

@@ -8,7 +8,7 @@ if(!dont_accum) {
   accum+=ops[0];
 }
 
-uint16_t ret = accum;
+uint32_t ret = accum;
 
 if(do_discard) {
   discard=1;

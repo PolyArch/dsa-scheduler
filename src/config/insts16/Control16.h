@@ -1,9 +1,7 @@
 uint16_t ret;
 
-if(ops[0]==0) {
-  back_array[0]=0;
-  back_array[1]=0;
-} else if(ops[1]==0) {
+// control signal
+if(ops[0]==0 || ops[1] == 0) {
   back_array[0]=0;
   back_array[1]=0;
 } else {

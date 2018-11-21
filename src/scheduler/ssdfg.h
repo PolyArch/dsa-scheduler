@@ -829,6 +829,9 @@ public:
                                                         _predInv(false), _isDummy(is_dummy),
                                                         _imm_slot(-1), _subFunc(0), _ssinst(inst) {
     _reg.resize(8, 0);
+    _reg_32.resize(16, 0);
+    _reg_16.resize(32, 0);
+    _reg_8.resize(64, 0);
   }
 
 
@@ -836,6 +839,10 @@ public:
                              _predInv(false), _isDummy(false),
                              _imm_slot(-1), _subFunc(0) {
     _reg.resize(8, 0);
+	_reg_32.resize(16, 0);
+    _reg_16.resize(32, 0);
+    _reg_8.resize(64, 0);
+
   }
 
   void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
