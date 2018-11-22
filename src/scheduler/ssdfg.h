@@ -1111,6 +1111,13 @@ public:
 	return _port_width;
   }
 
+  void set_vp_size(int n){
+    _vp_len=n;
+  }
+
+  int get_vp_size(){
+	return _vp_len;
+  }
 private:
   friend class boost::serialization::access;
 
@@ -1123,6 +1130,7 @@ protected:
   SSDfg *_ssdfg;
   int _group_id = 0; //which group do I belong to
   int _port_width;
+  int _vp_len;
 };
 
 class SSDfgVecInput : public SSDfgVec {
@@ -1337,23 +1345,13 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    int slice = 64 / width;
    int t = ceil(n / float(slice));
    SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
+   vec_output->set_vp_size(n);
    insert_vec_out(vec_output);
    vec_output->set_port_width(width);
    int left_len = 0;
-  for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+   for (int i = 0, cnt = 0; i < n; i += 64 / width) {
      SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
 
-	 /*
-     if(i==0){
-       // left_len = std::min(std::max(n,slice),slice); // A[2] = 2*1 = 2 (this should be max 64/width)
-       left_len = std::min(n,slice);
-     } else if(n-i>=slice) {
-	   left_len=slice;
-	 } else {
-       left_len = std::min(n%i,slice); // 15%12=3, less than that slice
-     }
-*/
-	 
 	 left_len = std::min(n-i,slice);
 
      addOutput(dfg_out);
@@ -1377,12 +1375,13 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    }
  }
 
-  void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
+ void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
    int n = std::max(1, len);
    int slice = 64 / width;
    int t = ceil(n / float(slice));
    // std::cout << "t: " << t << "\n";
    auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
+   vec_input->set_vp_size(n);
    insert_vec_in(vec_input);
    vec_input->set_port_width(width);
    int left_len=0;
@@ -1390,17 +1389,6 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
 
    for (int i = 0, cnt = 0; i < n; i += 64 / width) {
      auto *dfg_in = new SSDfgInput(this, name, vec_input);
-
-	 /*
-     if(i==0){
-       // left_len = std::min(std::max(n,slice),slice);
-       left_len = std::min(n,slice);
-     } else if(n-i>=slice) {
-	   left_len=slice;
-	 } else {
-       left_len = std::min(n%i,slice); // 15%12=3, less than that slice
-     }
-	 */
 
 	 left_len = std::min(n-i,slice);
 
@@ -1549,11 +1537,18 @@ SSDfgVecInput* get_vector_input(int i){
 
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
-    assert(data.size() == vec_in->inputs().size() && "insufficient data available");
+    // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
+    assert(data.size() == vec_in->get_vp_size() && "insufficient data available");
+	int npart = 64/vec_in->get_port_width();
+	uint64_t val=0;
+
     for (unsigned i = 0; i < vec_in->inputs().size(); ++i) {
+	  for(int j = i*npart; j < vec_in->get_vp_size() && j < (i+1)*npart; ++j) { 
+		val = data[j] | val << ((j-i*npart)*vec_in->get_port_width());
+	  }
       SSDfgInput *ss_node = vec_in->inputs()[i];
-      // std::cout << "Set the value of node to: " << data[i] << "\n";
-      ss_node->set_node(data[i], valid[i], true, print, verif);
+      ss_node->set_node(val, valid[i], true, print, verif);
+	  val = 0;
     }
     return true;
   }
@@ -1571,6 +1566,7 @@ SSDfgVecInput* get_vector_input(int i){
   bool can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
 
     assert(len > 0 && "Cannot pop 0 length output\n");
+    // assert(vec_out->outputs().size() == ceil(len*8/float(vec_out->get_port_width()))
     assert(vec_out->outputs().size() == len
            && "asked for different number of outputs than the supposed length\n");
 

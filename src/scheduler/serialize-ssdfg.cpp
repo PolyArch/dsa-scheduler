@@ -88,6 +88,7 @@ void SSDfgVec::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ssdfg);
   ar & BOOST_SERIALIZATION_NVP(_group_id);
   ar & BOOST_SERIALIZATION_NVP(_port_width);
+  ar & BOOST_SERIALIZATION_NVP(_vp_len);
 }
 
 template<class Archive>
