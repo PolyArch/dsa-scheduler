@@ -839,7 +839,7 @@ public:
                              _predInv(false), _isDummy(false),
                              _imm_slot(-1), _subFunc(0) {
     _reg.resize(8, 0);
-	_reg_32.resize(16, 0);
+    _reg_32.resize(16, 0);
     _reg_16.resize(32, 0);
     _reg_8.resize(64, 0);
 
@@ -1540,11 +1540,14 @@ SSDfgVecInput* get_vector_input(int i){
     // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
     assert(data.size() == vec_in->get_vp_size() && "insufficient data available");
 	int npart = 64/vec_in->get_port_width();
+	int x = static_cast<int>(vec_in->get_vp_size());
 	uint64_t val=0;
 
-    for (unsigned i = 0; i < vec_in->inputs().size(); ++i) {
-	  for(int j = i*npart; j < vec_in->get_vp_size() && j < (i+1)*npart; ++j) { 
-		val = data[j] | val << ((j-i*npart)*vec_in->get_port_width());
+    for (int i = 0; i < vec_in->inputs().size(); ++i) {
+	  int n_times = std::min(npart, x-i*npart); 
+	  // for(int j = i*npart; j < vec_in->get_vp_size() && j < (i+1)*npart; ++j) { 
+	  for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
+		val = data[j] | val << ((i*npart+n_times-1-j)*vec_in->get_port_width());
 	  }
       SSDfgInput *ss_node = vec_in->inputs()[i];
       ss_node->set_node(val, valid[i], true, print, verif);
