@@ -1349,10 +1349,13 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    insert_vec_out(vec_output);
    vec_output->set_port_width(width);
    int left_len = 0;
-   for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+   for (int i = 0, cnt = 0; i < n; i += slice) {
      SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
 
-	 left_len = std::min(n-i,slice);
+	 left_len = slice;
+	 if(n-i>0) {
+	   left_len = std::min(n-i,slice);
+	 }
 
      addOutput(dfg_out);
      vec_output->addOutput(dfg_out);
@@ -1363,7 +1366,7 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
        if (len)
          ss << cnt++;
        auto sym = syms.get_sym(ss.str());
-       std::cout << ss.str() << " ";
+       // std::cout << ss.str() << " ";
        int num_entries = (int) sym.edge_entries->size();
        assert(num_entries > 0 && num_entries <= 16);
 
@@ -1387,10 +1390,13 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    int left_len=0;
 
 
-   for (int i = 0, cnt = 0; i < n; i += 64 / width) {
+   for (int i = 0, cnt = 0; i < n; i += slice) {
      auto *dfg_in = new SSDfgInput(this, name, vec_input);
 
-	 left_len = std::min(n-i,slice);
+	 left_len = slice;
+	 if(n-i>0) {
+	   left_len = std::min(n-i,slice);
+	 }
 
      addInput(dfg_in);
      vec_input->addInput(dfg_in);
@@ -1538,6 +1544,9 @@ SSDfgVecInput* get_vector_input(int i){
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
     // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
+	if(data.size() != vec_in->get_vp_size()) {
+	  std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_size() << "\n";
+	}
     assert(data.size() == vec_in->get_vp_size() && "insufficient data available");
 	int npart = 64/vec_in->get_port_width();
 	int x = static_cast<int>(vec_in->get_vp_size());
@@ -1570,6 +1579,9 @@ SSDfgVecInput* get_vector_input(int i){
 
     assert(len > 0 && "Cannot pop 0 length output\n");
     // assert(vec_out->outputs().size() == ceil(len*8/float(vec_out->get_port_width()))
+	if(vec_out->outputs().size() != len) {
+	  std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
+	}
     assert(vec_out->outputs().size() == len
            && "asked for different number of outputs than the supposed length\n");
 
