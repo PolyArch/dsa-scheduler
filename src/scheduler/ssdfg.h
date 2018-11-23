@@ -22,6 +22,8 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
+void checked_system(const char* command);
+
 class Schedule;
 class SSDfgNode;
 class SSDfg;
@@ -82,8 +84,8 @@ public:
 
   uint64_t get_buffer_val() {
     assert(!_data_buffer.empty());
-	// std::cout << "value at top of buffer: " << _data_buffer.front().first << "\n";
-	// std::cout << "value extracted: " << extract_value(_data_buffer.front().first) << "\n";
+    // std::cout << "value at top of buffer: " << _data_buffer.front().first << "\n";
+    // std::cout << "value extracted: " << extract_value(_data_buffer.front().first) << "\n";
     return extract_value(_data_buffer.front().first);
   }
 
@@ -724,8 +726,8 @@ struct SymEntry {
 
   void take_union(SymEntry entry) {
     // edge_entries->push_back(entry.firstEdge());
-	// TODO: change edge_entries to deque
-	edge_entries->insert(edge_entries->begin(), entry.firstEdge());
+    // TODO: change edge_entries to deque
+    edge_entries->insert(edge_entries->begin(), entry.firstEdge());
   }
 
   EdgeEntry firstEdge() {
@@ -753,7 +755,7 @@ struct SymEntry {
    * \param l, r: The bit slice range [l, r]
    */
   void set_bitslice_params(int l, int r) {
-	  // std::cout << "IT CAME IN SET BITSLICE PARAMS FROM WHERE\n";
+      // std::cout << "IT CAME IN SET BITSLICE PARAMS FROM WHERE\n";
     assert(type == SymEntry::SYM_NODE && "trying to get node from wrong type");
     if (edge_entries->size() != 1) {
       assert(false && "Node must have exactly one entry to extract");
@@ -1108,16 +1110,11 @@ public:
   }
 
   int get_port_width(){
-	return _port_width;
+    return _port_width;
   }
 
-  void set_vp_size(int n){
-    _vp_len=n;
-  }
+  virtual unsigned length() = 0;
 
-  int get_vp_size(){
-	return _vp_len;
-  }
 private:
   friend class boost::serialization::access;
 
@@ -1139,11 +1136,13 @@ public:
 
   SSDfgVecInput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
 
-  virtual std::string gamsName() {
+  virtual std::string gamsName() override {
     std::stringstream ss;
     ss << "IPV_" << _name;
     return ss.str();
   }
+
+  virtual unsigned length() override {return _inputs.size();}
 
   bool backPressureOn();
 
@@ -1167,7 +1166,7 @@ public:
 
   SSDfgVecOutput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
 
-  virtual std::string gamsName() {
+  virtual std::string gamsName() override {
     std::stringstream ss;
     ss << "OPV_" << _name;
     return ss.str();
@@ -1177,14 +1176,9 @@ public:
 
   const std::vector<SSDfgOutput*>& outputs() { return _outputs; }
 
-  unsigned num_outputs() const { return _outputs.size(); }
+  virtual unsigned length() override {return _outputs.size();}
 
   SSDfgOutput *getOutput(int i) { return _outputs[i]; }
-
-  /*bool operator < (const SSDfgVecOutput& s) const
-  {
-     return (this->num_outputs() > s.num_outputs());
-  }*/
 
 private:
   friend class boost::serialization::access;
@@ -1345,17 +1339,16 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    int slice = 64 / width;
    int t = ceil(n / float(slice));
    SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
-   vec_output->set_vp_size(n);
    insert_vec_out(vec_output);
    vec_output->set_port_width(width);
    int left_len = 0;
    for (int i = 0, cnt = 0; i < n; i += slice) {
      SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
 
-	 left_len = slice;
-	 if(n-i>0) {
-	   left_len = std::min(n-i,slice);
-	 }
+     left_len = slice;
+     if(n-i>0) {
+       left_len = std::min(n-i,slice);
+     }
 
      addOutput(dfg_out);
      vec_output->addOutput(dfg_out);
@@ -1384,7 +1377,6 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    int t = ceil(n / float(slice));
    // std::cout << "t: " << t << "\n";
    auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
-   vec_input->set_vp_size(n);
    insert_vec_in(vec_input);
    vec_input->set_port_width(width);
    int left_len=0;
@@ -1393,10 +1385,10 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    for (int i = 0, cnt = 0; i < n; i += slice) {
      auto *dfg_in = new SSDfgInput(this, name, vec_input);
 
-	 left_len = slice;
-	 if(n-i>0) {
-	   left_len = std::min(n-i,slice);
-	 }
+     left_len = slice;
+     if(n-i>0) {
+       left_len = std::min(n-i,slice);
+     }
 
      addInput(dfg_in);
      vec_input->addInput(dfg_in);
@@ -1544,23 +1536,23 @@ SSDfgVecInput* get_vector_input(int i){
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
     // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
-	if(data.size() != vec_in->get_vp_size()) {
-	  std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_size() << "\n";
-	}
-    assert(data.size() == vec_in->get_vp_size() && "insufficient data available");
-	int npart = 64/vec_in->get_port_width();
-	int x = static_cast<int>(vec_in->get_vp_size());
-	uint64_t val=0;
+    if(data.size() != vec_in->length()) {
+      std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->length() << "\n";
+    }
+    assert(data.size() == vec_in->length() && "insufficient data available");
+    int npart = 64/vec_in->get_port_width();
+    int x = static_cast<int>(vec_in->length());
+    uint64_t val=0;
 
-    for (int i = 0; i < vec_in->inputs().size(); ++i) {
-	  int n_times = std::min(npart, x-i*npart); 
-	  // for(int j = i*npart; j < vec_in->get_vp_size() && j < (i+1)*npart; ++j) { 
-	  for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
-		val = data[j] | val << ((i*npart+n_times-1-j)*vec_in->get_port_width());
-	  }
+    for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {
+      int n_times = std::min(npart, x-i*npart); 
+      // for(int j = i*npart; j < vec_in->length() && j < (i+1)*npart; ++j) { 
+      for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
+        val = data[j] | val << ((i*npart+n_times-1-j)*vec_in->get_port_width());
+      }
       SSDfgInput *ss_node = vec_in->inputs()[i];
       ss_node->set_node(val, valid[i], true, print, verif);
-	  val = 0;
+      val = 0;
     }
     return true;
   }
@@ -1579,9 +1571,9 @@ SSDfgVecInput* get_vector_input(int i){
 
     assert(len > 0 && "Cannot pop 0 length output\n");
     // assert(vec_out->outputs().size() == ceil(len*8/float(vec_out->get_port_width()))
-	if(vec_out->outputs().size() != len) {
-	  std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
-	}
+    if(vec_out->outputs().size() != len) {
+      std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
+    }
     assert(vec_out->outputs().size() == len
            && "asked for different number of outputs than the supposed length\n");
 
@@ -1592,7 +1584,7 @@ SSDfgVecInput* get_vector_input(int i){
         ready_outputs++;
       }
     }
-	// std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
+    // std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
     if (ready_outputs == len) {
       return true;
     } else {
@@ -1609,7 +1601,7 @@ SSDfgVecInput* get_vector_input(int i){
     // we don't need discard now!
     for (auto elem: vec_out->outputs()) {
       SSDfgOperand &operand = elem->first_operand();
-	  // std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
+      // std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
       data.push_back(operand.get_buffer_val());
       data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
       //std::cout << e->get_buffer_valid();

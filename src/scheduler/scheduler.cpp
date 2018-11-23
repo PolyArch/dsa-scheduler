@@ -12,15 +12,6 @@ using namespace std;
 #include <string.h>
 #include <list>
 
-
-void System(const char* command) {
-  int ret = system(command);
-  if(ret) {
-    std::cout << "Command: \"" << command 
-              << "\" failed with return value: " << ret << "\n";
-  }
-}
-
 //floyd's unique-number sampling algorithm (ordered)
 //CACM Programming Pearls, 1987
 void HeuristicScheduler::rand_n_choose_k(int n, int k, std::vector<int>& indices) {

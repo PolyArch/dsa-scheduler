@@ -18,6 +18,15 @@ bool SSDfgVecInput::backPressureOn() {
     return false;
 }
 
+void checked_system(const char* command) {
+  int ret = system(command);
+  if(ret) {
+    std::cout << "Command: \"" << command 
+              << "\" failed with return value: " << ret << "\n";
+  }
+}
+
+
 SSDfgEdge::SSDfgEdge(SSDfgNode* def, SSDfgNode* use, EdgeType etype, SSDfg* ssdfg, int l, int r) :
    _ID(ssdfg->inc_edge_id()), _ssdfg(ssdfg), _def(def), _use(use), _etype(etype),  _l(l), _r(r) {
 }
@@ -53,7 +62,7 @@ uint64_t SSDfgEdge::extract_value(uint64_t val) {
   if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
     return val;
   } else {
-	// std::cout << "value to extract: " << val << " " << _l << " " << _r << "\n";
+    // std::cout << "value to extract: " << val << " " << _l << " " << _r << "\n";
     uint64_t mask = (((uint64_t) 1 << bitwidth()) - 1);
     return (val >> _l) & mask; // little endian machine
     // return (val >> (63-_r)) & mask;
@@ -495,8 +504,8 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
       discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
       pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
-	  // FIXME: confirm that this is correct
-	  _input_vals[i] = c_val;
+      // FIXME: confirm that this is correct
+      _input_vals[i] = c_val;
       reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
       //TODO: use reset somehow
     } else {
@@ -527,23 +536,14 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _ssdfg->dbg_stream() << " = " << output << "\n";
     }
   }
-  /*
+  //TODO/FIXME: change to all registers
   if(reset) {
-	switch(bitwidth()){
-	  case 64: _reg[0] = 0;
-			   break;
-	  case 32: _reg_32[0] = 0;
-			   break;
-	  case 16: _reg_16[0] = 0;
-			   break;
-	  case 8: _reg_8[0] = 0;
-			  break;
-	  default:
-      cout << "Weird bitwidth: " << bitwidth() << "\n";
-      assert(0 && "weird bitwidth");
-	}
+     _reg[0] = 0;
+     _reg_32[0] = 0;
+     _reg_16[0] = 0;
+    _reg_8[0] = 0;
   }
-	*/
+
   if(print) {
      std::cout << (_back_array[0] ? "backpressure on 1st input\n" : "");
      std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
@@ -607,7 +607,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
       _verif_stream.flush();
     } else {
-      system("mkdir -p verif");
+      checked_system("mkdir -p verif");
       _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
       assert(_verif_stream.is_open());
     }
@@ -768,7 +768,7 @@ int SSDfgNode::findDepth(ostream& os, string dfg_name, int level) {
     } else {
       int candidate_level = (*name_iter)->use()->findDepth(os, dfg_name, level+1);
       if(candidate_level > returned_level) {
-	returned_level = candidate_level;
+    returned_level = candidate_level;
       }
     }
   }
@@ -784,15 +784,15 @@ void SSDfgInst::printEmuDFG(ostream& os, string dfg_name) {
     if(!(*name_iter)->use()->getScalar()) {
       outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
       if(outputArray.find_first_of("0123456789") < outputArray.length()) {
-	outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
-	//this absolutely, should NOT have an _
-	if(outputArray.find_first_of("_") < outputArray.length()) {
-	  outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
-	}
-	//Get subIter
-	os << "[" << outputArray << "]  = ";
+    outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+    //this absolutely, should NOT have an _
+    if(outputArray.find_first_of("_") < outputArray.length()) {
+      outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
+    }
+    //Get subIter
+    os << "[" << outputArray << "]  = ";
       } else {
-	os << "[0] = ";
+    os << "[0] = ";
       }
     } else {
       os << "[0] = ";
@@ -811,16 +811,16 @@ void SSDfgInst::printEmuDFG(ostream& os, string dfg_name) {
       os << "inputs[" << (*ops_iter)->def()->_iter << "]";
       string inputArray = (*ops_iter)->def()->name();
       if(!(*ops_iter)->def()->getScalar()) {
-	inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
-	if(inputArray.find_first_of("0123456789") < inputArray.length()) {
-	  inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
-	  //Get subIter
-	  os << "[" << inputArray << "]";
-	} else {
-	  os << "[0]";
-	}
+    inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
+    if(inputArray.find_first_of("0123456789") < inputArray.length()) {
+      inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
+      //Get subIter
+      os << "[" << inputArray << "]";
+    } else {
+      os << "[0]";
+    }
       } else {
-	os << "[0]";
+    os << "[0]";
       }
     } else {
       string inputArray = (*ops_iter)->def()->name();
@@ -844,34 +844,34 @@ void SSDfgOutput::printDirectAssignments(ostream& os, string dfg_name) {
       os << "   outputs[" << _iter << "]";
       string outputArray = name();
       if(!getScalar()) {
-	outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
-	if(outputArray.find_first_of("0123456789") < outputArray.length()) {
-	  outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
-	  //this absolutely, should NOT have an _
-	  if(outputArray.find_first_of("_") < outputArray.length()) {
-	    outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
-	  }
-	  //Get subIter
-	  os << "[" << outputArray << "]  = ";
-	} else {
-	  os << "[0] = ";
-	}
+    outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
+    if(outputArray.find_first_of("0123456789") < outputArray.length()) {
+      outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
+      //this absolutely, should NOT have an _
+      if(outputArray.find_first_of("_") < outputArray.length()) {
+        outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
+      }
+      //Get subIter
+      os << "[" << outputArray << "]  = ";
+    } else {
+      os << "[0] = ";
+    }
       } else {
-	os << "[0] = ";
+    os << "[0] = ";
       }
       os << "inputs[" << (*ops_iter)->def()->_iter << "]";
       string inputArray = (*ops_iter)->def()->name();
       if(!(*ops_iter)->def()->getScalar()) {
-	inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
-	if(inputArray.find_first_of("0123456789") < inputArray.length()) {
-	  inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
-	  //Get subIter
-	  os << "[" << inputArray << "]";
-	} else {
-	  os << "[0]";
-	}
+    inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
+    if(inputArray.find_first_of("0123456789") < inputArray.length()) {
+      inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
+      //Get subIter
+      os << "[" << inputArray << "]";
+    } else {
+      os << "[0]";
+    }
       } else {
-	os << "[0]";
+    os << "[0]";
       }
       os << ";\n";
     }

@@ -193,11 +193,9 @@ public:
     assert(_num_mapped[SSDfgNode::V_OUTPUT] <= _ssDFG->outputs().size());
     assert(_num_mapped[SSDfgNode::V_INST] <= _ssDFG->inst_vec().size());
 
-    assert(num_left() >= 0);
     //std::cout << "node " << dfgnode->name() << " assigned to "
     //          << snode->name() << "\n";
     assert(dfgnode);
-
 
     assert(snode->id() < (int) _nodeProp.size());
     _nodeProp[snode->id()].vertices.insert(std::make_pair(assigned.first, dfgnode));
@@ -738,31 +736,31 @@ private:
 
 
 public:
-  int num_insts_mapped() { return _num_mapped[SSDfgNode::V_INST]; }
+  unsigned num_insts_mapped() { return _num_mapped[SSDfgNode::V_INST]; }
 
-  int num_inputs_mapped() { return _num_mapped[SSDfgNode::V_INPUT]; }
+  unsigned num_inputs_mapped() { return _num_mapped[SSDfgNode::V_INPUT]; }
 
-  int num_outputs_mapped() { return _num_mapped[SSDfgNode::V_OUTPUT]; }
+  unsigned num_outputs_mapped() { return _num_mapped[SSDfgNode::V_OUTPUT]; }
 
-  int num_mapped() {
+  unsigned num_mapped() {
     return _num_mapped[SSDfgNode::V_INST] +
            _num_mapped[SSDfgNode::V_INPUT] +
            _num_mapped[SSDfgNode::V_OUTPUT];
   }
 
-  int inputs_complete() { return num_inputs_mapped() == _ssDFG->inputs().size(); }
+  unsigned inputs_complete() { return num_inputs_mapped() == _ssDFG->inputs().size(); }
 
-  int outputs_complete() { return num_outputs_mapped() == _ssDFG->outputs().size(); }
+  unsigned outputs_complete() { return num_outputs_mapped() == _ssDFG->outputs().size(); }
 
-  int insts_complete() { return num_insts_mapped() == _ssDFG->inst_vec().size(); }
+  unsigned insts_complete() { return num_insts_mapped() == _ssDFG->inst_vec().size(); }
 
-  int isComplete() { return num_mapped() == _ssDFG->nodes().size(); }
+  bool isComplete() { return num_mapped() == _ssDFG->nodes().size(); }
 
-  int num_links_mapped() { return _links_mapped; }
+  unsigned num_links_mapped() { return _links_mapped; }
 
-  int num_edge_links_mapped() { return _edge_links_mapped; }
+  unsigned num_edge_links_mapped() { return _edge_links_mapped; }
 
-  int num_left() {
+  unsigned num_left() {
     int num = _ssDFG->nodes().size() - num_mapped();
     assert(num >= 0);
     return num;
@@ -870,7 +868,7 @@ private:
   int _totalViolation = 0;
   int _max_lat = -1, _max_lat_mis = -1; //filled from interpretConfigBits + calcLatency
 
-  int _num_mapped[SSDfgNode::V_NUM_TYPES] = {0}; //init all to zero
+  unsigned _num_mapped[SSDfgNode::V_NUM_TYPES] = {0}; //init all to zero
   int _links_mapped = 0, _edge_links_mapped = 0;
 
   std::map<int, int> _groupMismatch;
