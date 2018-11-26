@@ -337,12 +337,6 @@ public:
 
   virtual int compute_backcgra(bool print, bool verif) {
     //for an output node
-    //assert(this->num_inc()==1 && "not an output node?\n");
-    //assert(this->num_out()==0 && "not an output node?\n");
-    //auto it = this->ops_begin();
-    //SSDfgEdge* e = *it;
-    //this->set_outputnode(e->get_buffer_val(),e->get_buffer_valid(), true);
-    //e->pop_buffer_val();
     _inputs_ready = 0; // hopefully if it comes from inc_inputs_ready
     return 0;
   }
@@ -1113,6 +1107,15 @@ public:
     return _port_width;
   }
 
+
+  void set_vp_len(int n){
+    _vp_len=n;
+  }
+
+  int get_vp_len(){
+    return _vp_len;
+  }
+
   virtual unsigned length() = 0;
 
 private:
@@ -1341,6 +1344,7 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
    insert_vec_out(vec_output);
    vec_output->set_port_width(width);
+   vec_output->set_vp_len(n);
    int left_len = 0;
    for (int i = 0, cnt = 0; i < n; i += slice) {
      SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
@@ -1379,6 +1383,7 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
    insert_vec_in(vec_input);
    vec_input->set_port_width(width);
+   vec_input->set_vp_len(n);
    int left_len=0;
 
 
@@ -1536,12 +1541,14 @@ SSDfgVecInput* get_vector_input(int i){
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
     // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
-    if(data.size() != vec_in->length()) {
-      std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->length() << "\n";
+    if(data.size() != vec_in->get_vp_len()) {
+      std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
     }
-    assert(data.size() == vec_in->length() && "insufficient data available");
+    assert(data.size() == vec_in->get_vp_len() && "insufficient data available");
+    // assert(data.size() == vec_in->length() && "insufficient data available");
     int npart = 64/vec_in->get_port_width();
-    int x = static_cast<int>(vec_in->length());
+    int x = static_cast<int>(vec_in->get_vp_len());
+    // int x = static_cast<int>(vec_in->length());
     uint64_t val=0;
 
     for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {

@@ -459,11 +459,8 @@ int SSDfgInst::compute(bool print, bool verif) {
 
 // new compute for back cgra-----------------------------
 int SSDfgInst::compute_backcgra(bool print, bool verif) {
-  // std::cout << "came to compute for the node: " << this->gamsName() << " and the name: " << name() << "\n";
-
 
   assert(_ops.size() <=3);
-  // assert(num_inc <= 3);
 
   if(_input_vals.size()==0) {
     _input_vals.resize(_ops.size());

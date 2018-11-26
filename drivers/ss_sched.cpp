@@ -151,10 +151,11 @@ int main(int argc, char* argv[])
   string iter_dir = pdg_dir + "viz/iter/";
   string verif_dir = pdg_dir + "verif/";
   string sched_dir = pdg_dir + "sched/"; // Directory for cheating on the scheduler
-  System(("mkdir -p " + iter_dir).c_str());
-  System(("mkdir -p " + verif_dir).c_str());
-  System(("mkdir -p " + sched_dir).c_str());
-  System("mkdir -p gams/"); // gams will remain at top level
+
+  checked_system(("mkdir -p " + iter_dir).c_str());
+  checked_system(("mkdir -p " + verif_dir).c_str());
+  checked_system(("mkdir -p " + sched_dir).c_str());
+  checked_system("mkdir -p gams/"); // gams will remain at top level
 
   //sspdg object based on the dfg
   SSDfg sspdg(pdg_filename);

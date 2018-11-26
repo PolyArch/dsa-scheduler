@@ -12,6 +12,9 @@ Div16                   16           2             1           1
 Mod16                   16           2             1           1
 Keep16                  16           2             1           1
 Min16                   16           2             1           1
+And16                   16           2             1           1
+Not16                   16           2             1           1
+RShf16                  16           2             1           1
 IndexMatch16            16           2             1           1
 Control16               16           2             1           1
 ICmpEq16                16           2             1           1
@@ -29,6 +32,7 @@ Div32                   32           2             1           1
 Min32                   32           2             1           1
 Select32                32           2             1           1
 ICmpNE32                32           2             1           1
+ICmp32                  32           2             1           1
 And32                   32           2             1           1
 Or32                    32           2             1           1
 Xor32                   32           2             1           1
