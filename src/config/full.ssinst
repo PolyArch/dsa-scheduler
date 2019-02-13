@@ -168,6 +168,8 @@ FxRedCom16x4            64           2             1           1
 
 FxMul32x2               64           2             1           1
 FxAdd32x2               64           2             1           1
+# FIXME: not sure if this imp is correct!
+FxSub32x2               64           2             1           1
 FxRed32x2               64           2             2           1
 
 DupLow32                64           1             1           1

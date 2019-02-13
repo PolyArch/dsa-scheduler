@@ -341,7 +341,6 @@ public:
     return 0;
   }
 
-
   //-------------------------------------------------------
 
   SSDfgEdge *getLinkTowards(SSDfgNode *to) {
@@ -374,6 +373,8 @@ public:
       }
     }
   }
+
+  int num_inputs_ready() { return _inputs_ready; }
 
   SSDfgEdge *first_inc_edge() { return _ops[0].edges[0]; }
 
@@ -1537,10 +1538,28 @@ SSDfgVecInput* get_vector_input(int i){
 
   // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
 
+  double count_starving_nodes() {
+    double count = 0;
+    double num_unique_dfg_nodes = 0;
+    for(auto it : _vecInputs) {
+      SSDfgVecInput vec_in = *it;
+      for(auto elem : vec_in.inputs()) { // each scalar node
+        // for(auto node : elem->uses()) {
+        SSDfgNode *node = elem->first_use(); // FIXME: how does it work for dgra
+        num_unique_dfg_nodes += 1/node->num_inc();
+        if(node->num_inputs_ready()) { count += 1/node->num_inc(); }
+        // }
+      }
+    }
+    assert(num_unique_dfg_nodes>=0);
+    if(num_unique_dfg_nodes==0) return 0; // What is this case? none nodes
+    return count/num_unique_dfg_nodes;
+  }
+
+
 
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
-    // assert(data.size() == vec_in->inputs().size() && "insufficient data available");
     if(data.size() != vec_in->get_vp_len()) {
       std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
     }
@@ -1577,7 +1596,6 @@ SSDfgVecInput* get_vector_input(int i){
   bool can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
 
     assert(len > 0 && "Cannot pop 0 length output\n");
-    // assert(vec_out->outputs().size() == ceil(len*8/float(vec_out->get_port_width()))
     if(vec_out->outputs().size() != len) {
       std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
     }
@@ -1608,13 +1626,10 @@ SSDfgVecInput* get_vector_input(int i){
     // we don't need discard now!
     for (auto elem: vec_out->outputs()) {
       SSDfgOperand &operand = elem->first_operand();
-      // std::cout << "value pushed in output buffer: " << operand.get_buffer_val() << "and it;'s validity: " << operand.get_buffer_valid() << "\n";
       data.push_back(operand.get_buffer_val());
       data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
-      //std::cout << e->get_buffer_valid();
       operand.pop_buffer_val(print, verif);
     }
-
     // Insufficient output size
     // assert(data.size()==len);
   }
@@ -1627,41 +1642,29 @@ SSDfgVecInput* get_vector_input(int i){
   void push_buf_transient(SSDfgEdge *e, bool is_dummy, int cycle) {
     struct buffer_pop_info *temp = new buffer_pop_info(e, is_dummy);
     buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()].push_back(temp);
-    // std::cout << "POP FROM BUFFER AT: " << (cycle+cur_buf_ptr)%get_max_lat() << "\n";
   }
 
   int cycle(bool print, bool verif) {
     // int num_computed=0;
-    // std::cout << "size of the next list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
     for (auto it = buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end();) {
-      // std::cout << "CUR_BUF_PTR IS: " << cur_buf_ptr << "\n";
       // set the values
       buffer_pop_info *temp = *it;
       SSDfgEdge *e = temp->e;
-
       e->pop_buffer_val(print, verif);
-
 
       it = buf_transient_values[cur_buf_ptr].erase(it);
       // buf_transient_values[cur_buf_ptr].erase(it);
       // it--;
     }
-    // std::cout << "new size of the list is:  " << buf_transient_values[cur_buf_ptr].size() << "\n";
-
 
     for (auto it = transient_values[cur_node_ptr].begin(); it != transient_values[cur_node_ptr].end();) {
       struct cycle_result *temp = *it;
       SSDfgNode *ss_node = temp->n;
-      //std::cout << "transient_value update valid: " << temp->valid << "\n";
-
       ss_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
-
       it = transient_values[cur_buf_ptr].erase(it);
-
     }
 
     std::unordered_set<int> nodes_complete;
-
 
     for (auto I = _ready_nodes.begin(); I != _ready_nodes.end();) {
       SSDfgNode *n = *I;
@@ -1669,7 +1672,6 @@ SSDfgVecInput* get_vector_input(int i){
       int node_id = n->node_id();
       bool should_fire = (node_id == -1) ||
                          (nodes_complete.count(node_id) == 0);
-
 
       unsigned inst_throughput = 1;
 
@@ -1686,7 +1688,6 @@ SSDfgVecInput* get_vector_input(int i){
           }
         }
       }
-
 
       if (should_fire && n->get_avail() == 0) {
         n->compute_backcgra(print, verif);
