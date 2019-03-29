@@ -104,6 +104,7 @@ FSubAdd32x2             64           2             1           1
 FMul32x2                64           2             2           1
 FMulX32x2               64           2             2           1
 FAcc32x2                64           2             1           1
+FAcc64                  64           2             1           1
 
 FltCplxToFx             64           1             1           1
 CplxConj                64           1             1           1
@@ -178,6 +179,8 @@ ConcatLow32             64           1             1           1
 FAdd64                  64           2             1           1
 FSub64                  64           2             1           1
 FMul64                  64           2             2           1
+FDiv64                  64           2             12          1
+Sqrt64                  64           1             12          1
 FxExp64                 64        2             3           1
 
 Select                  64           3             1           1
