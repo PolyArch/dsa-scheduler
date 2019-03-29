@@ -253,7 +253,7 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
           
           ModelParsing::trim(value);
           
-          std::cout << _sizex << ", " << _sizey << "\n";
+          // std::cout << "CGRA SIZE: " << _sizex << ", " << _sizey << "\n";
           build_substrate(_sizex,_sizey);
           
           if(value.compare("FULL")==0)
