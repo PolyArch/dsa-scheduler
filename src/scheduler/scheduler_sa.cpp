@@ -1031,8 +1031,14 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
         }
         //kind of horribly ugly
         if (is_temporal_in) {
-          if (sched->input_matching_vector(cur_node, dynamic_cast<SSDfgInput *>(def_dfgnode)->input_vec()) ||
-              sched->output_matching_vector(cur_node, dynamic_cast<SSDfgOutput *>(use_dfgnode)->output_vec())) {
+          bool flag = false;
+          if (auto input_vec = dynamic_cast<SSDfgInput *>(def_dfgnode)) {
+            flag |= sched->input_matching_vector(cur_node, input_vec->input_vec());
+          }
+          if (auto output_vec = dynamic_cast<SSDfgOutput *>(use_dfgnode)) {
+            flag |= sched->output_matching_vector(cur_node, output_vec->output_vec());
+          }
+          if (flag) {
             t_cost = 0;
             break;
           }
