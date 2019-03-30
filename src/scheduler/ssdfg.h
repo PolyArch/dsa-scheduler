@@ -66,7 +66,7 @@ public:
 
   void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
     assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
-    // std::cout << "The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
+    // std::cout << this->name() << " The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
     _data_buffer.push(std::make_pair(v, valid));
     compute_after_push(print, verif);
   }
@@ -96,6 +96,7 @@ public:
 
   void pop_buffer_val(bool print, bool verif) {
     assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
+    // std::cout << "came here to pop buffer val\n";
     _data_buffer.pop();
     compute_after_pop(print, verif);
   }
@@ -105,6 +106,10 @@ public:
   int r() { return _r; }
 
   uint64_t get_value();
+
+  void reset_associated_buffer() {
+    while(!_data_buffer.empty()) _data_buffer.pop();
+  }
 
   friend class boost::serialization::access;
 
@@ -277,6 +282,8 @@ public:
   void addOutEdge(SSDfgEdge *edge) {
     _uses.push_back(edge);
   }
+
+  void reset_node();
 
   void validate() {
     for (unsigned i = 0; i < _ops.size(); ++i) {
@@ -1117,6 +1124,10 @@ public:
     return _vp_len;
   }
 
+  int logical_len(){
+    return _vp_len;
+  }
+
   virtual unsigned length() = 0;
 
 private:
@@ -1381,6 +1392,7 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
    int slice = 64 / width;
    int t = ceil(n / float(slice));
    // std::cout << "t: " << t << "\n";
+   // std::cout << "port_width: " << width << "\n";
    auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
    insert_vec_in(vec_input);
    vec_input->set_port_width(width);
@@ -1572,9 +1584,8 @@ SSDfgVecInput* get_vector_input(int i){
 
     for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {
       int n_times = std::min(npart, x-i*npart); 
-      // for(int j = i*npart; j < vec_in->length() && j < (i+1)*npart; ++j) { 
       for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
-        val = data[j] | val << ((i*npart+n_times-1-j)*vec_in->get_port_width());
+        val = data[j] | (val << vec_in->get_port_width());
       }
       SSDfgInput *ss_node = vec_in->inputs()[i];
       ss_node->set_node(val, valid[i], true, print, verif);

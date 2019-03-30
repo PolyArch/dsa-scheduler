@@ -14,6 +14,7 @@ Keep16                  16           2             1           1
 Min16                   16           2             1           1
 And16                   16           2             1           1
 Not16                   16           2             1           1
+Or16                    16           2             1           1
 RShf16                  16           2             1           1
 IndexMatch16            16           2             1           1
 Control16               16           2             1           1

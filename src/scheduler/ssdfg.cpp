@@ -43,13 +43,13 @@ void SSDfgEdge::compute_next(){
 }*/
 
 void SSDfgEdge::compute_after_push(bool print, bool verif){
-  //cout << this->name() << " is checking compute after push, buf size: " << _data_buffer.size() << "\n";
+  // std::cout << this->name() << " is checking compute after push, buf size: " << _data_buffer.size() << "\n";
   if(_data_buffer.size()==1){
     _use->inc_inputs_ready_backcgra(print, verif);
   }
 }
 void SSDfgEdge::compute_after_pop(bool print, bool verif){
-  //cout << this->name() << " is checking compute after pop, buf size: " << _data_buffer.size() << "\n";
+  // std::cout << this->name() << " is checking compute after pop, buf size: " << _data_buffer.size() << "\n";
 
   if(_data_buffer.size()>0){
     _use->inc_inputs_ready_backcgra(print, verif);
@@ -474,7 +474,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   }
 
   for(unsigned int i=0; i<_ops.size(); ++i) {
-      _back_array[i] = 0;
+    _back_array[i] = 0;
   }
   /*
   if(!predInv()) {
@@ -652,8 +652,9 @@ SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string &name) :
 
 int SSDfgNode::inc_inputs_ready_backcgra(bool print, bool verif) {
   _inputs_ready+=1;
-   //std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<num_inc_edges()<<"\n";
+   // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<num_inc_edges()<<"\n";
   if(_inputs_ready == num_inc_edges()) {
+    // std::cout << "(and its being pushed to ready)\n";
     _ssdfg->push_ready_node(this);
   }
   return 0;
@@ -1078,10 +1079,22 @@ void SSDfg::reset_simulation_state() {
   }
   _complex_fu_free_cycle.clear();
   _ready_nodes.clear();
+  for (auto in : _nodes) {
+    (*in).reset_node();
+  }
 }
 
+// TODO: free all buffers and clear inputs ready
+void SSDfgNode::reset_node() {
+  _inputs_ready = 0;
+  for (auto in_edges: _inc_edge_list) {
+    (*in_edges).reset_associated_buffer();
+  }
+  for (auto out_edges: _uses) {
+    (*out_edges).reset_associated_buffer();
+  }
 
-
+}
 
 void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 {
