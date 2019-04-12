@@ -420,20 +420,14 @@ public:
     assert(link.second);
     //Check all slots will be occupied empty.
     bool empty = true;
-    for (int i = 0; i < node->bitwidth() / 8; ++i) {
-      if (!_linkProp[link.second->id()].slots[link.first].edges.empty())
-        empty = false;
-    }
+    if (!_linkProp[link.second->id()].slots[link.first].edges.empty())
+      empty = false;
     if (empty)
       return 1;
-    int res = 0;
-    for (int i = 0; i < 8; ++i) {
-      for (auto elem : _linkProp[link.second->id()].slots[i].edges)
-        if (elem->def() == node && (i + elem->l() / 8) % 8 == link.first)
-          return 0;
-      res += _linkProp[link.second->id()].slots[i].edges.size();
-    }
-    return res + 1;  //2 or greater depending on how many links are mapped
+    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges)
+      if (elem->def() == node)
+        return 0;
+    return _linkProp[link.second->id()].slots[link.first].edges.size();
   }
 
   bool input_matching_vector(SSDfgNode *node, SSDfgVecInput *in_v) {

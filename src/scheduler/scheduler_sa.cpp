@@ -55,7 +55,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
   int violation = sched->violation();
 
-    int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
+  int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
 
 //        fprintf(stdout, "objective rt:%d, left: %3d, " 
 //                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
@@ -1007,21 +1007,17 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
     t_cost = sched->temporal_cost_out(make_pair(from_slot, link), def_dfgnode,
                                       dynamic_cast<SSDfgOutput *>(use_dfgnode)->output_vec());
   } else { //NORMAL CASE!
-    //FIXME: determine which slot to use
     t_cost = sched->temporal_cost(make_pair(from_slot, link), def_dfgnode);
+    for (auto elem : candRouting.routing[make_pair(from_slot, link)]) {
+      if (elem->def() == def_dfgnode) {
+        t_cost = 0;
+        break;
+      }
+    }
   }
 
   if (t_cost != 0) { //empty
-    for (int slot = 0; slot < 8; ++slot) {
-      for (auto elem : candRouting.routing[make_pair(slot, link)]) {
-        if (elem->def() == def_dfgnode && (slot + elem->l() / 8) % 8 == from_slot) {
-          t_cost = 0;
-          break;
-        }
-        if (!t_cost)
-          break;
-      }
-    }
+
     if (candRouting.routing.count(make_pair(from_slot, link))) {
       for (auto elem : candRouting.routing[make_pair(from_slot, link)]) {
         auto *cur_node = elem->def();

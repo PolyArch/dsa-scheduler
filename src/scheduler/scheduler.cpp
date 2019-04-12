@@ -330,7 +330,8 @@ vector<pair<int, ssnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, 
       for (int k = 0; k < 8; k += dfginst->bitwidth() / 8) {
         auto begin = occupied.begin() + k;
         auto end = occupied.begin() + k + dfginst->bitwidth() / 8;
-        int util = accumulate(begin, end, false, [](bool a, bool b) -> int { return (int) a + (int) b; });
+        int util = accumulate(begin, end, false,
+                              [](bool a, bool b) -> int { return (int) a + (int) b; });
         if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
           spots.emplace_back(make_pair(k, cand_fu));
         }
@@ -459,7 +460,7 @@ HeuristicScheduler::route_minimize_distance(Schedule *sched, SSDfgEdge *dfgedge,
       ssnode *next = link->dest();
       bool is_fu = dynamic_cast<ssfu*>(next) != nullptr;
 
-      for (int delta  = 0; delta <= (is_fu ? 7 : 1); ++delta) {
+      for (int delta = 0; delta <= (is_fu ? (64 / bitwidth - 1) : 1); ++delta) {
         int next_slot = slot + delta * bitwidth / 8;
         next_slot = (next_slot + 8) % 8;
         int route_cost = routing_cost(dfgedge, slot, next_slot, link, sched, candRouting, dest);

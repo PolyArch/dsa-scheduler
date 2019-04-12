@@ -58,7 +58,9 @@ public:
     }
   }
 
-  std::unordered_map<std::pair<int, SS_CONFIG::sslink*>, std::unordered_set<SSDfgEdge*>, boost::hash<std::pair<int, SS_CONFIG::sslink*>>> routing;
+  std::unordered_map<std::pair<int, SS_CONFIG::sslink*>,
+    std::unordered_set<SSDfgEdge*>, boost::hash<std::pair<int, SS_CONFIG::sslink*>>> routing;
+
   std::unordered_map<SSDfgEdge *, EdgeProp> edge_prop;
 
   void fill_lat(Schedule *sched,
