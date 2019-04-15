@@ -10,7 +10,7 @@ FU_TYPE FU_MUX:  Discard: 2, Keep: 3, Delay: 4
 
 
 
-FU_TYPE FU_SPC: CplxSqrt: 2, CplxInv: 3, RealSqrt: 4, RealInv: 5, RealSqrtInv: 6, CplxSqrtInv: 7, CplxDivCons: 8, CplxNmlz: 9, Discard: 10, Keep: 11, Delay: 12, NegCplxDivCons: 13, HouseHolder: 14, ImplicitQR: 15, CplxMulCons: 16, CplxInvConj:17, CplxMulConj: 18, CplxMulCplx: 19, NegCplxMulConj: 20, CplxGivensRes: 21, CplxGivensCos: 22, CplxGivensSin: 23, FMul32x2: 24, FMulX32x2: 25, FAdd32x2: 26, FSub32x2:27, FRed32x2:28, FAddSub32x2:29, FSubAdd32x2:30, CplxConj:31
+FU_TYPE FU_SPC: CplxSqrt: 2, CplxInv: 3, RealSqrt: 4, RealInv: 5, RealSqrtInv: 6, CplxSqrtInv: 7, CplxDivCons: 8, CplxNmlz: 9, Discard: 10, Keep: 11, Delay: 12, NegCplxDivCons: 13, HouseHolder: 14, ImplicitQR: 15, CplxMulCons: 16, CplxInvConj:17, CplxMulConj: 18, CplxMulCplx: 19, NegCplxMulConj: 20, CplxGivensRes: 21, CplxGivensCos: 22, CplxGivensSin: 23, FMul32x2: 24, FMulX32x2: 25, FAdd32x2: 26, FSub32x2:27, FRed32x2:28, FAddSub32x2:29, FSubAdd32x2:30, CplxConj:31, Add64: 32
 
 
 
