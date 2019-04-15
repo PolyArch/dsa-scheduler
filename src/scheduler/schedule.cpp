@@ -1987,7 +1987,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
         //       << " up:" << max_latency << " low:" << low_latency << "\n";
         //}
 
-        openset.push_back(new_link);
+        openset.push(new_link);
 
         //cout << "lat of " << next_dfgnode->name() 
         //     << ", old:" << _latOf[next_dfgnode]
