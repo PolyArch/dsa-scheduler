@@ -925,7 +925,7 @@ void Schedule::printFUGraphviz(std::ofstream& ofs, ssfu* fu) {
 
   ofs << "\n</table>>, pos = \"" << gvsf*fu->x() + gvsf/2.0 << "," 
                                  << sy-gvsf*fu->y()-1 - gvsf/2.0<< "!\"";
-  ofs << "];\n";  
+  ofs << ", pin=true];\n";  
 }
 
 void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
@@ -933,7 +933,7 @@ void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
 
   ofs << sw->name() << " [shape=diamond, ";
   ofs << "pos = \"" << gvsf*sw->x()  << "," << sy-gvsf*sw->y()-1 << "!\"";
-  ofs << "];\n";  
+  ofs << ", pin=true];\n";  
 }
 
 void Schedule::printInputGraphviz(std::ofstream& ofs, ssnode* node) {
@@ -1037,7 +1037,6 @@ void Schedule::reconstructSchedule(
                   map<SSDfgNode*, vector<SwitchDir::DIR> >& posMap
                   ) {
   //iterate over inputs (ssinputs)
-  SubModel::const_input_iterator Iin,Ein;
   for (auto elem : _ssModel->subModel()->inputs()) {
     ssinput* ssinput_node = (ssinput*) &elem;
    
@@ -1089,7 +1088,6 @@ void Schedule::calcAssignEdgeLink_single(SSDfgNode* dfgnode) {
 
     //route edge if source dfgnode is scheduled
     if(is_scheduled(source_dfgnode)) {
-      ssnode::const_iterator Il,El;
       for(auto& link: node.second->in_links()) {
         for (int slot=0; slot < 8; ++slot) {
           if (dfgNodeOf(slot, link) == source_dfgnode) {
@@ -1405,7 +1403,6 @@ bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
   max_lat = 0;
   max_lat_mis = 0;
 
-  SubModel::const_input_iterator I, E;
   for (auto elem : _ssModel->subModel()->inputs()) {
     ssinput *cand_input = const_cast<ssinput *>(elem);
 
@@ -1866,23 +1863,21 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
 }
 
 
-void Schedule::calcLatency(int &max_lat, int &max_lat_mis, 
-    bool warnMismatch) {
-  list<sslink*> openset;
+void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
+  queue<sslink*> openset;
   //map<ssnode*,sslink*> came_from;
   unordered_map<sslink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
 
-  SubModel::const_input_iterator I,E;
   for(auto elem : _ssModel->subModel()->inputs()) {
     ssinput *cand_input = const_cast<ssinput *>(elem);
 
     SSDfgNode *dfgnode = dfgNodeOf(cand_input);
     if (dfgnode != nullptr) {
       sslink *firstOutLink = cand_input->getFirstOutLink();
-      openset.push_back(firstOutLink);
+      openset.push(firstOutLink);
       lat_edge[firstOutLink] = latOf(dfgnode);
     }
   }
@@ -1890,12 +1885,11 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
  //Outlinks of all the inputs 
   while(!openset.empty()) {
     sslink* inc_link = openset.front(); 
-    openset.pop_front();
+    openset.pop();
     //cout << inc_link->name() << "\n";   
 
     //dest node
     ssnode* node = inc_link->dest();
-    ssnode::const_iterator I,E,II,EE;
     
     if(ssfu* next_fu = dynamic_cast<ssfu*>(node)) {
       sslink* new_link = next_fu->getFirstOutLink();
@@ -2013,7 +2007,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
         //       << " up:" << max_latency << " low:" << low_latency << "\n";
         //}
 
-        openset.push_back(new_link);
+        openset.push(new_link);
 
         //cout << "lat of " << next_dfgnode->name() 
         //     << ", old:" << _latOf[next_dfgnode]
@@ -2072,7 +2066,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis,
           }
 
           lat_edge[out_link] = lat_edge[inc_link] + 1;
-          openset.push_back(out_link);
+          openset.push(out_link);
         }
       }
     }
