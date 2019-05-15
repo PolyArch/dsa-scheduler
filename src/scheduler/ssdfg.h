@@ -933,6 +933,7 @@ public:
   }
 
   uint64_t ctrl_bits() { return _ctrl_bits.bits(); }
+  CtrlBits ctrlBits() { return _ctrl_bits; }
 
   virtual int bitwidth() {
     return SS_CONFIG::bitwidth[_ssinst];

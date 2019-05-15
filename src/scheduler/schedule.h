@@ -171,6 +171,7 @@ public:
     _vertexProp[n->id()].vio = violation;
   }
 
+  // sslink* getNextLink(SSDfgEdge* dfgedge, sslink* link);
 
   //Assign the ssnode to dfgnode and vice verse
   void assign_node(SSDfgNode *dfgnode, std::pair<int, ssnode *> assigned) {
@@ -673,6 +674,10 @@ public:
 
   std::vector<LinkProp> &link_prop() { return _linkProp; }
 
+  struct EdgeProp;
+
+  std::vector<EdgeProp> &edge_prop() { return _edgeProp; }
+
   size_t num_passthroughs(SSDfgEdge *e) {
     return _edgeProp[e->id()].passthroughs.size();
   }
@@ -876,8 +881,8 @@ private:
   std::vector<std::vector<int> > _wide_ports;
 
   std::map<std::pair<bool, int>, SSDfgVec *> _assignVPort;
-
   std::unordered_map<SSDfgVec *, VecProp> _vecProp;
+ 
   std::vector<VertexProp> _vertexProp;
   std::vector<EdgeProp> _edgeProp;
 

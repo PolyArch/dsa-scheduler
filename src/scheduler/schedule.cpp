@@ -1008,6 +1008,26 @@ void Schedule::printGraphviz(const char* name) {
 //    }
 //  }
 
+// TODO: check if it is required here..
+/*sslink* Schedule::getNextLink(SSDfgEdge* dfgedge, sslink* link) {
+  // auto &lp = _linkProp[link->id()].slots[0]; // this just gives corresponding edges
+  // need to use switch dir here probably
+  /*SwitchDir::DIR cur_dir = link->dir();
+  SSDfgNode dest_node = edge.dest_dfgnode();
+  ssnode* n = locationOf(dest_node);
+  // see where where they initialize num_links and extra_lat
+  // _came_from[]
+  // is routing here or there? should be here...
+  vector<sslink*> out_links = n->out_links();
+  for(auto it : out_links) {
+    if(it->dir() == cur_dir) {
+      return out_link;
+    }
+  }
+ 
+  sslink* next_link = _edgeProp[dfgedge->id()].links.find(0,link>);// j is slot number...
+  return next_link;
+}*/
 
 
 //reconstruct the schedule
