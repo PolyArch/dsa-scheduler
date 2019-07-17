@@ -55,6 +55,18 @@ std::string sslink::gams_name(int config) const {
     return ss.str();
 }
 
+sslink* sslink::getCycleLink() {
+  ssnode* n = this->dest();
+  for(auto I=n->out_links().begin(), E=n->out_links().end();I!=E; ++I) {
+    sslink* dlink= *I;
+    if(dlink->dest() == this->orig()) {
+      return dlink;
+    }
+  }
+  return NULL;
+}
+
+
 std::string sslink::gams_name(int st, int end) const {
     std::stringstream ss;
     ss << _orig->gams_name(st) << "_" << _dest->gams_name(end);
@@ -211,8 +223,10 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
     int switch_outs=2, switch_ins=2, bwm=1;
     double bwmfrac=0.0;
     
-    int temp_width, temp_height;  //size of temporal region
-    int temp_x,     temp_y;       //location of temporal region
+    int temp_width=0, temp_height=0;  //size of temporal region
+    int temp_x=0,     temp_y=0;       //location of temporal region
+
+    int skip_diag_dist=0, skip_hv_dist=0, skip_delay=1;
 
     PortType portType = PortType::opensp;
     
@@ -231,6 +245,11 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
         parseInt(param,value, "temporal_y", temp_y);
         parseInt(param,value, "temporal_width",  temp_width);
         parseInt(param,value, "temporal_height", temp_height);
+
+        parseInt(param,value, "skip_diag_dist",  skip_diag_dist);
+        parseInt(param,value, "skip_hv_dist",  skip_hv_dist);
+        parseInt(param,value, "skip_delay",  skip_delay);
+
 
         if(ModelParsing::StartsWith(param, "io_layout")) {
             ModelParsing::trim(value);
@@ -300,7 +319,7 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
     }
 
    connect_substrate(_sizex, _sizey, portType, switch_ins, switch_outs, multi_config,
-                     temp_x, temp_y, temp_width, temp_height);
+                     temp_x, temp_y, temp_width, temp_height, skip_hv_dist, skip_diag_dist, skip_delay);
     
 }
 
@@ -1171,7 +1190,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
 
 SubModel::SubModel(int x, int y, PortType pt, int ips, int ops,bool multi_config) {
   build_substrate(x,y);
-  connect_substrate(x,y,pt,ips,ops,multi_config,0,0,0,0);
+  connect_substrate(x,y,pt,ips,ops,multi_config,0,0,0,0,0,0,1);
 }
 
 
@@ -1225,8 +1244,7 @@ void SubModel::regroup_vecs() {
   }
 }
 
-void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips, int ops, bool multi_config, int temp_x, int temp_y, int temp_width, int temp_height) {
-
+void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips, int ops, bool multi_config, int temp_x, int temp_y, int temp_width, int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay)  {
   {
     const int di[] = {0, 1, 1, 0};
     const int dj[] = {0, 0, 1, 1};
@@ -1268,6 +1286,46 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           if (_i >= 0 && _i <= _sizex && _j >= 0 && _j <= _sizey)
             _switches[i][j]->add_link(_switches[_i][_j])->setdir(dir[k]);
         }
+
+        //crazy diagonals
+        //@Jian, feel free to condense if you want : )
+        ssswitch* startItem = _switches[i][j];
+
+        if(skip_diag_dist > 0) { 
+          int d=skip_diag_dist;
+          int l=skip_delay;
+          if(i-d>=0 && j-d>=0) {
+            startItem->add_link(_switches[i-d][j-d])->setdir(SwitchDir::NW2)->set_lat(l);
+          }
+          if(i-d>=0 && j+d<_sizey) {
+            startItem->add_link(_switches[i-d][j+d])->setdir(SwitchDir::SW2)->set_lat(l);
+          }
+          if(i+d<_sizex && j-d>=0) {
+            startItem->add_link(_switches[i+d][j-d])->setdir(SwitchDir::NE2)->set_lat(l);
+          }
+          if(i+d<_sizex && j+d<_sizey) {
+            startItem->add_link(_switches[i+d][j+d])->setdir(SwitchDir::SE2)->set_lat(l);
+          }
+        }
+
+        //Crazy Jumps
+        if(skip_hv_dist > 0) { 
+          int d=skip_hv_dist;
+          int l=skip_delay;
+          if(i-d>=0) {
+            startItem->add_link(_switches[i-d][j])->setdir(SwitchDir::W2)->set_lat(l);
+          }
+          if(j+d<_sizey) {
+            startItem->add_link(_switches[i][j+d])->setdir(SwitchDir::S2)->set_lat(l);
+          }
+          if(j-d>=0) {
+            startItem->add_link(_switches[i][j-d])->setdir(SwitchDir::N2)->set_lat(l);
+          }
+          if(i+d<_sizex) {
+            startItem->add_link(_switches[i+d][j])->setdir(SwitchDir::E2)->set_lat(l);
+          }
+        }
+
       }
     }
   }
@@ -1323,7 +1381,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
   } else if(portType == PortType::threein || portType == PortType::threetwo) {  //Three sides have inputs
 
-    bool bonus_middle = false;    
+    bool bonus_middle = true;    
 
     //Inputs to Switches
     add_inputs((_sizex*(1+bonus_middle)+_sizey*2)*ips);

@@ -19,6 +19,15 @@ SwitchDir::SwitchDir() {
   add_encode(SwitchDir::SW,0);
   add_encode(SwitchDir::W,1);
   add_encode(SwitchDir::NW,2);
+
+  add_encode(SwitchDir::N2,8);
+  add_encode(SwitchDir::NE2,9);
+  add_encode(SwitchDir::E2,10);
+  add_encode(SwitchDir::SE2,11);
+  add_encode(SwitchDir::S2,12);
+  add_encode(SwitchDir::SW2,13);
+  add_encode(SwitchDir::W2,14);
+  add_encode(SwitchDir::NW2,15);
  
   //The following functions map the input directions and correspoding tuple
   //to an index 
@@ -147,6 +156,15 @@ SwitchDir::DIR SwitchDir::toDir(string qs, bool outgoing) {
     else if(ModelParsing::StartsWith(qs,"E" )) return outgoing ? E   : reverse(E);
     else if(ModelParsing::StartsWith(qs,"S" )) return outgoing ? S   : reverse(S);
     else if(ModelParsing::StartsWith(qs,"W" )) return outgoing ? W   : reverse(W);
+    else if(ModelParsing::StartsWith(qs,"NW2")) return outgoing ? NW2  : reverse(NW2);  
+    else if(ModelParsing::StartsWith(qs,"NE2")) return outgoing ? NE2  : reverse(NE2);
+    else if(ModelParsing::StartsWith(qs,"SE2")) return outgoing ? SE2  : reverse(SE2);
+    else if(ModelParsing::StartsWith(qs,"SW2")) return outgoing ? SW2  : reverse(SW2);
+    else if(ModelParsing::StartsWith(qs,"N2" )) return outgoing ? N2   : reverse(N2);
+    else if(ModelParsing::StartsWith(qs,"E2" )) return outgoing ? E2   : reverse(E2);
+    else if(ModelParsing::StartsWith(qs,"S2" )) return outgoing ? S2   : reverse(S2);
+    else if(ModelParsing::StartsWith(qs,"W2" )) return outgoing ? W2   : reverse(W2);
+
     else if(ModelParsing::StartsWith(qs,"P0")) return outgoing ? OP0 : IP0;  
     else if(ModelParsing::StartsWith(qs,"P1")) return outgoing ? OP1 : IP1;
     else if(ModelParsing::StartsWith(qs,"P2")) return outgoing ? OP2 : IP2;  
@@ -166,6 +184,14 @@ SwitchDir::DIR SwitchDir::reverse(DIR myDir, bool reverseIO) {
     case SW:  return NE;
     case W:   return E;
     case NW:  return SE;
+    case N2:   return S2;
+    case NE2:  return SW2;
+    case E2:   return W2;
+    case SE2:  return NW2;
+    case S2:   return N2;
+    case SW2:  return NE2;
+    case W2:   return E2;
+    case NW2:  return SE2;
     default: {
       if(reverseIO) {
         switch(myDir) {
@@ -244,6 +270,30 @@ const char* SwitchDir::dirName(SwitchDir::DIR myDir, bool reverse) {
         break;
     case SwitchDir::NW:
         return "NW";
+        break;
+    case SwitchDir::N2:
+        return "N2";
+        break;
+    case SwitchDir::NE2:
+        return "NE2";
+        break;
+    case SwitchDir::E2:
+        return "E2";
+        break;
+    case SwitchDir::SE2:
+        return "SE2";
+        break;
+    case SwitchDir::S2:
+        return "S2";
+        break;
+    case SwitchDir::SW2:
+        return "SW2";
+        break;
+    case SwitchDir::W2:
+        return "W2";
+        break;
+    case SwitchDir::NW2:
+        return "NW2";
         break;
     case SwitchDir::IP0:
         return "P0";

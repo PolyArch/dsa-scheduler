@@ -57,7 +57,7 @@ public:
 
   SwitchDir::DIR dir() const { return _dir; }
 
-  void setdir(SwitchDir::DIR dir) { _dir = dir; }
+  sslink* setdir(SwitchDir::DIR dir) { _dir = dir; return this;}
 
   //Constructor
   sslink(ssnode *orig, ssnode *dest) {
@@ -65,6 +65,8 @@ public:
     _dest = dest;
     _ID = -1;
   }
+
+  sslink* getCycleLink();
 
   std::string name() const;
 
@@ -80,10 +82,14 @@ public:
 
   int set_max_util(int m) { return _max_util = m; }
 
+  void set_lat(int i) {_lat=i;}
+  int lat() {return _lat;}
+
 protected:
   int _ID = -1;
 
   int _max_util = 1; // by default, assume its a dedicated link
+  int _lat=1;
 
   ssnode *_orig;
   ssnode *_dest;
@@ -174,6 +180,10 @@ public:
 
   std::pair<int, sslink *> came_from(int slot) { return _came_from[slot]; }
 
+  int done(int slot) {return _done[slot];}
+  void set_done(int slot, int n) {_done[slot] = n;}
+
+
   void update_dist(int slot, int dist, int from_slot, sslink *from) {
     _node_dist[slot] = dist;
     _came_from[slot] = std::make_pair(from_slot, from);
@@ -182,6 +192,7 @@ public:
   void reset_runtime_vals() {
     memset(_node_dist, -1, sizeof _node_dist);
     memset(_came_from, 0, sizeof _came_from);
+    memset(_done, 0, sizeof _done);
   }
 
   int max_util() { return _max_util; }
@@ -194,6 +205,7 @@ protected:
   int _ID = -1;
 
   int _node_dist[8];
+  int _done[8];
   std::pair<int, sslink*>_came_from[8];
 
   int _max_util = 1; // by default, assume its a dedicated link
@@ -417,7 +429,7 @@ public:
   const std::vector<ssnode *> &node_list() { return _node_list; }
 
   void add_inputs(int n) {
-    _inputs.resize(n+1);
+    _inputs.resize(n);
     //Port num to each switch
     for(unsigned i = 0; i < _inputs.size(); ++i) {
       add_input(i);
@@ -425,13 +437,12 @@ public:
   }
 
   void add_outputs(int n) {
-    _outputs.resize(n+1);
+    _outputs.resize(n);
     //Port num to each switch
     for(unsigned i = 0; i < _outputs.size(); ++i) {
       add_output(i);
     }
   }
-
 
   ssinput* add_input(int i) {
     auto* in = new ssinput();
@@ -474,18 +485,15 @@ public:
 
   void regroup_vecs(); //fills in the linear lists
 
-
 private:
-
-
   //void CreateFUArray(int,int);
-
   //void SetTotalFUByRatio();
   //void RandDistributeFUs();
   void build_substrate(int x, int y);
 
   void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config, int temp_x, int temp_y,
-                         int temp_width, int temp_height);
+                         int temp_width, int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay);
+
 
   int _sizex, _sizey;  //size of SS cgra
   bool _multi_config;
