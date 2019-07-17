@@ -619,5 +619,3 @@ bool Scheduler::check_res(SSDfg* ssDFG, SSModel* ssmodel) {
 
   return true;
 }
-
-

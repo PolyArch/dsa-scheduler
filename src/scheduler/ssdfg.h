@@ -1,11 +1,12 @@
 #ifndef __SSDFG_H__
 #define __SSDFG_H__
 
+#include "ssinst.h"
+
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <vector>
-#include "ssinst.h"
 #include <unordered_map>
 #include <map>
 #include <vector>
@@ -22,6 +23,9 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
+
+
+
 void checked_system(const char* command);
 
 class Schedule;
@@ -32,27 +36,21 @@ class SSDfgEdge {
 public:
   SSDfgEdge() {}
 
-  enum EdgeType {
-    data, ctrl, ctrl_true, ctrl_false
-  };
+  enum EdgeType { data, ctrl, ctrl_true, ctrl_false };
 
   EdgeType etype() { return _etype; }
 
   SSDfgEdge(SSDfgNode *def, SSDfgNode *use,
-             EdgeType etype, SSDfg *ssdfg, int l = 0, int r = 63);
+            EdgeType etype, SSDfg *ssdfg, int l = 0, int r = 63);
 
-  int id() { return _ID; }
 
-  SSDfgNode *def() const {
-    return _def;
-  }
+  /// Source and destination
+  SSDfgNode *def() const;
+  SSDfgNode *use() const;
+  SSDfgNode *get(int) const;
 
-  SSDfgNode *use() const {
-    return _use;
-  }
-
+  int id();
   std::string gamsName();
-
   std::string name();
 
   void set_delay(int d) { _delay = d; }
@@ -64,71 +62,44 @@ public:
 
   void compute_after_pop(bool print, bool verif);
 
-  void push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
-    assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
-    // std::cout << this->name() << " The value I am trying to push in buffer (Associated with an operand): " << v << "\n";
-    _data_buffer.push(std::make_pair(v, valid));
-    compute_after_push(print, verif);
-  }
+  void push_in_buffer(uint64_t v, bool valid, bool print, bool verif);
 
-  bool is_buffer_full() {
-    return (_data_buffer.size() == buf_len);
-  }
+  bool is_buffer_full();
 
-  bool is_buffer_empty() {
-    return _data_buffer.empty();
-    // return (_data_buffer.size()!=0);
-  }
+  bool is_buffer_empty();
 
+  //Calculate the value based on the origin's value, and the edge's
+  //index and bitwidth fields
   uint64_t extract_value(uint64_t v_in);
 
-  uint64_t get_buffer_val() {
-    assert(!_data_buffer.empty());
-    // std::cout << "value at top of buffer: " << _data_buffer.front().first << "\n";
-    // std::cout << "value extracted: " << extract_value(_data_buffer.front().first) << "\n";
-    return extract_value(_data_buffer.front().first);
-  }
+  uint64_t get_buffer_val();
 
-  bool get_buffer_valid() {
-    assert(!_data_buffer.empty());
-    return _data_buffer.front().second;
-  }
+  bool get_buffer_valid();
 
-  void pop_buffer_val(bool print, bool verif) {
-    assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
-    // std::cout << "came here to pop buffer val\n";
-    _data_buffer.pop();
-    compute_after_pop(print, verif);
-  }
+  void pop_buffer_val(bool print, bool verif) ;
 
-  int bitwidth() { return _r - _l + 1; }
-  int l() { return _l; }
-  int r() { return _r; }
+  int bitwidth();
+  int l();
+  int r();
 
   uint64_t get_value();
 
-  void reset_associated_buffer() {
-    while(!_data_buffer.empty()) _data_buffer.pop();
-  }
+  void reset_associated_buffer();
 
   friend class boost::serialization::access;
-
-  template<class Archive>
-  void serialize(Archive &ar, const unsigned int version);
+  template<class Archive> void serialize(Archive &ar, const unsigned int version);
 
 private:
   int _ID;
   SSDfg *_ssdfg;
-  SSDfgNode *_def, *_use;
+  SSDfgNode *nodes[2];
   EdgeType _etype;
   int _l, _r;
 
   //Runtime Types
   std::queue<std::pair<uint64_t, bool>> _data_buffer;
-  // unsigned int buf_len = 1;
   // using 2 since 1st entry is used for bp
   unsigned int buf_len = 9;
-  // unsigned int buf_len = FU_BUF_LEN;
 
   int _delay = 0;
 };
@@ -139,92 +110,34 @@ class SSDfgInst;
 struct SSDfgOperand {
   SSDfgOperand() {}
 
-  SSDfgOperand(SSDfgEdge *e) {
-    edges.push_back(e);
-  }
+  SSDfgOperand(SSDfgEdge *e);
 
-  SSDfgOperand(std::vector<SSDfgEdge *> es) {
-    edges = es;
-  }
+  SSDfgOperand(std::vector<SSDfgEdge *> es);
 
-  SSDfgOperand(uint64_t i) {
-    imm = i;
-  }
+  SSDfgOperand(uint64_t);
 
   //Helper functions
-  SSDfgEdge *get_first_edge() const {
-    if (edges.empty()) {
-      return nullptr;
-    } else {
-      return edges[0];
-    }
-  }
+  SSDfgEdge *get_first_edge() const;
 
-  void clear() {
-    imm = 0;
-    edges.clear();
-  }
+  void clear();
 
-  bool is_ctrl() {
-    for (SSDfgEdge *e : edges) {
-      if (e->etype() == SSDfgEdge::ctrl) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool is_ctrl();
 
-  bool is_imm() { return edges.empty(); }
+  bool is_imm();
 
-  bool is_composed() { return edges.size() > 1; }
+  bool is_composed();
 
 
   //Functions which manipulate dynamic state
-  uint64_t get_value() { //used by simple simulator
-    uint64_t base = imm;
-    int cur_bit_pos = 0;
-    for (SSDfgEdge *e : edges) {
-      base |= e->get_value() << cur_bit_pos;
-      cur_bit_pos += e->bitwidth();
-    }
-    assert(cur_bit_pos <= 64); // max bitwidth is 64
-    return base;
-  }
+  uint64_t get_value();
 
-  uint64_t get_buffer_val() { //used by backcgra simulator
-    uint64_t base = imm;
-    int cur_bit_pos = 0;
-    for (SSDfgEdge *e : edges) {
-      base |= e->get_buffer_val() << cur_bit_pos;
-      cur_bit_pos += e->bitwidth();
-    }
-    assert(cur_bit_pos <= 64); // max bitwidth is 64
-    return base;
-  }
+  uint64_t get_buffer_val();
 
-  uint64_t get_buffer_valid() { //used by backcgra simulator
-    for (SSDfgEdge *e : edges) {
-      if (!e->get_buffer_valid()) {
-        return false;
-      }
-    }
-    return true;
-  }
+  uint64_t get_buffer_valid();
 
-  uint64_t is_buffer_empty() { //used by backcgra simulator
-    for (SSDfgEdge *e : edges) {
-      if (e->is_buffer_empty()) {
-        return true;
-      }
-    }
-    return false;
-  }
+  uint64_t is_buffer_empty();
 
-  void pop_buffer_val(bool print, bool verif) {
-    for (SSDfgEdge *e : edges) {
-      e->pop_buffer_val(print, verif);
-    }
-  }
+  void pop_buffer_val(bool print, bool verif);
 
   // An Operand is valid as long as ALL of its edges are valid
   bool valid();
@@ -242,6 +155,8 @@ struct SSDfgOperand {
 //DFG Node -- abstract base class
 class SSDfgNode {
 public:
+  virtual ~SSDfgNode() {}
+
   SSDfgNode() {}
 
   enum V_TYPE {
@@ -249,10 +164,9 @@ public:
   };
 
   virtual void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
-  //virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
 
   // some issue with this function
-  virtual uint64_t invalid() { return _invalid; } //execution-related
+  virtual uint64_t invalid();
 
   SSDfgNode(SSDfg *ssdfg, V_TYPE v);
   SSDfgNode(SSDfg *ssdfg, V_TYPE v, const std::string &name);
@@ -261,125 +175,33 @@ public:
   typedef std::vector<SSDfgOperand>::const_iterator const_op_iterator;
 
   //Add edge to operand in least to most significant bit order
-  void addOperand(unsigned pos, SSDfgEdge *e) {
-    assert(pos <= 4);
-    if (_ops.size() <= pos) {
-      _ops.resize(pos + 1);
-    }
-
-    _ops[pos].edges.push_back(e);
-    //if(_ops[pos].edges.size()) {
-    //  std::cerr << "ERROR: overwriting op at pos" << pos << "\n";
-    //  assert(0);
-    //}
-
-    //for(SSDfgEdge* e : op.edges) {
-    //  _inc_edge_list.push_back(e);
-    //}
-    _inc_edge_list.push_back(e);
-  }
-
-  void addOutEdge(SSDfgEdge *edge) {
-    _uses.push_back(edge);
-  }
-
+  void addOperand(unsigned pos, SSDfgEdge *e);
+  void addOutEdge(SSDfgEdge *edge);
+  void remove_edge(SSDfgNode *to_erase, int idx);
+  void removeIncEdge(SSDfgNode *orig);
+  void removeOutEdge(SSDfgNode *dest);
   void reset_node();
 
-  void validate() {
-    for (unsigned i = 0; i < _ops.size(); ++i) {
-      SSDfgEdge *edge = _inc_edge_list[i];
-      assert(edge == nullptr || edge->use() == this);
-    }
-    for (unsigned i = 0; i < _uses.size(); ++i) {
-      SSDfgEdge *edge = _uses[i];
-      assert(edge->def() == this);
-    }
-  }
+  void validate();
 
-  //TODO:FIXME this won't work for decomp-CGRA
-  void removeIncEdge(SSDfgNode *orig) {
-    for (unsigned i = 0; i < _ops.size(); ++i) {
-      SSDfgEdge *edge = _ops[i].get_first_edge();;
-      if (edge->def() == orig) {
-        _ops[i].clear();
-        return;
-      }
-    }
-    assert(false && "edge was not found");
-  }
-
-  void removeOutEdge(SSDfgNode *dest) {
-    for (auto it = _uses.begin(); it != _uses.end(); it++) {
-      if ((*it)->use() == dest) {
-        _uses.erase(it);
-        return;
-      }
-    }
-    assert(false && "edge was not found");
-  }
-
-  virtual int compute(bool print, bool verif) {
-    return 0;
-  }
+  virtual int compute(bool print, bool verif) { return 0; }
 
   //-----------------------------------------
-  virtual int update_next_nodes(bool print, bool verif) {
-    return 0;
-  }
-
-  /*
-  virtual int update_next_nodes(bool print, bool verif) {
-      // called from push_vector: i/p node
-      int num_computed = 0;
-      SSDfgNode* n = this->first_use();
-      num_computed = n->inc_inputs_ready_backcgra(print, verif);
-
-      return num_computed;
-  }
-      auto it = this->uses_begin();
-      if(!(*it)->is_buffer_full()){
-        num_computed = n->inc_inputs_ready_backcgra(print, verif);
-      }
- */
-
-  virtual int compute_backcgra(bool print, bool verif) {
-    //for an output node
-    _inputs_ready = 0; // hopefully if it comes from inc_inputs_ready
-    return 0;
-  }
-
+  virtual int update_next_nodes(bool print, bool verif) { return 0; }
+  virtual int compute_backcgra(bool print, bool verif) { _inputs_ready = 0; return 0; }
   //-------------------------------------------------------
 
-  SSDfgEdge *getLinkTowards(SSDfgNode *to) {
-    for (auto elem : _uses) {
-      if (elem && elem->use() == to) {
-        return elem;
-      }
-    }
-    return nullptr;
-  }
+  virtual int maxThroughput(); 
 
-  virtual int maxThroughput() {
-    if (_max_thr == 0) {
-      for (auto elem : _uses) {
-        _max_thr = std::max(_max_thr, elem->use()->maxThroughput());
-      }
-    }
-    return _max_thr;
-  }
+  virtual int lat_of_inst() { return 0; }
 
-  virtual int lat_of_inst() {
-    return 0;
-  }
+  virtual void depInsts(std::vector<SSDfgInst *> &insts);
 
-  virtual void depInsts(std::vector<SSDfgInst *> &insts) {
-    for (auto it : _uses) {
-      SSDfgNode *use = it->use();
-      if (std::find(insts.begin(), insts.end(), use) != insts.end()) {
-        use->depInsts(insts);
-      }
-    }
-  }
+  virtual std::string name() = 0;     //pure func
+
+  virtual std::string gamsName() = 0;
+
+  SSDfgEdge *getLinkTowards(SSDfgNode *to);
 
   int num_inputs_ready() { return _inputs_ready; }
 
@@ -395,10 +217,7 @@ public:
 
   size_t num_out() const { return _uses.size(); }
 
-  virtual std::string name() = 0;     //pure func
   void setName(std::string name) { _name = name; }
-
-  virtual std::string gamsName() = 0;
 
   const std::vector<SSDfgOperand> &ops() {return _ops; }
 
@@ -408,47 +227,15 @@ public:
 
   int id() { return _ID; }
 
-  void set_value(uint64_t v, bool valid) {
-    _val = v;
-    _invalid = !valid;
-  }
+  void set_value(uint64_t v, bool valid) { _val = v; _invalid = !valid; }
+  void set_outputnode(uint64_t v, bool valid, bool avail) { set_value(v, valid); _avail = avail; }
 
-  bool get_bp() {
-    bool bp = false;
-    for (auto elem : _uses)
-      if (elem->is_buffer_full()) {
-        bp = true;
-      }
-    return bp;
-  }
+  bool get_bp();
 
-  void set_outputnode(uint64_t v, bool valid, bool avail) {
-    _val = v;
-    _invalid = !valid;
-    _avail = avail;
-  }
 
   // Check's all consumers for backpressure-freedom,
   // If backpressure,
-  void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif) {
-    _val = v;
-    _invalid = !valid;
-    _avail = avail;
-
-    // std::cout << "came here to set the node: " << name() <<" to value: "<<v<<" and avail: "<<avail<<"\n";
-    // no need to do anything for output node
-    if (this->num_out() == 0) { return; }
-    if (avail) {
-      if (!get_bp()) {
-        for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-          (*iter)->push_in_buffer(v, valid, print, verif);
-        }
-        _avail = false;
-      } else {
-        this->set_value(v, valid, avail, 1); // after 1 cycle
-      }
-    }
-  }
+  void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif);
 
   // sets value at this cycle
   void set_value(uint64_t v, bool valid, bool avail, int cycle);
@@ -458,10 +245,6 @@ public:
 
   bool get_avail() { return _avail; }
 
-  bool input = false;
-  bool output = false;
-  int _iter;
-
   int min_lat() { return _min_lat; }
 
   void set_min_lat(int i) { _min_lat = i; }
@@ -470,22 +253,12 @@ public:
 
   void set_sched_lat(int i) { _sched_lat = i; }
 
-  int inc_inputs_ready(bool print, bool verif) {
-    _inputs_ready += 1;
-    if (_inputs_ready == num_inc_edges()) {
-      int num_computed = compute(print, verif);
-      _inputs_ready = 0;
-      return num_computed;
-    }
-    return 0;
-  }
+  int inc_inputs_ready(bool print, bool verif);
 
 
   int inc_inputs_ready_backcgra(bool print, bool verif);
 
-  int get_inputs_ready() {
-    return _inputs_ready;
-  }
+  int get_inputs_ready() { return _inputs_ready; }
 
   void push_buf_dummy_node();
 
@@ -519,9 +292,7 @@ protected:
   //Dynamic stuff
   uint64_t _val = 0; //dynamic var (setting the default value)
   bool _avail = false; // if their is data in the output buffer
-  // bool _backPressure=false;
-  uint64_t _invalid = false;
-  //bool _is_new_val = 0; // new variable
+  bool _invalid = false;
   int _inputs_ready = 0; //dynamic inputs ready
   std::vector<bool> _back_array;     //in edges
 
@@ -539,289 +310,95 @@ protected:
   V_TYPE _vtype;
 };
 
-
-//Control map defines the set of control signals which will be passed into
-//the configuration if any of these bits are set.
-class CtrlMap {
-public:
-  enum ctrl_flag {BACKP1, BACKP2, DISCARD, RESET, ABSTAIN, NUM_CTRL};
-
-  CtrlMap() {
-    add_ctrl("b1", BACKP1);
-    add_ctrl("b2", BACKP2);
-    add_ctrl("d" , DISCARD);
-    add_ctrl("r" , RESET);
-    add_ctrl("a" , ABSTAIN);
-  }
-
-  std::string decode_control(ctrl_flag c) {
-    if(_decode_map.count(c)) {
-      return _decode_map[c];
-    } else {
-      assert(0);
-    }
-  }
-
-  ctrl_flag encode_control(std::string s) {
-    if(_encode_map.count(s)) {
-      return _encode_map[s];
-    } else {
-      std::cout << "Bad Control Symobol: " << s <<"\n";
-      assert("Bad Control Symbol" && 0);
-    }
-  }
-
-private:
-  std::map<std::string,ctrl_flag> _encode_map;
-  std::map<ctrl_flag,std::string> _decode_map; //this could be an array i suppose
-
-  void add_ctrl(const char* s, ctrl_flag c) {
-    _encode_map[std::string(s)]=c;
-    _decode_map[c]=std::string(s);
-  }
-};
-
 typedef std::vector<std::string> string_vec_t;
 
 //post-parsing control signal definitions (mapping of string of flag to it's value?)
 typedef std::map<int,string_vec_t> ctrl_def_t;
 
+struct ParseResult {
 
-class CtrlBits {
-public:
-  static int bit_loc(int c_val, CtrlMap::ctrl_flag flag) {
-    return c_val * CtrlMap::NUM_CTRL + flag; // should have returned NUM_CTRL should be 5 and flag should be 0?
-  }
-  CtrlBits(ctrl_def_t d) {
-    for(auto i : d) {
-      int key = i.first;
-      auto vec = i.second;
-      // for debug
-      // std::cout << "key: " << key << "\n";
-      for(auto s : vec) {
-        CtrlMap::ctrl_flag  local_bit_pos = ctrl_map.encode_control(s);
-        int final_pos = bit_loc(key,local_bit_pos);
-        _bits.set(final_pos);
-      }
-    }
-  }
-  CtrlBits(uint64_t b) {
-    _bits = b;
-  }
-  CtrlBits(){}
+  virtual ~ParseResult() {}
+};
 
-  void print_rep() {
-    for(int i = 0; i < 4; ++i) {
-      printf("ctrl input %d:", i);
-      for(int c = 0; c<CtrlMap::NUM_CTRL;++c) {
-        if(isSet(i,(CtrlMap::ctrl_flag)c)) {
-          printf(" %s",ctrl_map.decode_control((CtrlMap::ctrl_flag)c).c_str());
-        }
-      }
-      printf("\n");
-    }
-  }
+struct ConstDataEntry : ParseResult {
 
-  uint64_t bits() {return _bits.to_ullong();}
+  ConstDataEntry(uint64_t i) : data(i) {}
 
-  // What is c_val? bits is the control lost, c_val is the value you read here
-  bool isSet(int c_val, CtrlMap::ctrl_flag flag) {
-    // std::cout << "In in set, c_val: " << c_val << "\n";
-    // std::cout << "num_ctrl: " << (int)CtrlMap::NUM_CTRL << " and flag: " << (int)flag << "\n";
-    return _bits.test(bit_loc(c_val,flag));
-  }
+  ConstDataEntry(uint64_t i1, uint64_t i2) : data((i2 << 32) | (i1 & 0xFFFFFFFF)) {}
+
+  ConstDataEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) :
+    data(((i4 & 0xFFFF) << 48) | ((i3 & 0xFFFF) << 32) | ((i2 & 0xFFFF) << 16) | (i1 & 0xFFFF)) {}
+
+  ConstDataEntry(double d) : d(d) {}
+
+  ConstDataEntry(float f0, float f1) : f0(f0), f1(f1) {}
+
+  union {
+    struct { float f0, f1; };
+    double d;
+    uint64_t data;
+  };
+
+};
+
+struct NodeEntry : ParseResult {
+
+  NodeEntry(SSDfgNode *node_, int l_ = 0, int r_ = 63) : node(node_), l(l_), r(r_) {}
+
+  SSDfgNode *node;
+  int l, r;
+};
+
+struct ConvergeEntry : ParseResult {
+  std::vector<NodeEntry*> entries;
+};
+
+struct CtrlBits {
+  enum Control {
+    B1, B2, Discard, Reset, Abstain, Total
+  };
+
+  CtrlBits(const std::map<int, std::vector<std::string>> &raw);
+  CtrlBits() : mask(0) {}
+
+  void set(uint64_t val, Control b);
+  bool test(uint64_t val, Control b);
+  void test(uint64_t val, std::vector<bool> &back_array, bool &discard,
+            bool &predicate, bool &reset);
+
+  uint64_t bits() { return mask; }
+
+  friend class boost::serialization::access;
+  template<class Archive> void serialize(Archive & ar, const unsigned version);
 
 private:
-  friend class boost::serialization::access;
-  template<class Archive>
-  void serialize(Archive & ar, const unsigned version);
+  uint64_t mask{0};
 
-  static CtrlMap ctrl_map;
-  std::bitset<32> _bits;
+  static Control str_to_enum(const std::string &s) {
+    if (s == "b1") return B1;
+    if (s == "b2") return B2;
+    if (s == "d") return Discard;
+    if (s == "r") return Reset;
+    if (s == "a") return Abstain;
+    assert(false && "Not a valid command");
+  }
 };
 
-struct SymEntry;
-struct EdgeEntry {
-  int l, r;
-  SSDfgNode* node;
-};
+struct ControlEntry : ParseResult {
 
+  void set_flag(const std::string &s);
 
-struct SymEntry {
-  SymEntry() {
-    type = SYM_INV;
-    flag = FLAG_INV;
+  ControlEntry(const std::string &s, ParseResult *controller_) : controller(controller_), bits() {
+    set_flag(s);
   }
 
-  SymEntry(uint64_t i) {
-    type = SYM_INT;
-    data.i = i;
-    width = 1;
-    bitwidth = 64;
-  }
+  ControlEntry(const std::string &s, std::map<int, std::vector<std::string>> &bits_,
+               ParseResult *controller_) :
+    controller(controller_), bits(bits_) { set_flag(s); }
 
-  SymEntry(uint64_t i1, uint64_t i2) {
-    type = SYM_INT;
-    data.i = ((i2 & 0xFFFFFFFF) << 32) | ((i1 & 0xFFFFFFFF) << 0);
-    width = 2;
-    bitwidth = 64;
-  }
-
-  SymEntry(uint64_t i1, uint64_t i2, uint64_t i3, uint64_t i4) {
-    type = SYM_INT;
-    data.i = ((i4 & 0xFFFF) << 48) | ((i3 & 0xFFFF) << 32) |
-             ((i2 & 0xFFFF) << 16) | ((i1 & 0xFFFF) << 0);
-    width = 4;
-    bitwidth = 64;
-  }
-
-  SymEntry(double d) {
-    type = SYM_DUB;
-    data.d = d;
-    width = 1;
-    bitwidth = 64;
-  }
-
-  SymEntry(double d1, double d2) {
-    float f1 = d1, f2 = d2;
-    type = SYM_DUB;
-    data.f.f1 = f1;
-    data.f.f2 = f2;
-    width = 2;
-    bitwidth = 64;
-  }
-
-  SymEntry(SSDfgNode *node) {
-    type = SYM_NODE;
-    edge_entries = new std::vector<EdgeEntry>();
-    EdgeEntry e;
-    e.node = node;
-    e.l = 0;
-    e.r = 63;
-    edge_entries->push_back(e);
-    width = 1;
-  }
-
-  SymEntry(SSDfgNode *node, int l, int r) {
-    type = SYM_NODE;
-    edge_entries = new std::vector<EdgeEntry>();
-    EdgeEntry e;
-    e.node = node;
-    e.l = l;
-    e.r = r;
-    edge_entries->push_back(e);
-    width = 1;
-  }
-
-  void set_flag(std::string &s) {
-    if (s == std::string("pred")) {
-      flag = FLAG_PRED;
-    } else if (s == std::string("inv_pred")) {
-      flag = FLAG_INV_PRED;
-    } else if (s == std::string("control")) {
-      flag = FLAG_CONTROL;
-    } else {
-      printf("qualifier: %s unknown", s.c_str());
-      assert(0 && "Invalid argument qualifier");
-    }
-  }
-
-  void take_union(SymEntry entry) {
-    // edge_entries->push_back(entry.firstEdge());
-    // TODO: change edge_entries to deque
-    edge_entries->insert(edge_entries->begin(), entry.firstEdge());
-  }
-
-  EdgeEntry firstEdge() {
-    assert(type == SymEntry::SYM_NODE && "trying to get node from wrong type");
-    if (edge_entries->size() != 1) {
-      assert(0 && "Node must have exactly one entry to extract");
-    }
-    return edge_entries->at(0);
-  }
-
-  SSDfgNode *node() {
-    assert(type == SymEntry::SYM_NODE && "trying to get node from wrong type");
-    if (edge_entries->size() != 1) {
-      assert(false && "Node must have exactly one entry to extract");
-    }
-    return edge_entries->at(0).node;
-  }
-
-  void set_control_list(ctrl_def_t &d) {
-    ctrl_bits = CtrlBits(d);
-  }
-
-  /*!
-   * \brief Set the width of bits of the edge.
-   * \param l, r: The bit slice range [l, r]
-   */
-  void set_bitslice_params(int l, int r) {
-      // std::cout << "IT CAME IN SET BITSLICE PARAMS FROM WHERE\n";
-    assert(type == SymEntry::SYM_NODE && "trying to get node from wrong type");
-    if (edge_entries->size() != 1) {
-      assert(false && "Node must have exactly one entry to extract");
-    }
-
-    EdgeEntry &edge_entry = edge_entries->at(0);
-    //SSDfgNode *node = edge_entry.node;
-    int bitwidth = r - l + 1;
-    assert(l <= r && r <= 64 && (bitwidth & -bitwidth) == bitwidth && "improper bitwidth");
-    edge_entry.l = l;
-    edge_entry.r = r;
-  }
-
-  SymEntry(const SymEntry &s) {
-    this->type = s.type;
-    this->flag = s.flag;
-    this->ctrl_bits = s.ctrl_bits;
-    this->width = s.width;
-    this->bitwidth = s.bitwidth;
-    this->ctrl_bits = s.ctrl_bits;
-    this->data = s.data;
-
-    if (s.edge_entries) {
-      this->edge_entries = new std::vector<EdgeEntry>();
-      for (auto &i : *s.edge_entries) {
-        this->edge_entries->push_back(i);
-      }
-    }
-  }
-
-  //TODO:FIXME:Known-Issue
-  //The DFG parser, as-is, LEAKs the edge_entries vector.
-  //This is because if I uncomment the destructor, bad bad things happen,
-  //and i'm not sure why, and i'm not sure I care enough, yet.
-
-  //~SymEntry() {
-  //  if(edge_entries) {
-  //    delete edge_entries;
-  //  }
-  //}
-
-  //data
-  enum enum_type {
-    SYM_INV, SYM_INT, SYM_DUB, SYM_NODE
-  } type;
-  enum enum_flag {
-    FLAG_NONE, FLAG_INV, FLAG_PRED, FLAG_INV_PRED,
-    FLAG_BGATE, FLAG_CONTROL
-  } flag = FLAG_NONE;
-  CtrlBits ctrl_bits;
-  int width;
-  int bitwidth;
-
-  //Union data is just used for immediates
-  union union_data {
-    uint64_t i;
-    double d;
-    struct struct_data {
-      float f1, f2;
-    } f;
-  } data;
-
-  std::vector<EdgeEntry> *edge_entries = nullptr;
-
+  SSDfgEdge::EdgeType flag;
+  ParseResult *controller;
+  CtrlBits bits;
 };
 
 //Instruction
@@ -829,32 +406,16 @@ class SSDfgInst : public SSDfgNode {
 public:
   SSDfgInst() {}
 
-  SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) : SSDfgNode(ssdfg, V_INST),
-                                                        _predInv(false), _isDummy(is_dummy),
-                                                        _imm_slot(-1), _subFunc(0), _ssinst(inst) {
-    _reg.resize(8, 0);
-    _reg_32.resize(16, 0);
-    _reg_16.resize(32, 0);
-    _reg_8.resize(64, 0);
-  }
+  SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
+    SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
+    _subFunc(0), _reg(8, 0), _ssinst(inst) {}
 
 
-  SSDfgInst(SSDfg *ssdfg) : SSDfgNode(ssdfg, V_INST),
-                             _predInv(false), _isDummy(false),
-                             _imm_slot(-1), _subFunc(0) {
-    _reg.resize(8, 0);
-    _reg_32.resize(16, 0);
-    _reg_16.resize(32, 0);
-    _reg_8.resize(64, 0);
+  SSDfgInst(SSDfg *ssdfg) :
+    SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(false), _imm_slot(-1), _subFunc(0),
+    _reg(8, 0) {}
 
-  }
-
-  void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
-  //virtual void printEmuDFG(std::ostream& os, std::string dfg_name);
-
-  virtual int lat_of_inst() {
-    return inst_lat(inst());
-  }
+  virtual int lat_of_inst() { return inst_lat(inst()); }
 
   void setImm(uint64_t val) { _imm = val; }
 
@@ -871,35 +432,11 @@ public:
   //Adding new function in the header file
   int update_next_nodes(bool print, bool verif);
 
-  virtual int maxThroughput() {
-    if (_max_thr == 0) {
-      _max_thr = inst_thr(inst());
-      for (auto it = _uses.begin(); it != _uses.end(); it++) {
-        _max_thr = std::max(_max_thr, (*it)->use()->maxThroughput());
-      }
-    }
-    return _max_thr;
-  }
+  virtual int maxThroughput();
 
-  virtual void depInsts(std::vector<SSDfgInst *> &insts) {
-    insts.push_back(this);
-    for (auto it = _uses.begin(); it != _uses.end(); it++) {
-      SSDfgNode *use = (*it)->use();
-      if (std::find(insts.begin(), insts.end(), use) != insts.end()) {
-        use->depInsts(insts);
-      }
-    }
-  }
+  virtual void depInsts(std::vector<SSDfgInst *> &insts);
 
-  std::string name() {
-    std::stringstream ss;
-    ss << _name << ":";
-    ss << SS_CONFIG::name_of_inst(_ssinst);
-    if (_imm_slot != -1) {
-      ss << " Imm:" << _imm;
-    }
-    return ss.str();
-  }
+  std::string name();
 
   std::string gamsName();
 
@@ -911,7 +448,7 @@ public:
 
   int subFunc() const { return _subFunc; }
 
-  uint64_t do_compute(uint64_t &discard);
+  uint64_t do_compute(bool &discard);
 
   virtual int compute(bool print, bool verif);
 
@@ -920,24 +457,19 @@ public:
 
   void set_verif_id(std::string s) { _verif_id = s; }
 
-  virtual uint64_t invalid() {
-    return _invalid;
-  }
+  virtual uint64_t invalid() { return _invalid; }
 
-  void set_ctrl_bits(CtrlBits c) {
-    // std::cout << "Should come here in set_ctrl_bits to set bits to: " << c << "\n";
-    _ctrl_bits = c;
-    // if(_ctrl_bits.bits() != 0) {
-    //   _ctrl_bits.print_rep();
-    // }
-  }
-
+  /// Control signal, either controlled by an dependent inst or itself
+  /// {
+  void set_ctrl_bits(const CtrlBits &c) { _ctrl_bits = c; }
   uint64_t ctrl_bits() { return _ctrl_bits.bits(); }
   CtrlBits ctrlBits() { return _ctrl_bits; }
 
-  virtual int bitwidth() {
-    return SS_CONFIG::bitwidth[_ssinst];
-  }
+  void set_self_ctrl(const CtrlBits &c) { _self_bits = c; }
+  uint64_t self_bits() { return _self_bits.bits(); }
+  /// }
+
+  virtual int bitwidth() { return SS_CONFIG::bitwidth[_ssinst]; }
 
 private:
   friend class boost::serialization::access;
@@ -957,11 +489,9 @@ private:
   int _imm_slot;
   int _subFunc;
   CtrlBits _ctrl_bits;
+  CtrlBits _self_bits;
 
   std::vector<uint64_t> _reg;
-  std::vector<uint32_t> _reg_32;
-  std::vector<uint16_t> _reg_16;
-  std::vector<uint8_t> _reg_8;
 
   uint64_t _imm;
   SS_CONFIG::ss_inst_t _ssinst;
@@ -980,22 +510,9 @@ public:
   void serialize(Archive &ar, const unsigned version);
   SSDfgVec *vector() { return vec_; }
 
-  std::string name() {
-    std::stringstream ss;
-    ss << _name << ":";
-    ss << i_or_o() << id();
-    ss << _name;
-    return ss.str();
-  }
-
 protected:
   SSDfgVec *vec_;
 
-  char i_or_o() {
-    if (_vtype == V_INPUT || _vtype == V_OUTPUT)
-      return "IO"[_vtype == V_OUTPUT];
-    return 'X';
-  }
 };
 
 class SSDfgVecInput;
@@ -1004,34 +521,18 @@ class SSDfgInput : public SSDfgIO {       //inturn inherits ssnode
 public:
   SSDfgInput() {}
 
-  void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
-
   SSDfgInput(SSDfg *ssdfg, const std::string &name, SSDfgVec *vec_) : SSDfgIO(ssdfg, name, vec_, V_INPUT) {}
 
   SSDfgVecInput *input_vec();
 
-  std::string gamsName();
+  std::string gamsName() override;
+
+  std::string name() override;
 
   // after inc inputs ready?
-  virtual int compute_backcgra(bool print, bool verif) {
-    int num_computed = 0;
-    for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-      // std::cout << "starts computation for this vector at an input\n";
-      SSDfgNode *use = (*iter)->use();
-      num_computed += use->inc_inputs_ready_backcgra(print, verif);
-    }
-    return num_computed;
-  }
-  //---------------------------------------
-  virtual int compute(bool print, bool verif) {
-    int num_computed = 0;
-    for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-      SSDfgNode *use = (*iter)->use();
+  int compute_backcgra(bool print, bool verif) override;
 
-      num_computed += use->inc_inputs_ready(print, verif);
-    }
-    return num_computed;
-  }
+  int compute(bool print, bool verif) override;
 
 
 private:
@@ -1047,8 +548,6 @@ class SSDfgOutput : public SSDfgIO {
 public:
   SSDfgOutput() {}
 
-  void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
-
   void printDirectAssignments(std::ostream &os, std::string dfg_name);
   //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
 
@@ -1057,29 +556,22 @@ public:
 
   SSDfgVecOutput *output_vec();
 
-  std::string gamsName();
+  std::string gamsName() override;
+
+  std::string name() override;
 
   //returns the instruction producing the
   //value to this output node
   //Returns nullptr if the producing instruction is an input!
   //TODO:FIXME: This might not be safe for decomp-CGRA
-  SSDfgInst *out_inst() {
-    return dynamic_cast<SSDfgInst *>(_ops[0].edges[0]->def());
-  }
+  SSDfgInst *out_inst() { return dynamic_cast<SSDfgInst *>(_ops[0].edges[0]->def()); }
 
   //retrieve the value of the def
-  uint64_t retrieve() {
-    assert(_ops.size() == 1);
-    return _ops[0].get_value();
-  }
+  uint64_t retrieve() { assert(_ops.size() == 1); return _ops[0].get_value(); }
 
-  uint64_t parent_invalid() {
-    return _ops[0].edges[0]->def()->invalid();
-  }
+  uint64_t parent_invalid() { return _ops[0].edges[0]->def()->invalid(); }
 
-  virtual uint64_t invalid() {
-    return _invalid;
-  }
+  virtual uint64_t invalid() override { return _invalid; }
 
 private:
   friend class boost::serialization::access;
@@ -1108,26 +600,16 @@ public:
 
   virtual std::string name() { return _name; }
 
-  void set_port_width(int n){
-    _port_width=n;
-  }
+  void set_port_width(int n) { _port_width=n; }
 
-  int get_port_width(){
-    return _port_width;
-  }
+  int get_port_width() { return _port_width; }
 
 
-  void set_vp_len(int n){
-    _vp_len=n;
-  }
+  void set_vp_len(int n) { _vp_len=n; }
 
-  int get_vp_len(){
-    return _vp_len;
-  }
+  int get_vp_len() { return _vp_len; }
 
-  int logical_len(){
-    return _vp_len;
-  }
+  int logical_len() { return _vp_len; }
 
   virtual unsigned length() = 0;
 
@@ -1152,13 +634,9 @@ public:
 
   SSDfgVecInput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
 
-  virtual std::string gamsName() override {
-    std::stringstream ss;
-    ss << "IPV_" << _name;
-    return ss.str();
-  }
+  virtual std::string gamsName() override;
 
-  virtual unsigned length() override {return _inputs.size();}
+  virtual unsigned length() override { return _inputs.size(); }
 
   bool backPressureOn();
 
@@ -1182,11 +660,7 @@ public:
 
   SSDfgVecOutput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
 
-  virtual std::string gamsName() override {
-    std::stringstream ss;
-    ss << "OPV_" << _name;
-    return ss.str();
-  }
+  virtual std::string gamsName() override;
 
   void addOutput(SSDfgOutput *out) { _outputs.push_back(out); }
 
@@ -1206,60 +680,29 @@ private:
   std::vector<SSDfgOutput *> _outputs;
 };
 
-class SymTab {
+class EntryTable {
   void assert_exists(const std::string &s) {
-    if (_sym_tab.count(s) == 0) {
+    if (symbol_table_.count(s) == 0) {
       std::cerr << "Could not find" + s + "\n";
       assert(false);
     }
   }
 
 public:
-  void set(const std::string &s, const SymEntry &n) {
-    //std::cout << "setting symbol " << s << " #ent:" << n.edge_entries->size() << "\n";
-    _sym_tab[s] = n;
-  }
+  void set(const std::string &s, ParseResult *pr, bool override = false);
 
-  void set(const std::string &s, SSDfgNode *n) {
-    //std::cout << "setting symbol " << s << " to node " << n->name() << "\n";
-    _sym_tab[s] = n;
+  void set(const std::string &s, SSDfgNode *n) { symbol_table_[s] = new NodeEntry(n); }
 
-    _sym_tab[s] = SymEntry(n);
-  }
+  void set(std::string &s, uint64_t n) { symbol_table_[s] = new ConstDataEntry(n); }
 
-  void set(std::string &s, uint64_t n) { _sym_tab[s] = SymEntry(n); }
+  void set(std::string &s, double n) { symbol_table_[s] = new ConstDataEntry(n); }
 
-  void set(std::string &s, double n) { _sym_tab[s] = SymEntry(n); }
+  bool has_sym(const std::string &s) { return symbol_table_.count(s); }
 
-  bool has_sym(std::string &s) {
-    return _sym_tab.count(s);
-  }
-
-  SymEntry get_sym(const std::string &s) {
-    assert_exists(s);
-    return _sym_tab[s];
-  }
-
-  int get_int(std::string &s) {
-    assert_exists(s);
-    if (_sym_tab[s].type != SymEntry::SYM_INT) {
-      std::cerr << "symbol \"" + s + "\" is not an int\"";
-      assert(0);
-    }
-    return _sym_tab[s].data.i;
-  }
-
-  int get_float(std::string &s) {
-    assert_exists(s);
-    if (_sym_tab[s].type != SymEntry::SYM_DUB) {
-      std::cerr << "symbol \"" + s + "\" is not a double\"";
-      assert(0);
-    }
-    return _sym_tab[s].data.d;
-  }
+  ParseResult *get_sym(const std::string &s);
 
 private:
-  std::map<std::string, SymEntry> _sym_tab;
+  std::map<std::string, ParseResult*> symbol_table_;
 };
 
 struct GroupProp {
@@ -1291,31 +734,14 @@ public:
 
   void reset_simulation_state();
 
-  static void order_insts(SSDfgInst *inst,
-                          std::set<SSDfgInst *> &done_nodes,         //done insts
+  static void order_insts(SSDfgInst *inst, std::set<SSDfgInst *> &done_nodes, // done insts
                           std::vector<SSDfgInst *> &ordered_insts);
 
-  std::vector<SSDfgInst *> &ordered_insts() {
-    if (_orderedInsts.size() == 0) {
-      std::set<SSDfgInst *> done_nodes;
-      for (SSDfgOutput *out : _outputs) {
-        if (SSDfgInst *producing_node = out->out_inst()) {
-          order_insts(producing_node, done_nodes, _orderedInsts);
-        }
-      }
-    }
-    return _orderedInsts;
-  }
+  std::vector<SSDfgInst *> &ordered_insts(); 
 
   void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
 
-  //void printEmuDFG(std::ostream& os, std::string dfg_name);
-  void printGraphviz(const char *fname, Schedule *sched = nullptr) {
-    std::ofstream os(fname);
-    assert(os.good());
-    printGraphviz(os, sched);
-    os.flush();
-  }
+  void printGraphviz(const char *fname, Schedule *sched = nullptr);
 
   void start_new_dfg_group();
 
@@ -1350,77 +776,9 @@ public:
     _nodes.push_back(output);
   }
 
-void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
-   int n = std::max(1, len);
-   int slice = 64 / width;
-   int t = ceil(n / float(slice));
-   SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
-   insert_vec_out(vec_output);
-   vec_output->set_port_width(width);
-   vec_output->set_vp_len(n);
-   int left_len = 0;
-   for (int i = 0, cnt = 0; i < n; i += slice) {
-     SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
-
-     left_len = slice;
-     if(n-i>0) {
-       left_len = std::min(n-i,slice);
-     }
-
-     addOutput(dfg_out);
-     vec_output->addOutput(dfg_out);
-
-     for (int j = 0; j < left_len*width; j += width) {
-       std::stringstream ss;
-       ss << name;
-       if (len)
-         ss << cnt++;
-       auto sym = syms.get_sym(ss.str());
-       // std::cout << ss.str() << " ";
-       int num_entries = (int) sym.edge_entries->size();
-       assert(num_entries > 0 && num_entries <= 16);
-
-       for (auto edge_entry : *sym.edge_entries) {
-         SSDfgNode *out_node = edge_entry.node;
-         connect(out_node, dfg_out, 0, SSDfgEdge::data, edge_entry.l, edge_entry.r);
-       }
-     }
-   }
- }
-
- void addVecInput(const std::string &name, int len, SymTab &syms, int width) {
-   int n = std::max(1, len);
-   int slice = 64 / width;
-   int t = ceil(n / float(slice));
-   // std::cout << "t: " << t << "\n";
-   // std::cout << "port_width: " << width << "\n";
-   auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
-   insert_vec_in(vec_input);
-   vec_input->set_port_width(width);
-   vec_input->set_vp_len(n);
-   int left_len=0;
-
-
-   for (int i = 0, cnt = 0; i < n; i += slice) {
-     auto *dfg_in = new SSDfgInput(this, name, vec_input);
-
-     left_len = slice;
-     if(n-i>0) {
-       left_len = std::min(n-i,slice);
-     }
-
-     addInput(dfg_in);
-     vec_input->addInput(dfg_in);
-     for (int j = 0; j < left_len*width; j += width) {
-       std::stringstream ss;
-       ss << name;
-       if (len)
-         ss << cnt++;
-       SymEntry entry(dfg_in, j, j + width - 1);
-       syms.set(ss.str(), entry);
-     }
-   }
- }
+  void addVecOutput(const std::string &name, int len, EntryTable &syms, int width);
+  
+  void addVecInput(const std::string &name, int len, EntryTable &syms, int width);
 
 
   SSDfgEdge *connect(SSDfgNode *orig, SSDfgNode *dest, int slot,
@@ -1429,7 +787,7 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
 
   void disconnect(SSDfgNode *orig, SSDfgNode *dest);
 
-  SymEntry create_inst(std::string opcode, std::vector<SymEntry> &args);
+  ParseResult *create_inst(std::string opcode, std::vector<ParseResult*> &args);
 
   typedef std::vector<SSDfgOutput *>::const_iterator const_output_iterator;
 
@@ -1447,8 +805,6 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
 
   void insert_vec_in(SSDfgVecInput *in) {
     _vecInputs.push_back(in);
-    // add to the group we are creating right now
-    // std::cout << "It does come in inserting vec_in" << "\n";
     _vecInputGroups.back().push_back(in);
   }
 
@@ -1495,30 +851,6 @@ void addVecOutput(const std::string &name, int len, SymTab &syms, int width) {
     assert(0 && "Vec Output not found");
   }
 
-//------------------------------
-/*
- int find_vec_for_scalar(SSDfgNode* in, int &index) {
-      for(unsigned int i =0; i < _vecInputs.size(); ++i) {
-          SSDfgVecInput* vec_in = _vecInputs[i];
-          for(unsigned int j=0; j<vec_in->num_inputs(); ++j) {
-              SSDfgNode* v = dynamic_cast<SSDfgNode*>(_vecInputs[i]->getInput(j));
-              // std::cout << "Vector_id: " << i << " and v: " << v << " and in: " << in << "\n";
-              if(v == in) {
-                 index=j;
-                 return i;
-              }
-          }
-    }
-      assert(0 && "Scalar input not found\n");
-}
-
-SSDfgVecInput* get_vector_input(int i){
-    return _vecInputs[i];
-}
-*/
-  //------------------
-
-
   SSDfgVecInput *vec_in(int i) { return _vecInputs[i]; }
 
   SSDfgVecOutput *vec_out(int i) { return _vecOutputs[i]; }
@@ -1551,100 +883,24 @@ SSDfgVecInput* get_vector_input(int i){
 
   // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
 
-  double count_starving_nodes() {
-    double count = 0;
-    double num_unique_dfg_nodes = 0;
-    for(auto it : _vecInputs) {
-      SSDfgVecInput vec_in = *it;
-      for(auto elem : vec_in.inputs()) { // each scalar node
-        // for(auto node : elem->uses()) {
-        SSDfgNode *node = elem->first_use(); // FIXME: how does it work for dgra
-        num_unique_dfg_nodes += 1/node->num_inc();
-        if(node->num_inputs_ready()) { count += 1/node->num_inc(); }
-        // }
-      }
-    }
-    assert(num_unique_dfg_nodes>=0);
-    if(num_unique_dfg_nodes==0) return 0; // What is this case? none nodes
-    return count/num_unique_dfg_nodes;
-  }
+  double count_starving_nodes();
 
 
 
   //Simulator pushes data to vector given by vector_id
-  bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
-    if(data.size() != vec_in->get_vp_len()) {
-      std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
-    }
-    assert(data.size() == vec_in->get_vp_len() && "insufficient data available");
-    // assert(data.size() == vec_in->length() && "insufficient data available");
-    int npart = 64/vec_in->get_port_width();
-    int x = static_cast<int>(vec_in->get_vp_len());
-    // int x = static_cast<int>(vec_in->length());
-    uint64_t val=0;
-
-    for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {
-      int n_times = std::min(npart, x-i*npart); 
-      for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
-        val = data[j] | (val << vec_in->get_port_width());
-      }
-      SSDfgInput *ss_node = vec_in->inputs()[i];
-      ss_node->set_node(val, valid[i], true, print, verif);
-      val = 0;
-    }
-    return true;
-  }
+  bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif);
 
   // check if some value present at input node or if
   // there is some backpressure or invalid value
-  bool can_push_input(SSDfgVecInput *vec_in) {
-    for (auto elem : vec_in->inputs())
-      if (elem->get_avail())
-        return false;
-    return true;
-  }
+  bool can_push_input(SSDfgVecInput *vec_in); 
 
   //Simulator would like to pop size elements from vector port (vector_id)
-  bool can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
-
-    assert(len > 0 && "Cannot pop 0 length output\n");
-    if(vec_out->outputs().size() != len) {
-      std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
-    }
-    assert(vec_out->outputs().size() == len
-           && "asked for different number of outputs than the supposed length\n");
-
-    size_t ready_outputs = 0;
-    for (auto elem: vec_out->outputs()) {
-      SSDfgOperand &operand = elem->first_operand();
-      if (!operand.is_buffer_empty()) {
-        ready_outputs++;
-      }
-    }
-    // std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
-    if (ready_outputs == len) {
-      return true;
-    } else {
-      return false;
-    }
-  }
+  bool can_pop_output(SSDfgVecOutput *vec_out, unsigned int len);
 
   //Simulator grabs size elements from vector port (vector_id)
   //assertion failure on insufficient size
   void pop_vector_output(SSDfgVecOutput *vec_out, std::vector<uint64_t> &data,
-                         std::vector<bool> &data_valid, unsigned int len, bool print, bool verif) {
-    assert(vec_out->outputs().size() == len && "insufficient output available\n");
-
-    // we don't need discard now!
-    for (auto elem: vec_out->outputs()) {
-      SSDfgOperand &operand = elem->first_operand();
-      data.push_back(operand.get_buffer_val());
-      data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
-      operand.pop_buffer_val(print, verif);
-    }
-    // Insufficient output size
-    // assert(data.size()==len);
-  }
+                         std::vector<bool> &data_valid, unsigned int len, bool print, bool verif);
 
   void push_transient(SSDfgNode *n, uint64_t v, bool valid, bool avail, int cycle) {
     struct cycle_result *temp = new cycle_result(n, v, valid, avail);
@@ -1656,72 +912,7 @@ SSDfgVecInput* get_vector_input(int i){
     buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()].push_back(temp);
   }
 
-  int cycle(bool print, bool verif) {
-    // int num_computed=0;
-    for (auto it = buf_transient_values[cur_buf_ptr].begin(); it != buf_transient_values[cur_buf_ptr].end();) {
-      // set the values
-      buffer_pop_info *temp = *it;
-      SSDfgEdge *e = temp->e;
-      e->pop_buffer_val(print, verif);
-
-      it = buf_transient_values[cur_buf_ptr].erase(it);
-      // buf_transient_values[cur_buf_ptr].erase(it);
-      // it--;
-    }
-
-    for (auto it = transient_values[cur_node_ptr].begin(); it != transient_values[cur_node_ptr].end();) {
-      struct cycle_result *temp = *it;
-      SSDfgNode *ss_node = temp->n;
-      ss_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
-      it = transient_values[cur_buf_ptr].erase(it);
-    }
-
-    std::unordered_set<int> nodes_complete;
-
-    for (auto I = _ready_nodes.begin(); I != _ready_nodes.end();) {
-      SSDfgNode *n = *I;
-
-      int node_id = n->node_id();
-      bool should_fire = (node_id == -1) ||
-                         (nodes_complete.count(node_id) == 0);
-
-      unsigned inst_throughput = 1;
-
-      //If inst_throughput cycles is great than 1, lets mark the throughput
-      //make sure nobody else can also schedule a complex instruction during
-      //that period
-      if (should_fire && node_id != -1) {
-        if (SSDfgInst *inst = dynamic_cast<SSDfgInst *>(n)) {
-          inst_throughput = inst_thr(inst->inst());
-          if (inst_throughput > 1) {
-            if (_complex_fu_free_cycle[node_id] > _cur_cycle) {
-              should_fire = false;
-            }
-          }
-        }
-      }
-
-      if (should_fire && n->get_avail() == 0) {
-        n->compute_backcgra(print, verif);
-        I = _ready_nodes.erase(I);
-        nodes_complete.insert(node_id);
-
-        if (node_id != -1 && inst_throughput > 1) {
-          _complex_fu_free_cycle[node_id] = _cur_cycle + inst_throughput;
-        }
-
-      } else {
-        ++I;
-      }
-    }
-
-    cur_buf_ptr = (cur_buf_ptr + 1) % get_max_lat();
-    cur_node_ptr = (cur_node_ptr + 1) % get_max_lat();
-    _cur_cycle = _cur_cycle + 1;
-    int temp = _total_dyn_insts;
-    _total_dyn_insts = 0;
-    return temp;
-  }
+  int cycle(bool print, bool verif);
 
 // ---------------------------------------------------------------------------
 

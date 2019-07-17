@@ -125,8 +125,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string suffix = suffixes[i];
     
       ofs << dtype << " execute" << suffix << "(ss_inst_t inst, " 
-          << "std::vector<" << dtype << ">& ops, std::vector<" << dtype << ">& reg, "
-          << "uint64_t& discard, std::vector<bool>& back_array);\n";
+          << "std::vector<" << dtype << ">& ops, " << dtype << "* reg, "
+          << "bool &discard, std::vector<bool>& back_array);\n";
     }
 
     ofs <<
@@ -270,17 +270,14 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string suffix = suffixes[i];
 
       ofs << dtype << " " << "SS_CONFIG::execute" << suffix << "(ss_inst_t inst, " 
-          << "std::vector<" << dtype << ">& ops, std::vector<" << dtype << ">& reg, "
-          << "uint64_t& discard, std::vector<bool>& back_array) {\n";
+          << "std::vector<" << dtype << ">& ops, " << dtype << " *reg, "
+          << "bool &discard, std::vector<bool>& back_array) {\n";
 
      //somwhere below is an implementation of pass through, is it though? (tony, 2018)
 
       ofs <<  dtype << "& accum = reg[0]; \n"
       "  assert(ops.size() <= 4); \n" 
       "  assert(ops.size() <=  (unsigned)(num_ops[inst]+1)); \n" 
-      "  if((ops.size() > (unsigned)num_ops[inst]) && (ops[ops.size()] == 0)) { \n" 
-      "    return ops[0];\n"
-      "  }\n"
 
       "  switch(inst) {\n";
       for(unsigned i = 0; i < _instList.size(); ++i) {

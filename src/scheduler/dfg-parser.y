@@ -20,7 +20,7 @@ extern int yylineno;
 void yyrestart(FILE *); 
 
 struct parse_param {
-  SymTab syms;
+  EntryTable symbols;
   SSDfg* dfg;
 };
 
@@ -38,13 +38,13 @@ static void yyerror(parse_param*, const char *);
 
 
 %union {
-    std::string* s;
     uint64_t i;
     double d;
-    io_pair_t* io_pair;
-    std::vector<SymEntry>* sym_vec;
-    SymEntry sym_ent;
 
+    std::string* s;
+    io_pair_t* io_pair;
+    std::vector<ParseResult*> *sym_vec;
+    ParseResult *sym_ent;
     string_vec_t* str_vec;
     ctrl_def_t* ctrl_def;
 
@@ -73,30 +73,27 @@ statement_list
 
 statement
     : INPUT ':' io_def  eol {
-        if(p->syms.has_sym($3->first)) {
+        if(p->symbols.has_sym($3->first)) {
           printf("Symbol \"%s\" already exists\n", $3->first.c_str());
           assert(0);
         }
-        p->dfg->addVecInput($3->first, $3->second, p->syms, $1);
+        p->dfg->addVecInput($3->first, $3->second, p->symbols, $1);
         delete $3;
       }
     | OUTPUT ':' io_def eol {
-        p->dfg->addVecOutput($3->first.c_str(), $3->second, p->syms, $1);
+        p->dfg->addVecOutput($3->first.c_str(), $3->second, p->symbols, $1);
         delete $3;
       }
     | IDENT '=' rhs eol {
-        SymEntry& s = $3;
-        if(s.type == SymEntry::SYM_NODE) {
-          assert(s.edge_entries);
-          assert(s.edge_entries->size());
-          for(int i = 0; i < s.edge_entries->size(); ++i) {
-            SSDfgNode* n = s.edge_entries->at(i).node;
-            n->setName(*$1);
+        ParseResult *s = $3;
+        if (auto ne = dynamic_cast<NodeEntry*>($3)) {
+          ne->node->setName(*$1);
+        } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
+          for (auto elem : ce->entries) {
+            elem->node->setName(*$1);
           }
-          //printf("%s assigned to instruction\n",$1->c_str());
         }
-        //else printf("%s assigned to constant\n",$1->c_str());
-        p->syms.set(*$1,s);
+        p->symbols.set(*$1,$3);
         delete $1;
       }
     | NEW_DFG eol {
@@ -127,22 +124,29 @@ rhs : expr { $$ = $1; } ;
 
 expr
     : I_CONST {
-        $$ = SymEntry($1); //expr: what you can assign to a var
+        $$ = new ConstDataEntry($1); //expr: what you can assign to a var
       }
     | I_CONST I_CONST {
-        $$ = SymEntry($1,$2);
+        $$ = new ConstDataEntry($1, $2);
       }
     | I_CONST I_CONST I_CONST I_CONST {
-        $$ = SymEntry($1,$2,$3,$4);
+        $$ = new ConstDataEntry($1, $2, $3, $4);
       }
     | F_CONST {
-        $$ = SymEntry($1);
+        $$ = new ConstDataEntry($1);
       }
     | F_CONST F_CONST {
-        $$ = SymEntry($1,$2);
+        $$ = new ConstDataEntry((float) $1, (float) $2);
       }
     | edge_list {
-        $$ = $1;
+        auto ce = dynamic_cast<ConvergeEntry*>($1);
+        assert(ce);
+        if (ce->entries.size() == 1) {
+          $$ = ce->entries[0];
+          delete ce;
+        } else {
+          $$ = $1;
+        }
       }
     | IDENT '(' arg_list ')' {
         $$ = p->dfg->create_inst(*$1,*$3);
@@ -158,19 +162,21 @@ arg_expr
 	    $$ = $1;
 	  }
 	| IDENT '=' expr {
-	    $$ = $3;
-	    $$.set_flag(*$1);
+	    $$ = new ControlEntry(*$1, $3);
 	  }
 	| IDENT '=' expr '{' ctrl_list  '}' {
-            $$ = $3;
-            $$.set_flag(*$1);
-            $$.set_control_list(*$5); delete $5;
-      }
+            $$ = new ControlEntry(*$1, *$5, $3);
+            delete $5;
+          }
+	| IDENT '=' '{' ctrl_list  '}' {
+            $$ = new ControlEntry(*$1, *$4, nullptr);
+            delete $4;
+          }
     ;
 
 arg_list
     : arg_expr {
-        $$ = new std::vector<SymEntry>();
+        $$ = new std::vector<ParseResult*>();
         $$->push_back($1);
       }
     | arg_list ',' arg_expr {
@@ -201,22 +207,41 @@ ident_list
 
 edge_list
     : edge {
-        $$ = $1;
+        auto res = new ConvergeEntry(); 
+        auto ne = dynamic_cast<NodeEntry*>($1);
+        assert(ne);
+        res->entries.push_back(ne);
+        $$ = res;
       }
     | edge_list edge {
-        $1.take_union($2);
-        $$ = $1;
+        auto ce = dynamic_cast<ConvergeEntry*>($1);
+        assert(ce);
+        auto ne = dynamic_cast<NodeEntry*>($2);
+        assert(ne);
+        ce->entries.insert(ce->entries.begin(), ne);
+        $$ = ce;
       }
     ;
 
 /*edge is a dfgnode annotated with bitwidth/index information*/
 edge
     : IDENT {
-        $$ = p->syms.get_sym(*$1);
+        $$ = p->symbols.get_sym(*$1);
+        delete $1;
       }
     | IDENT ':' I_CONST ':' I_CONST {
-        $$ = p->syms.get_sym(*$1);
-        $$.set_bitslice_params($3, $5);
+        auto ne = dynamic_cast<NodeEntry*>(p->symbols.get_sym(*$1));
+        assert(ne);
+        if (ne->l == $3 && ne->r == $5) {
+          $$ = ne;
+        } else {
+          std::ostringstream oss;
+          oss << *$1 << ':' << $3 << ':' << $5;
+          if (!p->symbols.has_sym(oss.str()))
+            p->symbols.set(oss.str(), new NodeEntry(ne->node, $3, $5));
+          $$ = p->symbols.get_sym(oss.str());
+        }
+        delete $1;
       }
     ;
 
@@ -244,6 +269,3 @@ static void yyerror(struct parse_param* p, char const* s) {
   fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
   assert(0);
 }
-
-
-

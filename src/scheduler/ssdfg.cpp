@@ -11,12 +11,7 @@
 using namespace std;
 using namespace SS_CONFIG;
 
-CtrlMap CtrlBits::ctrl_map;
-
-bool SSDfgVecInput::backPressureOn() {
-    // return getBackBit();
-    return false;
-}
+/// { misc
 
 void checked_system(const char* command) {
   int ret = system(command);
@@ -26,66 +21,524 @@ void checked_system(const char* command) {
   }
 }
 
+/// }
+
+/// { SSDfgEdge
+
+std::string SSDfgEdge::name() {
+  std::stringstream ss;
+  ss << def()->name() << "->" << use()->name();
+  return ss.str();
+}
+
+// -- Gams names --
+std::string SSDfgEdge::gamsName() {
+  std::stringstream ss;
+  ss << def()->gamsName() << "_" << use()->gamsName() << "i" << _ID ;
+  return ss.str();
+}
 
 SSDfgEdge::SSDfgEdge(SSDfgNode* def, SSDfgNode* use, EdgeType etype, SSDfg* ssdfg, int l, int r) :
-   _ID(ssdfg->inc_edge_id()), _ssdfg(ssdfg), _def(def), _use(use), _etype(etype),  _l(l), _r(r) {
+   _ID(ssdfg->inc_edge_id()), _ssdfg(ssdfg), _etype(etype),  _l(l), _r(r) {
+  nodes[0] = def;
+  nodes[1] = use;
+}
+
+void SSDfgEdge::compute_after_push(bool print, bool verif){
+  if(_data_buffer.size()==1){
+    use()->inc_inputs_ready_backcgra(print, verif);
+  }
+}
+
+void SSDfgEdge::compute_after_pop(bool print, bool verif){
+  if(_data_buffer.size()>0){
+    use()->inc_inputs_ready_backcgra(print, verif);
+  }
+}
+
+SSDfgNode *SSDfgEdge::def() const {
+  return nodes[0];
+}
+
+SSDfgNode *SSDfgEdge::use() const {
+  return nodes[1];
+}
+
+SSDfgNode *SSDfgEdge::get(int x) const {
+  return nodes[x];
+}
+
+int SSDfgEdge::id() {
+  return _ID;
+}
+
+uint64_t SSDfgEdge::extract_value(uint64_t val) {
+  if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
+    return val;
+  } else {
+    uint64_t mask = (((uint64_t) 1 << bitwidth()) - 1);
+    return (val >> _l) & mask; // little endian machine
+  }
+}
+
+uint64_t SSDfgEdge::get_value() {
+  assert(def());
+  return extract_value(def()->get_value()); //the whole value
+}
+
+void SSDfgEdge::push_in_buffer(uint64_t v, bool valid, bool print, bool verif) {
+  assert(_data_buffer.size() < buf_len && "Trying to push in full buffer\n");
+  _data_buffer.push(std::make_pair(v, valid));
+  compute_after_push(print, verif);
+}
+
+bool SSDfgEdge::is_buffer_full() {
+  return (_data_buffer.size() == buf_len);
+}
+
+bool SSDfgEdge::is_buffer_empty() {
+  return _data_buffer.empty();
+}
+
+uint64_t SSDfgEdge::get_buffer_val() {
+  assert(!_data_buffer.empty());
+  return extract_value(_data_buffer.front().first);
+}
+
+bool SSDfgEdge::get_buffer_valid() {
+  assert(!_data_buffer.empty());
+  return _data_buffer.front().second;
+}
+
+
+void SSDfgEdge::pop_buffer_val(bool print, bool verif) {
+  assert(!_data_buffer.empty() && "Trying to pop from empty queue\n");
+  // std::cout << "came here to pop buffer val\n";
+  _data_buffer.pop();
+  compute_after_pop(print, verif);
+}
+
+int SSDfgEdge::bitwidth() { return _r - _l + 1; }
+
+int SSDfgEdge::l() { return _l; }
+
+int SSDfgEdge::r() { return _r; }
+
+void SSDfgEdge::reset_associated_buffer() {
+  decltype(_data_buffer) empty;
+  std::swap(_data_buffer, empty);
+}
+
+/// }
+
+
+/// { SSDfgOperand
+
+SSDfgOperand::SSDfgOperand(SSDfgEdge *e) : edges{e} {}
+
+SSDfgOperand::SSDfgOperand(std::vector<SSDfgEdge *> es) : edges(es) {}
+
+SSDfgOperand::SSDfgOperand(uint64_t imm_) : imm(imm_) {}
+
+SSDfgEdge * SSDfgOperand::get_first_edge() const {
+  return edges.empty() ? nullptr : edges[0];
+}
+
+void SSDfgOperand::clear() {
+  imm = 0;
+  edges.clear();
+}
+
+bool SSDfgOperand::is_ctrl() {
+  for (SSDfgEdge *e : edges) {
+    if (e->etype() == SSDfgEdge::ctrl) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool SSDfgOperand::is_imm() { return edges.empty(); }
+
+bool SSDfgOperand::is_composed() { return edges.size() > 1; }
+
+
+//Functions which manipulate dynamic state
+uint64_t SSDfgOperand::get_value() { //used by simple simulator
+  uint64_t base = imm;
+  int cur_bit_pos = 0;
+  for (SSDfgEdge *e : edges) {
+    base |= e->get_value() << cur_bit_pos;
+    cur_bit_pos += e->bitwidth();
+  }
+  assert(cur_bit_pos <= 64); // max bitwidth is 64
+  return base;
+}
+
+uint64_t SSDfgOperand::get_buffer_val() { //used by backcgra simulator
+  uint64_t base = imm;
+  int cur_bit_pos = 0;
+  for (SSDfgEdge *e : edges) {
+    base |= e->get_buffer_val() << cur_bit_pos;
+    cur_bit_pos += e->bitwidth();
+  }
+  assert(cur_bit_pos <= 64); // max bitwidth is 64
+  return base;
+}
+
+uint64_t SSDfgOperand::get_buffer_valid() { //used by backcgra simulator
+  for (SSDfgEdge *e : edges) {
+    if (!e->get_buffer_valid()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+uint64_t SSDfgOperand::is_buffer_empty() { //used by backcgra simulator
+  for (SSDfgEdge *e : edges) {
+    if (e->is_buffer_empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void SSDfgOperand::pop_buffer_val(bool print, bool verif) {
+  for (SSDfgEdge *e : edges) {
+    e->pop_buffer_val(print, verif);
+  }
+}
+
+bool SSDfgOperand::valid() {
+  for(SSDfgEdge *e : edges) {
+    SSDfgNode *n = e->def();
+    if(n->invalid()) return false;
+  }
+  return true;
+}
+
+/// }
+
+
+/// { SSDfgNode
+
+uint64_t SSDfgNode::invalid() {
+  return _invalid;
+}
+
+//Add edge to operand in least to most significant bit order
+void SSDfgNode::addOperand(unsigned pos, SSDfgEdge *e) {
+  assert(pos <= 4);
+  if (_ops.size() <= pos) {
+    _ops.resize(pos + 1);
+  }
+  _ops[pos].edges.push_back(e);
+  _inc_edge_list.push_back(e);
+}
+
+void SSDfgNode::addOutEdge(SSDfgEdge *edge) {
+  _uses.push_back(edge);
+}
+
+void SSDfgNode::validate() {
+  for (size_t i = 0; i < _ops.size(); ++i) {
+    SSDfgEdge *edge = _inc_edge_list[i];
+    assert(edge == nullptr || edge->use() == this);
+  }
+  for (size_t i = 0; i < _uses.size(); ++i) {
+    SSDfgEdge *edge = _uses[i];
+    assert(edge->def() == this);
+  }
+}
+
+void SSDfgNode::remove_edge(SSDfgNode *node, int idx) {
+  for (unsigned i = 0; i < _ops.size(); ++i) {
+    for (auto I = _ops[i].edges.begin(), E = _ops[i].edges.end(); I != E; ++i) {
+      if ((*I)->get(idx) == node) {
+        _ops[i].edges.erase(I);
+        return;
+      }
+    }
+  }
+  assert(false && "edge was not found");
+}
+
+void SSDfgNode::removeIncEdge(SSDfgNode *orig) {
+  remove_edge(orig, 0);
+}
+
+void SSDfgNode::removeOutEdge(SSDfgNode *dest) {
+  remove_edge(dest, 1);
 }
 
 bool SSDfgNode::is_temporal() {
   return _ssdfg->group_prop(_group_id).is_temporal;
 }
 
-/*
-void SSDfgEdge::compute_next(){
-  if(_data_buffer.size()==1){
-        _use->inc_inputs_ready_backcgra(false, false);
-  }
-}*/
-
-void SSDfgEdge::compute_after_push(bool print, bool verif){
-  // std::cout << this->name() << " is checking compute after push, buf size: " << _data_buffer.size() << "\n";
-  if(_data_buffer.size()==1){
-    _use->inc_inputs_ready_backcgra(print, verif);
-  }
-}
-void SSDfgEdge::compute_after_pop(bool print, bool verif){
-  // std::cout << this->name() << " is checking compute after pop, buf size: " << _data_buffer.size() << "\n";
-
-  if(_data_buffer.size()>0){
-    _use->inc_inputs_ready_backcgra(print, verif);
-  }
-}
-
-//Calculate the value based on the origin's value, and the edge's
-//index and bitwidth fields
-uint64_t SSDfgEdge::extract_value(uint64_t val) {
-  if (_r - _l + 1 == 64) { //this is special cased because << 64 is weird in c
-    return val;
-  } else {
-    // std::cout << "value to extract: " << val << " " << _l << " " << _r << "\n";
-    uint64_t mask = (((uint64_t) 1 << bitwidth()) - 1);
-    return (val >> _l) & mask; // little endian machine
-    // return (val >> (63-_r)) & mask;
-  }
-}
-
-uint64_t SSDfgEdge::get_value() {
-  assert(_def);
-  return extract_value(_def->get_value()); //the whole value
-}
-
-bool SSDfgOperand::valid() {
-    for(SSDfgEdge* e : edges) {
-      SSDfgNode* n = e->def();
-      if(n->invalid()) return false;
-    }
-    return true;
-}
 
 void SSDfgNode::push_buf_dummy_node(){
     _ssdfg->push_buf_transient(this->first_inc_edge(), true, 1); // can it be immediate?
 }
 
+// TODO: free all buffers and clear inputs ready
+void SSDfgNode::reset_node() {
+  _inputs_ready = 0;
+  for (auto in_edges: _inc_edge_list) {
+    (*in_edges).reset_associated_buffer();
+  }
+  for (auto out_edges: _uses) {
+    (*out_edges).reset_associated_buffer();
+  }
+
+}
+
+SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v) :
+      _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _vtype(v) {
+  _group_id = _ssdfg->num_groups() - 1;
+
+}
+
+SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string &name) :
+        _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _name(name), _vtype(v)  {
+  _group_id = _ssdfg->num_groups() - 1;
+
+}
+
+int SSDfgNode::inc_inputs_ready_backcgra(bool print, bool verif) {
+  if(++_inputs_ready == num_inc_edges()) {
+    _ssdfg->push_ready_node(this);
+  }
+  return 0;
+}
+
+SSDfgEdge *SSDfgNode::getLinkTowards(SSDfgNode *to) {
+  auto pred = [to] (SSDfgEdge *e) -> bool { return e->use() == to; };
+  auto res = std::find_if(_uses.begin(), _uses.end(), pred);
+  return (res == _uses.end()) ? nullptr : *res;
+}
+
+int SSDfgNode::maxThroughput() {
+  if (_max_thr == 0) {
+    for (auto elem : _uses) {
+      _max_thr = std::max(_max_thr, elem->use()->maxThroughput());
+    }
+  }
+  return _max_thr;
+}
+
+void SSDfgNode::depInsts(std::vector<SSDfgInst *> &insts) {
+  for (auto it : _uses) {
+    SSDfgNode *use = it->use();
+    if (std::find(insts.begin(), insts.end(), use) != insts.end()) {
+      use->depInsts(insts);
+    }
+  }
+}
+
+bool SSDfgNode::get_bp() {
+  bool bp = false;
+  for (auto elem : _uses)
+    if (elem->is_buffer_full())
+      bp = true;
+  return bp;
+}
+
+void SSDfgNode::set_node(uint64_t v, bool valid, bool avail, bool print, bool verif) {
+  set_outputnode(v, valid, avail);
+
+  // no need to do anything for output node
+  if (this->num_out() == 0)
+    return;
+  if (avail) {
+    if (!get_bp()) {
+      for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+        (*iter)->push_in_buffer(v, valid, print, verif);
+      }
+      _avail = false;
+    } else {
+      set_value(v, valid, avail, 1); // after 1 cycle
+    }
+  }
+}
+
+int SSDfgNode::inc_inputs_ready(bool print, bool verif) {
+  if (++_inputs_ready == num_inc_edges()) {
+    int num_computed = compute(print, verif);
+    _inputs_ready = 0;
+    return num_computed;
+  }
+  return 0;
+}
+
+/// }
+
+
+/// { Parsing data structure
+
+void CtrlBits::set(uint64_t val, Control b) {
+  int loc = val * Total + b;
+  assert(loc >= 0 && loc < 64);
+  mask |= (1 << loc);
+}
+
+bool CtrlBits::test(uint64_t val, Control b) {
+  int loc = val * Total + b;
+  assert(loc >= 0 && loc < 64);
+  return (mask >> loc) & 1;
+}
+
+void CtrlBits::test(uint64_t val, std::vector<bool> &back_array, bool &discard,
+                    bool &predicate, bool &reset) {
+  if (!mask)
+    return;
+  back_array[0] = back_array[0] || test(val, CtrlBits::B1);
+  back_array[1] = back_array[1] || test(val, CtrlBits::B2);
+  discard = discard || test(val, CtrlBits::Discard);
+  predicate = predicate && !(test(val, CtrlBits::Abstain));
+  reset = reset || test(val, CtrlBits::Reset);
+}
+
+CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>> &raw) {
+  for (auto &elem : raw)
+    for (auto &s : elem.second)
+      set(elem.first, str_to_enum(s));
+}
+
+void ControlEntry::set_flag(const std::string &s) {
+  if (s == "pred") {
+    flag = SSDfgEdge::ctrl_true;
+  } else if (s == "inv_pred") {
+    flag = SSDfgEdge::ctrl_false;
+  } else if (s == "control" || s == "self") {
+    flag = SSDfgEdge::ctrl;
+  } else {
+    printf("qualifier: %s unknown", s.c_str());
+    assert(0 && "Invalid argument qualifier");
+  }
+}
+
+/// }
+
+/// { SSDfgInst
+
+int SSDfgInst::maxThroughput() {
+  if (_max_thr == 0) {
+    _max_thr = inst_thr(inst());
+    for (auto it = _uses.begin(); it != _uses.end(); it++) {
+      _max_thr = std::max(_max_thr, (*it)->use()->maxThroughput());
+    }
+  }
+  return _max_thr;
+}
+
+void SSDfgInst::depInsts(std::vector<SSDfgInst *> &insts) {
+  insts.push_back(this);
+  for (auto it = _uses.begin(); it != _uses.end(); it++) {
+    SSDfgNode *use = (*it)->use();
+    if (std::find(insts.begin(), insts.end(), use) != insts.end()) {
+      use->depInsts(insts);
+    }
+  }
+}
+
+std::string SSDfgInst::name() {
+  std::stringstream ss;
+  ss << _name << ":";
+  ss << SS_CONFIG::name_of_inst(_ssinst);
+  if (_imm_slot != -1) {
+    ss << " Imm:" << _imm;
+  }
+  return ss.str();
+}
+
+/// }
+
+/// { SSDfgIO
+
+std::string SSDfgInput::name() {
+  std::stringstream ss;
+  ss << _name << ":";
+  ss << "I" << id();
+  ss << _name;
+  return ss.str();
+}
+
+int SSDfgInput::compute_backcgra(bool print, bool verif) {
+  int num_computed = 0;
+  for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SSDfgNode *use = (*iter)->use();
+    num_computed += use->inc_inputs_ready_backcgra(print, verif);
+  }
+  return num_computed;
+}
+
+int SSDfgInput::compute(bool print, bool verif) {
+  int num_computed = 0;
+  for (auto iter = _uses.begin(); iter != _uses.end(); iter++) {
+    SSDfgNode *use = (*iter)->use();
+
+    num_computed += use->inc_inputs_ready(print, verif);
+  }
+  return num_computed;
+}
+
+std::string SSDfgOutput::name() {
+  std::stringstream ss;
+  ss << _name << ":";
+  ss << "O" << id();
+  ss << _name;
+  return ss.str();
+}
+
+std::string SSDfgVecInput::gamsName() {
+  std::stringstream ss;
+  ss << "IPV_" << _name;
+  return ss.str();
+}
+
+std::string SSDfgVecOutput::gamsName() {
+  std::stringstream ss;
+  ss << "OPV_" << _name;
+  return ss.str();
+}
+
+bool SSDfgVecInput::backPressureOn() {
+    return false;
+}
+
+/// }
+
+/// { EntryTable
+
+void EntryTable::set(const std::string &s, ParseResult *pr, bool override) {
+  if (!symbol_table_.count(s))
+    symbol_table_[s] = pr;
+  else if (override)
+    symbol_table_[s] = pr;
+  else
+    assert(0 && "Add existing symbol entrying w/o overriding");
+}
+
+ParseResult *EntryTable::get_sym(const std::string &s) {
+  assert(symbol_table_.count(s));
+  return symbol_table_[s];
+}
+/// }
+
+
+/// { SSDfg
+std::vector<SSDfgInst*> &SSDfg::ordered_insts() {
+  if (_orderedInsts.size() == 0) {
+    std::set<SSDfgInst *> done_nodes;
+    for (SSDfgOutput *out : _outputs) {
+      if (SSDfgInst *producing_node = out->out_inst()) {
+        order_insts(producing_node, done_nodes, _orderedInsts);
+      }
+    }
+  }
+  return _orderedInsts;
+}
 
 void SSDfg::order_insts(SSDfgInst* inst,
                  std::set<SSDfgInst*>& done_nodes,         //done insts
@@ -115,6 +568,14 @@ void SSDfg::order_insts(SSDfgInst* inst,
   }
 
   ordered_insts.push_back(inst);
+}
+
+
+void SSDfg::printGraphviz(const char *fname, Schedule *sched) {
+  std::ofstream os(fname);
+  assert(os.good());
+  printGraphviz(os, sched);
+  os.flush();
 }
 
 void SSDfg::check_for_errors() {
@@ -151,28 +612,6 @@ void SSDfg::check_for_errors() {
 
 // This function is called from the simulator to
 int SSDfg::compute(bool print, bool verif, int g) {
-  //if(_orderedInstsGroup.size()<=(unsigned)g) {
-  //  _orderedInstsGroup.resize(g+1);
-  //}
-
-  //if(_orderedInsts.size()==0) {
-  //  std::set<SSDfgInst*> done_nodes;
-
-  //  //for each output node traverse
-  //  //the incoming node
-  //  for(SSDfgOutput* out : _outputs) {
-  //    if(SSDfgInst* producing_node = out->out_inst()) {
-  //      order_insts(producing_node, done_nodes, _orderedInsts);
-  //    }
-  //  }
-  //}
-
-  //for(SSDfgInst* inst : _orderedInsts) {
-  //  inst->compute(print,verif);
-  //}
-
-  //printf("came inside compute function at line:74\n");
-
 
   int num_computed=0;
 
@@ -209,9 +648,7 @@ void SSDfg::instsForGroup(int g, std::vector<SSDfgInst*>& insts) {
 }
 
 //Necessary for BOOST::SERIALIZATION
-SSDfg::SSDfg() {
-
-}
+SSDfg::SSDfg() {}
 
 
 //COMMA IF NOT FIRST
@@ -239,50 +676,32 @@ bool conv_to_double(std::string s, double& dval) {
   return false;
 }
 
-SymEntry SSDfg::create_inst(std::string opcode, std::vector<SymEntry> &args) {
+ParseResult *SSDfg::create_inst(std::string opcode, std::vector<ParseResult*> &args) {
 
   SS_CONFIG::ss_inst_t inst = inst_from_string(opcode.c_str());
   auto *dfg_inst = new SSDfgInst(this, inst);
 
-  int imm_offset = 0;
+
   for (unsigned i = 0; i < args.size(); ++i) {
-    SymEntry &sym = args[i];
-    if (sym.type == SymEntry::SYM_INT || sym.type == SymEntry::SYM_DUB) {
-      assert(imm_offset == 0 && "only one immediate per instr. is allowed");
-      dfg_inst->setImm(sym.data.i);
+    if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {
+      dfg_inst->setImm(data->data);
       dfg_inst->setImmSlot(i);
-      imm_offset = 1;
-      assert(sym.flag == SymEntry::FLAG_NONE);
-    } else if (sym.type == SymEntry::SYM_NODE) {
-      int num_entries = (int) sym.edge_entries->size();
-      assert(num_entries > 0 && num_entries <= 16);
-      for (int e = 0; e < num_entries; ++e) {
-        auto &edge_entry = sym.edge_entries->at(e); // l,r set here
-        SSDfgNode *inc_node = edge_entry.node;
-        if (inc_node == nullptr) {
-          cerr << "Could not find argument " << i << " for \""
-               << opcode + "\" inst \n";
-          assert(false);
-        }
-        SSDfgEdge::EdgeType etype = SSDfgEdge::EdgeType::data;
-
-        switch (sym.flag) {
-          case SymEntry::FLAG_CONTROL:
-            etype = SSDfgEdge::EdgeType::ctrl;
-            break;
-          case SymEntry::FLAG_PRED:
-            etype = SSDfgEdge::EdgeType::ctrl_true;
-            break;
-          case SymEntry::FLAG_INV_PRED:
-            etype = SSDfgEdge::EdgeType::ctrl_false;
-            break;
-          default:
-            etype = SSDfgEdge::data;
-        }
-
-        // flag should not work if it is control
-        connect(inc_node, dfg_inst, i, etype, edge_entry.l, edge_entry.r);
-        dfg_inst->set_ctrl_bits(sym.ctrl_bits);
+    } else if (auto ne =dynamic_cast<NodeEntry*>(args[i])) {
+      connect(ne->node, dfg_inst, i, SSDfgEdge::data, ne->l, ne->r);
+    } else if (auto ce = dynamic_cast<ConvergeEntry*>(args[i])) {
+      for (auto elem : ce->entries) {
+        if (auto ne = dynamic_cast<NodeEntry*>(elem))
+        connect(ne->node, dfg_inst, i, SSDfgEdge::data, ne->l, ne->r);
+      }
+    } else if (auto ce = dynamic_cast<ControlEntry*>(args[i])) {
+      // External control
+      if (ce->controller) {
+        auto ne = dynamic_cast<NodeEntry*>(ce->controller);
+        connect(ne->node, dfg_inst, i, ce->flag, ne->l, ne->r);
+        dfg_inst->set_ctrl_bits(ce->bits);
+      } else {
+        // Self control
+        dfg_inst->set_self_ctrl(ce->bits);
       }
     } else {
       assert(false && "Invalide Node type");
@@ -290,13 +709,9 @@ SymEntry SSDfg::create_inst(std::string opcode, std::vector<SymEntry> &args) {
   }
 
 
+  ParseResult *res = new NodeEntry(dfg_inst, 0, SS_CONFIG::bitwidth[inst] - 1);
   addInst(dfg_inst);
-  SymEntry e(dfg_inst);
-  // e.set_bitslice_params(64-SS_CONFIG::bitwidth[inst],63);
-  // little endian machine: this is output i guess
-  // std::cout << "SETS BITWIDTH HERE\n";
-  e.set_bitslice_params(0, SS_CONFIG::bitwidth[inst] - 1);
-  return e;
+  return res;
 }
 
 void SSDfg::set_pragma(std::string& c, std::string& s) {
@@ -326,19 +741,6 @@ SSDfg::SSDfg(string filename) : SSDfg() {
   check_for_errors();
 }
 
-std::string SSDfgEdge::name() {
-  std::stringstream ss;
-  ss << _def->name() << "->" << _use->name();
-  return ss.str();
-}
-
-// -- Gams names --
-std::string SSDfgEdge::gamsName() {
-  std::stringstream ss;
-  ss << _def->gamsName() << "_" << _use->gamsName() << "i" << _ID ;
-  return ss.str();
-}
-
 std::string SSDfgInput::gamsName() {
   std::stringstream ss;
   ss << "IV" << _ID;
@@ -366,33 +768,33 @@ void SSDfgInst::setImmSlot(int i) {
   _imm_slot = i;
 }
 
-uint64_t SSDfgInst::do_compute(uint64_t &discard) {
+uint64_t SSDfgInst::do_compute(bool &discard) {
   //This is a really cheezy way to do this, but i'm a little tired
   uint64_t output;
   switch(bitwidth()) {
     case 64:
-     output=SS_CONFIG::execute64(_ssinst,_input_vals,_reg,discard,_back_array);
+      output=SS_CONFIG::execute64(_ssinst,_input_vals,&_reg[0],discard,_back_array);
       break;
     case 32:
       _input_vals_32.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_32[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute32(_ssinst,_input_vals_32,_reg_32,discard,_back_array);
+      output=SS_CONFIG::execute32(_ssinst,_input_vals_32,(uint32_t*)&_reg[0],discard,_back_array);
       break;
     case 16:
       _input_vals_16.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_16[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute16(_ssinst,_input_vals_16,_reg_16,discard,_back_array);
+      output=SS_CONFIG::execute16(_ssinst,_input_vals_16,(uint16_t*)&_reg[0],discard,_back_array);
       break;
     case 8:
       _input_vals_8.resize(_input_vals.size());
       for(int i = 0; i < (int)_input_vals.size(); ++i) {
         _input_vals_8[i] = _input_vals[i];
       }
-      output=SS_CONFIG::execute8(_ssinst,_input_vals_8,_reg_8,discard,_back_array);
+      output=SS_CONFIG::execute8(_ssinst,_input_vals_8,(uint8_t*)&_reg[0],discard,_back_array);
       break;
     default:
       cout << "Weird bitwidth: " << bitwidth() << "\n";
@@ -437,16 +839,16 @@ int SSDfgInst::compute(bool print, bool verif) {
   }
 
   if(verif) {
-    if (_verif_stream.is_open()) {
-      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
-      _verif_stream.flush();
-    } else {
-      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
-      assert(_verif_stream.is_open());
-    }
+    //if (!_verif_stream.is_open()) {
+    //  checked_system("mkdir -p verif");
+    //  _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str());
+    //  assert(_verif_stream.is_open());
+    //}
+    //_verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+    //_verif_stream.flush();
   }
 
-  int num_computed=!_invalid;
+  int num_computed = !_invalid;
 
   for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
       SSDfgNode* use = (*iter)->use();
@@ -466,29 +868,16 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     _input_vals.resize(_ops.size());
   }
 
-  uint64_t pred = 1; // valid by default
-
   // initializing back pressure
-  if(_back_array.size() == 0){
-     _back_array.resize(_ops.size());
-  }
+  _back_array.clear();
+  _back_array.resize(_ops.size(), 0);
 
-  for(unsigned int i=0; i<_ops.size(); ++i) {
-    _back_array[i] = 0;
-  }
-  /*
-  if(!predInv()) {
-    _input_vals.resize(_ops.size()-1);
-      // slot 2 in this instruction is predicate
-  }
-  */
   if(print) {
     _ssdfg->dbg_stream() << name() << " (" << _ID << "): ";
   }
 
-  uint64_t discard=0;
+  bool discard(false), reset(false), pred(true);
   uint64_t output = 0;
-  bool reset = false;
 
   _invalid=false;
 
@@ -497,54 +886,55 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _input_vals[i]=imm();
     } else if (_ops[i].is_ctrl()) {
       int c_val = _ops[i].get_buffer_val();
-      _back_array[0] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP1); // 2*5+0 = 10th pos in bitmap?
-      _back_array[1] = _ctrl_bits.isSet(c_val,CtrlMap::BACKP2);
-      discard = _ctrl_bits.isSet(c_val,CtrlMap::DISCARD);
-      pred = !(_ctrl_bits.isSet(c_val,CtrlMap::ABSTAIN)); // because it is abstain
       // FIXME: confirm that this is correct
       _input_vals[i] = c_val;
-      reset = _ctrl_bits.isSet(c_val,CtrlMap::RESET);
-      //TODO: use reset somehow
+      if (!_ops[i].get_buffer_valid()) {
+        _invalid = true;
+      } else {
+        _ctrl_bits.test(c_val, _back_array, discard, pred, reset);
+      }
     } else {
       _input_vals[i] = _ops[i].get_buffer_val();
       if(!_ops[i].get_buffer_valid()) {
-        _invalid=true;
+        _invalid = true;
       }
-    }
-
-    if(print) {
-      _ssdfg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
   }
 
   // we set this instruction to invalid
   // pred = 1; // for now--check why is it here?
-  if(pred==0) {
+  if (!pred) {
     _invalid=true;
   }
 
   if(!_invalid) { //IF VALID
+    if(print)
+      for (size_t i = 0; i < _ops.size(); ++i)
+        _ssdfg->dbg_stream() << std::hex << _input_vals[i] << " ";
+
      _ssdfg->inc_total_dyn_insts();
 
     // Read in some temp value and set _val after inst_lat cycles
-    output=do_compute(discard);
+    output = do_compute(discard);
+    _self_bits.test(output, _back_array, discard, pred, reset);
 
     if(print) {
       _ssdfg->dbg_stream() << " = " << output << "\n";
     }
   }
+
   //TODO/FIXME: change to all registers
-  if(reset) {
-     _reg[0] = 0;
-     _reg_32[0] = 0;
-     _reg_16[0] = 0;
-    _reg_8[0] = 0;
+  if (reset) {
+    std::cout << "Reset the register file! " << _reg[0] << "\n";
+    _reg[0] = 0;
   }
 
   if(print) {
-     std::cout << (_back_array[0] ? "backpressure on 1st input\n" : "");
-     std::cout << (_back_array[1] ? "backpressure on 2nd input\n" : "");
+    for (size_t i = 0; i < _back_array.size(); ++i)
+      if (_back_array[i])
+        std::cout << "backpressure on " << i << " input\n";
   }
+
   if(this->name() == ":Phi") {
     _ssdfg->inc_total_dyn_insts();
     assert(_input_vals.size()==3 && "Not enough input in phi node");
@@ -561,21 +951,16 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     _invalid=false;
   }
 
-  // std::cout << "final values of discard: " << discard << " pred: " << pred << "\n";
-  _inputs_ready=0;
+  _inputs_ready = 0;
 
   if(print) {
-    std::cout << (_invalid ? "instruction invalid\n" : "instruction valid\n");
-    if(discard) {
-      cout << " and output discard!\n";
-    }
-    // cout << "\n";
+    std::cout << (_invalid ? "instruction invalid " : "instruction valid ")
+              << (discard ? " and output discard!\n" : "\n");
   }
 
   if(!discard) {
     this->set_value(output, !_invalid, true, inst_lat(inst()));
   }
-  // _invalid = true;
 
 
   // pop the inputs after inst_thr+back_press here
@@ -586,10 +971,10 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     if(_ops[i].is_imm()) {
       continue;
     }
-    if(_back_array[i]==1){
-      _inputs_ready += _ops[i].edges.size();
-    }
-    else{
+    if (_back_array[i]) {
+      _inputs_ready++;
+      //_inputs_ready += _ops[i].edges.size();
+    } else {
       //TODO:FIXME:CHECK:IMPORTANT
       //Iterate over edges in an operand and push transients for all of them?
       for(SSDfgEdge* e : _ops[i].edges) {
@@ -600,18 +985,14 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
 
 
   if(verif) {
-    if (_verif_stream.is_open()) {
-      _verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
-      _verif_stream.flush();
-    } else {
-      checked_system("mkdir -p verif");
-      _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str(), ofstream::trunc | ofstream::out);
-      assert(_verif_stream.is_open());
-    }
+    //if (!_verif_stream.is_open()) {
+    //  checked_system("mkdir -p verif");
+    //  _verif_stream.open(("verif/fu" + _verif_id + ".txt").c_str());
+    //  assert(_verif_stream.is_open());
+    //}
+    //_verif_stream << hex << setw(16) << setfill('0') << _val << "\n";
+    //_verif_stream.flush();
   }
-
-  // int num_computed=!discard;
-  // return num_computed;
 
   return 1;
 }
@@ -634,32 +1015,6 @@ SSDfgVec::SSDfgVec(int len, const std::string &name, int id, SSDfg* ssdfg) : _na
   _group_id = ssdfg->num_groups() - 1;
 }
 
-SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v) :
-      _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _vtype(v) {
-  //TODO:FIXME: This will likely be incorrect while rebuilding the
-  //DFG from a config file, but might work for now
-  _group_id = _ssdfg->num_groups() - 1;
-
-}
-
-SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string &name) :
-        _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _name(name), _vtype(v)  {
-  //TODO:FIXME: This will likely be incorrect while rebuilding the
-  //DFG from a config file, but might work for now
-  _group_id = _ssdfg->num_groups() - 1;
-
-}
-
-int SSDfgNode::inc_inputs_ready_backcgra(bool print, bool verif) {
-  _inputs_ready+=1;
-   // std::cout<<"Node: " << this->name() << " Came to inc the inputs avail are: "<<_inputs_ready << " and required: "<<num_inc_edges()<<"\n";
-  if(_inputs_ready == num_inc_edges()) {
-    // std::cout << "(and its being pushed to ready)\n";
-    _ssdfg->push_ready_node(this);
-  }
-  return 0;
-}
-
 SSDfgVecOutput *SSDfgOutput::output_vec() {
   auto res = dynamic_cast<SSDfgVecOutput*>(vec_);
   assert(res);
@@ -674,7 +1029,7 @@ SSDfgVecInput *SSDfgInput::input_vec() {
 
 
 void SSDfgNode::set_value(uint64_t v, bool valid, bool avail, int cycle) {
-    _ssdfg->push_transient(this, v,valid, avail, cycle);
+  _ssdfg->push_transient(this, v,valid, avail, cycle);
 }
 
 //------------------------------------------------------------------
@@ -701,7 +1056,6 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   os << "\n";
 
   //print edges
-  SSDfgNode::const_edge_iterator I,E;
   for (auto e : _uses) {
 
     if(e->etype()==SSDfgEdge::data) {
@@ -728,210 +1082,6 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   os << "\n";
 
 }
-
-void SSDfgInst::printGraphviz(ostream& os, Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
-}
-
-void SSDfgOutput::printGraphviz(ostream& os,Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
-}
-
-void SSDfgInput::printGraphviz(ostream& os,Schedule* sched) {
-  SSDfgNode::printGraphviz(os,sched);
-}
-
-//TODO:FIXME: This doesn't work any more
-// ---------------------------------------------------------------------------
-// DFG Emulation -- not currently used ---------------------------------------
-#if 0
-void SSDfgNode::printEmuDFG(ostream& os, string dfg_name) {
-  os << "The ID for this node is " << _ID << endl;
-  os << "The name for this node is " << _name << endl;
-  for(auto iter = _ops.begin(); iter != _ops.end(); iter++) {
-  //  os << "Name for the ops " << (*iter)->name() << endl;
-  }
-  for(auto iter = _uses.begin(); iter != _uses.end(); iter++) {
-    os << "Name for the uses " << (*iter)->name() << endl;
-  }
-  os << "The gams name is " << gamsName() << endl;
-  os << "\n";
-}
-
-int SSDfgNode::findDepth(ostream& os, string dfg_name, int level) {
-  int returned_level = level;
-  for(auto name_iter = _uses.begin(); name_iter != _uses.end(); name_iter++) {
-    if((*name_iter)->use()->output) {
-      //Don't do anything
-    } else {
-      int candidate_level = (*name_iter)->use()->findDepth(os, dfg_name, level+1);
-      if(candidate_level > returned_level) {
-    returned_level = candidate_level;
-      }
-    }
-  }
-  return returned_level;
-}
-
-void SSDfgInst::printEmuDFG(ostream& os, string dfg_name) {
-  //os << "INSTRUCTION " << dfg_name << "_" << _name << endl;
-  auto name_iter = _uses.begin();
-  if((*name_iter)->use()->output) {
-    os << "   outputs[" << (*name_iter)->use()->_iter << "]";
-    string outputArray = (*name_iter)->use()->name();
-    if(!(*name_iter)->use()->getScalar()) {
-      outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
-      if(outputArray.find_first_of("0123456789") < outputArray.length()) {
-    outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
-    //this absolutely, should NOT have an _
-    if(outputArray.find_first_of("_") < outputArray.length()) {
-      outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
-    }
-    //Get subIter
-    os << "[" << outputArray << "]  = ";
-      } else {
-    os << "[0] = ";
-      }
-    } else {
-      os << "[0] = ";
-    }
-  } else {
-    string outputArray = (*name_iter)->def()->name();
-    outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
-    os << "   uint64_t " << outputArray << " = ";
-  }
-  string instName = (*name_iter)->def()->name();
-  instName = instName.substr(instName.find_first_of(":")+1, instName.length());
-  os << instName << "(std::array<uint64_t,2>{";
-  uint ops_amt = 1;
-  for(auto ops_iter = _ops.begin(); ops_iter != _ops.end(); ops_iter++) {
-    if((*ops_iter)->def()->input) {
-      os << "inputs[" << (*ops_iter)->def()->_iter << "]";
-      string inputArray = (*ops_iter)->def()->name();
-      if(!(*ops_iter)->def()->getScalar()) {
-    inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
-    if(inputArray.find_first_of("0123456789") < inputArray.length()) {
-      inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
-      //Get subIter
-      os << "[" << inputArray << "]";
-    } else {
-      os << "[0]";
-    }
-      } else {
-    os << "[0]";
-      }
-    } else {
-      string inputArray = (*ops_iter)->def()->name();
-      inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
-      os << inputArray;
-    }
-    if(ops_amt != _ops.size()) {
-      os << ",";
-    } else {
-      os << "});" << endl;
-    }
-    ops_amt++;
-  }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
-}
-
-void SSDfgOutput::printDirectAssignments(ostream& os, string dfg_name) {
-  for(auto ops_iter = _ops.begin(); ops_iter != _ops.end(); ops_iter++) {
-    if((*ops_iter)->def()->input) {
-      //Print our formatted name and such
-      os << "   outputs[" << _iter << "]";
-      string outputArray = name();
-      if(!getScalar()) {
-    outputArray = outputArray.substr(0, outputArray.find_first_of(":"));
-    if(outputArray.find_first_of("0123456789") < outputArray.length()) {
-      outputArray = outputArray.substr(outputArray.find_first_of("0123456789"), outputArray.length());
-      //this absolutely, should NOT have an _
-      if(outputArray.find_first_of("_") < outputArray.length()) {
-        outputArray = outputArray.substr(0, outputArray.find_first_of("_"));
-      }
-      //Get subIter
-      os << "[" << outputArray << "]  = ";
-    } else {
-      os << "[0] = ";
-    }
-      } else {
-    os << "[0] = ";
-      }
-      os << "inputs[" << (*ops_iter)->def()->_iter << "]";
-      string inputArray = (*ops_iter)->def()->name();
-      if(!(*ops_iter)->def()->getScalar()) {
-    inputArray = inputArray.substr(0, inputArray.find_first_of(":"));
-    if(inputArray.find_first_of("0123456789") < inputArray.length()) {
-      inputArray = inputArray.substr(inputArray.find_first_of("0123456789"), inputArray.length());
-      //Get subIter
-      os << "[" << inputArray << "]";
-    } else {
-      os << "[0]";
-    }
-      } else {
-    os << "[0]";
-      }
-      os << ";\n";
-    }
-  }
-}
-
-void SSDfgOutput::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* output_sizes) {
-  output = true;
-  //First, split name into realName and subIter
-  if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
-    _realName = _name.substr(0, _name.find_first_of("0123456789"));
-    _realName = _realName.substr(0, _realName.find_last_of("_"));
-    //Get subIter
-    _subIter = atoi(_name.substr(_name.find_first_of("0123456789"), _name.length()).c_str());
-  } else {
-    _realName = _name;
-    _realName = _realName.substr(0, _realName.find_last_of("_"));
-    _subIter = 0;
-  }
-  if((realName->compare(_realName) == 0) && !_scalar) {
-    //same input or output as last time, don't do anything
-    _iter = *iter - 1;
-    output_sizes->back() = output_sizes->back()+1;
-  } else {
-    _iter = *iter;
-    _size = 1;
-    *iter = (*iter) + 1;
-    os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
-    output_sizes->push_back(_size);
-  }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
-  *realName = _realName;
-}
-
-void SSDfgInput::printEmuDFG(ostream& os, string dfg_name, string* realName, int* iter, vector<int>* input_sizes) {
-  //First, split name into realName and subIter
-  input = true;
-  if((_name.find_first_of("0123456789") < _name.length()) && !_scalar) {
-    _realName = _name.substr(0, _name.find_first_of("0123456789"));
-    //Get subIter
-    _subIter = atoi(_name.substr(_name.find_first_of("0123456789"), _name.length()).c_str());
-  } else {
-    _realName = _name;
-    _subIter = 0;
-  }
-  if(realName->compare(_realName) == 0) {
-    //same input or output as last time, don't do anything
-    _iter = *iter - 1;
-    input_sizes->back() = input_sizes->back()+1;
-  } else {
-    _iter = *iter;
-    _size = 1;
-    *iter = (*iter) + 1;
-    os << "#define P_" << dfg_name << "_"  << _realName << " " << _iter << endl;
-    input_sizes->push_back(_size);
-  }
-  //SSDfgNode::printEmuDFG(os, dfg_name);
-  *realName = _realName;
-}
-// End DFG Emulation -- not currently used -----------------------------------
-// ---------------------------------------------------------------------------
-#endif
 
 //Connect two nodes in DFG
 //assumption is that each operand's edges are
@@ -1084,18 +1234,6 @@ void SSDfg::reset_simulation_state() {
   }
 }
 
-// TODO: free all buffers and clear inputs ready
-void SSDfgNode::reset_node() {
-  _inputs_ready = 0;
-  for (auto in_edges: _inc_edge_list) {
-    (*in_edges).reset_associated_buffer();
-  }
-  for (auto out_edges: _uses) {
-    (*out_edges).reset_associated_buffer();
-  }
-
-}
-
 void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 {
   os << "Digraph G { \nnewrank=true;\n " ;
@@ -1146,76 +1284,6 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 
   os << "}\n";
 }
-
-#if 0
-void SSDfg::printEmuDFG(ostream& os, string dfg_name)
-{
-  string realName = "";
-  vector<int> input_sizes;
-  int input_iter = 0;
-  const_input_iterator Iin,Ein;
-  os << "#include \"ss_emu.h\"" << endl;
-  os << "#include \"ss_c_insts.h\" "<< endl << endl;
-
-  os << "#define " << dfg_name << "_size 64" << endl;
-
-  //Inputs
-  int level = 1;
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  {
-    (*Iin)->printEmuDFG(os, dfg_name, &realName, &input_iter, &input_sizes);
-  }
-  int output_iter = 0;
-  const_output_iterator Iout,Eout;
-
-  //Outputs
-  vector<int> output_sizes;
-  for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  { (*Iout)->printEmuDFG(os, dfg_name, &realName, &output_iter, &output_sizes); }
-
-  for (Iin=_inputs.begin(),Ein=_inputs.end();Iin!=Ein;++Iin)  {
-    int new_level = (*Iin)->findDepth(os, dfg_name, 0);
-    if(new_level > level) {
-      level = new_level;
-    }
-  }
-
-  const_inst_iterator Ii,Ei;
-
-  int iter = 0;
-  int ionodes = 0;
-  //Insts
-  os << endl << "inline void dfg_func_" << dfg_name << "(uint64_t** inputs, uint64_t** outputs) {" << endl;
-  for (Ii=_insts.begin(),Ei=_insts.end();Ii!=Ei;++Ii)  {
-    (*Ii)->printEmuDFG(os, dfg_name);
-  }
-  //Next, we need to assure no outputs are just direct assignments of an input;
-   for (Iout=_outputs.begin(),Eout=_outputs.end();Iout!=Eout;++Iout)  {
-     (*Iout)->printDirectAssignments(os, dfg_name);
-   }
-   os << "}" << endl << endl << endl;
-  os << "static ss_config " << dfg_name << "_config = {&dfg_func_" << dfg_name << ", " << input_iter << ", new int["  << input_iter << "]{";
-  iter = 1;
-  for(auto viter = input_sizes.begin(); viter != input_sizes.end(); viter++) {
-    os << *viter;
-    ionodes += *viter;
-    if(iter != input_iter) {
-      os << ",";
-    }
-    iter++;
-  }
-  os << "}, " << output_iter << ", new int[" << output_iter << "]{";
-  iter = 1;
-  for(auto viter = output_sizes.begin(); viter != output_sizes.end(); viter++) {
-    os << *viter;
-    ionodes += *viter;
-    if(iter != output_iter) {
-      os << ",";
-    }
-    iter++;
-  }
-  os << "}, " << num_nodes()-ionodes << ", "  << level << " };" << endl;
-}
-#endif
-
 
 
 //IO-Model has the hardware vector io interface mapping
@@ -1500,3 +1568,231 @@ void SSDfg::printGams(std::ostream& os,
   }
   os << "/;\n";
 }
+
+void SSDfg::addVecOutput(const std::string &name, int len, EntryTable &syms, int width) {
+  int n = std::max(1, len);
+  int slice = 64 / width;
+  int t = ceil(n / float(slice));
+  SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
+  insert_vec_out(vec_output);
+  vec_output->set_port_width(width);
+  vec_output->set_vp_len(n);
+  int left_len = 0;
+  for (int i = 0, cnt = 0; i < n; i += slice) {
+    SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
+ 
+    left_len = slice;
+    if(n-i>0) {
+      left_len = std::min(n-i,slice);
+    }
+ 
+    addOutput(dfg_out);
+    vec_output->addOutput(dfg_out);
+ 
+    for (int j = 0; j < left_len*width; j += width) {
+      std::stringstream ss;
+      ss << name;
+      if (len)
+        ss << cnt++;
+      auto sym = syms.get_sym(ss.str());
+ 
+      if (auto ce = dynamic_cast<ConvergeEntry*>(sym)) {
+        int num_entries = ce->entries.size();
+        assert(num_entries > 0 && num_entries <= 16);
+        for (auto elem : ce->entries)
+          connect(elem->node, dfg_out, 0, SSDfgEdge::data, elem->l, elem->r);
+      } else if (auto ne = dynamic_cast<NodeEntry*>(sym)) {
+        connect(ne->node, dfg_out, 0, SSDfgEdge::data, ne->l, ne->r);
+      }
+    }
+  }
+}
+ 
+
+void SSDfg::addVecInput(const std::string &name, int len, EntryTable &syms, int width) {
+  int n = std::max(1, len);
+  int slice = 64 / width;
+  int t = ceil(n / float(slice));
+  // std::cout << "t: " << t << "\n";
+  // std::cout << "port_width: " << width << "\n";
+  auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
+  insert_vec_in(vec_input);
+  vec_input->set_port_width(width);
+  vec_input->set_vp_len(n);
+  int left_len=0;
+
+
+  for (int i = 0, cnt = 0; i < n; i += slice) {
+    auto *dfg_in = new SSDfgInput(this, name, vec_input);
+
+    left_len = slice;
+    if(n-i>0) {
+      left_len = std::min(n-i,slice);
+    }
+
+    addInput(dfg_in);
+    vec_input->addInput(dfg_in);
+    for (int j = 0; j < left_len*width; j += width) {
+      std::stringstream ss;
+      ss << name;
+      if (len)
+        ss << cnt++;
+      syms.set(ss.str(), new NodeEntry(dfg_in, j, j + width - 1));
+    }
+  }
+}
+
+double SSDfg::count_starving_nodes() {
+  double count = 0;
+  double num_unique_dfg_nodes = 0;
+  for(auto it : _vecInputs) {
+    SSDfgVecInput vec_in = *it;
+    for(auto elem : vec_in.inputs()) { // each scalar node
+      // for(auto node : elem->uses()) {
+      SSDfgNode *node = elem->first_use(); // FIXME: how does it work for dgra
+      num_unique_dfg_nodes += 1/node->num_inc();
+      if(node->num_inputs_ready()) { count += 1/node->num_inc(); }
+      // }
+    }
+  }
+  assert(num_unique_dfg_nodes>=0);
+  if(num_unique_dfg_nodes==0) return 0; // What is this case? none nodes
+  return count / num_unique_dfg_nodes;
+}
+
+bool SSDfg::push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
+  if((int) data.size() != vec_in->get_vp_len()) {
+    std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
+  }
+  assert((int) data.size() == vec_in->get_vp_len() && "insufficient data available");
+  // assert(data.size() == vec_in->length() && "insufficient data available");
+  int npart = 64/vec_in->get_port_width();
+  int x = static_cast<int>(vec_in->get_vp_len());
+  // int x = static_cast<int>(vec_in->length());
+  uint64_t val=0;
+
+  for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {
+    int n_times = std::min(npart, x-i*npart); 
+    for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
+      val = data[j] | (val << vec_in->get_port_width());
+    }
+    SSDfgInput *ss_node = vec_in->inputs()[i];
+    ss_node->set_node(val, valid[i], true, print, verif);
+    val = 0;
+  }
+  return true;
+}
+
+bool SSDfg::can_push_input(SSDfgVecInput *vec_in) {
+  for (auto elem : vec_in->inputs())
+    if (elem->get_avail())
+      return false;
+  return true;
+}
+
+bool SSDfg::can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
+
+  assert(len > 0 && "Cannot pop 0 length output\n");
+  if(vec_out->outputs().size() != len) {
+    std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
+  }
+  assert(vec_out->outputs().size() == len
+         && "asked for different number of outputs than the supposed length\n");
+
+  size_t ready_outputs = 0;
+  for (auto elem: vec_out->outputs()) {
+    SSDfgOperand &operand = elem->first_operand();
+    if (!operand.is_buffer_empty()) {
+      ready_outputs++;
+    }
+  }
+  // std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
+  if (ready_outputs == len) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void SSDfg::pop_vector_output(SSDfgVecOutput *vec_out, std::vector<uint64_t> &data,
+                              std::vector<bool> &data_valid, unsigned int len, bool print,
+                              bool verif){
+    assert(vec_out->outputs().size() == len && "insufficient output available\n");
+
+    // we don't need discard now!
+    for (auto elem: vec_out->outputs()) {
+      SSDfgOperand &operand = elem->first_operand();
+      data.push_back(operand.get_buffer_val());
+      data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
+      operand.pop_buffer_val(print, verif);
+    }
+  }
+
+int SSDfg::cycle(bool print, bool verif) {
+  // int num_computed=0;
+  for (auto it = buf_transient_values[cur_buf_ptr].begin();
+       it != buf_transient_values[cur_buf_ptr].end();) {
+    // set the values
+    buffer_pop_info *temp = *it;
+    SSDfgEdge *e = temp->e;
+    e->pop_buffer_val(print, verif);
+
+    it = buf_transient_values[cur_buf_ptr].erase(it);
+  }
+
+  for (auto it = transient_values[cur_node_ptr].begin();
+       it != transient_values[cur_node_ptr].end();) {
+    struct cycle_result *temp = *it;
+    SSDfgNode *ss_node = temp->n;
+    ss_node->set_node(temp->val, temp->valid, temp->avail, print, verif);
+    it = transient_values[cur_buf_ptr].erase(it);
+  }
+
+  /// FIXME(@were): I think this can be simplified; I think this local variable can be deleted
+  std::unordered_set<int> nodes_complete;
+
+
+  for (auto I = _ready_nodes.begin(); I != _ready_nodes.end();) {
+    SSDfgNode *n = *I;
+
+    int node_id = n->node_id();
+    bool should_fire = (node_id == -1) || (nodes_complete.count(node_id) == 0);
+
+    unsigned inst_throughput = 1;
+
+    //If inst_throughput cycles is great than 1, lets mark the throughput
+    //make sure nobody else can also schedule a complex instruction during
+    //that period
+    if (should_fire && node_id != -1) {
+      if (SSDfgInst *inst = dynamic_cast<SSDfgInst *>(n)) {
+        inst_throughput = inst_thr(inst->inst());
+        if (inst_throughput > 1) {
+          if (_complex_fu_free_cycle[node_id] > _cur_cycle) {
+            should_fire = false;
+          }
+        }
+      }
+    }
+
+    if (should_fire && n->get_avail() == 0) {
+      n->compute_backcgra(print, verif);
+      I = _ready_nodes.erase(I);
+      nodes_complete.insert(node_id);
+
+      if (node_id != -1 && inst_throughput > 1) {
+        _complex_fu_free_cycle[node_id] = _cur_cycle + inst_throughput;
+      }
+
+    } else {
+      ++I;
+    }
+  }
+
+  cur_buf_ptr = (cur_buf_ptr + 1) % get_max_lat();
+  cur_node_ptr = (cur_node_ptr + 1) % get_max_lat();
+  _cur_cycle = _cur_cycle + 1;
+  int temp = _total_dyn_insts;
+  _total_dyn_insts = 0;
+  return temp;
+}
+/// }

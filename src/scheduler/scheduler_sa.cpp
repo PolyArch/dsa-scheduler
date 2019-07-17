@@ -398,6 +398,7 @@ bool SchedulerSimulatedAnnealing::schedule_input( SSDfgVecInput*  vec_in, SSDfg*
 bool SchedulerSimulatedAnnealing::schedule_output( SSDfgVecOutput*  vec_out, 
     SSDfg* ssDFG, Schedule* sched) {
 
+
   SS_CONFIG::SubModel* subModel = _ssModel->subModel();
   ssio_interface& si =  subModel->io_interf();
   int n_vertex = vec_out->outputs().size();
@@ -464,6 +465,7 @@ bool SchedulerSimulatedAnnealing::schedule_output( SSDfgVecOutput*  vec_out,
     }
 
     if (!ports_okay_to_use) continue;
+
     num_found++;
 
     apply_routing(sched, candRouting);
@@ -502,8 +504,9 @@ bool SchedulerSimulatedAnnealing::schedule_output( SSDfgVecOutput*  vec_out,
       //assert(n_vertex == num_cgra_ports);
     }
   }
-  //cout << " -- \n";
+
   if(num_found > 0) {
+
     for(int i = 0; i < n_vertex; ++i) { 
        int cand_index = vec_out->is_temporal() ? 0 : i;
        ssnode* node = bestOutputs[cand_index];
@@ -1095,6 +1098,3 @@ pair<int,int> SchedulerSimulatedAnnealing::route(Schedule* sched, SSDfgEdge* dfg
   pair<int, int> score = route_minimize_distance(sched, dfgedge, source, dest, candRouting);
   return score;
 }
-
-
-

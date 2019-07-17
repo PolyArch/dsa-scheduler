@@ -17,8 +17,7 @@ template<class Archive>
 void SSDfgEdge::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ID);
   ar & BOOST_SERIALIZATION_NVP(_ssdfg);
-  ar & BOOST_SERIALIZATION_NVP(_def);
-  ar & BOOST_SERIALIZATION_NVP(_use);
+  ar & BOOST_SERIALIZATION_NVP(nodes);
   ar & BOOST_SERIALIZATION_NVP(_etype);
   ar & BOOST_SERIALIZATION_NVP(_l);
   ar & BOOST_SERIALIZATION_NVP(_r);
@@ -46,7 +45,7 @@ void SSDfgNode::serialize(Archive & ar, const unsigned version) {
 
 template<class Archive>
 void CtrlBits::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_bits);
+  ar & BOOST_SERIALIZATION_NVP(mask);
 }
 
 template<class Archive>
@@ -57,10 +56,8 @@ void SSDfgInst::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_imm_slot);
   ar & BOOST_SERIALIZATION_NVP(_subFunc);
   ar & BOOST_SERIALIZATION_NVP(_ctrl_bits);
+  ar & BOOST_SERIALIZATION_NVP(_self_bits);
   ar & BOOST_SERIALIZATION_NVP(_reg);
-  ar & BOOST_SERIALIZATION_NVP(_reg_32);
-  ar & BOOST_SERIALIZATION_NVP(_reg_16);
-  ar & BOOST_SERIALIZATION_NVP(_reg_8);
   ar & BOOST_SERIALIZATION_NVP(_imm);
   ar & BOOST_SERIALIZATION_NVP(_ssinst);
 }
