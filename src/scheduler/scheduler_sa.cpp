@@ -37,40 +37,35 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
 
 std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched, 
     int& lat, int& latmis, int& ovr, int& agg_ovr, int& max_util) {  
-    int num_left = sched->num_left(); 
-    bool succeed_sched = (num_left==0);
+  int num_left = sched->num_left(); 
+  bool succeed_sched = (num_left==0);
 
-    sched->get_overprov(ovr,agg_ovr,max_util);
-
-    //bool succeed_ovr = (ovr ==0);
-
-    //bool succeed_timing = false;
-    if (succeed_sched) { 
-      //succeed_timing = 
-      sched->fixLatency(lat,latmis);
-    } else {
-      latmis = 1000;
-      lat = 1000;
-    }
+  sched->get_overprov(ovr,agg_ovr,max_util);
+  bool succeed_timing = sched->fixLatency(lat,latmis);
 
   int violation = sched->violation();
 
-  int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
+//  int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
+    int obj = agg_ovr*10000 + violation*2000 +latmis*2000
+      + lat + max_util*30000;
 
-//        fprintf(stdout, "objective rt:%d, left: %3d, " 
-//                "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
-//                "obj:%d, ins: %d/%d, outs: %d/%d,"
-//                " insts: %d, links:%d, edge-links:%d  %s%s\n", 
-//                _route_times,
-//                sched->num_left(), lat, 
-//                sched->violation(), latmis, ovr, max_util, obj,
-//                sched->num_inputs_mapped(),  sched->ssdfg()->num_inputs(),
-//                sched->num_outputs_mapped(), sched->ssdfg()->num_outputs(),
-//                sched->num_insts_mapped(),  
-//                sched->num_links_mapped(),
-//                sched->num_edge_links_mapped(),
-//                succeed_sched ? ", all mapped" : "",
-//                succeed_timing ? ", mismatch == 0" : "");
+
+    if(false) {
+      fprintf(stdout, "\n\nobjective rt:%d, left: %3d, " 
+            "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
+            "obj:%d, ins: %d/%zu, outs: %d/%zu,"
+            " insts: %d, links:%d, edge-links:%d  %s%s\n", 
+            _route_times,
+            sched->num_left(), lat, 
+            sched->violation(), latmis, ovr, max_util, obj,
+            sched->num_inputs_mapped(),  sched->ssdfg()->inputs().size(),
+            sched->num_outputs_mapped(), sched->ssdfg()->outputs().size(),
+            sched->num_insts_mapped(),  
+            sched->num_links_mapped(),
+            sched->num_edge_links_mapped(),
+            succeed_sched ? ", all mapped" : "",
+            succeed_timing ? ", mismatch == 0" : "");
+    }
 
 //    sched->printGraphviz("hi.gv");
 
@@ -80,10 +75,8 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {  
   initialize(ssDFG,sched);
 
-  static int _srand_no=1; 
-
   int max_iters_no_improvement = 100000000;
-  srand(++_srand_no);
+  srand(++_srand);
 
   Schedule* cur_sched = new Schedule(getSSModel(),ssDFG);
   std::pair<int, int> best_score = make_pair(0, 0);
@@ -847,7 +840,8 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SSDfgNode* dfgno
 
 
   if (auto *dfginst = dynamic_cast<SSDfgInst *>(dfgnode)) {
-    spots = fill_inst_spots(sched, dfginst); //all possible candidates based on FU capability
+    spots = fill_inst_spots(sched, dfginst); 
+    //all possible candidates based on FU capability
   } else if (auto *dfg_in = dynamic_cast<SSDfgInput *>(dfgnode)) {
     spots = fill_input_spots(sched, dfg_in);
   } else if (auto *dfg_out = dynamic_cast<SSDfgOutput *>(dfgnode)) {
@@ -861,6 +855,7 @@ bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SSDfgNode* dfgno
     while (!succ && attempt < spots.size()) {
       size_t r2 = rand() % spots.size();
 
+      curRouting->clear();
       std::pair<int, int> n_score = scheduleHere(sched, dfgnode, spots[r2], *curRouting);
       bool failed = (n_score == fscore);
 
@@ -1019,11 +1014,12 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
     }
   }
 
-  if (t_cost != 0) { //empty
+  if (t_cost != 0) { //if we are not already riding on the same route
 
     if (candRouting.routing.count(make_pair(from_slot, link))) {
-      for (auto elem : candRouting.routing[make_pair(from_slot, link)]) {
-        auto *cur_node = elem->def();
+      auto& edges = candRouting.routing[make_pair(from_slot, link)];
+      for (auto edge : edges) {
+        auto *cur_node = edge->def();
         if (cur_node == def_dfgnode) {
           t_cost = 0;
           break;
@@ -1046,9 +1042,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
 
         }
       }
-      //TODO: FIXME OH NOOOOO
-      //if (t_cost==1) t_cost=1+edges.size(); //empty before
-      //t_cost+=edges.size();
+      if (t_cost!=0) t_cost+=edges.size();      
     }
   }
 

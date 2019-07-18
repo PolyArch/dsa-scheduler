@@ -1301,43 +1301,31 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
     i.extra_lat=0;
   }
 
-  if(num_left()) { //schedule is incomplete!
-    cheapCalcLatency(max_lat, max_lat_mis, true);
-    max_lat=1000;
-    max_lat_mis=1000; //no point in optimizing for this yet
-    return false;
-  } else {
-    //bool succ = fixLatency_fwd(max_lat, max_lat_mis); //fwd pass
-    //int max_lat2=0,max_lat_mis2=0;
-    //cheapCalcLatency(max_lat, max_lat_mis, true);
-    //fixLatency_fwd(max_lat,max_lat_mis);
-    //fixLatency_bwd(); //bwd pass
-    iterativeFixLatency();
+  iterativeFixLatency();
 
-    max_lat=0;
-    max_lat_mis=0;
-    cheapCalcLatency(max_lat, max_lat_mis, false);
+  max_lat=0;
+  max_lat_mis=0;
+  cheapCalcLatency(max_lat, max_lat_mis, false);
 
-    //int max_lat2=0;
-    //int max_lat_mis2=0;
-    //calcLatency(max_lat2, max_lat_mis2);
-    //checkOutputMatch(max_lat_mis2);
+  //int max_lat2=0;
+  //int max_lat_mis2=0;
+  //calcLatency(max_lat2, max_lat_mis2);
+  //checkOutputMatch(max_lat_mis2);
 
-    //if(max_lat != max_lat2|| max_lat_mis!=max_lat_mis2) {
-    //  cout << "max_lat: " << max_lat << " mis:" << max_lat_mis << "\n";
-    //  cout << "max_lat2: " << max_lat2 << " mis2:" << max_lat_mis2 << "\n";
-    //}
+  //if(max_lat != max_lat2|| max_lat_mis!=max_lat_mis2) {
+  //  cout << "max_lat: " << max_lat << " mis:" << max_lat_mis << "\n";
+  //  cout << "max_lat2: " << max_lat2 << " mis2:" << max_lat_mis2 << "\n";
+  //}
 
-    //_ssDFG->printGraphviz("viz/remap-fail.dot");
-    //printGraphviz("viz/sched.gv");
-    //cout << "-------------------------------------------------------------------\n";
-    //cout << "-------------------------------------------------------------------\n"; 
-    //exit(1);
+  //_ssDFG->printGraphviz("viz/remap-fail.dot");
+  //printGraphviz("viz/sched.gv");
+  //cout << "-------------------------------------------------------------------\n";
+  //cout << "-------------------------------------------------------------------\n"; 
+  //exit(1);
 
-    //printGraphviz("viz/sched.gv");
+  //printGraphviz("viz/sched.gv");
 
-    return max_lat_mis==0;
-  }
+  return max_lat_mis==0;
 }
 
 bool Schedule::fixLatency_bwd() {
@@ -1542,6 +1530,8 @@ void Schedule::iterativeFixLatency() {
   bool overflow = false;
   int max_mis = 0;
 
+  int _max_expected_route_latency=8;
+
   // TODO: We didn't quite fix the problem of IO vectors in temporal region, though hopefully this isn't necessary
 
   std::vector<SSDfgInst *> ordered_non_temp = ordered_non_temporal();
@@ -1565,13 +1555,23 @@ void Schedule::iterativeFixLatency() {
       for (auto edge : inst->in_edges()) {
         SSDfgNode *origNode = edge->def();
         auto &orig_vp = _vertexProp[origNode->id()];
-
-        int edge_lat = origNode->lat_of_inst() + link_count(edge) - 1;
+   
+        int routing_latency =edge_latency(edge);
+        int edge_lat = origNode->lat_of_inst() + routing_latency -1;
 
         //cout << " -----------------" <<  edge->name() << ": " << edge_lat << "\n";
 
-        new_min = std::max(new_min, orig_vp.min_lat + edge_lat);
-        new_max = std::min(new_max, orig_vp.max_lat + edge_lat + max_ed + max_mis);
+        //This edge is routed
+        if(routing_latency!=0) {
+          new_min = std::max(new_min, orig_vp.min_lat + edge_lat);
+          new_max = std::min(new_max, orig_vp.max_lat+edge_lat+max_ed+max_mis);
+        } else {
+          //This edge is not routed, so give worst case upper bound
+          new_min = std::max(new_min, orig_vp.min_lat + edge_lat +
+              _min_expected_route_latency);
+          new_max = std::min(new_max, orig_vp.max_lat+edge_lat+max_ed+max_mis
+              +_max_expected_route_latency);
+        }
       }
       changed |= new_min != vp.min_lat;
       changed |= new_max != vp.max_lat;
@@ -1603,14 +1603,21 @@ void Schedule::iterativeFixLatency() {
         SSDfgNode *origNode = edge->def();
         auto &orig_vp = _vertexProp[origNode->id()];
 
-        int edge_lat = origNode->lat_of_inst() + link_count(edge) - 1;
+        int routing_latency =edge_latency(edge);
+        int edge_lat = origNode->lat_of_inst() + routing_latency-1;
 
         //cout << " -----------------" <<  edge->name() << ": " << edge_lat << "\n";
 
-        //remove max_ed
-        new_min = std::max(new_min, orig_vp.min_lat + edge_lat);
-        new_max = std::min(new_max,
-                           orig_vp.max_lat + edge_lat + max_mis); //no max_ed here because these are output nodes
+        if(routing_latency!=0){
+          //no max_ed here because these are output nodes
+          new_max = std::min(new_max, orig_vp.max_lat + edge_lat + max_mis); 
+          new_min = std::max(new_min, orig_vp.min_lat + edge_lat);
+        } else {
+          new_min = std::max(new_min, orig_vp.min_lat + edge_lat +
+              _min_expected_route_latency); 
+          new_max = std::min(new_max, orig_vp.max_lat + edge_lat + max_mis +
+              _max_expected_route_latency); 
+        }
       }
       changed |= new_min != vecp.min_lat;
       changed |= new_max != vecp.max_lat;
@@ -1645,9 +1652,24 @@ void Schedule::iterativeFixLatency() {
         SSDfgNode *useNode = edge->use();
         auto &use_vp = _vertexProp[useNode->id()];
 
-        int edge_lat = link_count(edge) - 1 + inst->lat_of_inst();
-        new_min = std::max(new_min, use_vp.min_lat - edge_lat - max_ed - max_mis);
-        new_max = std::min(new_max, use_vp.max_lat - edge_lat);
+        int routing_latency=edge_latency(edge);
+        int edge_lat = routing_latency-1 + inst->lat_of_inst();
+
+        //Outputs don't get an edge delay... so better correct for it
+        int my_max_ed = max_ed;
+        if(dynamic_cast<SSDfgOutput*>(useNode)) {
+          my_max_ed=0;
+        }
+
+        if(routing_latency!=0) {
+          new_min = std::max(new_min, use_vp.min_lat - edge_lat -my_max_ed-max_mis);
+          new_max = std::min(new_max, use_vp.max_lat - edge_lat);
+        } else {
+          new_min = std::max(new_min, use_vp.min_lat - edge_lat - my_max_ed - max_mis
+              - _max_expected_route_latency);
+          new_max = std::min(new_max, use_vp.max_lat - edge_lat
+              - _min_expected_route_latency);
+        }
       }
       changed |= new_min != vp.min_lat;
       changed |= new_max != vp.max_lat;
@@ -1676,17 +1698,31 @@ void Schedule::iterativeFixLatency() {
     //cout << "target : " << target << "\n";
 
     int max = 0;
-    int mis = 0;
+    //int mis = 0;
     for (auto edge : inst->in_edges()) {
       if (edge == nullptr) continue;
       SSDfgNode *origNode = edge->def();
 
-      int lat = latOf(origNode) + link_count(edge) - 1;
-      int diff = std::max(std::min(_ssModel->maxEdgeDelay(), target - lat), 0);
-      mis = std::max(mis, (target - lat) - diff);
-      set_edge_delay(diff, edge);
+      int routing_latency = edge_latency(edge);
+      int max_edge_delay = _ssModel->maxEdgeDelay();
 
-      max = std::max(max, lat + diff);
+      if(routing_latency==0) { //if its not scheduled yet, be more liberal
+        routing_latency=_min_expected_route_latency;
+        max_edge_delay+=_max_expected_route_latency; 
+      }
+
+      int lat = latOf(origNode) + routing_latency -1; 
+
+      int diff = std::max(std::min(max_edge_delay, target - lat),0);
+      //mis = std::max(mis,(target- lat) - diff);
+      set_edge_delay(diff,edge);
+
+      int vio = std::max(0,(target-lat) - max_edge_delay);
+      if(vio > 0) {
+        record_violation(edge,vio);
+      } 
+
+      max=std::max(max,lat+diff);     
       //cout << " -- " << origNode->name() << "diff"  << diff 
       //                         << "links:" << link_count(edge)-1 << "\n";
     }
@@ -1694,6 +1730,8 @@ void Schedule::iterativeFixLatency() {
     assign_lat(inst, inst->lat_of_inst() + max);
   }
 
+  //This code assumes delay fifos on vector outputs -- need to re-implement if we wanted this...
+  /*
   for (int i = 0; i < _ssDFG->num_vec_output(); i++) {
     SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
     auto &vp = _vecProp[vec_out];
@@ -1723,6 +1761,7 @@ void Schedule::iterativeFixLatency() {
     //cout << " * mis: " << mis << "\n";
 
   }
+  */
 }
 
 void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) {
@@ -1741,26 +1780,27 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
     SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int low_lat=MAX_SCHED_LAT, up_lat=0;
 
-    if(vecMapped(vec_out)) {
-      for (auto dfgout : vec_out->outputs()) {
-        SSDfgEdge* edge = dfgout->first_inc_edge();
-  
-        if(is_scheduled(dfgout)) {
-          int lat = latOf(edge->def()) + edge_delay(edge) + link_count(edge)-1;
-          //cout << edge->name() << "\n";
-          //cout << edge->def()->name() << "\n";
-          //cout << edge->use()->name() << "\n";
-          //cout << "C " << vec_out->name() << " " << lat << " -- "
-          //     << " def_lat:" << latOf(edge->def()) << " ed:" << edge_delay(edge)
-          //     << " link_count:" << link_count(edge) << "inst: "
-          //     << edge->def() << " " << edge->def()->name() << "\n";
+    for (auto dfgout : vec_out->outputs()) {
+      SSDfgEdge* edge = dfgout->first_inc_edge();
 
-          assign_lat(dfgout,lat);
-
-          if(lat>up_lat) up_lat=lat;
-          if(lat<low_lat) low_lat=lat;
-        }
+      int routing_latency = edge_latency(edge);
+      if(routing_latency==0) { // if edge is not scheduled...
+        routing_latency=_min_expected_route_latency;
       }
+
+        int lat = latOf(edge->def()) + edge_delay(edge) + routing_latency-1;
+        //cout << edge->name() << "\n";
+        //cout << edge->def()->name() << "\n";
+        //cout << edge->use()->name() << "\n";
+        //cout << "C " << vec_out->name() << " " << lat << " -- "
+        //     << " def_lat:" << latOf(edge->def()) << " ed:" << edge_delay(edge)
+        //     << " link_count:" << link_count(edge) << "inst: "
+        //     << edge->def() << " " << edge->def()->name() << "\n";
+
+        assign_lat(dfgout,lat);
+
+        if(lat>up_lat) up_lat=lat;
+        if(lat<low_lat) low_lat=lat;
     }
 
     assign_lat_bounds(vec_out,low_lat,up_lat); //turn off, just for debug
@@ -1802,22 +1842,24 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
     bool set_delay) {
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
-  if(is_scheduled(inst)) {
-    for(auto edge : inst->in_edges()) {
+  for(auto edge : inst->in_edges()) {
 
-      SSDfgNode* origNode = edge->def();
+    SSDfgNode* origNode = edge->def();
 
-      if(is_scheduled(origNode)) {
-        if (origNode != nullptr) {
-          int edge_lat = edge_delay(edge) + link_count(edge)-1;
-          assert(edge_lat >= 0);
-          assert(edge_delay(edge)==0 || set_delay == 0);
-          int lat = latOf(origNode) + edge_lat; 
+    //If routing latency is 0, then its okay to assume minimum 
+    int routing_latency = edge_latency(edge);
+    if(routing_latency==0) {
+      routing_latency=_min_expected_route_latency;
+    }
 
-          if(lat>up_lat) up_lat=lat;
-          if(lat<low_lat) low_lat=lat;
-        }
-      }
+    if (origNode != nullptr) {
+      int edge_lat = edge_delay(edge) + routing_latency -1;
+      assert(edge_lat >= 0);
+      assert(edge_delay(edge)==0 || set_delay == 0);
+      int lat = latOf(origNode) + edge_lat; 
+
+      if(lat>up_lat) up_lat=lat;
+      if(lat<low_lat) low_lat=lat;
     }
   }
 
@@ -1844,8 +1886,13 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
   if(diff > 0) {
     add_violation(diff);
     record_violation(inst,diff);
+  } else {
+    record_violation(inst,0);
   }
 
+  assert(!set_delay); //set delay depricated
+
+  /*
   //Set the delay based on a simple model
   if(set_delay && is_scheduled(inst)) {
     for (auto edge : inst->in_edges()) {
@@ -1859,7 +1906,7 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
         }
       }
     }
-  }
+  }*/
 }
 
 

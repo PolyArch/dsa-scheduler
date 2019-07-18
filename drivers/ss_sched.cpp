@@ -41,6 +41,7 @@ static struct option long_options[] = {
   { "max-iters",    required_argument, nullptr, 'i', },
 
   { "max-edge-delay", required_argument, nullptr, 'd', },
+  { "seed", required_argument, NULL, 'e', },
 
   { 0, 0, 0, 0, },
 };
@@ -83,6 +84,8 @@ int main(int argc, char* argv[])
   int opt;
   bool verbose = false;
   bool show_gams = false, mipstart=false, sll=false;
+  int seed=0;
+
   string str_schedType = string("sa"); 
   string str_subalg = string("");
   bool print_bits = false;
@@ -93,7 +96,7 @@ int main(int argc, char* argv[])
   int max_edge_delay=15;
   int max_iters=20000;
   
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:e:", long_options, nullptr)) != -1) {
     switch (opt) {
     case 'a': str_schedType = string(optarg); break;
     case 's': str_subalg = string(optarg); break;
@@ -109,6 +112,8 @@ int main(int argc, char* argv[])
     case 'i': max_iters=atoi(optarg); break;
 
     case 'd': max_edge_delay=atoi(optarg); break;
+    case 'e': seed=atoi(optarg); break;
+
 
     default: exit(1);
     }
@@ -191,6 +196,7 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
+  scheduler->set_srand(seed);
   scheduler->verbose = verbose;
   scheduler->str_subalg = str_subalg;
   scheduler->setGap(relative_gap,absolute_gap);
@@ -222,14 +228,30 @@ int main(int argc, char* argv[])
 
     if(verbose) {
       sched->cheapCalcLatency(lat,latmis);
+      int ovr=0, agg_ovr=0, max_util=0;
+      sched->get_overprov(ovr,agg_ovr,max_util);
+      int violation = sched->violation();
+
       //sched->checkOutputMatch(latmis);
       if(succeed_sched) {
+        //Also check final latency
+        if(agg_ovr==0) {
+          int sim_lat=-1, sim_latmis=-1;
+          sched->calcLatency(sim_lat,sim_latmis,true);
+          cout << "simulated-lat:  " << sim_lat << "\n";  
+          cout << "simulated-lat-mis:  " << sim_latmis << "\n";
+          if(lat!=sim_lat) lat=-1;
+          if(latmis!=sim_latmis) latmis=-1;
+        }
+
         cout << "latency: " << lat << "\n";  
-        cout << "latency mismatch: " << latmis << "\n";
-        cout << "Scheduling Successful!\n";
+        cout << "lat-mismatch-max: " << latmis << "\n";
+        cout << "lat-mismatch-sum: " << violation << "\n";
+        cout << "overprov-max: " << ovr << "\n";
+        cout << "overprov-sum: " << agg_ovr << "\n";
       } else { 
-        cout << "latency: " << 0 << "\n";  
-        cout << "latency mismatch: " << 0 << "\n";  
+        cout << "latency: " << -1 << "\n";  
+        cout << "latency mismatch: " << -1 << "\n";  
         cout << "Scheduling Failed!\n";
       }
       sched->stat_printOutputLatency();

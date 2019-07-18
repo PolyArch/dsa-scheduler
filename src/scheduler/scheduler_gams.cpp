@@ -191,6 +191,7 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
 
   if(_mipstart || heur_fix) {
     SchedulerSimulatedAnnealing heur_scheduler(_ssModel);
+    heur_scheduler.set_srand(_srand++);
     heur_scheduler.suppress_timing_print=true;
     heur_scheduler.verbose=verbose;
     heur_scheduler.set_max_iters(_max_iters);

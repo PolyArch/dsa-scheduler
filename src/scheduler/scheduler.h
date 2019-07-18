@@ -160,6 +160,8 @@ public:
   bool running() {return !_should_stop;}
   void stop() {_should_stop=true;}
 
+  void set_srand(int i) {_srand=i;}
+
 protected:
   SS_CONFIG::SSModel *getSSModel() { return _ssModel; }
 
@@ -167,6 +169,7 @@ protected:
 
   int _max_iters = 20000;
   bool _should_stop = false;
+  int _srand=0;
 
   float _optcr, _optca, _reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;

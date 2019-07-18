@@ -171,6 +171,12 @@ public:
     _vertexProp[n->id()].vio = violation;
   }
 
+  int vioOf(SSDfgEdge* e) { return _edgeProp[e->id()].vio;}
+  void record_violation(SSDfgEdge* e, int violation) {
+    _edgeProp[e->id()].vio=violation; 
+  }
+
+
   // sslink* getNextLink(SSDfgEdge* dfgedge, sslink* link);
 
   //Assign the ssnode to dfgnode and vice verse
@@ -399,6 +405,16 @@ public:
   int link_count(SSDfgEdge *dfgedge) {
     return _edgeProp[dfgedge->id()].links.size();
   }
+
+  int edge_latency(SSDfgEdge* pdgedge) {
+    auto& ep = _edgeProp[pdgedge->id()];
+    int total_lat=0;
+    for(auto& link : ep.links) {
+      total_lat+=link.second->lat();
+    }
+    return total_lat;
+  }
+
 
   std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> &links_of(SSDfgEdge *edge) {
     auto &ep = _edgeProp[edge->id()];
@@ -795,6 +811,7 @@ public:
   struct EdgeProp {
     int num_links = 0;
     int extra_lat = 0;
+    int vio=0;
     std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> links;
     std::unordered_set<std::pair<int, ssnode*>, boost::hash<std::pair<int, ssnode*>>> passthroughs;
 
@@ -891,6 +908,10 @@ private:
 
   //CGRA-parsable Config Data
   bitslices<uint64_t> _bitslices;
+
+  int _min_expected_route_latency=2; //this is probably fixed?
+  int _max_expected_route_latency=6;
+
 
   SwitchDir ssdir;
   ColorMapper _cm;
