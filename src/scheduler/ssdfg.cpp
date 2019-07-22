@@ -528,6 +528,7 @@ ParseResult *EntryTable::get_sym(const std::string &s) {
 
 
 /// { SSDfg
+
 std::vector<SSDfgInst*> &SSDfg::ordered_insts() {
   if (_orderedInsts.size() == 0) {
     std::set<SSDfgInst *> done_nodes;
@@ -618,7 +619,7 @@ int SSDfg::compute(bool print, bool verif, int g) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SSDfgVecInput* vec = _vecInputGroups[g][i];
-    for (auto elem : vec->inputs()) {
+    for (auto elem : vec->vector()) {
       num_computed += elem->compute(print,verif); //calling some other compute
     }
   }
@@ -632,7 +633,7 @@ int SSDfg::maxGroupThroughput(int g) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SSDfgVecInput* vec = _vecInputGroups[g][i];
-    for (auto elem : vec->inputs())
+    for (auto elem : vec->vector())
       maxgt=std::max(maxgt, elem->maxThroughput());
   }
   return maxgt;
@@ -642,7 +643,7 @@ void SSDfg::instsForGroup(int g, std::vector<SSDfgInst*>& insts) {
   assert(g < (int)_vecInputGroups.size());
   for(unsigned i = 0; i < _vecInputGroups[g].size(); ++i) {
     SSDfgVecInput* vec = _vecInputGroups[g][i];
-    for (auto elem : vec->inputs())
+    for (auto elem : vec->vector())
       elem->depInsts(insts);
   }
 }
@@ -710,7 +711,7 @@ ParseResult *SSDfg::create_inst(std::string opcode, std::vector<ParseResult*> &a
 
 
   ParseResult *res = new NodeEntry(dfg_inst, 0, SS_CONFIG::bitwidth[inst] - 1);
-  addInst(dfg_inst);
+  add<SSDfgInst>(dfg_inst);
   return res;
 }
 
@@ -1135,7 +1136,7 @@ bool SSDfg::remappingNeeded() {
         disconnect(node, dfg_out);
         connect(node, newNode, 0, SSDfgEdge::data);
         connect(newNode, dfg_out, 0, SSDfgEdge::data);
-        addInst(newNode);
+        add<SSDfgInst>(newNode);
         dummy_map[dfg_out] = newNode;
       }
     }
@@ -1183,7 +1184,7 @@ void SSDfg::remap(int num_HW_FU) {
       SSDfgInst* newNode = dummy_map[dfg_out]; //get the one we saved earlier
       connect(node, newNode, 0, SSDfgEdge::data);
       connect(newNode, dfg_out, 0, SSDfgEdge::data);
-      addInst(newNode); //add to list of nodes
+      add<SSDfgInst>(newNode); //add to list of nodes
       dummies.insert(newNode);
       dummiesOutputs.insert(dfg_out);
 
@@ -1212,7 +1213,7 @@ void SSDfg::rememberDummies(std::set<SSDfgOutput*> d) {
       SSDfgInst* newNode = dummy_map[dfg_out]; //get the one we saved earlier
       connect(node, newNode, 0, SSDfgEdge::data);
       connect(newNode, dfg_out, 0, SSDfgEdge::data);
-      addInst(newNode); //add to list of nodes
+      add<SSDfgInst>(newNode); //add to list of nodes
       dummies.insert(newNode);
       dummiesOutputs.insert(dfg_out);
     }
@@ -1258,7 +1259,7 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
   os << "\n";
   for(auto& i : _vecInputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for (auto ssin : i->inputs()) {
+    for (auto ssin : i->vector()) {
       os << "N" << ssin->id() << " ";
     }
     os << "}\n";
@@ -1266,7 +1267,7 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 
   for(auto& i : _vecOutputs) {
     os << "subgraph cluster_" << cluster_num++ << " {" ;
-    for (auto ssout : i->outputs()) {
+    for (auto ssout : i->vector()) {
       os << "N" << ssout->id() << " ";
     }
     os << "}\n";
@@ -1284,58 +1285,6 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 
   os << "}\n";
 }
-
-
-//IO-Model has the hardware vector io interface mapping
-void SSDfg::printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssModel) {
-  os << "set cp(pv,pn) \"Port Compatibility\" \n /";   // Print the port compatibility
-  bool first=true;
-
-  for(auto& vec_in : _vecInputs) {
-    std::vector<int> matching_ports;
-
-    for(auto& port_interf : ssModel->subModel()->io_interf().in_vports) {
-      const std::vector<int>& port_m = port_interf.second->port_vec();
-
-      if(port_m.size() >= vec_in->inputs().size()) {
-        matching_ports.push_back(port_interf.first);
-        CINF(os,first);
-        os << vec_in->gamsName() << ".ip" << port_interf.first << " ";
-      }
-    }
-
-    if(matching_ports.size()==0) {
-      cout << "IN PORT \"" << vec_in->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
-      assert(0);
-    }
-  }
-
-  for(auto& vec_out : _vecOutputs) {
-    std::vector<int> matching_ports;
-
-    for(auto& port_interf : ssModel->subModel()->io_interf().out_vports) {
-
-      const std::vector<int>& port_m = port_interf.second->port_vec();
-
-      if(port_m.size() >= vec_out->outputs().size()) {
-        matching_ports.push_back(port_interf.first);
-        CINF(os,first);
-        os << vec_out->gamsName() << ".op" << port_interf.first << " ";
-      }
-    }
-
-    if(matching_ports.size()==0) {
-      cout << "OUT PORT \"" << vec_out->gamsName() << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
-      assert(0);
-    }
-
-  }
-
-  os << "/;\n";
-}
-
-
-
 
 void SSDfg::calc_minLats() {
   list<SSDfgNode* > openset;
@@ -1487,14 +1436,14 @@ void SSDfg::printGams(std::ostream& os,
   os << "parameter VI(pv,v) \"Port Vector Definitions\" \n /";   // Print the set of port vertices mappings:
   for(auto& i : _vecInputs) {
     int ind=0;
-    for (auto ssin : i->inputs()) {
+    for (auto ssin : i->vector()) {
       CINF(os,first);
       os << i->gamsName() << "." << ssin->gamsName() << " " << ind+1;
     }
   }
   for(auto& i : _vecOutputs) {
     int ind=0;
-    for (auto ssout : i->outputs()) {
+    for (auto ssout : i->vector()) {
       CINF(os,first);
       os << i->gamsName() << "." << ssout->gamsName() << " " << ind+1;
     }
@@ -1570,76 +1519,11 @@ void SSDfg::printGams(std::ostream& os,
 }
 
 void SSDfg::addVecOutput(const std::string &name, int len, EntryTable &syms, int width) {
-  int n = std::max(1, len);
-  int slice = 64 / width;
-  int t = ceil(n / float(slice));
-  SSDfgVecOutput *vec_output = new SSDfgVecOutput(t, name, (int) _vecOutputs.size(), this);
-  insert_vec_out(vec_output);
-  vec_output->set_port_width(width);
-  vec_output->set_vp_len(n);
-  int left_len = 0;
-  for (int i = 0, cnt = 0; i < n; i += slice) {
-    SSDfgOutput *dfg_out = new SSDfgOutput(this, name + "_out", vec_output);
- 
-    left_len = slice;
-    if(n-i>0) {
-      left_len = std::min(n-i,slice);
-    }
- 
-    addOutput(dfg_out);
-    vec_output->addOutput(dfg_out);
- 
-    for (int j = 0; j < left_len*width; j += width) {
-      std::stringstream ss;
-      ss << name;
-      if (len)
-        ss << cnt++;
-      auto sym = syms.get_sym(ss.str());
- 
-      if (auto ce = dynamic_cast<ConvergeEntry*>(sym)) {
-        int num_entries = ce->entries.size();
-        assert(num_entries > 0 && num_entries <= 16);
-        for (auto elem : ce->entries)
-          connect(elem->node, dfg_out, 0, SSDfgEdge::data, elem->l, elem->r);
-      } else if (auto ne = dynamic_cast<NodeEntry*>(sym)) {
-        connect(ne->node, dfg_out, 0, SSDfgEdge::data, ne->l, ne->r);
-      }
-    }
-  }
+  add_parsed_vec<SSDfgVecOutput>(name, len, syms, width);
 }
- 
 
 void SSDfg::addVecInput(const std::string &name, int len, EntryTable &syms, int width) {
-  int n = std::max(1, len);
-  int slice = 64 / width;
-  int t = ceil(n / float(slice));
-  // std::cout << "t: " << t << "\n";
-  // std::cout << "port_width: " << width << "\n";
-  auto *vec_input = new SSDfgVecInput(t, name, (int) _vecInputs.size(), this);
-  insert_vec_in(vec_input);
-  vec_input->set_port_width(width);
-  vec_input->set_vp_len(n);
-  int left_len=0;
-
-
-  for (int i = 0, cnt = 0; i < n; i += slice) {
-    auto *dfg_in = new SSDfgInput(this, name, vec_input);
-
-    left_len = slice;
-    if(n-i>0) {
-      left_len = std::min(n-i,slice);
-    }
-
-    addInput(dfg_in);
-    vec_input->addInput(dfg_in);
-    for (int j = 0; j < left_len*width; j += width) {
-      std::stringstream ss;
-      ss << name;
-      if (len)
-        ss << cnt++;
-      syms.set(ss.str(), new NodeEntry(dfg_in, j, j + width - 1));
-    }
-  }
+  add_parsed_vec<SSDfgVecInput>(name, len, syms, width);
 }
 
 double SSDfg::count_starving_nodes() {
@@ -1647,7 +1531,7 @@ double SSDfg::count_starving_nodes() {
   double num_unique_dfg_nodes = 0;
   for(auto it : _vecInputs) {
     SSDfgVecInput vec_in = *it;
-    for(auto elem : vec_in.inputs()) { // each scalar node
+    for(auto elem : vec_in.vector()) { // each scalar node
       // for(auto node : elem->uses()) {
       SSDfgNode *node = elem->first_use(); // FIXME: how does it work for dgra
       num_unique_dfg_nodes += 1/node->num_inc();
@@ -1671,12 +1555,12 @@ bool SSDfg::push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::
   // int x = static_cast<int>(vec_in->length());
   uint64_t val=0;
 
-  for (int i = 0; i < (int)vec_in->inputs().size(); ++i) {
+  for (int i = 0; i < (int)vec_in->vector().size(); ++i) {
     int n_times = std::min(npart, x-i*npart); 
     for(int j = n_times-1+i*npart; j >= i*npart; --j) { 
       val = data[j] | (val << vec_in->get_port_width());
     }
-    SSDfgInput *ss_node = vec_in->inputs()[i];
+    SSDfgInput *ss_node = vec_in->at(i);
     ss_node->set_node(val, valid[i], true, print, verif);
     val = 0;
   }
@@ -1684,7 +1568,7 @@ bool SSDfg::push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::
 }
 
 bool SSDfg::can_push_input(SSDfgVecInput *vec_in) {
-  for (auto elem : vec_in->inputs())
+  for (auto elem : vec_in->vector())
     if (elem->get_avail())
       return false;
   return true;
@@ -1693,14 +1577,14 @@ bool SSDfg::can_push_input(SSDfgVecInput *vec_in) {
 bool SSDfg::can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
 
   assert(len > 0 && "Cannot pop 0 length output\n");
-  if(vec_out->outputs().size() != len) {
-    std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->outputs().size() << "\n";
+  if(vec_out->length() != len) {
+    std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->length() << "\n";
   }
-  assert(vec_out->outputs().size() == len
+  assert(vec_out->length() == len
          && "asked for different number of outputs than the supposed length\n");
 
   size_t ready_outputs = 0;
-  for (auto elem: vec_out->outputs()) {
+  for (auto elem: vec_out->vector()) {
     SSDfgOperand &operand = elem->first_operand();
     if (!operand.is_buffer_empty()) {
       ready_outputs++;
@@ -1717,10 +1601,10 @@ bool SSDfg::can_pop_output(SSDfgVecOutput *vec_out, unsigned int len) {
 void SSDfg::pop_vector_output(SSDfgVecOutput *vec_out, std::vector<uint64_t> &data,
                               std::vector<bool> &data_valid, unsigned int len, bool print,
                               bool verif){
-    assert(vec_out->outputs().size() == len && "insufficient output available\n");
+    assert(vec_out->length() == len && "insufficient output available\n");
 
     // we don't need discard now!
-    for (auto elem: vec_out->outputs()) {
+    for (auto elem: vec_out->vector()) {
       SSDfgOperand &operand = elem->first_operand();
       data.push_back(operand.get_buffer_val());
       data_valid.push_back(operand.get_buffer_valid()); // I can read different validity here
@@ -1796,3 +1680,69 @@ int SSDfg::cycle(bool print, bool verif) {
   return temp;
 }
 /// }
+
+using SS_CONFIG::SubModel;
+
+// This function is aggressively different from those below two, so I decide to keep this for now.
+std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSModel *ssmodel) {
+  SubModel *model = ssmodel->subModel();
+  std::vector<std::pair<int, ssnode*>> spots;
+
+  //For Dedicated-required Instructions
+  for (ssfu *cand_fu : model->nodes<MapsTo*>()) {
+    if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(this->inst())) {
+      continue;
+    }
+
+    if (!this->is_temporal()) {
+      if (sched->isPassthrough(cand_fu))
+        continue;
+      //Normal Dedidated Instructions
+      
+      auto status = sched->dfg_nodes_of(cand_fu);
+      uint8_t occupied(0);
+      for (auto elem : status) {
+        occupied |= (1 << elem.second->bitwidth() / 8) - 1;
+      }
+      for (int k = 0; k < 8; k += this->bitwidth() / 8) {
+        int cnt = 0, tmp = cnt >> k & ((1 << this->bitwidth()) - 1);
+        while (tmp) {
+          ++cnt;
+          tmp -= tmp & -tmp;
+        }
+        if (cnt == 0 || rand() % (3 + cnt * cnt) == 0) {
+          spots.emplace_back(make_pair(k, cand_fu));
+        }
+      }
+
+    } else {
+      //For temporaly-shared instructions
+      //For now the approach is to *not* consume dedicated resources, although
+      //this can be changed later if that's helpful.
+      if ((int)sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
+        spots.emplace_back(make_pair(0, cand_fu));
+      }
+    }
+    
+    
+  }
+
+  if (this->is_temporal() && spots.empty()) {
+    cout << "Warning, no spots for" << this->name() << "\n";
+  }
+  return spots;
+}
+
+int SSDfgVecInput::wasted_width(Schedule *sched, SubModel *model) {
+  return model->io_interf().vports(true)[sched->vecPortOf(this).second]->size() - get_port_width();
+}
+
+int SSDfgVecOutput::wasted_width(Schedule *sched, SubModel *model) {
+  return model->io_interf().vports(false)[sched->vecPortOf(this).second]->size() - get_port_width();
+}
+
+bool SSDfgVec::yield(Schedule *sched, SubModel *model) {
+  int wasted = wasted_width(sched, model);
+  int r = rand() % wasted * wasted + get_port_width();
+  return r <= wasted * wasted;
+}

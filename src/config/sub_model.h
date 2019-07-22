@@ -20,28 +20,35 @@ class ssoutput;
 class ssvport;
 
 class ssio_interface {
-    public:
-    //interf_vec_port_num -> vec<cgra_port_num>
-    std::map<int, ssvport*> in_vports;
-    std::map<int, ssvport*> out_vports;
+public:
 
-    void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
-      sort(portID2size, in_vports);
-    }
-    
-    void sort_out_vports(std::vector<std::pair<int,int>>& portID2size) {
-      sort(portID2size, out_vports);
-    }
-    
-    ssvport* getDesc_I(int id) {
-        assert(in_vports.count(id) != 0);
-        return in_vports[id];
-    }  
-    ssvport* getDesc_O(int id) {
-        assert(out_vports.count(id) != 0);
-        return out_vports[id];
-    }  
-    private:        
+  std::map<int, ssvport*> vports_map[2];
+
+  using EntryType = std::pair<int, ssvport*>;
+  std::vector<EntryType> vports_vec[2];
+
+  std::map<int, ssvport*> &vports(bool is_input) {
+    return vports_map[is_input];
+  }
+
+  ssvport* get(bool is_input, int id) {
+    auto &ports = vports(is_input);
+    auto iter = ports.find(id);
+    assert(iter != ports.end());
+    return iter->second;
+  }
+
+  void fill_vec();
+
+  void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
+    sort(portID2size, vports_map[1]);
+  }
+  
+  void sort_out_vports(std::vector<std::pair<int,int>>& portID2size) {
+    sort(portID2size, vports_map[0]);
+  }
+
+ private:        
     void sort(std::vector<std::pair<int,int>>& portID2size, 
          std::map<int,ssvport*>& vports);
 };
@@ -383,6 +390,8 @@ public:
 
   void PrintGraphviz(std::ostream &ofs);
 
+  template<int is_input, typename T> void PrintGamsIO(std::ostream &os);
+
   void PrintGamsModel(std::ostream &ofs,
                       std::unordered_map<std::string, std::pair<ssnode *, int> > &,
                       std::unordered_map<std::string, std::pair<sslink *, int> > &,
@@ -401,6 +410,8 @@ public:
   std::vector<ssoutput*> &outputs() { return _outputs; }
 
   std::vector<std::vector<ssfu*> > &fus() { return _fus; }
+
+  template<typename T> std::vector<T> &nodes();
 
   std::vector<ssfu* > &fu_list() { return _fu_list; }
 

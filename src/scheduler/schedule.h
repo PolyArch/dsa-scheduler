@@ -90,7 +90,6 @@ public:
   //Rest of Stuff
   SSDfg *ssdfg() const { return _ssDFG; }
 
-
   std::map<SS_CONFIG::sslink *, SS_CONFIG::sslink *> &link_map_for_sw(ssswitch *sssw) {
     return _assignSwitch[sssw];
   }
@@ -216,7 +215,7 @@ public:
 
   void calc_out_vport_lat(SSDfgVecOutput *dfgvec_out) {
     int max_lat = 0;
-    for (auto dfgout : dfgvec_out->outputs()) {
+    for (auto dfgout : dfgvec_out->vector()) {
       //ssnode* out_ssnode = locationOf(dfgout).first;
       int lat_of_out_ssnode = _vertexProp[dfgout->id()].lat;
       std::cout << dfgvec_out->gamsName() << " lat:" << lat_of_out_ssnode << "\n";
@@ -255,43 +254,27 @@ public:
 
     //for assert
     auto &io_interf = _ssModel->subModel()->io_interf();
-    if (pn.first) {
-      assert(mask.size() == io_interf.in_vports[pn.second]->size());
-    } else {
-      assert(mask.size() == io_interf.out_vports[pn.second]->size());
-    }
-  }
-
-  bool vecMapped(SSDfgVec *p) {
-    return _vecProp[p].vport.second != -1;
+    assert(mask.size() == io_interf.vports_map[pn.first][pn.second]->size());
+    //if (pn.first) {
+    //  assert(mask.size() == io_interf.in_vports[pn.second]->size());
+    //} else {
+    //  assert(mask.size() == io_interf.out_vports[pn.second]->size());
+    //}
   }
 
   std::pair<bool, int> vecPortOf(SSDfgVec *p) {
     return _vecProp[p].vport;
   }
 
-  //unassign all the input nodes and vector
-  void unassign_input_vec(SSDfgVecInput *dfgvec) {
-    for (auto in : dfgvec->inputs()) {
+  void unassign_vec(SSDfgVec *vec) {
+    for (auto in : vec->vector()) {
       unassign_dfgnode(in);
     }
 
-    auto &vp = _vecProp[dfgvec];
+    auto &vp = _vecProp[vec];
     std::pair<bool, int> pn = vp.vport;
     _assignVPort.erase(pn);
-    _vecProp.erase(dfgvec);
-  }
-
-  //unassign all the input nodes and vector
-  void unassign_output_vec(SSDfgVecOutput *dfgvec) {
-    for (auto out : dfgvec->outputs()) {
-      unassign_dfgnode(out);
-    }
-
-    auto &vp = _vecProp[dfgvec];
-    std::pair<bool, int> pn = vp.vport;
-    _assignVPort.erase(pn);
-    _vecProp.erase(dfgvec);
+    _vecProp.erase(vec);
   }
 
   void unassign_edge(SSDfgEdge *edge) {
@@ -345,6 +328,8 @@ public:
     }
   }
 
+  template<typename T> inline void unassign(T);
+
   std::unordered_set<SSDfgEdge *> &edge_list(int slot, sslink *link) {
     return _linkProp[link->id()].slots[slot].edges;
   }
@@ -367,7 +352,7 @@ public:
     }
     std::cout << "\nVec: ";
     for (auto &v : _vecProp) {
-      if (v.first && vecMapped(v.first)) {
+      if (v.first && is_scheduled(v.first)) {
         std::cout << v.first->name() << " ";
       }
     }
@@ -534,12 +519,11 @@ public:
     return _vertexProp[dfgnode->id()].node != nullptr;
   }
 
+  bool is_scheduled(SSDfgVec *p) {
+    return _vecProp[p].vport.second != -1;
+  }
+
   void stat_printOutputLatency();
-
-  //typedef std::vector<sslink*>::const_iterator link_iterator;
-  //link_iterator links_begin(SSDfgNode* n) {return _linksOf[n].begin();}
-  //link_iterator links_end(SSDfgNode* n)   {return _linksOf[n].end();}
-
 
   //wide vector ports
   int numWidePorts() { return _wide_ports.size(); }
@@ -719,7 +703,7 @@ public:
       auto &vecp = _vecProp[vec_out];
       vecp.min_lat = 0;
       vecp.max_lat = INT_MAX - 1000;
-      for (auto dfgout: vec_out->outputs()) {
+      for (auto dfgout: vec_out->vector()) {
         auto &vp = _vertexProp[dfgout->id()];
         vp.min_lat = 0;
         vp.max_lat = INT_MAX - 1000;
@@ -751,35 +735,16 @@ private:
 
 
 public:
-  unsigned num_insts_mapped() { return _num_mapped[SSDfgNode::V_INST]; }
 
-  unsigned num_inputs_mapped() { return _num_mapped[SSDfgNode::V_INPUT]; }
+  template<typename T> inline bool is_complete();
 
-  unsigned num_outputs_mapped() { return _num_mapped[SSDfgNode::V_OUTPUT]; }
-
-  unsigned num_mapped() {
-    return _num_mapped[SSDfgNode::V_INST] +
-           _num_mapped[SSDfgNode::V_INPUT] +
-           _num_mapped[SSDfgNode::V_OUTPUT];
-  }
-
-  unsigned inputs_complete() { return num_inputs_mapped() == _ssDFG->inputs().size(); }
-
-  unsigned outputs_complete() { return num_outputs_mapped() == _ssDFG->outputs().size(); }
-
-  unsigned insts_complete() { return num_insts_mapped() == _ssDFG->inst_vec().size(); }
-
-  bool isComplete() { return num_mapped() == _ssDFG->nodes().size(); }
+  template<typename T> inline int num_mapped() { return _num_mapped[T::KindValue]; }
 
   unsigned num_links_mapped() { return _links_mapped; }
 
   unsigned num_edge_links_mapped() { return _edge_links_mapped; }
 
-  unsigned num_left() {
-    int num = _ssDFG->nodes().size() - num_mapped();
-    assert(num >= 0);
-    return num;
-  }
+  inline unsigned num_left();
 
   void allocate_space() {
     if (_ssDFG) {
@@ -891,6 +856,7 @@ private:
 
   std::vector<std::vector<int> > _wide_ports;
 
+  //
   std::map<std::pair<bool, int>, SSDfgVec *> _assignVPort;
   std::unordered_map<SSDfgVec *, VecProp> _vecProp;
  
@@ -916,5 +882,25 @@ private:
   SwitchDir ssdir;
   ColorMapper _cm;
 };
+
+template<> inline int Schedule::num_mapped<SSDfgNode>() {
+    return _num_mapped[SSDfgNode::V_INST] +
+           _num_mapped[SSDfgNode::V_INPUT] +
+           _num_mapped[SSDfgNode::V_OUTPUT];
+}
+
+template<typename T> inline bool Schedule::is_complete() {
+  return (int) _ssDFG->nodes<T*>().size() == num_mapped<T>();
+}
+
+inline unsigned Schedule::num_left() {
+  int num = _ssDFG->nodes<SSDfgNode*>().size() - num_mapped<SSDfgNode>();
+  assert(num >= 0);
+  return num;
+}
+
+template<> inline void Schedule::unassign(SSDfgInst* inst) { unassign_dfgnode(inst); }
+template<> inline void Schedule::unassign(SSDfgVecInput* input) { unassign_vec(input); }
+template<> inline void Schedule::unassign(SSDfgVecOutput* output) { unassign_vec(output); }
 
 #endif

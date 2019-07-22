@@ -9,7 +9,7 @@
 #include "ssinst.h"
 #include <assert.h>
 #include <list>
-#include  <iomanip>
+#include <iomanip>
 #include <unordered_set>
 
 using namespace std;
@@ -609,48 +609,31 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
 
   // --------------------------- ENCODE VP MASK ------------------------------
-  int start_bits_vp_mask=0;
-  int total_bits_vp_mask=0;
-  int slice=VP_MAP_SLICE_1;
-  for(auto& port_pair : _ssModel->subModel()->io_interf().in_vports) {
-    const std::vector<int>& port_m = port_pair.second->port_vec();
-    total_bits_vp_mask+=port_m.size();
- 
-    if(start_bits_vp_mask < 64 && total_bits_vp_mask >64) {
-      start_bits_vp_mask=port_m.size();
-      total_bits_vp_mask=port_m.size();
-      slice=VP_MAP_SLICE_2;
-    }
-
-    //Is this port assigned?  if not can skip 
-    if(SSDfgVec* dfg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
-      vector<bool> mask = maskOf(dfg_vec_in);
-
-      for(unsigned i = 0; i < port_m.size(); ++i) {
-        _bitslices.write(slice, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+  for (int io = 0; io < 2; ++io) {
+    int start_bits_vp_mask=0;
+    int total_bits_vp_mask=0;
+    int slice=VP_MAP_SLICE_1;
+    for(auto& port_pair : _ssModel->subModel()->io_interf().vports_map[io]) {
+      const std::vector<int>& port_m = port_pair.second->port_vec();
+      total_bits_vp_mask+=port_m.size();
+   
+      if(start_bits_vp_mask < 64 && total_bits_vp_mask >64) {
+        start_bits_vp_mask=port_m.size();
+        total_bits_vp_mask=port_m.size();
+        slice=VP_MAP_SLICE_2;
       }
-    }
   
-    start_bits_vp_mask=total_bits_vp_mask; //next
-  }
-
-  start_bits_vp_mask=0;
-  total_bits_vp_mask=0;
-  for(auto& port_pair : _ssModel->subModel()->io_interf().out_vports) {
-    // pair<cgra_port_location, vector<indicies_into_vec>>
-    const std::vector<int>& port_m = port_pair.second->port_vec();
-    total_bits_vp_mask+=port_m.size();
- 
-    //Is this port assigned?  if not can skip 
-    if(SSDfgVec* dfg_vec_out = vportOf(make_pair(false/*output*/,port_pair.first))) {
-      vector<bool> mask = maskOf(dfg_vec_out);
-
-      for(unsigned i = 0; i < port_m.size(); ++i) {
-        _bitslices.write(VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+      //Is this port assigned?  if not can skip 
+      if(SSDfgVec* dfg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
+        vector<bool> mask = maskOf(dfg_vec_in);
+  
+        for(unsigned i = 0; i < port_m.size(); ++i) {
+          _bitslices.write(io ? slice : VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+        }
       }
+    
+      start_bits_vp_mask=total_bits_vp_mask; //next
     }
-  
-    start_bits_vp_mask=total_bits_vp_mask; //next
   }
 
   xfer_link_to_switch(); // makes sure we have switch representation of routing
@@ -661,7 +644,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //In1, In2, In3, Opcode, S1, S2, ... S8, Row
   vector< vector<ssswitch*> >& switches = _ssModel->subModel()->switches();
   for(int i = 0; i < _ssModel->subModel()->sizex()+1; ++i) {
-    
+
     bool left = (i==0);                 //left edge switch
     bool right = (i==_ssModel->subModel()->sizex());    //right edge switch
     
@@ -1236,7 +1219,7 @@ void Schedule::stat_printOutputLatency() {
   for (int i = 0; i < n; i++) {
     SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
     cout << vec_out->gamsName() << ": ";
-    for (auto dfgout: vec_out->outputs()) {
+    for (auto dfgout: vec_out->vector()) {
       cout << latOf(dfgout) << " ";
     }
     cout << endl;
@@ -1250,7 +1233,8 @@ void Schedule::checkOutputMatch(int &max_lat_mis) {
   for (int i=0; i<_ssDFG->num_vec_output(); i++) {
     SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int low_lat=10000, up_lat=0;
-    for (auto dfgout: vec_out->outputs()) {
+    for (size_t j = 0; j < vec_out->length(); ++j) {
+      auto dfgout = vec_out->at(j);
       int lat = latOf(dfgout);
       if(lat < low_lat) {
         low_lat = lat;
@@ -1334,14 +1318,15 @@ bool Schedule::fixLatency_bwd() {
     SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int maxLat = 0;
     
-    for (auto dfgout : vec_out->outputs()) {
+    for (auto dfgout : vec_out->vector()) {
       if (latOf(dfgout) > maxLat) {
         maxLat = latOf(dfgout);
       }
     }
     unordered_set<SSDfgNode*> visited;
     //TODO: sort ports from small to large latency
-    for (auto dfgout: vec_out->outputs()) {
+    for (size_t j = 0; j < vec_out->length(); ++j) {
+      auto dfgout = vec_out->at(j);
       int ed = maxLat - latOf(dfgout); //extra delay to insert
       //cout<<"Output "<<dfgout->name()<<"  maxLat: "<<maxLat<<" _latOf: "<<_latOf[dfgout]<<" ed: "<<ed<<endl;
       if (ed > 0) {
@@ -1597,7 +1582,7 @@ void Schedule::iterativeFixLatency() {
       int new_max = vecp.max_lat;
 
 
-      for (auto dfgout : vec_out->outputs()) {
+      for (auto dfgout : vec_out->vector()) {
         SSDfgEdge *edge = dfgout->first_inc_edge();
 
         SSDfgNode *origNode = edge->def();
@@ -1624,7 +1609,7 @@ void Schedule::iterativeFixLatency() {
       vecp.min_lat = new_min;
       vecp.max_lat = new_max;
 
-      for (auto dfgout : vec_out->outputs()) {
+      for (auto dfgout : vec_out->vector()) {
         auto &vp = _vertexProp[dfgout->id()];
         vp.min_lat = new_min;
         vp.max_lat = new_max;
@@ -1780,7 +1765,7 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
     SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     int low_lat=MAX_SCHED_LAT, up_lat=0;
 
-    for (auto dfgout : vec_out->outputs()) {
+    for (auto dfgout : vec_out->vector()) {
       SSDfgEdge* edge = dfgout->first_inc_edge();
 
       int routing_latency = edge_latency(edge);
@@ -1819,7 +1804,7 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
 
     /*
     //Don't play with delay on output nodes because no delay fifos
-    if(set_delay && vecMapped(vec_out)) { 
+    if(set_delay && is_scheduled(vec_out)) { 
       for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
         SSDfgOutput* dfgout = vec_out->getOutput(m);
         SSDfgEdge* edge = dfgout->first_inc_edge();
@@ -2332,4 +2317,3 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   }
 
 }
-

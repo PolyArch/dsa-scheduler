@@ -177,28 +177,30 @@ void SubModel::parse_io(std::istream& istream) {
         std::stringstream ssv(value);
              
         static int message=0;
+        int is_input = -1;
         if(ModelParsing::StartsWith(param, "VPORT_IN")) {
           if(message++==0) 
             cout << "VPORT_IN depricated, ignoring colons, switch to PORT_IN\n";
           parse_port_list(ssv,int_map);
           for(auto& p : int_map) int_vec.push_back(p.first);
-          _ssio_interf.in_vports[port_num]=new ssvport();
-          _ssio_interf.in_vports[port_num]->set_port_vec(int_vec);
+          is_input = 1;
         } else if(ModelParsing::StartsWith(param, "VPORT_OUT")) {
           if(message++==0) 
              cout << "VPORT_OUT depricated, ignoring colons, switch to PORT_IN\n";
           parse_port_list(ssv,int_map);
           for(auto& p : int_map) int_vec.push_back(p.first);
-          _ssio_interf.out_vports[port_num]=new ssvport();
-          _ssio_interf.out_vports[port_num]->set_port_vec(int_vec);
+          is_input = 0;
         } else if(ModelParsing::StartsWith(param, "PORT_IN")) {
           parse_list_of_ints(ssv,int_vec);
-          _ssio_interf.in_vports[port_num]=new ssvport();
-          _ssio_interf.in_vports[port_num]->set_port_vec(int_vec);
+          is_input = 1;
         } else if(ModelParsing::StartsWith(param, "PORT_OUT")) {
           parse_list_of_ints(ssv,int_vec);
-          _ssio_interf.out_vports[port_num]=new ssvport();
-          _ssio_interf.out_vports[port_num]->set_port_vec(int_vec);
+          is_input = 0;
+        }
+        if (is_input != -1) {
+          ssvport *nvp = new ssvport();
+          nvp->set_port_vec(int_vec);
+          _ssio_interf.vports_map[is_input][port_num] = nvp;
         }
     }
 }
@@ -395,6 +397,29 @@ void SubModel::clear_all_runtime_vals() {
   for (auto &i : _switch_list) {
     i->reset_runtime_vals();
   }
+}
+
+namespace SS_CONFIG {
+
+template<> std::vector<ssinput*> &SubModel::nodes() { return _inputs; }
+template<> std::vector<ssoutput*> &SubModel::nodes() { return _outputs; }
+template<> std::vector<ssfu*> &SubModel::nodes() { return _fu_list; }
+
+template<int is_input, typename T> void SubModel::PrintGamsIO(std::ostream &os) {
+  bool first = true;
+  auto &_ssio_interf = this->_ssio_interf;
+  std::vector<T*> &nodes_ = this->nodes<T*>();
+  for (auto &elem : _ssio_interf.vports_map[is_input]) {
+    int i = 0;
+    //for each elem in the vector
+    for (auto port : elem.second->port_vec()) {
+      assert((unsigned) port >= nodes_.size() && "TOO HIGH OP INDEX");
+      if (first) first = false; else os << ", ";
+      os << "ip" << elem.first << "." << nodes_[port]->gams_name(0) << " " << i + 1; //no config supp.
+    }
+  }
+}
+
 }
 
 #if 0
@@ -792,16 +817,13 @@ void SubModel::PrintGamsModel(ostream& ofs,
   // Declare Vector Ports 
   first = true;
 
-  for (auto I = _ssio_interf.in_vports.begin(), E = _ssio_interf.in_vports.end(); I != E; ++I) {
-    CINF(ofs, first);
-    ofs << "ip" << I->first;
-    port_map[string("ip") + std::to_string(I->first)] = make_pair(true, I->first);
-  }
-
-  for (auto I = _ssio_interf.out_vports.begin(), E = _ssio_interf.out_vports.end(); I != E; ++I) {
-    CINF(ofs, first);
-    ofs << "op" << I->first;
-    port_map[string("op") + std::to_string(I->first)] = make_pair(false, I->first);
+  for (int io = 0; io < 2; ++io) {
+    std::string prfx[2] = {"op", "ip"};
+    for (auto &elem : _ssio_interf.vports_map[io]) {
+      CINF(ofs, first);
+      ofs << "ip" << elem.first;
+      port_map[prfx[io] + std::to_string(elem.first)] = make_pair(true, elem.first);
+    }
   }
 
   if (first == true) {
@@ -1029,25 +1051,8 @@ void SubModel::PrintGamsModel(ostream& ofs,
   // Declare Port to Node Mapping
   first = true;
 
-  for (auto I = _ssio_interf.in_vports.begin(), E = _ssio_interf.in_vports.end(); I != E; ++I) {
-    int i = 0;
-
-    //for each elem in the vector
-    for (auto port : I->second->port_vec()) {
-      CINF(ofs, first);
-      if ((unsigned) port >= _inputs.size()) { assert(0 && "TOO HIGH OP INDEX"); }
-      ofs << "ip" << I->first << "." << _inputs[port]->gams_name(0) << " " << i + 1; //no config supp.
-    }
-  }
-
-  for (auto I = _ssio_interf.out_vports.begin(), E = _ssio_interf.out_vports.end(); I != E; ++I) {
-    int i = 0;
-    for (auto port : I->second->port_vec()) {
-      CINF(ofs, first);
-      if ((unsigned) port >= _outputs.size()) { assert(0 && "TOO HIGH OP INDEX"); }
-      ofs << "op" << I->first << "." << _outputs[port]->gams_name(0) << " " << i + 1;
-    }
-  }
+  PrintGamsIO<1, ssinput>(ofs);
+  PrintGamsIO<0, ssoutput>(ofs);
 
   ofs << "/\n";
 
@@ -1571,6 +1576,21 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   }
 
   regroup_vecs();
+}
+
+void ssio_interface::fill_vec() {
+  for (int i = 0; i < 2; ++i) {
+    vports_vec[i].resize(vports_map[i].size());
+    int j = 0;
+    for (auto &elem : vports_map[i])
+      vports_vec[i][j++] = elem;
+    std::sort(vports_vec[i].begin(),
+              vports_vec[i].end(),
+              [] (const ssio_interface::EntryType& a,
+                  const ssio_interface::EntryType &b) {
+                return a.second->size() > b.second->size();
+              });
+  }
 }
 
 

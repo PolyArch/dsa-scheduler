@@ -86,18 +86,17 @@ void SSDfgVec::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_group_id);
   ar & BOOST_SERIALIZATION_NVP(_port_width);
   ar & BOOST_SERIALIZATION_NVP(_vp_len);
+  ar & BOOST_SERIALIZATION_NVP(vector_);
 }
 
 template<class Archive>
 void SSDfgVecInput::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgVec);
-  ar & BOOST_SERIALIZATION_NVP(_inputs);
 }
 
 template<class Archive>
 void SSDfgVecOutput::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgVec);
-  ar & BOOST_SERIALIZATION_NVP(_outputs);
 }
 
 template<class Archive>

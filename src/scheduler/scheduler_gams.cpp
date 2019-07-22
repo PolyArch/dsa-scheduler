@@ -33,7 +33,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SSDfg* ssDFG
 
   int config=0;
   //Mapping Variables
-  for (auto dfgnode : ssDFG->nodes()) {
+  for (auto dfgnode : ssDFG->nodes<SSDfgNode*>()) {
     ssnode* spot = sched->locationOf(dfgnode);
     ofs << "Mn.l('" << dfgnode->gamsName() 
         << "','" << spot->gams_name(config) << "')=1;\n";
@@ -99,7 +99,7 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SSDfg* ssDFG
   //Timing
   int d1,d2;
   sched->calcLatency(d1,d2); //make sure stuff is filled in
-  for (auto n : ssDFG->nodes()) {
+  for (auto n : ssDFG->nodes<SSDfgNode*>()) {
     int l = sched->latOf(n);
     if(SSDfgInst* inst = dynamic_cast<SSDfgInst*>(n)) {
       l -= inst_lat(inst->inst());
@@ -347,7 +347,7 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
 
   schedule->clearAll();
 
-  cout << "Total Nodes: " << ssDFG->nodes().size() << "\n";
+  cout << "Total Nodes: " << ssDFG->nodes<SSDfgNode*>().size() << "\n";
   
   int numInsts = ssDFG->inst_vec().size();
   cout << "Total Insts: " <<  numInsts << "\n";
@@ -384,7 +384,12 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
   //--gamsToDfgegde
   //--gamsToPortV
   ssDFG->printGams(ofs_ss_dfg,gamsToDfgnode,gamsToDfgedge,gamsToPortV);
-  ssDFG->printPortCompatibilityWith(ofs_ss_dfg,_ssModel);
+
+  ofs_ss_dfg << "set cp(pv,pn) \"Port Compatibility\" \n /";
+  ssDFG->printPortCompatibilityWith<1, SSDfgVecInput>(ofs_ss_dfg,_ssModel);
+  ssDFG->printPortCompatibilityWith<0, SSDfgVecInput>(ofs_ss_dfg,_ssModel);
+  ofs_ss_dfg << "/;\n";
+
   ofs_ss_dfg.close();
   
   // ----------------- run gams! --------------------------------------------
@@ -467,11 +472,7 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
       std::pair<bool,int> pn = gamsToPortN[ssnode_name];  
 
       unsigned size_of_vp;
-      if(pn.first) {
-       size_of_vp = _ssModel->subModel()->io_interf().in_vports[pn.second]->size();
-      } else {
-       size_of_vp = _ssModel->subModel()->io_interf().out_vports[pn.second]->size();
-      }
+      size_of_vp = _ssModel->subModel()->io_interf().vports_map[pn.first][pn.second]->size();
 
       std::vector<bool> mask;
       //mask.resize(pv->locMap().size());

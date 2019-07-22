@@ -230,9 +230,11 @@ void SSModel::parse_json(std::istream& istream) {
       nodes.push_back(n);
     }
  
+    // TODO(@were): merge this
+    int is_input = type=="InputPorts";
     if(type=="InputPorts") {
       int port_num = num_ivp++;
-      io.in_vports[port_num]=vp;
+      io.vports_map[is_input][port_num]=vp;
       for(ssnode* n:nodes) {
         int node_id = num_inputs++;
         cout << "added input to vec: " << node_id << "\n";
@@ -243,7 +245,7 @@ void SSModel::parse_json(std::istream& istream) {
       }
     } else if(type=="OutputPorts") {
       int port_num = num_ovp++;
-      io.out_vports[port_num]=vp;
+      io.vports_map[is_input][port_num]=vp;
       for(ssnode* n:nodes) {
         int node_id = num_outputs++;
         cout << "added output to vec: " << node_id << "\n";

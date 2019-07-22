@@ -24,7 +24,7 @@ using usec = std::chrono::microseconds;
 using get_time = std::chrono::steady_clock;
 
 
-template <typename T,typename U>                           
+template <typename T,typename U>
 std::pair<T,U> operator+(const std::pair<T,U> & l,
                          const std::pair<T,U> & r) {   
     return {l.first+r.first,l.second+r.second};
@@ -43,20 +43,6 @@ public:
     int num_passthroughs = 0;
     std::unordered_set<sslink *> links;
   };
-
-
-  void take_union(CandidateRouting &r) {
-    for (auto &link_iter : r.routing) {
-      for (SSDfgEdge *edge : link_iter.second) {
-        routing[link_iter.first].insert(edge);
-      }
-    }
-    for (auto &edge_iter : r.edge_prop) {
-      SSDfgEdge *edge = edge_iter.first;
-      assert(edge_prop.count(edge) == 0);
-      edge_prop[edge] = edge_iter.second;
-    }
-  }
 
   std::unordered_map<std::pair<int, SS_CONFIG::sslink*>,
     std::unordered_set<SSDfgEdge*>, boost::hash<std::pair<int, SS_CONFIG::sslink*>>> routing;
@@ -186,7 +172,7 @@ public:
   HeuristicScheduler(SS_CONFIG::SSModel *ssModel) : Scheduler(ssModel),
                                                     fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
 
-  virtual bool scheduleNode(Schedule *, SSDfgNode *) = 0;
+  virtual bool scheduleNode(Schedule *, SSDfgInst *) = 0;
 
   virtual std::pair<int, int> scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
                                            CandidateRouting &) = 0;
@@ -212,13 +198,6 @@ protected:
   void apply_routing(Schedule *, CandidateRouting *);
 
   void apply_routing(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>, CandidateRouting *);
-
-  std::vector<std::pair<int, ssnode *>> fill_input_spots(Schedule *, SSDfgInput *);
-
-  std::vector<std::pair<int, ssnode *>> fill_output_spots(Schedule *, SSDfgOutput *);
-
-  // Find all the candidate spots for the given instruction.
-  std::vector<std::pair<int, SS_CONFIG::ssnode *>> fill_inst_spots(Schedule *, SSDfgInst *);
 
   const std::pair<int, int> fscore;
 

@@ -8,7 +8,7 @@ CXX = g++
 
 CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
-LIB_PATH=$(SS_TOOLS)/lib 
+LIB_PATH=../build/lib 
 INC_SSMODEL_PATH=$(SS_TOOLS)/include/ss-config
 INC_SSSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 

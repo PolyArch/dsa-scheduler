@@ -73,8 +73,8 @@ bool HeuristicScheduler::assignVectorInputs(SSDfg* ssDFG, Schedule* sched) {
 
   int n = ssDFG->num_vec_input();
 
-  ssDFG->sort_vec_in();
-  si.sort_in_vports(sd);
+  ssDFG->sort<SSDfgVecInput>();
+  ssDFG->sort<SSDfgVecOutput>();
 
   for (int j = 0; j < n; ++j) {
     SSDfgVecInput *vec_in = ssDFG->vec_in(j);
@@ -85,17 +85,17 @@ bool HeuristicScheduler::assignVectorInputs(SSDfg* ssDFG, Schedule* sched) {
     for (auto &i : sd) {
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/, vport_num);
-      const vector<int> &vport_desc = si.getDesc_I(vport_num)->port_vec();
+      const vector<int> &vport_desc = si.get(true, vport_num)->port_vec();
 
       //Check if the vetcor port is 1. big enough & 2. unassigned
-      if (vec_in->inputs().size() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
+      if (vec_in->length() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
         std::vector<bool> mask;
         mask.resize(vport_desc.size());
 
         bool ports_okay_to_use = true;
 
         //Check if it's okay to assign to these ports
-        for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
+        for (unsigned m = 0; m < vec_in->length(); ++m) {
           //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
           ssinput *cgra_in_port = subModel->inputs()[cgra_port_num];
@@ -110,7 +110,7 @@ bool HeuristicScheduler::assignVectorInputs(SSDfg* ssDFG, Schedule* sched) {
           continue; //don't assign these ports
         }
         // Assign Individual Elements
-        for (unsigned m = 0; m < vec_in->inputs().size(); ++m) {
+        for (unsigned m = 0; m < vec_in->length(); ++m) {
           mask[m] = true;
 
           //Get the ssnode corresponding to mask[m]
@@ -118,7 +118,7 @@ bool HeuristicScheduler::assignVectorInputs(SSDfg* ssDFG, Schedule* sched) {
           ssinput *cgra_in_port = subModel->inputs()[cgra_port_num];
 
           //Get the input dfgnode corresponding to m
-          SSDfgNode *ssdfg_input = vec_in->inputs()[m];
+          SSDfgNode *ssdfg_input = vec_in->at(m);
           sched->assign_node(ssdfg_input, make_pair(0, cgra_in_port));
         }
         //Perform the vector assignment
@@ -147,7 +147,7 @@ bool HeuristicScheduler::assignVectorOutputs(SSDfg* ssDFG, Schedule* sched) {
   int n = ssDFG->num_vec_output();
 
 
-  ssDFG->sort_vec_out();
+  ssDFG->sort<SSDfgVecOutput>();
   si.sort_out_vports(sd);
 
   for (int j = 0; j < n; ++j) {
@@ -159,22 +159,22 @@ bool HeuristicScheduler::assignVectorOutputs(SSDfg* ssDFG, Schedule* sched) {
     for (auto &i : sd) {
       int vport_num = i.first;
       auto vport_id = std::make_pair(true/*input*/, vport_num);
-      const vector<int> &vport_desc = si.getDesc_I(vport_num)->port_vec();
+      const vector<int> &vport_desc = si.get(true, vport_num)->port_vec();
 
       //Check if the vetcor port is 1. big enough & 2. unassigned
-      if (vec_out->outputs().size() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
+      if (vec_out->length() <= vport_desc.size() && sched->vportOf(vport_id) == nullptr) {
         std::vector<bool> mask;
         mask.resize(vport_desc.size());
 
         bool ports_okay_to_use = true;
         candRouting.clear();
         //Check if it's okay to assign to these ports
-        for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
+        for (unsigned m = 0; m < vec_out->length(); ++m) {
           //Get the ssnode corresponding to mask[m]
           int cgra_port_num = vport_desc[m];
           ssoutput *cgra_out_port = subModel->outputs()[cgra_port_num];
           //Get the input dfgnode corresponding to m
-          SSDfgNode *ssdfg_output = vec_out->outputs()[m];
+          SSDfgNode *ssdfg_output = vec_out->at(m);
           if (sched->dfgNodeOf(cgra_out_port) != nullptr) {
             ports_okay_to_use = false;
             break;
@@ -191,7 +191,7 @@ bool HeuristicScheduler::assignVectorOutputs(SSDfg* ssDFG, Schedule* sched) {
         }
         apply_routing(sched, &candRouting); //Commit the routing
         // Assign Individual Elements
-        for (unsigned m = 0; m < vec_out->outputs().size(); ++m) {
+        for (unsigned m = 0; m < vec_out->length(); ++m) {
           mask[m] = true;
 
           //Get the ssnode corresponding to mask[m]
@@ -199,7 +199,7 @@ bool HeuristicScheduler::assignVectorOutputs(SSDfg* ssDFG, Schedule* sched) {
           ssoutput *cgra_out_port = subModel->outputs()[cgra_port_num];
 
           //Get the input dfgnode corresponding to m
-          SSDfgNode *ssdfg_output = vec_out->outputs()[m];
+          SSDfgNode *ssdfg_output = vec_out->at(m);
           sched->assign_node(ssdfg_output, make_pair(0, cgra_out_port));
         }
         //Perform the vector assignment
@@ -272,87 +272,6 @@ void HeuristicScheduler::apply_routing(Schedule *sched, SSDfgNode *dfgnode,
 
   sched->assign_node(dfgnode,here);
   apply_routing(sched, candRouting);
-}
-
-vector<pair<int, ssnode*>> HeuristicScheduler::fill_input_spots(Schedule* sched, SSDfgInput* dfginst) {
-  vector<pair<int, ssnode*>> spots;
-
-  SubModel::const_input_iterator I, E;
-  for (auto &elem : _ssModel->subModel()->inputs()) {
-    ssinput *cand_input = elem;
-
-    if (sched->dfgNodeOf(cand_input) == nullptr) {
-      spots.emplace_back(make_pair(0, cand_input));
-    }
-  }
-  return spots;
-}
-
-vector<pair<int, ssnode*>> HeuristicScheduler::fill_output_spots(Schedule* sched,SSDfgOutput* dfginst) {
-  vector<pair<int, ssnode*>> spots;
-
-  SubModel::const_output_iterator I, E;
-  for (auto &elem : _ssModel->subModel()->outputs()) {
-    ssoutput *cand_output = elem;
-
-    if (sched->dfgNodeOf(cand_output) == nullptr) {
-      spots.emplace_back(make_pair(0, cand_output));
-    }
-
-  }
-  return spots;
-}
-
-vector<pair<int, ssnode*>> HeuristicScheduler::fill_inst_spots(Schedule *sched, SSDfgInst *dfginst) {
-  vector<pair<int, ssnode*>> spots;
-
-  //For Dedicated-required Instructions
-  for (ssfu *cand_fu : _ssModel->subModel()->fu_list()) {
-    if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(dfginst->inst())) {
-      continue;
-    }
-
-    if (!dfginst->is_temporal()) {
-      if (sched->isPassthrough(cand_fu))
-        continue;
-      //Normal Dedidated Instructions
-      
-      //integrate this later!
-      //int util=sched->thingsAssigned(cand_fu);
-      //if(util==0 || (rand_bt(0,3+util*util) ==0) ) {
-      //   spots.push_back(cand_fu);
-      auto status = sched->dfg_nodes_of(cand_fu);
-      vector<bool> occupied(8, false);
-      for (auto elem : status) {
-        for (int k = 0; k < elem.second->bitwidth() / 8; ++k)
-          occupied[k + elem.first] = true;
-      }
-      for (int k = 0; k < 8; k += dfginst->bitwidth() / 8) {
-        auto begin = occupied.begin() + k;
-        auto end = occupied.begin() + k + dfginst->bitwidth() / 8;
-        int util = accumulate(begin, end, false,
-                              [](bool a, bool b) -> int { return (int) a + (int) b; });
-        if (util == 0 || rand_bt(0, 3 + util * util) == 0) {
-          spots.emplace_back(make_pair(k, cand_fu));
-        }
-      }
-
-    } else {
-      //For temporaly-shared instructions
-      //For now the approach is to *not* consume dedicated resources, although
-      //this can be changed later if that's helpful.
-      if ((int)sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
-        spots.emplace_back(make_pair(0, cand_fu));
-      }
-    }
-    
-    
-  }
-
-  if (dfginst->is_temporal() && spots.empty()) {
-    cout << "Warning, no spots for" << dfginst->name() << "\n";
-  }
-  return spots;
 }
 
 //void Scheduler::unroute(Schedule* sched, SSDfgEdge* dfgedge, 
