@@ -83,6 +83,8 @@ public:
 
   void printConfigBits(std::ostream &os, std::string cfg_name);
 
+  void printConfigBits_Hw(std::string & hw_config_filename);
+
   void printConfigCheat(std::ostream &os, std::string cfg_name);
 
   void printConfigVerif(std::ostream &os);
@@ -585,34 +587,28 @@ public:
       return;
     }
 
-    vector<vector<ssswitch*> > &switches = _ssModel->subModel()->switches();  //2d switches
-    for (int i = 0; i < _ssModel->subModel()->sizex() + 1; ++i) {
-      for (int j = 0; j < _ssModel->subModel()->sizey() + 1; ++j) {
+    vector<ssswitch*>  &switches = _ssModel->subModel() -> switch_list();  //1d switches
+    
+    for(auto sssw_it : switches){
+      ssswitch *sssw = sssw_it;
+      for (auto &inlink: sssw->in_links()) {
+        for (int slot_in = 0; slot_in < 8; ++slot_in) {
+          if (linkAssigned(slot_in, inlink)) {
+            //inlink to sw associated with a dfg node
+            SSDfgNode *innode = dfgNodeOf(slot_in, inlink);
 
-        ssswitch *sssw = switches[i][j];
-
-        for (auto &inlink: sssw->in_links()) {
-          for (int slot_in = 0; slot_in < 8; ++slot_in) {
-            if (linkAssigned(slot_in, inlink)) {
-              //inlink to sw associated with a dfg node
-              SSDfgNode *innode = dfgNodeOf(slot_in, inlink);
-
-              for (auto outlink: sssw->out_links()) {
-                for (int slot_out = 0; slot_out < 8; ++slot_out) {
-
+            for (auto outlink: sssw->out_links()) {
+              for (int slot_out = 0; slot_out < 8; ++slot_out) {
                   //check if the dfgnode has same outlink and inlink
-                  if (linkAssigned(slot_out, outlink) != 0 && innode == dfgNodeOf(slot_out, outlink)) {
-                    _assignSwitch[sssw][outlink] = inlink;
-                  }
+                if (linkAssigned(slot_out, outlink) != 0 && innode == dfgNodeOf(slot_out, outlink)) {
+                 _assignSwitch[sssw][outlink] = inlink;
                 }
-              }//end for out links
-
-            }
+              }
+            }//end for out links
           }
-        }//end for sin links
-
-      }//end for sizex
-    }//end for sizey
+        }
+      }//end for sin links
+    }
   }
 
   //NOTE/WARN: interpretConfigBits creates a dfg object that should

@@ -138,6 +138,8 @@ int main(int argc, char* argv[])
   ssmodel.setMaxEdgeDelay(max_edge_delay);
   ssmodel.maxEdgeDelay();
 
+
+
   //cout << "Softbrain CGRA Size:" << ssmodel.subModel()->sizex() << "x"
   //                               << ssmodel.subModel()->sizey() <<"\n";
 
@@ -181,6 +183,8 @@ int main(int argc, char* argv[])
   ofs.close();
 
   Schedule* sched=nullptr;
+  
+
 
   //Scheduler scheduler(&ssmodel);
   if(str_schedType == "gams") {
@@ -215,6 +219,10 @@ int main(int argc, char* argv[])
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL); 
 
+    // Debug
+    //string hw_config_filename = model_rawname + ".xml";
+    //sched -> printConfigBits_Hw(hw_config_filename);
+
     succeed_sched = scheduler->schedule_timed(&sspdg,sched);
 
     int lat=0,latmis=0;
@@ -225,6 +233,8 @@ int main(int argc, char* argv[])
       //ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
       //sched->printConfigText(ctxs); // text form of config fed to gui
     }
+
+
 
     if(verbose) {
       sched->cheapCalcLatency(lat,latmis);
@@ -278,6 +288,10 @@ int main(int argc, char* argv[])
     succeed_sched = s->schedule_internal(&sspdg,sched);
   }
 
+  // TODO: Print Hardware Config Information @ Sihao
+  // string hw_config_filename = model_rawname + ".xml";
+  // sched -> printConfigBits_Hw(hw_config_filename);
+
   sched->set_name(pdg_rawname);
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);     
@@ -288,7 +302,7 @@ int main(int argc, char* argv[])
     std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
     std::ofstream oshb(config_header_bits);     
     assert(oshb.good()); 
-    sched->printConfigHeader(oshb, dfg_base,false);
+    sched->printConfigHeader(oshb, dfg_base,true);
   }
 
 

@@ -50,7 +50,7 @@ class SSModel {
     int _maxEdgeDelay = 15;
 
     void parse_exec(std::istream& istream);
-
+    void parse_yaml(const std::string& fn);
     void parse_json(std::istream& istream);
 };
     

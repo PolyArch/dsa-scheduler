@@ -12,11 +12,17 @@
 #include <iomanip>
 #include <unordered_set>
 
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+#include <boost/foreach.hpp>
+#include <set>
+#include <exception>
+
 using namespace std;
 using namespace SS_CONFIG;
+namespace pt = boost::property_tree;
 
 //Scheduling Interface
-
 extern "C" void libssscheduler_is_present() {}
 
 void Schedule::clear_ssdfg() {
@@ -567,6 +573,32 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
   os << "filename:" << file_name.c_str() << "\";\n\n";
 }
 
+void Schedule::printConfigBits_Hw(std::string & hw_config_filename){
+  pt::ptree root;
+  pt::read_xml(hw_config_filename, root);
+
+
+  // ------ Encode for Switches ------
+  vector<ssswitch *> switches = _ssModel -> subModel() -> switch_list();
+  for(ssswitch * sssw : switches){
+    // Find Hardware Config
+    string sw_name = sssw -> get_name();
+    bool found = false;
+    for (auto it : root.get_child("CGRA.Routers")){
+      std::string router_name = it.second.get<std::string>("Module_Name");
+      if (sw_name == router_name){// Switch Config Find
+        found = true;
+        int module_id = it.second.get<int>("Module_ID");
+        bool test = module_id > 0;
+        
+      }else{
+        continue; // Not this one, continue
+      }
+    }// End of Switch in Config File
+    assert(found&&"Not found the config of this switch");
+  }// End of Switch In Model
+}
+
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //print_bit_loc();
 
@@ -1032,6 +1064,7 @@ void Schedule::reconstructSchedule(
   }
 
   //iterate over fus
+  /*
   vector< vector<ssfu*> >& fus = _ssModel->subModel()->fus();
   for(int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
     for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
@@ -1042,6 +1075,16 @@ void Schedule::reconstructSchedule(
         tracePath(ssfu_node, dfg_node, routeMap, dfgnode_for, posMap);
       }
         
+    }
+  }
+  */
+  std::vector< ssfu* > fus = _ssModel->subModel()->fu_list();
+  for(auto fu : fus) {
+    ssfu* ssfu_node = dynamic_cast<ssfu*>(fu);
+    if(dfgnode_for.count(ssfu_node)!=0) {
+      //cout << "reconstruct from fu " << i << " " << j << "\n";
+      SSDfgNode* dfg_node = dfgnode_for[ssfu_node];
+      tracePath(ssfu_node, dfg_node, routeMap, dfgnode_for, posMap);
     }
   }
   allocate_space();

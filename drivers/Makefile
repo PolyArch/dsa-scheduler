@@ -14,7 +14,7 @@ INC_SSSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
 
 CXXFLAGS += -I$(INC_SSMODEL_PATH) -I$(INC_SSSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig $(LIBS)
+LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig -lyaml-cpp $(LIBS)
 
 all: ss_sched 
 

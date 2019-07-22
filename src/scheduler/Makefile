@@ -6,9 +6,7 @@ include $(level)/make.config
 SYS = $(shell sys)
 CXX = g++
 
-OPT ?= -O3
-#OPT = -Og
-#OPT = -O0
+OPT = -O0
 
 LEX = lex
 YACC = yacc -d
@@ -31,7 +29,7 @@ BOOST_PATH=${boost}
 
 all: $(LIB_DEST)/libssscheduler.a $(LIB_DEST)/libssscheduler.so
 
-CXXFLAGS += -I$(INCLUDE_CONFIG) -L$(BOOST_PATH) -fPIC 
+CXXFLAGS += -I$(INCLUDE_CONFIG) -L$(BOOST_PATH) -fPIC
 
 $(LIB_DEST)/libssscheduler.a: $(OBJECTS)
 	ar crs $@ $^ 

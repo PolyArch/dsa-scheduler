@@ -1,7 +1,7 @@
 level=../../
 include ${level}/make.config
 
-SOURCES= model.cpp model_parsing.cpp fu_model.cpp sub_model.cpp direction.cpp ssinst.cpp
+SOURCES= model.cpp model_parsing.cpp fu_model.cpp sub_model.cpp direction.cpp ssinst.cpp predict.cpp
 PRE_OBJECTS=$(SOURCES:.cpp=.o)
 INST_MODEL_FILE=full.ssinst
 
@@ -21,7 +21,7 @@ $(LIB_DEST)/libssconfig.a: $(OBJECTS)
 	ar crs $@ $^
     
 $(LIB_DEST)/libssconfig.so: $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^ $(LIBS)
+	$(CXX) $(CXXFLAGS) -MD -shared -o $@ $^  $(LIBS)
 
 
 ssinst.cpp: ssinst.h $(INST_HEADERS)

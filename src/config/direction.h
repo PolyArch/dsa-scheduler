@@ -12,10 +12,17 @@ namespace SS_CONFIG {
 
   class SwitchDir {
   public:
-    enum DIR { IP0, IP1, IP2, OP0, OP1, OP2, 
-       N, NE, E, SE, S, SW, W, NW,
-       N2, NE2, E2, SE2, S2, SW2, W2, NW2,
-       IM, END_DIR };
+     enum DIR {  
+      IP0,        IP1,        IP2, 
+      OP0,        OP1,        OP2, 
+      N,          NE,         E,          SE, 
+      S,          SW,         W,          NW, 
+      N2,          NE2,         E2,          SE2, 
+      S2,          SW2,         W2,          NW2, 
+      IM,         END_DIR,
+      north,      south,      east,       west,
+      northeast,  northwest,  southeast,  southwest
+      };
 
      static bool isInputDir(DIR d)  {return d==IP0 || d==IP1 || d==IP2;}
      static bool isOutputDir(DIR d) {return d==OP0 || d==OP1 || d==OP2;}

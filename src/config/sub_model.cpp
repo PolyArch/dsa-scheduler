@@ -1330,7 +1330,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
             startItem->add_link(_switches[i+d][j])->setdir(SwitchDir::E2)->set_lat(l);
           }
         }
-
       }
     }
   }
