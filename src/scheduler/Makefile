@@ -6,7 +6,7 @@ include $(level)/make.config
 SYS = $(shell sys)
 CXX = g++
 
-OPT = -O0
+OPT = -O3
 
 LEX = lex
 YACC = yacc -d
