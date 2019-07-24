@@ -232,6 +232,17 @@ public:
     }catch(...){
       input_ports = default_setting["input_ports"].as<std::vector<std::string>>();
     }
+    
+    // Fuck Insts
+    std::vector<std::string> insts;
+    if(default_setting["instructions"] || prop["instructions"])
+    try{
+      insts = prop["instructions"].as<std::vector<std::string>>();
+    }catch(...){
+      insts = default_setting["instructions"].as<std::vector<std::string>>();
+    }
+    
+    
     // Output Ports
     if(default_setting["output_ports"] || prop["output_ports"])
     try{

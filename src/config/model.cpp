@@ -244,11 +244,15 @@ void SSModel::parse_yaml(const std::string& fn) {
       }
       // Get Instructions
       std::vector<std::string> insts;
-      try{
-        insts = pe_properties["instructions"].as<vector<std::string>>();
-      }catch(...){
-        insts = default_node["instructions"].as<vector<std::string>>();
-      }
+      YAML::Node default_setting = pe_properties["<<"];
+
+    if(default_setting["instructions"] || pe_properties["instructions"])
+    try{
+      insts = pe_properties["instructions"].as<std::vector<std::string>>();
+    }catch(...){
+      insts = default_setting["instructions"].as<std::vector<std::string>>();
+    }
+
       // Set Function Unit Definition
       func_unit_def * fudef = new func_unit_def(pe_name);
       fu -> setFUDef(fudef);
