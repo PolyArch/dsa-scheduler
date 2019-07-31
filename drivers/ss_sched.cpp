@@ -245,6 +245,8 @@ int main(int argc, char* argv[])
       //sched->checkOutputMatch(latmis);
       if(succeed_sched) {
         //Also check final latency
+        
+        /*
         if(agg_ovr==0) {
           int sim_lat=-1, sim_latmis=-1;
           sched->calcLatency(sim_lat,sim_latmis,true);
@@ -253,6 +255,7 @@ int main(int argc, char* argv[])
           if(lat!=sim_lat) lat=-1;
           if(latmis!=sim_latmis) latmis=-1;
         }
+        */
 
         cout << "latency: " << lat << "\n";  
         cout << "lat-mismatch-max: " << latmis << "\n";
