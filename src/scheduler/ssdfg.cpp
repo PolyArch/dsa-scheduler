@@ -444,11 +444,7 @@ void SSDfgInst::depInsts(std::vector<SSDfgInst *> &insts) {
 
 std::string SSDfgInst::name() {
   std::stringstream ss;
-  ss << _name << ":";
-  ss << SS_CONFIG::name_of_inst(_ssinst);
-  if (_imm_slot != -1) {
-    ss << " Imm:" << _imm;
-  }
+  ss << _name << "(" << SS_CONFIG::name_of_inst(_ssinst) << " " << id() << ")";
   return ss.str();
 }
 
@@ -458,9 +454,7 @@ std::string SSDfgInst::name() {
 
 std::string SSDfgInput::name() {
   std::stringstream ss;
-  ss << _name << ":";
-  ss << "I" << id();
-  ss << _name;
+  ss << _name << "(input " << id() << ")";
   return ss.str();
 }
 
@@ -485,9 +479,7 @@ int SSDfgInput::compute(bool print, bool verif) {
 
 std::string SSDfgOutput::name() {
   std::stringstream ss;
-  ss << _name << ":";
-  ss << "O" << id();
-  ss << _name;
+  ss << _name << "(output " << id() << ")";
   return ss.str();
 }
 
@@ -516,8 +508,10 @@ void EntryTable::set(const std::string &s, ParseResult *pr, bool override) {
     symbol_table_[s] = pr;
   else if (override)
     symbol_table_[s] = pr;
-  else
+  else {
+    std::cerr << "duplicated symbol: " << s << std::endl;
     assert(0 && "Add existing symbol entrying w/o overriding");
+  }
 }
 
 ParseResult *EntryTable::get_sym(const std::string &s) {
@@ -682,7 +676,6 @@ ParseResult *SSDfg::create_inst(std::string opcode, std::vector<ParseResult*> &a
   SS_CONFIG::ss_inst_t inst = inst_from_string(opcode.c_str());
   auto *dfg_inst = new SSDfgInst(this, inst);
 
-
   for (unsigned i = 0; i < args.size(); ++i) {
     if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {
       dfg_inst->setImm(data->data);
@@ -692,7 +685,7 @@ ParseResult *SSDfg::create_inst(std::string opcode, std::vector<ParseResult*> &a
     } else if (auto ce = dynamic_cast<ConvergeEntry*>(args[i])) {
       for (auto elem : ce->entries) {
         if (auto ne = dynamic_cast<NodeEntry*>(elem))
-        connect(ne->node, dfg_inst, i, SSDfgEdge::data, ne->l, ne->r);
+          connect(ne->node, dfg_inst, i, SSDfgEdge::data, ne->l, ne->r);
       }
     } else if (auto ce = dynamic_cast<ControlEntry*>(args[i])) {
       // External control
@@ -1545,14 +1538,20 @@ double SSDfg::count_starving_nodes() {
 }
 
 bool SSDfg::push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif) {
-  if((int) data.size() != vec_in->get_vp_len()) {
-    std::cout << "DATA FROM GEM5: " << data.size() << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
+  if (!vec_in->is_temporal()) {
+    if((int) data.size() != vec_in->get_vp_len()) {
+      std::cout << "DATA FROM GEM5: " << data.size()
+                << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
+      assert(false && "insufficient data available");
+    }
+  } else {
+    //if((int) data.size() != vec_in->get_vp_len())
+    //  return false;
   }
-  assert((int) data.size() == vec_in->get_vp_len() && "insufficient data available");
-  // assert(data.size() == vec_in->length() && "insufficient data available");
+
   int npart = 64/vec_in->get_port_width();
   int x = static_cast<int>(vec_in->get_vp_len());
-  // int x = static_cast<int>(vec_in->length());
+
   uint64_t val=0;
 
   for (int i = 0; i < (int)vec_in->vector().size(); ++i) {
@@ -1734,11 +1733,11 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
 }
 
 int SSDfgVecInput::wasted_width(Schedule *sched, SubModel *model) {
-  return model->io_interf().vports(true)[sched->vecPortOf(this).second]->size() - get_port_width();
+  return model->io_interf().vports(IsInput())[sched->vecPortOf(this).second]->size() - get_port_width();
 }
 
 int SSDfgVecOutput::wasted_width(Schedule *sched, SubModel *model) {
-  return model->io_interf().vports(false)[sched->vecPortOf(this).second]->size() - get_port_width();
+  return model->io_interf().vports(IsInput())[sched->vecPortOf(this).second]->size() - get_port_width();
 }
 
 bool SSDfgVec::yield(Schedule *sched, SubModel *model) {

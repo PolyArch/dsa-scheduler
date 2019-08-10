@@ -1027,7 +1027,7 @@ void Schedule::printGraphviz(const char* name) {
 /*sslink* Schedule::getNextLink(SSDfgEdge* dfgedge, sslink* link) {
   // auto &lp = _linkProp[link->id()].slots[0]; // this just gives corresponding edges
   // need to use switch dir here probably
-  /*SwitchDir::DIR cur_dir = link->dir();
+  SwitchDir::DIR cur_dir = link->dir();
   SSDfgNode dest_node = edge.dest_dfgnode();
   ssnode* n = locationOf(dest_node);
   // see where where they initialize num_links and extra_lat
@@ -1940,18 +1940,16 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
   queue<sslink*> openset;
-  //map<ssnode*,sslink*> came_from;
+
+  // TODO: Change this to a vector.
   unordered_map<sslink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
 
-  for(auto elem : _ssModel->subModel()->inputs()) {
-    ssinput *cand_input = const_cast<ssinput *>(elem);
-
-    SSDfgNode *dfgnode = dfgNodeOf(cand_input);
-    if (dfgnode != nullptr) {
-      sslink *firstOutLink = cand_input->getFirstOutLink();
+  for(auto elem : _ssModel->subModel()->nodes<ssinput*>()) {
+    if (SSDfgNode *dfgnode = dfgNodeOf(elem)) {
+      sslink *firstOutLink = elem->getFirstOutLink();
       openset.push(firstOutLink);
       lat_edge[firstOutLink] = latOf(dfgnode);
     }
@@ -1976,8 +1974,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
       SSDfgNode* next_dfgnode = dfgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
       if(!next_dfgnode && !isPassthrough(node)) {
-        assert(next_dfgnode);
-        cout << "problem with latency calculation!\n";
+        assert(false && "problem with latency calculation!\n");
         max_lat=-1;
         max_lat_mis=-1;
         return;
@@ -1985,7 +1982,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
       SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode); 
       assert(next_dfginst || isPassthrough(node));
-    
+
       bool everyone_is_here = true;
 
       for(auto &inlink: next_fu->in_links()) {
@@ -2017,6 +2014,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
               if (!isPassthrough(node)) {
                 SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
                 if (!edge) {
+                  continue;
                   cout << "Edge: " << origNode->name() << " has no edge towards "
                        << next_dfgnode->name() << ", for link:"
                        << inlink->name() << "\n";
@@ -2024,8 +2022,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
                   _ssDFG->printGraphviz("viz/remap-fail2.dot");
                   printGraphviz("viz/remap-fail2.gv");
-
-                  assert(edge);
+                  assert(false);
                 }
                 if (edge_delay(edge)) {
                   curLat += edge_delay(edge);
@@ -2040,13 +2037,12 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
               }
 
               if (warnMismatch && max_latency != low_latency) {
-                cout << "Mismatch, min_lat:" << low_latency
-                     << ", max_lat:" << max_latency
+                cout << "Mismatch, min_lat:" << low_latency << ", max_lat:" << max_latency
                      << ", link:" << inlink->name() << "\n";
                 if (!isPassthrough(node)) {
                   SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
-                  cout << "(calcLat) Edge " << edge->name() << "  lat_edge: " << lat_edge[inlink] << "  extralat:"
-                       << edge_delay(edge) << "\n";
+                  cout << "(calcLat) Edge " << edge->name() << "  lat_edge: " << lat_edge[inlink]
+                       << "  extralat:" << edge_delay(edge) << "\n";
                 } else {
                   cout << "passthrough\n";
                 }
@@ -2093,9 +2089,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
           max_lat_mis=diff;
         }
       }
-    } else if (dynamic_cast<ssoutput*>(node)) {
-      ssoutput* ss_out = dynamic_cast<ssoutput*>(node);
+    } else if (auto ss_out = dynamic_cast<ssoutput*>(node)) {
       SSDfgNode* dfgnode = dfgNodeOf(ss_out);
+      if (!dfgnode)
+        continue;
       SSDfgEdge* inc_edge = dfgnode->first_inc_edge();
 
       int l = lat_edge[inc_link] + edge_delay(inc_edge);
