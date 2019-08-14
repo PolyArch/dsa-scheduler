@@ -154,9 +154,10 @@ struct SSDfgOperand {
 
 class ScheduleUnit {
 public:
-  using Spot = std::pair<int, SS_CONFIG::ssnode*>;
   ScheduleUnit() = default;
-  virtual std::vector<Spot> candidates(Schedule *, SS_CONFIG::SSModel *) = 0;
+  virtual std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
+  virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) = 0;
 };
 
 //DFG Node -- abstract base class
@@ -416,7 +417,10 @@ public:
 
   SSDfgInst() {}
 
-  std::vector<ScheduleUnit::Spot> candidates(Schedule *, SS_CONFIG::SSModel *) override;
+  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
+
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
 
   SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
@@ -684,7 +688,10 @@ public:
     return dynamic_cast<Scalar*>(vector_[i]);
   }
 
-  std::vector<ScheduleUnit::Spot> candidates(Schedule *, SS_CONFIG::SSModel *) override { return {}; }
+  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
+
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
 
   friend class boost::serialization::access;
 
@@ -705,7 +712,10 @@ public:
 
   SSDfgVecOutput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
 
-  std::vector<ScheduleUnit::Spot> candidates(Schedule *, SS_CONFIG::SSModel *) override { return {}; }
+  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
+
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
 
   int wasted_width(Schedule *, SubModel *) override;
 

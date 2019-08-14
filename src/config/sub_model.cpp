@@ -1583,11 +1583,10 @@ void ssio_interface::fill_vec() {
     int j = 0;
     for (auto &elem : vports_map[i])
       vports_vec[i][j++] = elem;
-    std::sort(vports_vec[i].begin(),
-              vports_vec[i].end(),
+    std::sort(vports_vec[i].begin(), vports_vec[i].end(),
               [] (const ssio_interface::EntryType& a,
                   const ssio_interface::EntryType &b) {
-                return a.second->size() > b.second->size();
+                return a.second->size() < b.second->size();
               });
   }
 }

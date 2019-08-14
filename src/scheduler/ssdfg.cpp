@@ -1523,8 +1523,8 @@ double SSDfg::count_starving_nodes() {
   double count = 0;
   double num_unique_dfg_nodes = 0;
   for(auto it : _vecInputs) {
-    SSDfgVecInput vec_in = *it;
-    for(auto elem : vec_in.vector()) { // each scalar node
+    SSDfgVecInput *vec_in = it;
+    for(auto elem : vec_in->vector()) { // each scalar node
       // for(auto node : elem->uses()) {
       SSDfgNode *node = elem->first_use(); // FIXME: how does it work for dgra
       num_unique_dfg_nodes += 1/node->num_inc();
@@ -1683,12 +1683,14 @@ int SSDfg::cycle(bool print, bool verif) {
 using SS_CONFIG::SubModel;
 
 // This function is aggressively different from those below two, so I decide to keep this for now.
-std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSModel *ssmodel) {
+std::vector<std::pair<int, int>> SSDfgInst::candidates(Schedule *sched, SSModel *ssmodel, int n) {
   SubModel *model = ssmodel->subModel();
-  std::vector<std::pair<int, ssnode*>> spots;
+  std::vector<std::pair<int, int>> spots;
 
+  std::vector<ssfu*> &fus = model->nodes<MapsTo*>();
   //For Dedicated-required Instructions
-  for (ssfu *cand_fu : model->nodes<MapsTo*>()) {
+  for (size_t i = 0; i < fus.size(); ++i) {
+    ssfu *cand_fu = fus[i];
     if (cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(this->inst())) {
       continue;
     }
@@ -1709,9 +1711,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
           ++cnt;
           tmp -= tmp & -tmp;
         }
-        if (cnt == 0 || rand() % (3 + cnt * cnt) == 0) {
-          spots.emplace_back(make_pair(k, cand_fu));
-        }
+        spots.emplace_back(i, k);
       }
 
     } else {
@@ -1719,7 +1719,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
       //For now the approach is to *not* consume dedicated resources, although
       //this can be changed later if that's helpful.
       if ((int)sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
-        spots.emplace_back(make_pair(0, cand_fu));
+        spots.emplace_back(i, 0);
       }
     }
     
@@ -1729,19 +1729,125 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
   if (this->is_temporal() && spots.empty()) {
     cout << "Warning, no spots for" << this->name() << "\n";
   }
+
+  std::random_shuffle(spots.begin(), spots.end());
   return spots;
 }
 
+template<typename T>
+int wasted_width_impl(SSDfgVec *vec, Schedule *sched, SubModel *model) {
+  int mapped_ = model->io_interf().vports(T::IsInput())[sched->vecPortOf(vec).second]->size();
+  return mapped_ - vec->get_port_width();
+}
+
 int SSDfgVecInput::wasted_width(Schedule *sched, SubModel *model) {
-  return model->io_interf().vports(IsInput())[sched->vecPortOf(this).second]->size() - get_port_width();
+  return wasted_width_impl<SSDfgVecInput>(this, sched, model);
 }
 
 int SSDfgVecOutput::wasted_width(Schedule *sched, SubModel *model) {
-  return model->io_interf().vports(IsInput())[sched->vecPortOf(this).second]->size() - get_port_width();
+  return wasted_width_impl<SSDfgVecOutput>(this, sched, model);
 }
 
 bool SSDfgVec::yield(Schedule *sched, SubModel *model) {
   int wasted = wasted_width(sched, model);
   int r = rand() % wasted * wasted + get_port_width();
   return r <= wasted * wasted;
+}
+
+template<typename T>
+std::vector<std::pair<int, int>> vec_candidate_impl(SSDfgVec *vec, Schedule *sched,
+                                                    SSModel *model, int n) {
+  std::vector<std::pair<int, int>> res;
+
+  auto fcompare = [](const ssio_interface::EntryType &a, const int &val) {
+      return a.second->size() < val;
+  };
+
+  std::vector<ssio_interface::EntryType> &vecs = model->subModel()->io_interf().vports_vec[T::IsInput()];
+  // TODO(@were): Prestore this value somewhere to enhance the performance.
+  int needed = vec->is_temporal() ? 1 : vec->vector().size();
+  int l = std::lower_bound(vecs.begin(), vecs.end(), (int) vec->vector().size(),
+                           fcompare) - vecs.begin();
+  for (int i = l; i < vecs.size(); ++i) {
+    auto &cand = vecs[i];
+    if (!sched->vportOf(std::make_pair(T::IsInput(), cand.first))) {
+      auto &ports = cand.second->port_vec();
+      assert(ports.size() <= 32);
+      std::vector<int> mask_ids;
+      auto &nodes = model->subModel()->nodes<typename T::Scalar::MapsTo*>();
+      for (int j = 0; j < ports.size(); ++j) {
+        ssnode *node = nodes[ports[j]];
+        if (!sched->dfgNodeOf(node)) {
+          mask_ids.push_back(j);
+        }
+      }
+      if (mask_ids.size() >= needed) {
+        std::random_shuffle(mask_ids.begin(), mask_ids.end());
+        int mask = 0;
+        for (int j = 0; j < needed; ++j) {
+          mask |= 1 << mask_ids[j];
+        }
+        res.emplace_back(i, mask);
+
+        assert(i < vecs.size());
+
+        if (res.size() > n) {
+          break;
+        }
+      }
+    }
+  }
+
+  std::random_shuffle(res.begin(), res.end());
+  return res;
+}
+
+std::vector<std::pair<int, int>> SSDfgVecInput::candidates(Schedule *sched, SSModel *model, int n) {
+  return vec_candidate_impl<SSDfgVecInput>(this, sched, model, n);
+}
+
+std::vector<std::pair<int, int>> SSDfgVecOutput::candidates(Schedule *sched, SSModel *model, int n) {
+  return vec_candidate_impl<SSDfgVecOutput>(this, sched, model, n);
+}
+
+
+std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+SSDfgInst::ready_to_map(SS_CONFIG::SSModel *model, const std::pair<int, int> &cand) {
+  return {std::make_pair(cand.second, model->subModel()->fu_list()[cand.first])};
+}
+
+template<typename T>
+std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+ready_to_map_impl(SSDfgVec *vec, SS_CONFIG::SSModel *model, const std::pair<int, int> &cand) {
+  auto &ports =
+    model->subModel()->io_interf().vports_vec[T::IsInput()][cand.first].second->port_vec();
+
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>> res(vec->vector().size());
+
+  int j = 0;
+  for (size_t i = 0; i < ports.size(); ++i) {
+    if (cand.second >> i & 1) {
+      res[j++] = std::make_pair(0, (model->subModel()->nodes<typename T::Scalar::MapsTo*>()[ports[i]]));
+    }
+  }
+
+  if (vec->is_temporal()) {
+    for (size_t j = 1; j < res.size(); ++j) {
+      res[j] = res[0];
+    }
+  } else {
+    assert(j == res.size());
+  }
+
+  return res;
+}
+
+std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+SSDfgVecInput::ready_to_map(SS_CONFIG::SSModel *model, const std::pair<int, int> &cand) {
+  return ready_to_map_impl<SSDfgVecInput>(this, model, cand);
+}
+
+std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+SSDfgVecOutput::ready_to_map(SS_CONFIG::SSModel *model, const std::pair<int, int> &cand) {
+  return ready_to_map_impl<SSDfgVecOutput>(this, model, cand);
 }

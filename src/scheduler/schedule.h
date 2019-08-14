@@ -280,9 +280,8 @@ public:
   }
 
   void unassign_edge(SSDfgEdge *edge) {
-    auto &ep = _edgeProp[edge->id()];
 
-    //std::cout << "unassign: " <<edge->name() << "\n";
+    auto &ep = _edgeProp[edge->id()];
 
     _edge_links_mapped -= ep.links.size();
 

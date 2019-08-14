@@ -13,13 +13,7 @@ public:
   SchedulerSimulatedAnnealing(SS_CONFIG::SSModel *ssModel) :
           HeuristicScheduler(ssModel) {}
 
-  bool schedule(SSDfg *, Schedule *&);
-
-  std::pair<int, int> route(Schedule *sched, SSDfgEdge *dfgnode,
-                            std::pair<int, SS_CONFIG::ssnode *> source, std::pair<int, SS_CONFIG::ssnode *> dest,
-                            CandidateRouting &);
-
-  int routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, CandidateRouting &, const std::pair<int, ssnode*> &);
+  bool schedule(SSDfg *, Schedule *&) override;
 
   void set_fake_it() { _fake_it = true; }
 
@@ -31,12 +25,34 @@ protected:
 
   bool scheduleNode(Schedule *sched, SSDfgInst *dfgnode) override;
 
-  std::pair<int, int> scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>, CandidateRouting &);
-
-  void findFirstIndex(ssio_interface &si, unsigned int numIO, unsigned int &index, bool is_input);
-
-  bool genRandomIndexBW(std::pair<bool, int> &vport_id, std::vector<int> &vport_desc,
-                        ssio_interface &si, unsigned int index, Schedule *&sched, bool s);
+  template<typename T>
+  bool scheduleHere(Schedule *sched, const std::vector<T> &nodes,
+                    const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots,
+                    std::pair<int, int> &score) {
+    assert(slots.size() == nodes.size());
+    for (int i = 0; i < (int) nodes.size(); ++i) {
+      if (!scheduleHere(sched, nodes[i], slots[i], score)) {
+        for (int j = 0; j < i; ++j) {
+          sched->unassign_dfgnode(nodes[j]);
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+  // OK, I now have these four functions to rewrite, after that is done, I will kill
+  // the candidate routing version.
+  bool scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
+                    std::pair<int, int> &score);
+  bool route(Schedule *sched, SSDfgEdge *dfgnode,
+             std::pair<int, SS_CONFIG::ssnode *> source,
+             std::pair<int, SS_CONFIG::ssnode *> dest,
+             std::pair<int, int> &score);
+  bool route_minimize_distance(Schedule *sched, SSDfgEdge *dfgnode,
+                               std::pair<int, SS_CONFIG::ssnode *> source,
+                               std::pair<int, SS_CONFIG::ssnode *> dest,
+                               std::pair<int, int> &score);
+  int routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, const std::pair<int, ssnode *> &);
 
   bool timingIsStillGood(Schedule *sched);
 
@@ -52,7 +68,7 @@ protected:
     int p = rand() % n;
     for(int i = 0; i < n; ++i) {
       p = (p + 1) % n;
-      T* to_map = nodes[i];
+      T* to_map = nodes[p];
       if (!sched->is_scheduled(to_map))
         return schedule_it<T>(to_map, ssDFG, sched);
     }
@@ -80,143 +96,56 @@ protected:
 };
 
 template<typename T>
-bool SchedulerSimulatedAnnealing::schedule_io(T*  vec, SSDfg* ssDFG, Schedule* sched) {
+bool SchedulerSimulatedAnnealing::schedule_io(T* vec, SSDfg* ssDFG, Schedule* sched) {
   using std::vector;
   using std::pair;
   using std::make_pair;
 
   SS_CONFIG::SubModel *subModel = _ssModel->subModel();
   ssio_interface &si = subModel->io_interf();
-  int n_vertex = (int) vec->vector().size();
-  int n_vertex_physical = n_vertex;
-
-  if (vec->is_temporal()) {
-    n_vertex_physical = 1;  // temporal vectors are always scheduled to one node
-  }
-
-  unsigned int index = 0;
-  int num_found = 0;
-  //use physical number of vertices to decide a port
-  findFirstIndex(si, n_vertex_physical, index, T::IsInput() /*is i/o*/);
-  unsigned int attempt = 0;
-
-  vector<int> order; //temp variable used for randomly iterating
-
-  CandidateRouting r1, r2; //do this so that function scope de-allocates these
-  CandidateRouting *bestRouting = &r1, *candRouting = &r2;
 
   vector<bool> bestMask;
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
+  int best_candidate = -1;
   pair<bool, int> bestVportid;
-  std::vector<ssnode *> bestInputs;
 
-  while (num_found < 9 &&  (attempt++ < sd(T::IsInput()).size())) {
-    pair<bool, int> vport_id;
-    vector<int> vport_desc;
+  std::vector<pair<int, int>> candidates = vec->candidates(sched, _ssModel, 0);
 
-    //TODO: put this code in schedule_output as well
-    bool found=false;
-    while(!found) {
-      if (!genRandomIndexBW(vport_id, vport_desc, si, index, sched, T::IsInput() /*is i/o*/)) {
-        unmap_one<T>(ssDFG, sched);
-      } else {
-        found = vec->is_temporal() || si.get(T::IsInput(), vport_id.second)->size() >= vec->vector().size();
-      }
-    }
+  for (size_t i = 0; i < candidates.size(); ++i) {
 
+    int id = candidates[i].first;
+    int mask = candidates[i].second;
 
-    candRouting->clear();
-    std::vector<ssnode*> possInputs;
+    std::pair<int, int> score;
+    if (scheduleHere(sched, vec->vector(), vec->ready_to_map(_ssModel, candidates[i]), score)) {
+      int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
+      pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
+      if (candScore > bestScore) {
+        best_candidate = i;
+        bestScore = candScore;
 
-    for (unsigned m = 0; m < vport_desc.size(); m++) {
-      int cgra_port_num = vport_desc[m];
-      typename T::Scalar::MapsTo *in = subModel->nodes<typename T::Scalar::MapsTo*>()[cgra_port_num];
-      if (sched->dfgNodeOf(in) == nullptr) {
-        possInputs.push_back(in);
-      }
-    }
-
-    if ((int) possInputs.size() < n_vertex_physical) continue;
-
-    vector<ssnode *> candInputs;
-    rand_node_choose_k(n_vertex_physical, possInputs, candInputs);
-
-    bool ports_okay_to_use = true;
-    random_order(n_vertex, order);
-    int num_links_used = 0;
-    for (int i : order) {
-      //In a temporal region, just select the 0th input
-      int cand_index = vec->is_temporal() ? 0 : i;
-      ssnode *node = candInputs[cand_index];
-      SSDfgNode *vertex = vec->vector()[i];
-
-      pair<int, int> n_score = scheduleHere(sched, vertex, make_pair(0, node), *candRouting);
-      if (n_score >= fscore) {
-        ports_okay_to_use = false;
-        break;
-      }
-
-      num_links_used += n_score.second;
-    }
-
-    if (!ports_okay_to_use) continue;
-    num_found++;
-
-    apply_routing(sched, candRouting);
-    for (int i = 0; i < n_vertex; ++i) {
-      int cand_index = vec->is_temporal() ? 0 : i;
-      ssnode *node = candInputs[cand_index];
-      sched->assign_node(vec->vector()[i], make_pair(0, node));
-    }
-
-    int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
-    pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
-    candScore.second -= num_links_used;
-
-    //TODO: does this help at all?
-    int hw_port_size = vport_desc.size();
-    int extra = hw_port_size - vec->vector().size();
-    candScore.second-=extra*10;
-
-    sched->unassign_vec(vec);
-
-    if (candScore > bestScore) {
-      //cout << candScore.first << " " << candScore.second <<"\n";
-      //cout << "lat: " << lat << " latmis: " << latmis 
-      //    << " ovr " << ovr << " num links used " << num_links_used << "\n";
-      bestScore = candScore;
-      bestInputs = candInputs;
-      bestVportid = vport_id;
-      std::swap(bestRouting, candRouting);
-      bestMask.clear();
-      bestMask.resize(vport_desc.size());
-      int num_cgra_ports = 0; //for debugging
-      for (int m = 0; m < (int) vport_desc.size(); m++) {
-        int cgra_port_num = vport_desc[m];
-        for (int i = 0; i < (int) candInputs.size(); ++i) {
-          if (static_cast<ssinput *>(candInputs[i])->port() == cgra_port_num) {
-            assert(bestMask[m] == false);
-            bestMask[m] = true;
-            num_cgra_ports++;
-            break;
-          }
+        pair<bool, int> vport_id(T::IsInput(), si.vports_vec[T::IsInput()][id].first);
+        vector<int> &vport_desc = si.vports_vec[T::IsInput()][id].second->port_vec();
+        bestMask.resize(vport_desc.size(), false);
+        for (int m = 0; m < (int) vport_desc.size(); m++) {
+          bestMask[m] = mask >> m & 1;
         }
-      }
-      //assert(n_vertex == num_cgra_ports);
-    }
-  }
-  //cout << " -- \n";
+        bestVportid = vport_id;
 
-  if (num_found > 0) {
-    for (int i = 0; i < n_vertex; ++i) {
-      int cand_index = vec->is_temporal() ? 0 : i;
-      ssnode *node = bestInputs[cand_index];
-      sched->assign_node(vec->vector()[i], make_pair(0, node));
+      }
+      sched->unassign_vec(vec);
     }
-    sched->assign_vport(vec, bestVportid, bestMask);
-    apply_routing(sched, bestRouting); //Commit the routing
+
   }
-  return num_found > 0;
+
+  if (best_candidate != -1) {
+    pair<int, int> score;
+    scheduleHere(sched, vec->vector(), vec->ready_to_map(_ssModel, candidates[best_candidate]), score);
+    sched->assign_vport(vec, bestVportid, bestMask);
+    return true;
+  }
+
+  return false;
 }
 
 template<> inline bool SchedulerSimulatedAnnealing::schedule_it(SSDfgVecInput *vec, SSDfg *ssDFG, Schedule *sched) {
