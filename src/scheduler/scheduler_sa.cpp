@@ -390,7 +390,7 @@ bool
 SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge *edge,
                               std::pair<int, SS_CONFIG::ssnode *> source,
                               std::pair<int, SS_CONFIG::ssnode *> dest,
-                              std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
+                              CandidateRoute &path) {
   int bitwidth = edge->bitwidth();
 
   if (edge->def()->bitwidth() > edge->bitwidth() && source.first != edge->l() / 8) {
@@ -460,10 +460,11 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
 
     // TODO(@were): Make sure this is correct!
     sched->assign_edgelink(edge, link.first, link.second);
+    path.links.emplace_back(edge, link);
     if (auto fu = dynamic_cast<ssfu*>(link.second->dest())) {
       if (!sched->dfgNodeOf(fu)) {
         sched->assign_edge_pt(edge, x);
-        path.emplace_back(edge, x);
+        path.thrus.emplace_back(edge, x);
       }
     }
 
@@ -476,14 +477,14 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
 bool SchedulerSimulatedAnnealing::route(Schedule *sched, SSDfgEdge *edge,
                               std::pair<int, SS_CONFIG::ssnode *> source,
                               std::pair<int, SS_CONFIG::ssnode *> dest,
-                              std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
+                              CandidateRoute &path) {
 
   return route_minimize_distance(sched, edge, source, dest, path);
 }
 
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
     SSDfgNode* node, pair<int, SS_CONFIG::ssnode*> here,
-    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
+    CandidateRoute &path) {
 
   std::vector<SSDfgEdge*> to_revert;
 

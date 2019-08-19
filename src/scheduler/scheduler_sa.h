@@ -6,6 +6,16 @@
 
 #define DEBUG_SCHED (false)
 
+struct CandidateRoute {
+  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> thrus;
+  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::sslink*>>> links;
+
+  void swap(CandidateRoute &other) {
+    thrus.swap(other.thrus);
+    links.swap(other.links);
+  }
+};
+
 class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 public:
   void initialize(SSDfg *, Schedule *&);
@@ -26,7 +36,7 @@ protected:
   template<typename T>
   bool scheduleHere(Schedule *sched, const std::vector<T> &nodes,
                     const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots,
-                    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
+                    CandidateRoute &path) {
     assert(slots.size() == nodes.size());
     for (int i = 0; i < (int) nodes.size(); ++i) {
       if (!scheduleHere(sched, nodes[i], slots[i], path)) {
@@ -40,17 +50,14 @@ protected:
   }
 
   bool scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
-                    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+                    CandidateRoute &path);
 
-  bool route(Schedule *sched, SSDfgEdge *dfgnode,
-             std::pair<int, SS_CONFIG::ssnode *> source,
-             std::pair<int, SS_CONFIG::ssnode *> dest,
-             std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+  bool route(Schedule *sched, SSDfgEdge *dfgnode, std::pair<int, SS_CONFIG::ssnode *> source,
+             std::pair<int, SS_CONFIG::ssnode *> dest, CandidateRoute &path);
 
   bool route_minimize_distance(Schedule *sched, SSDfgEdge *dfgnode,
                                std::pair<int, SS_CONFIG::ssnode *> source,
-                               std::pair<int, SS_CONFIG::ssnode *> dest,
-                               std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+                               std::pair<int, SS_CONFIG::ssnode *> dest, CandidateRoute &path);
 
   int routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, const std::pair<int, ssnode *> &);
 
@@ -101,7 +108,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   using std::pair;
   using std::make_pair;
   SSModel *model = sched->ssModel();
-  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> best_path;
+  CandidateRoute best_path;
 
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
   int best_candidate = -1;
@@ -109,7 +116,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
   for (size_t i = 0; i < candidates.size(); ++i) {
 
-    std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> path;
+    CandidateRoute path;
     if (scheduleHere(sched, node->ready_to_map(),
                      node->ready_to_map(model, candidates[i]), path)) {
 
@@ -132,8 +139,11 @@ int SchedulerSimulatedAnnealing::try_candidates(
   }
 
   if (best_candidate != -1) {
-    for (auto elem : best_path) {
+    for (auto elem : best_path.thrus) {
       sched->assign_edge_pt(elem.first, elem.second);
+    }
+    for (auto elem : best_path.links) {
+      sched->assign_edgelink(elem.first, elem.second.first, elem.second.second);
     }
     auto software = node->ready_to_map();
     auto hardware = node->ready_to_map(model, candidates[best_candidate]);
