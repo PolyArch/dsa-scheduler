@@ -113,8 +113,6 @@ public:
   HeuristicScheduler(SS_CONFIG::SSModel *ssModel) : Scheduler(ssModel),
                                                     fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
 
-  virtual bool scheduleNode(Schedule *, SSDfgInst *) = 0;
-
 protected:
 
   const std::pair<int, int> fscore;

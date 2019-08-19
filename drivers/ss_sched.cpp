@@ -139,15 +139,9 @@ int main(int argc, char* argv[])
   ssmodel.maxEdgeDelay();
 
 
-
-  //cout << "Softbrain CGRA Size:" << ssmodel.subModel()->sizex() << "x"
-  //                               << ssmodel.subModel()->sizey() <<"\n";
-
   std::string pdg_filename=argv[1];
   lastindex = pdg_filename.find_last_of("."); 
   string pdg_rawname = pdg_filename.substr(0, lastindex); 
-
-  
 
   string dfg_base = basename(pdg_filename); // the name without preceeding dirs or file extension
   string pdg_dir = basedir(pdg_filename);   // preceeding directories only
@@ -167,16 +161,7 @@ int main(int argc, char* argv[])
   //sspdg object based on the dfg
   SSDfg sspdg(pdg_filename);
 
-  /* scheduler for testing purposes
-  for (int i=0; i<100; i++){
-    cycle();
-  }
-  */
 
-
-  //cout << "file: " << filename << "\n";
-
-  // ofstream ofs("viz/"+basename(pdg_filename)+".dot", ios::out);
   ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
   assert(ofs.good());
   sspdg.printGraphviz(ofs);
@@ -185,8 +170,6 @@ int main(int argc, char* argv[])
   Schedule* sched=nullptr;
   
 
-
-  //Scheduler scheduler(&ssmodel);
   if(str_schedType == "gams") {
     auto* scheduler_gams = new GamsScheduler(&ssmodel);
     scheduler_gams->showGams(show_gams);

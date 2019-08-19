@@ -23,15 +23,13 @@ protected:
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
       int& lat_mis, int& ovr, int& agg_ovr, int& max_util); 
 
-  bool scheduleNode(Schedule *sched, SSDfgInst *dfgnode) override;
-
   template<typename T>
   bool scheduleHere(Schedule *sched, const std::vector<T> &nodes,
                     const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots,
-                    std::pair<int, int> &score) {
+                    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
     assert(slots.size() == nodes.size());
     for (int i = 0; i < (int) nodes.size(); ++i) {
-      if (!scheduleHere(sched, nodes[i], slots[i], score)) {
+      if (!scheduleHere(sched, nodes[i], slots[i], path)) {
         for (int j = 0; j < i; ++j) {
           sched->unassign_dfgnode(nodes[j]);
         }
@@ -40,18 +38,20 @@ protected:
     }
     return true;
   }
-  // OK, I now have these four functions to rewrite, after that is done, I will kill
-  // the candidate routing version.
+
   bool scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
-                    std::pair<int, int> &score);
+                    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+
   bool route(Schedule *sched, SSDfgEdge *dfgnode,
              std::pair<int, SS_CONFIG::ssnode *> source,
              std::pair<int, SS_CONFIG::ssnode *> dest,
-             std::pair<int, int> &score);
+             std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+
   bool route_minimize_distance(Schedule *sched, SSDfgEdge *dfgnode,
                                std::pair<int, SS_CONFIG::ssnode *> source,
                                std::pair<int, SS_CONFIG::ssnode *> dest,
-                               std::pair<int, int> &score);
+                               std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path);
+
   int routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, const std::pair<int, ssnode *> &);
 
   bool timingIsStillGood(Schedule *sched);
@@ -60,8 +60,15 @@ protected:
 
   bool map_io_to_completion(SSDfg *ssDFG, Schedule *sched);
 
+  template<typename T> inline int
+  try_candidates(const std::vector<std::pair<int, int>> &candidates, Schedule *, T* node);
+
+  template<typename T>
+  static bool schedule_vec_impl(SchedulerSimulatedAnnealing *engine, T *vec, SSDfg *dfg,
+                                Schedule *sched);
+
   template<typename T> inline bool schedule_it(T *node, SSDfg *ssDFG, Schedule *sched);
-  template<typename T> inline bool schedule_io(T *vec, SSDfg *ssDFG, Schedule *sched);
+
   template<typename T> inline bool map_one(SSDfg *ssDFG, Schedule *sched) {
     auto &nodes = ssDFG->nodes<T*>();
     int n = nodes.size();
@@ -78,15 +85,6 @@ protected:
   template<typename T> inline void unmap_one(SSDfg *ssDFG, Schedule *sched);
   void unmap_some(SSDfg *ssDFG, Schedule *sched);
 
-
-  std::vector<std::pair<int, int>> _sd_in;  //port, length pair
-  std::vector<std::pair<int, int>> _sd_out; //port, length pair
-
-  std::vector<std::pair<int, int>> &sd(bool is_input) {
-    return is_input ? _sd_in : _sd_out;
-  }
-
-  int _max_iters_zero_vio = 1000000000;
   bool _integrate_timing = true;
   int _best_latmis, _best_lat, _best_violation;
   bool _strict_timing = true;
@@ -96,71 +94,103 @@ protected:
 };
 
 template<typename T>
-bool SchedulerSimulatedAnnealing::schedule_io(T* vec, SSDfg* ssDFG, Schedule* sched) {
+int SchedulerSimulatedAnnealing::try_candidates(
+  const std::vector<std::pair<int, int>> &candidates, Schedule *sched, T* node) {
+
   using std::vector;
   using std::pair;
   using std::make_pair;
+  SSModel *model = sched->ssModel();
+  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> best_path;
 
-  SS_CONFIG::SubModel *subModel = _ssModel->subModel();
-  ssio_interface &si = subModel->io_interf();
-
-  vector<bool> bestMask;
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
   int best_candidate = -1;
-  pair<bool, int> bestVportid;
-
-  std::vector<pair<int, int>> candidates = vec->candidates(sched, _ssModel, 0);
+  bool find_best = rand() % 1024 != 1;
 
   for (size_t i = 0; i < candidates.size(); ++i) {
 
-    int id = candidates[i].first;
-    int mask = candidates[i].second;
+    std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> path;
+    if (scheduleHere(sched, node->ready_to_map(),
+                     node->ready_to_map(model, candidates[i]), path)) {
 
-    std::pair<int, int> score;
-    if (scheduleHere(sched, vec->vector(), vec->ready_to_map(_ssModel, candidates[i]), score)) {
       int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
       pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
+
+      if (!find_best) {
+        return i;
+      }
+
       if (candScore > bestScore) {
         best_candidate = i;
         bestScore = candScore;
-
-        pair<bool, int> vport_id(T::IsInput(), si.vports_vec[T::IsInput()][id].first);
-        vector<int> &vport_desc = si.vports_vec[T::IsInput()][id].second->port_vec();
-        bestMask.resize(vport_desc.size(), false);
-        for (int m = 0; m < (int) vport_desc.size(); m++) {
-          bestMask[m] = mask >> m & 1;
-        }
-        bestVportid = vport_id;
-
+        best_path.swap(path);
       }
-      sched->unassign_vec(vec);
+
+      sched->unassign<T*>(node);
     }
 
   }
 
   if (best_candidate != -1) {
-    pair<int, int> score;
-    scheduleHere(sched, vec->vector(), vec->ready_to_map(_ssModel, candidates[best_candidate]), score);
-    sched->assign_vport(vec, bestVportid, bestMask);
+    for (auto elem : best_path) {
+      sched->assign_edge_pt(elem.first, elem.second);
+    }
+    auto software = node->ready_to_map();
+    auto hardware = node->ready_to_map(model, candidates[best_candidate]);
+    assert(software.size() == hardware.size());
+    for (size_t i = 0; i < software.size(); ++i) {
+      sched->assign_node(software[i], hardware[i]);
+    }
+  }
+
+  return best_candidate;
+
+}
+
+template<typename T>
+bool SchedulerSimulatedAnnealing::schedule_vec_impl(SchedulerSimulatedAnnealing *engine,
+                                               T *vec, SSDfg *dfg, Schedule *sched) {
+  auto candidates = vec->candidates(sched, engine->_ssModel, 0);
+  int best_candidate = engine->try_candidates<T>(candidates, sched, vec);
+
+  if (best_candidate != -1) {
+
+    int id = candidates[best_candidate].first;
+    int mask = candidates[best_candidate].second;
+    ssio_interface &si = engine->_ssModel->subModel()->io_interf();
+    std::pair<bool, int> vport_id(T::IsInput(), si.vports_vec[T::IsInput()][id].first);
+    std::vector<int> &vport_desc = si.vports_vec[T::IsInput()][id].second->port_vec();
+    std::vector<bool> mask_(vport_desc.size());
+    for (int m = 0; m < (int) vport_desc.size(); m++) {
+      mask_[m] = mask >> m & 1;
+    }
+    sched->assign_vport(vec, vport_id, mask_);
     return true;
+
   }
 
   return false;
 }
 
-template<> inline bool SchedulerSimulatedAnnealing::schedule_it(SSDfgVecInput *vec, SSDfg *ssDFG, Schedule *sched) {
-  return schedule_io<SSDfgVecInput>(vec, ssDFG, sched);
+template<> inline bool
+SchedulerSimulatedAnnealing::schedule_it(SSDfgVecInput *vec, SSDfg *ssDFG, Schedule *sched) {
+  return schedule_vec_impl<SSDfgVecInput>(this, vec, ssDFG, sched);
 }
 
-template<> inline bool SchedulerSimulatedAnnealing::schedule_it(SSDfgVecOutput *vec, SSDfg *ssDFG, Schedule *sched) {
-  return schedule_io<SSDfgVecOutput>(vec, ssDFG, sched);
+template<> inline bool
+SchedulerSimulatedAnnealing::schedule_it(SSDfgVecOutput *vec, SSDfg *ssDFG, Schedule *sched) {
+  return schedule_vec_impl<SSDfgVecOutput>(this, vec, ssDFG, sched);
 }
 
-template<> inline bool SchedulerSimulatedAnnealing::schedule_it(SSDfgInst *node, SSDfg *ssDFG, Schedule *sched) {
-  return scheduleNode(sched, node);
+template<> inline bool
+SchedulerSimulatedAnnealing::schedule_it(SSDfgInst *node, SSDfg *ssDFG, Schedule *sched) {
+  auto candidates = node->candidates(sched, _ssModel, 0);
+  int best_candidate = try_candidates<SSDfgInst>(candidates, sched, node);
+  return best_candidate != -1;
 }
 
-template<typename T> inline void SchedulerSimulatedAnnealing::unmap_one(SSDfg *dfg, Schedule *sched) {
+template<typename T> inline void
+SchedulerSimulatedAnnealing::unmap_one(SSDfg *dfg, Schedule *sched) {
   const auto &nodes = dfg->nodes<T*>();
   int n = nodes.size();
   int p = rand() % n;

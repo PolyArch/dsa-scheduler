@@ -152,14 +152,6 @@ struct SSDfgOperand {
   uint64_t imm = 0;
 };
 
-class ScheduleUnit {
-public:
-  ScheduleUnit() = default;
-  virtual std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
-  virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>>
-  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) = 0;
-};
-
 //DFG Node -- abstract base class
 class SSDfgNode {
 public:
@@ -318,6 +310,15 @@ protected:
   V_TYPE _vtype;
 };
 
+class ScheduleUnit {
+public:
+  ScheduleUnit() = default;
+  virtual std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
+  virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>>
+  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) = 0;
+  virtual std::vector<SSDfgNode*> ready_to_map() = 0;
+};
+
 typedef std::vector<std::string> string_vec_t;
 
 //post-parsing control signal definitions (mapping of string of flag to it's value?)
@@ -421,6 +422,10 @@ public:
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>>
   ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
+
+  std::vector<SSDfgNode*> ready_to_map() override {
+    return {this};
+  }
 
   SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
@@ -658,6 +663,12 @@ protected:
   int _vp_len;
 
   std::vector<SSDfgIO*> vector_;
+
+  std::vector<SSDfgNode*> _to_node_vector() {
+    SSDfgNode **from = (SSDfgNode**)(&vector_[0]);
+    SSDfgNode **to = from + vector_.size();
+    return std::vector<SSDfgNode*>(from, to);
+  }
 };
 
 
@@ -693,6 +704,10 @@ public:
   std::vector<std::pair<int, SS_CONFIG::ssnode*>>
   ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
 
+  std::vector<SSDfgNode*> ready_to_map() override {
+    return _to_node_vector();
+  }
+
   friend class boost::serialization::access;
 
   template<class Archive>
@@ -720,6 +735,10 @@ public:
   int wasted_width(Schedule *, SubModel *) override;
 
   virtual std::string gamsName() override;
+
+  std::vector<SSDfgNode*> ready_to_map() override {
+    return _to_node_vector();
+  }
 
   void add(SSDfgIO *in)  override {
     assert(dynamic_cast<Scalar*>(in));

@@ -25,10 +25,6 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
   //Sort the input ports once
   SS_CONFIG::SubModel* subModel = _ssModel->subModel();
   ssio_interface& si =  subModel->io_interf();
-  _sd_in.clear();
-  _sd_out.clear();
-  si.sort_in_vports(_sd_in);
-  si.sort_out_vports(_sd_out);
 
   si.fill_vec();
 
@@ -48,7 +44,6 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
   int violation = sched->violation();
 
-//  int obj = agg_ovr*100000 + ovr * 50000 + latmis*10000+violation*100+lat + max_util;
     int obj = agg_ovr*10000 + violation*2000 +latmis*2000
       + lat + max_util*30000;
 
@@ -192,11 +187,10 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     if (((iter - last_improvement_iter) > max_iters_no_improvement) 
         && best_succeeded) {
+      std::cout << "Break because of no improvement!\n";
       break;
     }
-    if(sched->violation() ==0 && iter > _max_iters_zero_vio) {
-      break;
-    }
+
   }
   if(verbose) {
     cout << "Breaking at Iter " << iter << "\n";
@@ -329,45 +323,6 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sch
   return false;
 }
 
-bool SchedulerSimulatedAnnealing::scheduleNode(Schedule* sched, SSDfgInst* dfgnode) {
-  std::vector<std::pair<int, int>> candidates;
-
-  candidates = dfgnode->candidates(sched, _ssModel, 0);
-
-  bool find_best = rand() % 1024 != 1;
-
-  std::pair<int, int> bestScore(INT_MIN, INT_MIN);
-  int best_candidate = -1;
-
-  for (unsigned i = 0; i < candidates.size(); i++) {
-
-    std::pair<int, int> score(0, 0);
-    if (scheduleHere<SSDfgNode*>(sched, {dfgnode}, dfgnode->ready_to_map(_ssModel, candidates[i]), score)) {
-      if (!find_best)
-        return true;
-      int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX, 
-          agg_ovr = INT_MAX, max_util = INT_MAX;
-      auto cur_score = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
-      if (cur_score > bestScore) {
-        bestScore = cur_score;
-        best_candidate = i;
-      }
-      sched->unassign_dfgnode(dfgnode);
-    }
-
-  }
-
-  if (best_candidate != -1) {
-    std::pair<int, int> score(0, 0);
-    scheduleHere<SSDfgNode*>(sched, {dfgnode}, dfgnode->ready_to_map(_ssModel,
-                                                                     candidates[best_candidate]),
-                             score);
-    return true;
-  }
-
-  return false;
-}
-
 int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, int next_slot,
                                               sslink *link, Schedule* sched,
                                               const pair<int, ssnode*> &dest) {
@@ -431,10 +386,11 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
 
 }
 
-bool SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge *edge,
-                                                          std::pair<int, SS_CONFIG::ssnode *> source,
-                                                          std::pair<int, SS_CONFIG::ssnode *> dest,
-                                                          std::pair<int, int> &score) {
+bool
+SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge *edge,
+                              std::pair<int, SS_CONFIG::ssnode *> source,
+                              std::pair<int, SS_CONFIG::ssnode *> dest,
+                              std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
   int bitwidth = edge->bitwidth();
 
   if (edge->def()->bitwidth() > edge->bitwidth() && source.first != edge->l() / 8) {
@@ -496,8 +452,6 @@ bool SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfg
   if (dest.second->node_dist(dest.first) == -1)
     return false;  //routing failed, no routes exist!
 
-  score.second += dest.second->node_dist(dest.first);
-
   auto x = dest;
 
   while (x != source) {
@@ -509,6 +463,7 @@ bool SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfg
     if (auto fu = dynamic_cast<ssfu*>(link.second->dest())) {
       if (!sched->dfgNodeOf(fu)) {
         sched->assign_edge_pt(edge, x);
+        path.emplace_back(edge, x);
       }
     }
 
@@ -519,31 +474,16 @@ bool SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfg
 }
 
 bool SchedulerSimulatedAnnealing::route(Schedule *sched, SSDfgEdge *edge,
-                                        std::pair<int, SS_CONFIG::ssnode *> source,
-                                        std::pair<int, SS_CONFIG::ssnode *> dest,
-                                        std::pair<int, int> &score) {
-  if (source.second == dest.second) {
-    sslink *link = source.second->get_cycle_link();
-    assert(link);
-    // FIXME(@were): What if I handle these in the general routing distance?
-    if (source.first < dest.first) {
-      for (int i = source.first + 1; i <= dest.first; ++i)
-        sched->assign_edgelink(edge, i, link);
-    } else if (source.first > dest.first) {
-      for (int i = source.first - 1; i >= dest.first; --i)
-        sched->assign_edgelink(edge, i, link);
-    } else {
-      sched->assign_edgelink(edge, source.first, link);
-    }
-    score.second += 2 + abs(source.first - dest.first);
-    return true;
-  }
+                              std::pair<int, SS_CONFIG::ssnode *> source,
+                              std::pair<int, SS_CONFIG::ssnode *> dest,
+                              std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
 
-  return route_minimize_distance(sched, edge, source, dest, score);
+  return route_minimize_distance(sched, edge, source, dest, path);
 }
 
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
-    SSDfgNode* node, pair<int, SS_CONFIG::ssnode*> here, std::pair<int, int> &score) {
+    SSDfgNode* node, pair<int, SS_CONFIG::ssnode*> here,
+    std::vector<std::pair<SSDfgEdge *, std::pair<int, ssnode*>>> &path) {
 
   std::vector<SSDfgEdge*> to_revert;
 
@@ -560,7 +500,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       auto node = edge->node_();                                     \
       if (sched->is_scheduled(node)) {                               \
         auto loc = sched->location_of(node);                         \
-        if (!route(sched, edge, src, dest, score)) {                 \
+        if (!route(sched, edge, src, dest, path)) {                  \
           for (auto revert : to_revert) {                            \
             sched->unassign_edge(revert);                            \
           }                                                          \
