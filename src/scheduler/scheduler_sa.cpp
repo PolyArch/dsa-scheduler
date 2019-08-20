@@ -44,8 +44,8 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
   int violation = sched->violation();
 
-    int obj = agg_ovr*10000 + violation*2000 +latmis*2000
-      + lat + max_util*30000;
+    int obj = agg_ovr * 10000 + violation * 2000 + latmis * 2000
+      + lat + (max_util - 1) * 30000;
 
 
     if(false) {
@@ -67,7 +67,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched,
 
 //    sched->printGraphviz("hi.gv");
 
-  return make_pair( succeed_sched  -num_left, -obj);
+  return make_pair(succeed_sched - num_left, -obj);
 }
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {  
@@ -96,17 +96,14 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
   int remapNeeded = false; //ssDFG->remappingNeeded(); //setup remap structres
   int iter = 0;
-  while (iter < _max_iters) {
+  for (int iter = 0; iter < _max_iters; ++iter) {
     if( (total_msec() > _reslim * 1000) || _should_stop ) {
       break;
     }
 
-    bool print_stat=false;
-    if( (iter & (256-1)) == 0) {
-      print_stat=true;
-    }
+    bool print_stat = (iter & (256-1)) == 0;
 
-    if( (iter & (4096-1)) == 0) {
+    if((iter & (4096-1)) == 0) {
       //Every so often, lets give up and start over from scratch
       delete cur_sched;
       cur_sched = new Schedule(getSSModel(),ssDFG);
@@ -122,7 +119,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     if(iter - last_improvement_iter > 1023) {
       *cur_sched = *sched; //shallow copy of sched should work?
     }
-
 
     bool succeed_sched = schedule_internal(ssDFG, cur_sched);
 
@@ -183,11 +179,8 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       last_improvement_iter = iter;
     }
 
-    iter++;
-
     if (((iter - last_improvement_iter) > max_iters_no_improvement) 
         && best_succeeded) {
-      std::cout << "Break because of no improvement!\n";
       break;
     }
 
@@ -241,10 +234,11 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
 
   if(DEBUG_SCHED) cout << "Map to completion! " << sched->num_mapped<SSDfgNode>() << "\n";
   while(!sched->is_complete<SSDfgNode>()) {
-    int r = rand_bt(0,16); //upper limit defines ratio of input/output scheduling
+    int r = rand() % 16; //upper limit defines ratio of input/output scheduling
     switch(r) {
       case 0: {
-        if(sched->is_complete<SSDfgInput>()) break;
+        if(sched->is_complete<SSDfgInput>())
+          break;
         bool success = map_one<SSDfgVecInput>(ssDFG,sched);
         if(!success) {
           return false;
@@ -252,7 +246,8 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
         break;
       }
       case 1: {
-        if(sched->is_complete<SSDfgOutput>()) break;
+        if(sched->is_complete<SSDfgOutput>())
+          break;
         bool success = map_one<SSDfgVecOutput>(ssDFG,sched);
         if(!success) { 
           return false;
@@ -260,7 +255,8 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
         break;
       }      
       default: {
-        if(sched->is_complete<SSDfgInst>()) break;
+        if(sched->is_complete<SSDfgInst>())
+          break;
         bool success = map_one<SSDfgInst>(ssDFG,sched);
         if(!success) { 
           return false;
@@ -370,6 +366,7 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
       return (t_cost) * (t_cost) * 10;
     }
   }
+
   bool is_dest = (next == dest.second && next_slot == dest.first);
 
   ssfu *fu = dynamic_cast<ssfu *>(next);
@@ -391,6 +388,7 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
                               std::pair<int, SS_CONFIG::ssnode *> source,
                               std::pair<int, SS_CONFIG::ssnode *> dest,
                               CandidateRoute &path) {
+
   int bitwidth = edge->bitwidth();
 
   if (edge->def()->bitwidth() > edge->bitwidth() && source.first != edge->l() / 8) {
@@ -418,8 +416,9 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
 
     openset.erase(openset.begin());
 
-    if (slot == dest.first && node == dest.second)
+    if (slot == dest.first && node == dest.second) {
       break;
+    }
 
     for (auto link : node->out_links()) {
       ssnode *next = link->dest();
@@ -449,8 +448,9 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
     }
   }
 
-  if (dest.second->node_dist(dest.first) == -1)
+  if (dest.second->node_dist(dest.first) == -1) {
     return false;  //routing failed, no routes exist!
+  }
 
   auto x = dest;
 
@@ -483,8 +483,7 @@ bool SchedulerSimulatedAnnealing::route(Schedule *sched, SSDfgEdge *edge,
 }
 
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
-    SSDfgNode* node, pair<int, SS_CONFIG::ssnode*> here,
-    CandidateRoute &path) {
+    SSDfgNode* node, pair<int, SS_CONFIG::ssnode*> here, CandidateRoute &path) {
 
   std::vector<SSDfgEdge*> to_revert;
 
@@ -502,9 +501,8 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched,
       if (sched->is_scheduled(node)) {                               \
         auto loc = sched->location_of(node);                         \
         if (!route(sched, edge, src, dest, path)) {                  \
-          for (auto revert : to_revert) {                            \
+          for (auto revert : to_revert)                              \
             sched->unassign_edge(revert);                            \
-          }                                                          \
           for (int j = 0; j < i; ++j)                                \
             sched->unassign_edge(edges[j]);                          \
           return false;                                              \

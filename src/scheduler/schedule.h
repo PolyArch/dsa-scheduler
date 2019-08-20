@@ -427,9 +427,10 @@ public:
       empty = false;
     if (empty)
       return 1;
-    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges)
+    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges) {
       if (elem->def() == node)
         return 0;
+    }
     return _linkProp[link.second->id()].slots[link.first].edges.size();
   }
 

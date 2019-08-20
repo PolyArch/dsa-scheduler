@@ -1695,10 +1695,14 @@ std::vector<std::pair<int, int>> SSDfgInst::candidates(Schedule *sched, SSModel 
       continue;
     }
 
-    if (!this->is_temporal()) {
+    if (!is_temporal()) {
       if (sched->isPassthrough(cand_fu))
         continue;
       //Normal Dedidated Instructions
+      
+      if (cand_fu->is_shared() && !spots.empty()) {
+        continue;
+      }
       
       auto status = sched->dfg_nodes_of(cand_fu);
       uint8_t occupied(0);
@@ -1706,15 +1710,16 @@ std::vector<std::pair<int, int>> SSDfgInst::candidates(Schedule *sched, SSModel 
         occupied |= (1 << elem.second->bitwidth() / 8) - 1;
       }
       for (int k = 0; k < 8; k += this->bitwidth() / 8) {
-        int cnt = 0, tmp = cnt >> k & ((1 << this->bitwidth()) - 1);
+        int cnt = 1, tmp = cnt >> k & ((1 << this->bitwidth()) - 1);
         while (tmp) {
           ++cnt;
           tmp -= tmp & -tmp;
         }
-        spots.emplace_back(i, k);
+        if (rand() % (cnt * cnt) == 0)
+          spots.emplace_back(i, k);
       }
 
-    } else {
+    } else if (cand_fu->is_shared()) {
       //For temporaly-shared instructions
       //For now the approach is to *not* consume dedicated resources, although
       //this can be changed later if that's helpful.
@@ -1722,16 +1727,18 @@ std::vector<std::pair<int, int>> SSDfgInst::candidates(Schedule *sched, SSModel 
         spots.emplace_back(i, 0);
       }
     }
-    
-    
   }
 
-  if (this->is_temporal() && spots.empty()) {
-    cout << "Warning, no spots for" << this->name() << "\n";
-  }
+  //if (this->is_temporal() && spots.empty()) {
+  //  cout << "Warning, no spots for" << this->name() << "\n";
+  //}
 
   std::random_shuffle(spots.begin(), spots.end());
-  return spots;
+
+  if (n > spots.size() || n == 0)
+    n = spots.size();
+
+  return std::vector<std::pair<int, int>>(spots.begin(), spots.begin() + n);
 }
 
 template<typename T>
@@ -1760,10 +1767,11 @@ std::vector<std::pair<int, int>> vec_candidate_impl(SSDfgVec *vec, Schedule *sch
   std::vector<std::pair<int, int>> res;
 
   auto fcompare = [](const ssio_interface::EntryType &a, const int &val) {
-      return a.second->size() < val;
+    return a.second->size() < val;
   };
 
-  std::vector<ssio_interface::EntryType> &vecs = model->subModel()->io_interf().vports_vec[T::IsInput()];
+  std::vector<ssio_interface::EntryType> 
+    vecs(model->subModel()->io_interf().vports_vec[T::IsInput()]);
   // TODO(@were): Prestore this value somewhere to enhance the performance.
   int needed = vec->is_temporal() ? 1 : vec->vector().size();
   int l = std::lower_bound(vecs.begin(), vecs.end(), (int) vec->vector().size(),
@@ -1791,15 +1799,16 @@ std::vector<std::pair<int, int>> vec_candidate_impl(SSDfgVec *vec, Schedule *sch
 
         assert(i < vecs.size());
 
-        if (res.size() > n) {
-          break;
-        }
       }
     }
   }
 
   std::random_shuffle(res.begin(), res.end());
-  return res;
+
+  if (n == 0 || n > res.size())
+    n = res.size();
+
+  return std::vector<std::pair<int, int>>(res.begin(), res.begin() + n);
 }
 
 std::vector<std::pair<int, int>> SSDfgVecInput::candidates(Schedule *sched, SSModel *model, int n) {

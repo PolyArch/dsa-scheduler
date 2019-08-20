@@ -83,8 +83,10 @@ protected:
     for(int i = 0; i < n; ++i) {
       p = (p + 1) % n;
       T* to_map = nodes[p];
-      if (!sched->is_scheduled(to_map))
-        return schedule_it<T>(to_map, ssDFG, sched);
+      if (!sched->is_scheduled(to_map)) {
+        bool success = schedule_it<T>(to_map, ssDFG, sched);
+        return success;
+      }
     }
     return false;
   }
@@ -112,7 +114,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
   int best_candidate = -1;
-  bool find_best = rand() % 1024 != 1;
+  bool find_best = rand() % 1024;
 
   for (size_t i = 0; i < candidates.size(); ++i) {
 
@@ -154,13 +156,12 @@ int SchedulerSimulatedAnnealing::try_candidates(
   }
 
   return best_candidate;
-
 }
 
 template<typename T>
 bool SchedulerSimulatedAnnealing::schedule_vec_impl(SchedulerSimulatedAnnealing *engine,
                                                T *vec, SSDfg *dfg, Schedule *sched) {
-  auto candidates = vec->candidates(sched, engine->_ssModel, 0);
+  auto candidates = vec->candidates(sched, engine->_ssModel, 10);
   int best_candidate = engine->try_candidates<T>(candidates, sched, vec);
 
   if (best_candidate != -1) {
@@ -194,7 +195,7 @@ SchedulerSimulatedAnnealing::schedule_it(SSDfgVecOutput *vec, SSDfg *ssDFG, Sche
 
 template<> inline bool
 SchedulerSimulatedAnnealing::schedule_it(SSDfgInst *node, SSDfg *ssDFG, Schedule *sched) {
-  auto candidates = node->candidates(sched, _ssModel, 0);
+  auto candidates = node->candidates(sched, _ssModel, 10);
   int best_candidate = try_candidates<SSDfgInst>(candidates, sched, node);
   return best_candidate != -1;
 }
