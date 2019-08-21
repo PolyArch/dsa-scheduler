@@ -136,11 +136,11 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
         cout << cur_sched->vecPortOf(ssDFG->vec_in(i)).second << " ";
       }
 
-      fprintf(stdout, "Iter: %4d, time:%0.2f, rt:%d, left: %3d, " 
+      fprintf(stdout, "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
               "obj:%d, ins: %d/%d, outs: %d/%d,"
               " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s", 
-              iter, total_msec()/1000.f, _route_times,
+              iter, total_msec()/1000.f, _route_times/total_msec(),
               cur_sched->num_left(), lat, 
               cur_sched->violation(), latmis, ovr, agg_ovr, 
               max_util, -score.second,
