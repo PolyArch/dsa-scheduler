@@ -431,7 +431,7 @@ public:
       if (elem->def() == node)
         return 0;
     }
-    return _linkProp[link.second->id()].slots[link.first].edges.size();
+    return _linkProp[link.second->id()].slots[link.first].edges.size()+1;
   }
 
   bool input_matching_vector(SSDfgNode *node, SSDfgVecInput *in_v) {
