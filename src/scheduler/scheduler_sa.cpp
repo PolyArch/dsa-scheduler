@@ -34,7 +34,7 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
   sched = new Schedule(getSSModel(),ssDFG); //just a dummy one
 }
 
-std::pair<int, int> SchedulerSimulatedAnnealing::obj( Schedule*& sched, 
+std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched,
     int& lat, int& latmis, int& ovr, int& agg_ovr, int& max_util) {  
   int num_left = sched->num_left(); 
   bool succeed_sched = (num_left==0);
@@ -96,7 +96,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
   int remapNeeded = false; //ssDFG->remappingNeeded(); //setup remap structres
   int iter = 0;
-  for (int iter = 0; iter < _max_iters; ++iter) {
+  for (iter = 0; iter < _max_iters; ++iter) {
     if( (total_msec() > _reslim * 1000) || _should_stop ) {
       break;
     }
@@ -185,8 +185,10 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     }
 
   }
+
   if(verbose) {
     cout << "Breaking at Iter " << iter << "\n";
+    std::cout << "Totally " << this->candidates_succ << "/" << this->candidates_tried << std::endl;
   }
 
   //Fix back up any dummies
@@ -369,14 +371,15 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
 
   bool is_dest = (next == dest.second && next_slot == dest.first);
 
-  ssfu *fu = dynamic_cast<ssfu *>(next);
+  ssfu *fu = dynamic_cast<ssfu*>(next);
   if (fu && sched->dfgNodeOf(fu) && !is_dest)
     return -1;  //stop if run into fu
   if (t_cost == 0) {
     return 0 + internet_dis; //free link because schedule or candidate routing already maps
   } else {
-    if (fu && sched->isPassthrough(fu))
+    if (fu && sched->isPassthrough(fu)) {
       return -1; //someone else's pass through
+    }
     bool passthrough = (fu && !is_dest);
     return t_cost + passthrough * 1000 + internet_dis;
   }
@@ -462,7 +465,7 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
     sched->assign_edgelink(edge, link.first, link.second);
     path.links.emplace_back(edge, link);
     if (auto fu = dynamic_cast<ssfu*>(link.second->dest())) {
-      if (!sched->dfgNodeOf(fu)) {
+      if ((dest != x) && !sched->dfgNodeOf(fu)) {
         sched->assign_edge_pt(edge, x);
         path.thrus.emplace_back(edge, x);
       }

@@ -498,6 +498,7 @@ public:
 
   //find first node for
   SSDfgNode *dfgNodeOf(ssnode *node) {
+    assert(node->id() < _nodeProp.size());
     auto &vec = _nodeProp[node->id()].vertices;
     return vec.size() == 0 ? nullptr : vec.begin()->second;
   }

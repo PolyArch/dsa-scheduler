@@ -18,6 +18,8 @@ struct CandidateRoute {
 
 class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 public:
+  int candidates_tried{0}, candidates_succ{0};
+
   void initialize(SSDfg *, Schedule *&);
 
   SchedulerSimulatedAnnealing(SS_CONFIG::SSModel *ssModel) :
@@ -117,10 +119,12 @@ int SchedulerSimulatedAnnealing::try_candidates(
   bool find_best = rand() % 1024;
 
   for (size_t i = 0; i < candidates.size(); ++i) {
+    ++candidates_tried;
 
     CandidateRoute path;
     if (scheduleHere(sched, node->ready_to_map(),
                      node->ready_to_map(model, candidates[i]), path)) {
+      ++candidates_succ;
 
       int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
       pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
@@ -137,6 +141,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
       sched->unassign<T*>(node);
     }
+
 
   }
 
