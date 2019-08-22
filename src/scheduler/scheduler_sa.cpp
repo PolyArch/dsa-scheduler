@@ -369,12 +369,12 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
   // FIXME(@were): Move these to a virtual method!
   int t_cost;
   if (is_temporal_in) {
-    t_cost = sched->temporal_cost_in(link, dynamic_cast<SSDfgInput *>(def_dfgnode)->input_vec());
+    t_cost = sched->routing_cost_in(link, dynamic_cast<SSDfgInput *>(def_dfgnode)->input_vec());
   } else if (is_temporal_out) {
-    t_cost = sched->temporal_cost_out(make_pair(from_slot, link), def_dfgnode,
+    t_cost = sched->routing_cost_out(make_pair(from_slot, link), def_dfgnode,
                                       dynamic_cast<SSDfgOutput *>(use_dfgnode)->output_vec());
   } else { //NORMAL CASE!
-    t_cost = sched->temporal_cost(make_pair(from_slot, link), def_dfgnode);
+    t_cost = sched->routing_cost(make_pair(from_slot, link), edge->val());
   }
 
   if (t_cost >= 2) { //square law avoidance of existing routes

@@ -74,13 +74,6 @@ public:
     _dest = dest;
     _ID = -1;
   }
-  sslink(ssnode *source, ssnode *sink,
-        std::string source_port, std::string sink_port){
-          _orig = source;
-          _dest = sink;
-          _source_port = source_port;
-          _sink_port = sink_port;
-        }
 
   sslink* getCycleLink();
 
@@ -89,6 +82,11 @@ public:
   std::string gams_name(int config) const;
 
   std::string gams_name(int, int) const;
+
+  void set_port_names(std::string source_port, std::string sink_port) {
+    _source_port = source_port;
+    _sink_port = sink_port;
+  }
 
   int id() { return _ID; }
 
@@ -123,20 +121,17 @@ public:
 
   sslink *add_link(ssnode *node) {
     sslink *link = new sslink(this, node);
+    if(this==node) {
+      if(_cycle_link) assert(0 && "two cycle links, why?");
+      _cycle_link=link;
+    }
     _out_links.push_back(link);
     node->add_back_link(link);
     return link;
   }
   sslink * add_link(ssnode *sink_n,std::string source_port, std::string sink_port){
-    ssnode * source_node;
-    ssnode * sink_node;
-
-    source_node = this;
-    sink_node = sink_n;
-    
-    sslink * link = new sslink(source_node, sink_node, source_port, sink_port);
-    _out_links.push_back(link);
-    sink_node -> add_back_link(link);
+    sslink* link = add_link(sink_n);
+    link->set_port_names(source_port,sink_port);
     return link;
   }
 
@@ -157,6 +152,8 @@ public:
   const std::vector<sslink *> &in_links() { return _in_links; }
 
   const std::vector<sslink *> &out_links() { return _out_links; }
+
+  int num_non_self_out_links() {return _out_links.size() - (_cycle_link!=0);}
 
   sslink *getFirstOutLink() {
     return _out_links.empty() ? nullptr : _out_links[0];
@@ -181,12 +178,7 @@ public:
   }
 
   sslink *get_cycle_link() {
-    for (auto &dlink: out_links()) {
-      if (dlink->dest() == this) {
-        return dlink;
-      }
-    }
-    return nullptr;
+    return _cycle_link;
   }
 
   std::vector<std::string> get_output_ports(){
@@ -233,7 +225,7 @@ public:
       input_ports = default_setting["input_ports"].as<std::vector<std::string>>();
     }
     
-    // Fuck Insts
+    // Fuck Insts (awww, that's mean)
     std::vector<std::string> insts;
     if(default_setting["instructions"] || prop["instructions"])
     try{
@@ -241,7 +233,6 @@ public:
     }catch(...){
       insts = default_setting["instructions"].as<std::vector<std::string>>();
     }
-    
     
     // Output Ports
     if(default_setting["output_ports"] || prop["output_ports"])
@@ -331,6 +322,7 @@ protected:
   int _node_dist[8];
   int _done[8];
   std::pair<int, sslink*>_came_from[8];
+  sslink *_cycle_link=nullptr;
 
   int _max_util = 1; // by default, assume its a dedicated link
   std::vector<sslink *> _in_links;

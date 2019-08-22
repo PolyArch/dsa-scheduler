@@ -57,7 +57,7 @@ static void yyerror(parse_param*, const char *);
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
-%type <str_vec> ident_list
+%type <str_vec> ident_list value_list
 
 
 %start statement_list
@@ -84,16 +84,33 @@ statement
         p->dfg->addVecOutput($3->first.c_str(), $3->second, p->symbols, $1);
         delete $3;
       }
-    | IDENT '=' rhs eol {
+    | value_list '=' rhs eol {
         ParseResult *s = $3;
-        if (auto ne = dynamic_cast<NodeEntry*>($3)) {
-          ne->node->setName(*$1);
-        } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
-          for (auto elem : ce->entries) {
-            elem->node->setName(*$1);
+        if (auto ne = dynamic_cast<ValueEntry*>($3)) {
+          SSDfgNode* node = ne->value->node();
+          std::string name = (*$1)[0];
+          node->setName(name);
+          auto& values = node->values();
+          
+          if(values.size() < $1->size()) {
+            std::cout << "The instruction for node: \"" << node->name() 
+                 << " \"only supports " << values.size() << " output\n";
+            assert(0);
           }
+
+          for (int i = 0; i < $1->size(); ++i) {
+            name = (*$1)[i];
+            p->symbols.set(name, new ValueEntry(values[i], ne->l, ne->r));
+          }
+        } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
+          //By definition, converge entries only need one symbol (just def)
+          assert($1->size()==1);
+          std::string name = (*$1)[0];
+          for (auto elem : ce->entries) {
+            elem->value->node()->setName(name);
+          }
+          p->symbols.set(name,$3);
         }
-        p->symbols.set(*$1,$3);
         delete $1;
       }
     | NEW_DFG eol {
@@ -196,6 +213,15 @@ ctrl_list
       }
     ;
 
+value_list
+    : IDENT {
+        $$ = new string_vec_t(); $$->push_back(std::string(*$1));
+      }
+    | value_list ',' IDENT {
+        $1->push_back(*$3); $$ = $1;
+      }
+    ;
+
 ident_list
     : IDENT {
         $$ = new string_vec_t(); $$->push_back(std::string(*$1));
@@ -208,7 +234,7 @@ ident_list
 edge_list
     : edge {
         auto res = new ConvergeEntry(); 
-        auto ne = dynamic_cast<NodeEntry*>($1);
+        auto ne = dynamic_cast<ValueEntry*>($1);
         assert(ne);
         res->entries.push_back(ne);
         $$ = res;
@@ -216,7 +242,7 @@ edge_list
     | edge_list edge {
         auto ce = dynamic_cast<ConvergeEntry*>($1);
         assert(ce);
-        auto ne = dynamic_cast<NodeEntry*>($2);
+        auto ne = dynamic_cast<ValueEntry*>($2);
         assert(ne);
         ce->entries.insert(ce->entries.begin(), ne);
         $$ = ce;
@@ -230,15 +256,16 @@ edge
         delete $1;
       }
     | IDENT ':' I_CONST ':' I_CONST {
-        auto ne = dynamic_cast<NodeEntry*>(p->symbols.get_sym(*$1));
+        auto ne = dynamic_cast<ValueEntry*>(p->symbols.get_sym(*$1));
         assert(ne);
         if (ne->l == $3 && ne->r == $5) {
           $$ = ne;
         } else {
           std::ostringstream oss;
           oss << *$1 << ':' << $3 << ':' << $5;
-          if (!p->symbols.has_sym(oss.str()))
-            p->symbols.set(oss.str(), new NodeEntry(ne->node, $3, $5));
+          if (!p->symbols.has_sym(oss.str())) {
+            p->symbols.set(oss.str(), new ValueEntry(ne->value, $3, $5));
+          }
           $$ = p->symbols.get_sym(oss.str());
         }
         delete $1;

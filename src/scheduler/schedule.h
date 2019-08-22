@@ -20,7 +20,6 @@
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/functional/hash.hpp>
 
-
 using namespace SS_CONFIG;
 
 #define MAX_SCHED_LAT 1000000
@@ -53,9 +52,6 @@ public:
   void printOutputGraphviz(std::ofstream &ofs, ssnode *node);
 
   void printSwitchGraphviz(std::ofstream &ofs, ssswitch *sw);
-
-  //Scheduling Interface:
-  bool spilled(SSDfgNode *);
 
   //Old Interface:
 
@@ -401,7 +397,7 @@ public:
   //0: free
   //1: empty
   //>2: already there
-  int temporal_cost(std::pair<int, sslink *> link, SSDfgNode *node) {
+  int routing_cost(std::pair<int, sslink *> link, SSDfgValue *val) {
     assert(link.second);
     //Check all slots will be occupied empty.
     bool empty = true;
@@ -410,7 +406,7 @@ public:
     if (empty)
       return 1;
     for (auto elem : _linkProp[link.second->id()].slots[link.first].edges) {
-      if (elem->def() == node)
+      if (elem->val() == val)
         return 0;
     }
     return _linkProp[link.second->id()].slots[link.first].edges.size()+1;
@@ -436,7 +432,7 @@ public:
     return false;
   }
 
-  int temporal_cost_in(sslink *link, SSDfgVecInput *in_v) {
+  int routing_cost_in(sslink *link, SSDfgVecInput *in_v) {
     assert(link);
     auto &vec = _linkProp[link->id()].slots[0].edges;
     if (vec.empty()) return 1;
@@ -448,7 +444,7 @@ public:
   }
 
   //what a confusing function
-  int temporal_cost_out(std::pair<int, sslink*> link, SSDfgNode *node, SSDfgVecOutput *out_v) {
+  int routing_cost_out(std::pair<int, sslink*> link, SSDfgNode *node, SSDfgVecOutput *out_v) {
     assert(link.second);
     auto &vec = _linkProp[link.second->id()].slots[link.first].edges;
     if (vec.empty()) return 1;
@@ -696,7 +692,6 @@ public:
 
 private:
 
-
   //called by reconstructSchedule to trace link assignment
   void tracePath(ssnode *, SSDfgNode *,
                  std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &,
@@ -711,7 +706,6 @@ private:
           std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &routemap,
           std::map<ssnode *, SSDfgNode *> &dfgnode_for,
           std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &posMap);
-
 
 public:
 
@@ -736,7 +730,7 @@ public:
     }
   }
 
-  int colorOf(SSDfgNode *n) { return _cm.colorOf(n); }
+  int colorOf(SSDfgValue *v) { return _cm.colorOf(v); }
 
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
   void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
@@ -758,6 +752,7 @@ public:
     int extra_lat = 0;
     int vio=0;
     std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> links;
+    
     std::unordered_set<std::pair<int, ssnode*>, boost::hash<std::pair<int, ssnode*>>> passthroughs;
 
     void reset() {
@@ -789,7 +784,7 @@ public:
     struct LinkSlot {
       int lat = 0, order = -1;
       std::unordered_set<SSDfgEdge *> edges;
-      std::unordered_set<SSDfgNode *> nodes;
+      std::unordered_set<SSDfgValue *> values;
     };
 
     LinkSlot slots[8];

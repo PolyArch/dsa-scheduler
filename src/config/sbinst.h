@@ -218,10 +218,10 @@ sb_inst_t inst_from_string(const char* str);
 const char* name_of_inst(sb_inst_t inst);
 int inst_lat(sb_inst_t inst);
 int inst_thr(sb_inst_t inst);
-uint64_t execute64(sb_inst_t inst, std::vector<uint64_t>& ops, std::vector<uint64_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
-uint32_t execute32(sb_inst_t inst, std::vector<uint32_t>& ops, std::vector<uint32_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
-uint16_t execute16(sb_inst_t inst, std::vector<uint16_t>& ops, std::vector<uint16_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
-uint8_t execute8(sb_inst_t inst, std::vector<uint8_t>& ops, std::vector<uint8_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
+void execute64(sb_inst_t inst, std::vector<uint64_t>& ops, std::vector<uint64_t>& outs, std::vector<uint64_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
+void execute32(sb_inst_t inst, std::vector<uint32_t>& ops, std::vector<uint32_t>& outs, std::vector<uint32_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
+void execute16(sb_inst_t inst, std::vector<uint16_t>& ops, std::vector<uint16_t>& outs, std::vector<uint16_t>& reg, uint64_t& discard, std::vector<bool>& back_array);
+void execute8(sb_inst_t inst,  std::vector<uint8_t>& ops,  std::vector<uint8_t>& outs,  std::vector<uint8_t>& reg,  uint64_t& discard, std::vector<bool>& back_array);
 
 };
 

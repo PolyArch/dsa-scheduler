@@ -31,6 +31,40 @@ void checked_system(const char* command);
 class Schedule;
 class SSDfgNode;
 class SSDfg;
+class SSDfgEdge;
+
+// Datastructure describing a value created by an input vector or an instruction
+// Values are always routed "together" on adjacent subnetworks
+class SSDfgValue {
+public:
+  SSDfgValue() {} //for serialization
+  SSDfgValue(SSDfgNode* node, int index) : _node(node), _index(index) {}
+
+  SSDfgNode *node() const {return _node;}
+  int index() const {return _index;}
+  const std::vector<SSDfgEdge*> edges() const {return _uses;}
+  int bitwidth() const {return _bitwidth;}
+
+  void addOutEdge(SSDfgEdge* edge);
+
+  friend class boost::serialization::access;
+  template<class Archive> void serialize(Archive &ar, const unsigned int version);
+
+  //Dynamic Stuff
+  void set_val(uint64_t v) { _val = v;}
+  uint64_t get_val() {return _val;}
+
+private: 
+  SSDfgNode *_node=nullptr; //This is the node that it belongs to
+  int _index=0; //within the node, what index is it in its value list
+  int _bitwidth=64;
+  std::vector<SSDfgEdge *> _uses; //storage for all outgoing edges
+
+  //Dynamic Stuff
+  uint64_t _val = 0; //dynamic var (setting the default value)
+
+};
+
 
 class SSDfgEdge {
 public:
@@ -40,12 +74,12 @@ public:
 
   EdgeType etype() { return _etype; }
 
-  SSDfgEdge(SSDfgNode *def, SSDfgNode *use,
+  SSDfgEdge(SSDfgValue *def, SSDfgNode *use,
             EdgeType etype, SSDfg *ssdfg, int l = 0, int r = 63);
-
 
   /// Source and destination
   SSDfgNode *def() const;
+  SSDfgValue *val() const;
   SSDfgNode *use() const;
   SSDfgNode *get(int) const;
 
@@ -76,7 +110,7 @@ public:
 
   bool get_buffer_valid();
 
-  void pop_buffer_val(bool print, bool verif) ;
+  void pop_buffer_val(bool print, bool verif);
 
   int bitwidth();
   int l();
@@ -92,7 +126,8 @@ public:
 private:
   int _ID;
   SSDfg *_ssdfg;
-  SSDfgNode *nodes[2];
+  SSDfgValue* _value; //value which produces the node
+  SSDfgNode* _use; //operand which consumes the edge
   EdgeType _etype;
   int _l, _r;
 
@@ -127,7 +162,6 @@ struct SSDfgOperand {
 
   bool is_composed();
 
-
   //Functions which manipulate dynamic state
   uint64_t get_value();
 
@@ -153,11 +187,14 @@ struct SSDfgOperand {
 };
 
 //DFG Node -- abstract base class
+//DFG Nodes are intended to be the scheduling unit
 class SSDfgNode {
 public:
   virtual ~SSDfgNode() {}
 
-  SSDfgNode() {}
+  SSDfgNode() {
+    _values.resize(1,new SSDfgValue(this,0));
+  }
 
   enum V_TYPE {
     V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES
@@ -223,25 +260,28 @@ public:
 
   const std::vector<SSDfgEdge*> &in_edges() { return _inc_edge_list; }
 
+  std::vector<SSDfgValue*> &values() { return _values; }
+
   const std::vector<SSDfgEdge*> &uses() { return _uses; }
 
   int id() { return _ID; }
 
-  void set_value(uint64_t v, bool valid) { _val = v; _invalid = !valid; }
-  void set_outputnode(uint64_t v, bool valid, bool avail) { set_value(v, valid); _avail = avail; }
-
   bool get_bp();
-
 
   // Check's all consumers for backpressure-freedom,
   // If backpressure,
-  void set_node(uint64_t v, bool valid, bool avail, bool print, bool verif);
+  void set_node(SSDfgValue* dfg_val, 
+      uint64_t v, bool valid, bool avail, bool print, bool verif);
+
+  // sets value in non-backcgra
+  void set_value(uint64_t v, bool valid) { 
+    _values[0]->set_val(v); 
+    _invalid = !valid; 
+  }
 
   // sets value at this cycle
-  void set_value(uint64_t v, bool valid, bool avail, int cycle);
+  void set_value(SSDfgValue* dfg_val,uint64_t v, bool valid, bool avail, int cycle);
   //--------------------------------------------
-
-  uint64_t get_value() { return _val; }
 
   bool get_avail() { return _avail; }
 
@@ -290,7 +330,6 @@ protected:
   int _node_id = -1; //hack for temporal simulator to remember _node_id
 
   //Dynamic stuff
-  uint64_t _val = 0; //dynamic var (setting the default value)
   bool _avail = false; // if their is data in the output buffer
   bool _invalid = false;
   int _inputs_ready = 0; //dynamic inputs ready
@@ -300,8 +339,11 @@ protected:
   int _ID;
   std::string _name;
   std::vector<SSDfgOperand> _ops;     //in edges
-  std::vector<SSDfgEdge *> _inc_edge_list; //in edges
-  std::vector<SSDfgEdge *> _uses;          //out edges
+  std::vector<SSDfgEdge *> _inc_edge_list; //in edges in flat form
+
+  std::vector<SSDfgValue*> _values;    //out edges by index
+  std::vector<SSDfgEdge *> _uses;       //out edges in flat form
+
   int _min_lat = 0;
   int _sched_lat = 0;
   int _max_thr = 0;
@@ -350,16 +392,16 @@ struct ConstDataEntry : ParseResult {
 
 };
 
-struct NodeEntry : ParseResult {
+struct ValueEntry : ParseResult {
 
-  NodeEntry(SSDfgNode *node_, int l_ = 0, int r_ = 63) : node(node_), l(l_), r(r_) {}
+  ValueEntry(SSDfgValue *value_, int l_ = 0, int r_ = 63) : value(value_), l(l_), r(r_) {}
 
-  SSDfgNode *node;
+  SSDfgValue *value;
   int l, r;
 };
 
 struct ConvergeEntry : ParseResult {
-  std::vector<NodeEntry*> entries;
+  std::vector<ValueEntry*> entries;
 };
 
 struct CtrlBits {
@@ -429,7 +471,12 @@ public:
 
   SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
-    _subFunc(0), _reg(8, 0), _ssinst(inst) {}
+    _subFunc(0), _reg(8, 0), _ssinst(inst) {
+    //DFG Node makes a value by default, so start at 1
+    for(int i = 1; i < SS_CONFIG::num_values(_ssinst); ++ i) {
+      _values.push_back(new SSDfgValue(this,i));
+    }
+  }
 
 
   SSDfgInst(SSDfg *ssdfg) :
@@ -473,6 +520,8 @@ public:
 
   virtual int compute(bool print, bool verif);
 
+  void print_output(std::ostream& os);
+
   // new line added
   virtual int compute_backcgra(bool print, bool verif);
 
@@ -494,8 +543,22 @@ public:
 
   bool yield(Schedule *, SS_CONFIG::SubModel *) { return true; }
 
+  uint64_t getout(int i) {
+    switch(bitwidth()) {
+      case 64: return _output_vals[i];
+      case 32: return _output_vals_32[i];
+      case 16: return _output_vals_16[i];
+      case 8:  return _output_vals_8[i];
+      default:
+        std::cout << "Weird bitwidth: " << bitwidth() << "\n";
+        assert(0 && "weird bitwidth");
+    }
+  }
+
 private:
   friend class boost::serialization::access;
+
+  void resize_vals(int n);
 
   template<class Archive>
   void serialize(Archive &ar, const unsigned version);
@@ -506,6 +569,11 @@ private:
   std::vector<uint32_t> _input_vals_32;
   std::vector<uint16_t> _input_vals_16;
   std::vector<uint8_t> _input_vals_8;
+
+  std::vector<uint64_t> _output_vals;
+  std::vector<uint32_t> _output_vals_32;
+  std::vector<uint16_t> _output_vals_16;
+  std::vector<uint8_t> _output_vals_8;
 
   bool _predInv;
   bool _isDummy;
@@ -768,7 +836,7 @@ public:
 
   void set(const std::string &s, ParseResult *pr, bool override = false);
 
-  void set(const std::string &s, SSDfgNode *n) { symbol_table_[s] = new NodeEntry(n); }
+  void set(const std::string &s, SSDfgValue *n) { symbol_table_[s] = new ValueEntry(n); }
 
   void set(std::string &s, uint64_t n) { symbol_table_[s] = new ConstDataEntry(n); }
 
@@ -848,7 +916,7 @@ public:
   void addVecInput(const std::string &name, int len, EntryTable &syms, int width);
 
 
-  SSDfgEdge *connect(SSDfgNode *orig, SSDfgNode *dest, int slot,
+  SSDfgEdge *connect(SSDfgValue *orig, SSDfgNode *dest, int slot,
                       SSDfgEdge::EdgeType etype, int l = 0, int r = 63);
 
 
@@ -959,8 +1027,9 @@ public:
   void pop_vector_output(SSDfgVecOutput *vec_out, std::vector<uint64_t> &data,
                          std::vector<bool> &data_valid, unsigned int len, bool print, bool verif);
 
-  void push_transient(SSDfgNode *n, uint64_t v, bool valid, bool avail, int cycle) {
-    struct cycle_result *temp = new cycle_result(n, v, valid, avail);
+  void push_transient(SSDfgValue *dfg_val, uint64_t v, bool valid, 
+      bool avail, int cycle) {
+    struct cycle_result *temp = new cycle_result(dfg_val, v, valid, avail);
     transient_values[(cycle + cur_node_ptr) % get_max_lat()].push_back(temp);
   }
 
@@ -1004,13 +1073,13 @@ public:
 private:
   // to keep track of number of cycles---------------------
   struct cycle_result {
-    SSDfgNode *n;
+    SSDfgValue *dfg_val;
     uint64_t val;
     bool valid;
     bool avail;
 
-    cycle_result(SSDfgNode *node, uint64_t value, bool valid_in, bool a) {
-      n = node;
+    cycle_result(SSDfgValue *dfg_val_, uint64_t value, bool valid_in, bool a) {
+      dfg_val = dfg_val_;
       val = value;
       valid = valid_in;
       avail = a;
@@ -1142,12 +1211,12 @@ inline void SSDfg::add_parsed_vec(const std::string &name, int len, EntryTable &
           int num_entries = ce->entries.size();
           assert(num_entries > 0 && num_entries <= 16);
           for (auto elem : ce->entries)
-            connect(elem->node, node, 0, SSDfgEdge::data, elem->l, elem->r);
-        } else if (auto ne = dynamic_cast<NodeEntry*>(sym)) {
-          connect(ne->node, node, 0, SSDfgEdge::data, ne->l, ne->r);
+            connect(elem->value, node, 0, SSDfgEdge::data, elem->l, elem->r);
+        } else if (auto ne = dynamic_cast<ValueEntry*>(sym)) {
+          connect(ne->value, node, 0, SSDfgEdge::data, ne->l, ne->r);
         }
       } else if (std::is_same<T, SSDfgVecInput>::value) {
-        syms.set(ss.str(), new NodeEntry(node, j, j + width - 1));
+        syms.set(ss.str(), new ValueEntry(node->values()[0], j, j + width - 1));
       }
 
     }

@@ -903,7 +903,7 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
       auto v = elem.second;
       ofs << "<tr><td port=\"" << v->name() 
           << "\" border=\"1\" bgcolor=\"#" 
-          << std::hex << colorOf(v) << std::dec << "\">" 
+          << std::hex << colorOf(v->values()[0]) << std::dec << "\">" 
 //          << ((node->max_util()!=1) ? "T!" : "")
           << v->name() << "</td></tr>";
     }
@@ -919,9 +919,10 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
 
     for (int slot= 0; slot < 8; ++slot) {
       auto &lp = _linkProp[link->id()];
-      vector<SSDfgNode*> temp;
-      for (auto *e : lp.slots[slot].edges)
-        temp.push_back(e->def());
+      vector<SSDfgValue*> temp;
+      for (auto *e : lp.slots[slot].edges) {
+        temp.push_back(e->val());
+      }
       sort(temp.begin(), temp.end());
       auto unique_end = unique(temp.begin(), temp.end());
       for (auto iter = temp.begin(); iter != unique_end; ++iter) {
@@ -2247,7 +2248,7 @@ void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode,
           //_ssnodeOf[dest_dfgnode]=ssout;
           assign_node(dest_dfgnode, make_pair(0, ssout));
 
-          SSDfgEdge* edge = _ssDFG->connect(dfgnode,dest_dfgnode,0, SSDfgEdge::data); 
+          SSDfgEdge* edge = _ssDFG->connect(dfgnode->values()[0],dest_dfgnode,0, SSDfgEdge::data); 
           for(auto& i : links) {
             //FIXME: for now, we do not use this function to rebuild the schedule, so I just put some random value for the slot
             assign_edgelink(edge, 0, i);
@@ -2269,7 +2270,7 @@ void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode,
               if(slot==n_ops) edge_type = dest_dfgnode->predInv()? 
                              SSDfgEdge::ctrl_false : SSDfgEdge::ctrl_true;
 
-              SSDfgEdge * edge = _ssDFG->connect(dfgnode,dest_dfgnode, slot, edge_type);
+              SSDfgEdge * edge = _ssDFG->connect(dfgnode->values()[0],dest_dfgnode, slot, edge_type);
               //FIXME: put a placeholder for the slot to pass compilation first. Later we will use this function to reconstruct the scheudle
               for(auto& i : links) {
                 assign_edgelink(edge, 0, i);
@@ -2338,37 +2339,38 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
 
 void Schedule::get_link_overprov(sslink* link, 
                                  int& ovr, int& agg_ovr, int& max_util) {
-   for (int slot = 0; slot < 8; ++slot) {
-     auto &lp = _linkProp[link->id()];
-     int util = 0;
-     //if (!lp.slots[slot].edges.empty())
-       //std::cout << elem->name() << " " << slot << "\n";
+  for (int slot = 0; slot < 8; ++slot) {
+    auto &lp = _linkProp[link->id()];
+    int util = 0;
+    //if (!lp.slots[slot].edges.empty())
+      //std::cout << elem->name() << " " << slot << "\n";
 
-     std::vector<SSDfgVec *> vecs;
-     std::vector<SSDfgNode*> nodes;
+    std::vector<SSDfgVec *> vecs;
+    std::vector<SSDfgValue*> values;
 
-     for (auto edge : lp.slots[slot].edges) {
-       //std::cout << edge->name() << "\n";
-       auto v = edge->def();
-       if (v->is_temporal()) {
-         if (auto input = dynamic_cast<SSDfgInput *>(v)) {
-           vecs.push_back(input->input_vec());
-           continue;
-         }
-         for (auto use : v->uses()) {
-           if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
-             vecs.push_back(out->output_vec());
-             continue;
-           }
-         }
-       } else {
-         nodes.push_back(v);
-       }
-     }
-     util = count_unique(nodes) + count_unique(vecs);
-     int cur_ovr = util - link->max_util();
-     ovr = std::max(cur_ovr, ovr);
-     agg_ovr += std::max(cur_ovr, 0);
-     max_util = std::max(util, max_util);
-   }
+    for (auto edge : lp.slots[slot].edges) {
+      //std::cout << edge->name() << "\n";
+      auto v = edge->def();
+      if (v->is_temporal()) {
+        if (auto input = dynamic_cast<SSDfgInput *>(v)) {
+          vecs.push_back(input->input_vec());
+          continue;
+        }
+        for (auto use : v->uses()) {
+          if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
+            vecs.push_back(out->output_vec());
+            continue;
+          }
+        }
+      } else {
+        auto val = edge->val();
+        values.push_back(val);
+      }
+    }
+    util = count_unique(values) + count_unique(vecs);
+    int cur_ovr = util - link->max_util();
+    ovr = std::max(cur_ovr, ovr);
+    agg_ovr += std::max(cur_ovr, 0);
+    max_util = std::max(util, max_util);
+  }
 }

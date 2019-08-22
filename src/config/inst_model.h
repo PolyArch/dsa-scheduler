@@ -18,20 +18,23 @@ class ConfigInst {
         int bitwidth()              { return _bitwidth; }
         void setBitwidth(int b)     { _bitwidth=b; }
 
+        int numOps()                     { return _num_ops; }
+        void setNumOperands(int n_ops)    { _num_ops=n_ops; }
+
+        int numValues()                 { return _num_values; }
+        void setNumValues(int n_values)    { _num_values=n_values; }
+
         int latency()               { return _latency; }
         void setLatency(int lat)    { _latency=lat; }
 
         int  throughput()           { return _throughput; }
         void setThroughput(int thr) { _throughput=thr; }
-
-        int numOps()                     { return _num_ops; }
-        void setNumOperands(int n_ops)    { _num_ops=n_ops; }
-
         
     private:
         std::string _name;
         int _latency;
         int _throughput; //technically 1/throughput in cycles
+        int _num_values;
         int _num_ops;
         int _bitwidth;
 };
