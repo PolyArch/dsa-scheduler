@@ -1738,6 +1738,8 @@ std::vector<std::pair<int, int>> SSDfgInst::candidates(Schedule *sched, SSModel 
   if (n > spots.size() || n == 0)
     n = spots.size();
 
+  //cout << n << "\n";
+
   return std::vector<std::pair<int, int>>(spots.begin(), spots.begin() + n);
 }
 
@@ -1789,16 +1791,21 @@ std::vector<std::pair<int, int>> vec_candidate_impl(SSDfgVec *vec, Schedule *sch
           mask_ids.push_back(j);
         }
       }
+
       if (mask_ids.size() >= needed) {
-        std::random_shuffle(mask_ids.begin(), mask_ids.end());
-        int mask = 0;
-        for (int j = 0; j < needed; ++j) {
-          mask |= 1 << mask_ids[j];
+
+        int retries = mask_ids.size() == needed ? 1 : 2;
+        for(int r = 0; r < retries; ++r) {        
+          std::random_shuffle(mask_ids.begin(), mask_ids.end());
+          int mask = 0;
+          for (int j = 0; j < needed; ++j) {
+            mask |= 1 << mask_ids[j];
+          }
+          res.emplace_back(i, mask);
+    
+          assert(i < vecs.size());
         }
-        res.emplace_back(i, mask);
-
-        assert(i < vecs.size());
-
+  
       }
     }
   }

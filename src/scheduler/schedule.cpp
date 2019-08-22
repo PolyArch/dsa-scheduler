@@ -913,6 +913,10 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
 
 void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
   for(auto link: node->out_links()) {
+
+    int ovr=0,agg_ovr=0,max_util=0;
+    get_link_overprov(link,ovr,agg_ovr,max_util);
+
     for (int slot= 0; slot < 8; ++slot) {
       auto &lp = _linkProp[link->id()];
       vector<SSDfgNode*> temp;
@@ -920,10 +924,16 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
         temp.push_back(e->def());
       sort(temp.begin(), temp.end());
       auto unique_end = unique(temp.begin(), temp.end());
-      for (auto iter = temp.begin(); iter != unique_end; ++iter)
+      for (auto iter = temp.begin(); iter != unique_end; ++iter) {
         ofs << link->orig()->name() << "->" << link->dest()->name()
-            << " [color=\"#" << std::hex << colorOf(*iter) << std::dec
-            << "\"];";
+            << " [color=\"#" << std::hex << colorOf(*iter) << std::dec << "\" "
+            << (link->max_util()>1 ? " style=dotted " : "")
+            << " label=\""; 
+        if(agg_ovr!=0) {
+          ofs<< "OVR:" << agg_ovr;
+        }
+        ofs<< "\"];";
+      }
     }
   } 
  
@@ -2320,40 +2330,45 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
 
   for (auto &n : _ssModel->subModel()->node_list()) {
     for (auto &elem: n->out_links()) {
-      for (int slot = 0; slot < 8; ++slot) {
-        auto &lp = _linkProp[elem->id()];
-        int util = 0;
-        //if (!lp.slots[slot].edges.empty())
-          //std::cout << elem->name() << " " << slot << "\n";
-
-        std::vector<SSDfgVec *> vecs;
-        std::vector<SSDfgNode*> nodes;
-
-        for (auto edge : lp.slots[slot].edges) {
-          //std::cout << edge->name() << "\n";
-          auto v = edge->def();
-          if (v->is_temporal()) {
-            if (auto input = dynamic_cast<SSDfgInput *>(v)) {
-              vecs.push_back(input->input_vec());
-              continue;
-            }
-            for (auto use : v->uses()) {
-              if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
-                vecs.push_back(out->output_vec());
-                continue;
-              }
-            }
-          } else {
-            nodes.push_back(v);
-          }
-        }
-        util = count_unique(nodes) + count_unique(vecs);
-        int cur_ovr = util - n->max_util();
-        ovr = std::max(cur_ovr, ovr);
-        agg_ovr += std::max(cur_ovr, 0);
-        max_util = std::max(util, max_util);
-      }
+      get_link_overprov(elem,ovr,agg_ovr,max_util);
     }
   }
 
+}
+
+void Schedule::get_link_overprov(sslink* link, 
+                                 int& ovr, int& agg_ovr, int& max_util) {
+   for (int slot = 0; slot < 8; ++slot) {
+     auto &lp = _linkProp[link->id()];
+     int util = 0;
+     //if (!lp.slots[slot].edges.empty())
+       //std::cout << elem->name() << " " << slot << "\n";
+
+     std::vector<SSDfgVec *> vecs;
+     std::vector<SSDfgNode*> nodes;
+
+     for (auto edge : lp.slots[slot].edges) {
+       //std::cout << edge->name() << "\n";
+       auto v = edge->def();
+       if (v->is_temporal()) {
+         if (auto input = dynamic_cast<SSDfgInput *>(v)) {
+           vecs.push_back(input->input_vec());
+           continue;
+         }
+         for (auto use : v->uses()) {
+           if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
+             vecs.push_back(out->output_vec());
+             continue;
+           }
+         }
+       } else {
+         nodes.push_back(v);
+       }
+     }
+     util = count_unique(nodes) + count_unique(vecs);
+     int cur_ovr = util - link->max_util();
+     ovr = std::max(cur_ovr, ovr);
+     agg_ovr += std::max(cur_ovr, 0);
+     max_util = std::max(util, max_util);
+   }
 }
