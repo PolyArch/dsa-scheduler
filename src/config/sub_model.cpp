@@ -1430,7 +1430,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           else if(p==2) link->setdir(SwitchDir::IP2);
         }
       }
-      cout << "\n";
+      //cout << "\n";
       assert((unsigned)in_index == _inputs.size());
     }
 

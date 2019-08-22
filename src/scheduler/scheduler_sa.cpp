@@ -44,8 +44,9 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched,
 
   int violation = sched->violation();
 
-    int obj = agg_ovr * 10000 + violation * 2000 + latmis * 2000
-      + lat + (max_util - 1) * 30000;
+    int obj = agg_ovr * 1000 + violation * 200 + latmis * 200
+      + lat + (max_util - 1) * 3000;
+    obj = obj*100 + sched->num_links_mapped();
 
 
     if(false) {
@@ -115,9 +116,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       }
     }
 
-    // every so often you can reset?
-    if(iter - last_improvement_iter > 1023) {
-      *cur_sched = *sched; //shallow copy of sched should work?
+    // if we don't improve for some time, lets reset
+    if(iter - last_improvement_iter > 128) {
+      *cur_sched = *sched; 
     }
 
     bool succeed_sched = schedule_internal(ssDFG, cur_sched);
@@ -128,6 +129,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     int succeed_timing = (latmis ==0) && (ovr ==0);
 
     if (verbose && ((score > best_score) || print_stat)) {
+
       stringstream ss;
       ss << "viz/iter/" << iter << ".gv";
       cur_sched->printGraphviz(ss.str().c_str());
@@ -135,6 +137,11 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       for(int i = 0; i < ssDFG->num_vec_input(); ++i) {
         cout << cur_sched->vecPortOf(ssDFG->vec_in(i)).second << " ";
       }
+      cout << "|";
+      for(int i = 0; i < ssDFG->num_vec_output(); ++i) {
+        cout << cur_sched->vecPortOf(ssDFG->vec_out(i)).second << " ";
+      }
+
 
       fprintf(stdout, "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
@@ -184,6 +191,10 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       break;
     }
 
+    if(best_succeeded) {
+      break;
+    }
+
   }
 
   if(verbose) {
@@ -205,7 +216,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* sched) {
 
   while (!(sched->is_complete<SSDfgInput>() && sched->is_complete<SSDfgOutput>())) {
-    int r = rand_bt(0, 2); //upper limit defines ratio of input/output scheduling
+    int r = rand_bt(0, 2); 
     switch (r) {
       case 0: {
         if (sched->is_complete<SSDfgInput>())
@@ -273,19 +284,20 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
 
 void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
 
-  int num_to_unmap = 1;
   int r = rand() % 1000; //upper limit defines ratio of input/output scheduling
-  num_to_unmap = (r < 5) ? 10 : (r < 10 ? 5 : num_to_unmap);
+  int num_to_unmap = (r < 5) ? 10 : (r < 250 ? 4 : 2);
 
   for (int i = 0; i < num_to_unmap && sched->num_mapped<SSDfgNode>(); ++i) {
     bool flag = sched->num_mapped<SSDfgNode>() != 0;
     while (flag) {
-      r = rand() % 8;
+      r = rand_bt(0,100);
       if (r == 0 && sched->num_mapped<SSDfgInput>()) {
         unmap_one<SSDfgVecInput>(ssDFG, sched);
+        i+=1;
         flag = false;
       } else if (r == 1 && sched->num_mapped<SSDfgOutput>()) {
         unmap_one<SSDfgVecOutput>(ssDFG, sched);
+        i+=1;
         flag = false;
       } else if (sched->num_mapped<SSDfgInst>()) {
         unmap_one<SSDfgInst>(ssDFG, sched);
@@ -295,6 +307,8 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
   }
 
 }
+
+static int FU=0;
 
 bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
   int max_retries = 100;
@@ -405,17 +419,22 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
     assert(0);
   }
 
-  set<std::tuple<int, int, ssnode*>> openset;
+  // Distance, random priority, slot, node
+  set<std::tuple<int, int, int, ssnode*>> openset;
 
   _ssModel->subModel()->clear_all_runtime_vals();
 
   source.second->update_dist(source.first, 0, 0, nullptr);
-  openset.emplace(0, source.first, source.second);
+
+  int new_rand_prio = rand_bt(0,1); //just pick zero
+  source.second->set_done(source.first,new_rand_prio); //remeber for later for deleting
+
+  openset.emplace(0, new_rand_prio, source.first, source.second);
 
   while (!openset.empty()) {
     int cur_dist = std::get<0>(*openset.begin());
-    int slot = std::get<1>(*openset.begin());
-    ssnode *node = std::get<2>(*openset.begin());
+    int slot = std::get<2>(*openset.begin());
+    ssnode *node = std::get<3>(*openset.begin());
 
     openset.erase(openset.begin());
 
@@ -440,11 +459,14 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
         int next_dist = next->node_dist(next_slot);
         if (next_dist == -1 || next_dist > new_dist) {
           if (next_dist != -1) {
-            auto iter = openset.find(std::make_tuple(next_dist, next_slot, next));
+            int next_rand_prio = next->done(next_slot);
+            auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
             assert(iter != openset.end());
             openset.erase(iter);
           }
-          openset.emplace(new_dist, next_slot, next);
+          int new_rand_prio = rand_bt(0,20);
+          next->set_done(next_slot,new_rand_prio); //remeber for later for deleting
+          openset.emplace(new_dist, new_rand_prio,next_slot, next);
           next->update_dist(next_slot, new_dist, slot, link);
         }
       }

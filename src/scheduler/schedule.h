@@ -23,24 +23,6 @@
 
 using namespace SS_CONFIG;
 
-//How do you choose which switch in each row and FU to pass ??
-//struct sw_config {
-//  unsigned pred:2;
-//  unsigned opcode:5;
-//  unsigned fu_in1:2;    //cfg for 1st input of FU
-//  unsigned fu_in2:2;    //cfg for 2nd input of FU
-//  unsigned fu_out:2;    //cfg for 3rd input of FU
-//  unsigned  sw_s:3;     //select line for output muxes
-//  unsigned sw_se:3;
-//  unsigned  sw_e:3;
-//  unsigned sw_ne:3;
-//  unsigned  sw_n:3;
-//  unsigned sw_nw:3;
-//  unsigned  sw_w:3;
-//  unsigned sw_sw:3;
-//  unsigned   row:2;  //can address only 4 rows -- need to update it
-//};
-
 #define MAX_SCHED_LAT 1000000
 
 class Schedule {
@@ -757,6 +739,7 @@ public:
   int colorOf(SSDfgNode *n) { return _cm.colorOf(n); }
 
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
+  void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
 
   struct VertexProp {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
