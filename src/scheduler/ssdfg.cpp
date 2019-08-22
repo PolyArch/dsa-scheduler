@@ -1759,8 +1759,8 @@ int SSDfgVecOutput::wasted_width(Schedule *sched, SubModel *model) {
 
 bool SSDfgVec::yield(Schedule *sched, SubModel *model) {
   int wasted = wasted_width(sched, model);
-  int r = rand() % wasted * wasted + get_port_width();
-  return r <= wasted * wasted;
+  int r = rand() % (wasted * wasted + get_port_width());
+  return r <= wasted * wasted+1;
 }
 
 template<typename T>

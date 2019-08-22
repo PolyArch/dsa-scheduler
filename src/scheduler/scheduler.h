@@ -129,6 +129,11 @@ protected:
     return rand() % (e - s) + s;
   }
 
+  int rand_bt_large(int s, int e) {
+    return (rand() * RAND_MAX + rand()) % (e - s) + s;
+  }
+
+
   int _route_times = 0;
 };
 

@@ -137,6 +137,11 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       for(int i = 0; i < ssDFG->num_vec_input(); ++i) {
         cout << cur_sched->vecPortOf(ssDFG->vec_in(i)).second << " ";
       }
+      cout << "|";
+      for(int i = 0; i < ssDFG->num_vec_output(); ++i) {
+        cout << cur_sched->vecPortOf(ssDFG->vec_out(i)).second << " ";
+      }
+
 
       fprintf(stdout, "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
@@ -285,7 +290,7 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
   for (int i = 0; i < num_to_unmap && sched->num_mapped<SSDfgNode>(); ++i) {
     bool flag = sched->num_mapped<SSDfgNode>() != 0;
     while (flag) {
-      r = rand() % 100;
+      r = rand_bt(0,100);
       if (r == 0 && sched->num_mapped<SSDfgInput>()) {
         unmap_one<SSDfgVecInput>(ssDFG, sched);
         i+=1;
@@ -302,6 +307,8 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
   }
 
 }
+
+static int FU=0;
 
 bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
   int max_retries = 100;
@@ -412,17 +419,22 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
     assert(0);
   }
 
-  set<std::tuple<int, int, ssnode*>> openset;
+  // Distance, random priority, slot, node
+  set<std::tuple<int, int, int, ssnode*>> openset;
 
   _ssModel->subModel()->clear_all_runtime_vals();
 
   source.second->update_dist(source.first, 0, 0, nullptr);
-  openset.emplace(0, source.first, source.second);
+
+  int new_rand_prio = rand_bt(0,1); //just pick zero
+  source.second->set_done(source.first,new_rand_prio); //remeber for later for deleting
+
+  openset.emplace(0, new_rand_prio, source.first, source.second);
 
   while (!openset.empty()) {
     int cur_dist = std::get<0>(*openset.begin());
-    int slot = std::get<1>(*openset.begin());
-    ssnode *node = std::get<2>(*openset.begin());
+    int slot = std::get<2>(*openset.begin());
+    ssnode *node = std::get<3>(*openset.begin());
 
     openset.erase(openset.begin());
 
@@ -447,11 +459,14 @@ SchedulerSimulatedAnnealing::route_minimize_distance(Schedule *sched, SSDfgEdge 
         int next_dist = next->node_dist(next_slot);
         if (next_dist == -1 || next_dist > new_dist) {
           if (next_dist != -1) {
-            auto iter = openset.find(std::make_tuple(next_dist, next_slot, next));
+            int next_rand_prio = next->done(next_slot);
+            auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
             assert(iter != openset.end());
             openset.erase(iter);
           }
-          openset.emplace(new_dist, next_slot, next);
+          int new_rand_prio = rand_bt(0,20);
+          next->set_done(next_slot,new_rand_prio); //remeber for later for deleting
+          openset.emplace(new_dist, new_rand_prio,next_slot, next);
           next->update_dist(next_slot, new_dist, slot, link);
         }
       }

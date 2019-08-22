@@ -216,8 +216,8 @@ SchedulerSimulatedAnnealing::unmap_one(SSDfg *dfg, Schedule *sched) {
     for (int i = 0; i < n; ++i) {
       p = (p + 1) % n;
       // TODO(@were): add extra estimation to this function...
-      if (sched->is_scheduled(nodes[i]) && nodes[i]->yield(sched, _ssModel->subModel())) {
-        sched->unassign<T*>(nodes[i]);
+      if (sched->is_scheduled(nodes[p]) && nodes[p]->yield(sched, _ssModel->subModel())) {
+        sched->unassign<T*>(nodes[p]);
         return;
       }
     }
