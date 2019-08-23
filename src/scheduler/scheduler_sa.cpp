@@ -17,9 +17,27 @@ using namespace std;
 
 //Major things left to try that might improve the algorithm:
 //1. Overprovisioning while routing/placing 
-//    (maybe also the including actual simulated annealing part)
-//2. Prioritizing nodes based on what their presumed effect on scheduling
+//  (DONE -- iterative+overprovisioning is incredibly useful for large graphs)
+//2. Simulated Annealing -- include a temperature that controls randomness?
+//3. Prioritizing nodes based on what their presumed effect on scheduling
 //   quality might be.  This may be difficult to gauge though.
+//4. Including multiple schedules to work on concurrently.  Sometimes its useful
+//   to work on very different schedules, as the scheduler easily gets stuck
+//   in local optima.
+//5. Incorperating Multithreading -- this might work nicely with 4, where each
+//   thread works on a different schedule.
+//6. Better way to fix_latency.  One option is max_flow formulation as suggested
+//by Jian; not sure it will be faster than the iterative heuristic (it could be
+//exactly the same).  Another option is a proper ILP -- this is no fun fun to
+//maintain with an interface to another language (eg. gams), but otherwise its
+//okay.
+//7. Introduce more randomness into routing itself?  Maybe randomly de-prioritize
+//a path.
+//8. For paths where you multi-cast a value (A->B A->C ...), finding the optimal
+//version is a steiner-tree problem for graphs.  A direct implementation may be better
+//than our approximate version (Which uses multiple djkstra's instances).  Warning
+//that steiner problems often don't have polynomial solutions, so *some* approximation
+//is necessary.
 
 void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
   //Sort the input ports once
