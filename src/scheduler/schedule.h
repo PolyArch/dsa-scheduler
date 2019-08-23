@@ -277,6 +277,7 @@ public:
     for (auto &pt : ep.passthroughs) {
       auto &np = _nodeProp[pt.second->id()];
       np.num_passthroughs -= 1; //take one passthrough edge away
+      _num_passthroughs -=1;
       assert(np.num_passthroughs >= 0);
     }
 
@@ -609,6 +610,7 @@ public:
     assert(dfgNodeOf(n) == nullptr);
 
     _nodeProp[n->id()].num_passthroughs += 1; //add one to edges passing through
+    _num_passthroughs+=1;
   }
 
   bool isPassthrough(ssnode *n) {
@@ -735,6 +737,8 @@ public:
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
   void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
 
+  int num_passthroughs() {return _num_passthroughs;}
+
   struct VertexProp {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
     ssnode *node = nullptr;
@@ -853,6 +857,7 @@ private:
   int _min_expected_route_latency=2; //this is probably fixed?
   int _max_expected_route_latency=6;
 
+  int _num_passthroughs=0;
 
   SwitchDir ssdir;
   ColorMapper _cm;

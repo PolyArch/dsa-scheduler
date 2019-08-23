@@ -40,33 +40,13 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched,
   bool succeed_sched = (num_left==0);
 
   sched->get_overprov(ovr,agg_ovr,max_util);
-  bool succeed_timing = sched->fixLatency(lat,latmis);
+  sched->fixLatency(lat,latmis);
 
   int violation = sched->violation();
 
     int obj = agg_ovr * 1000 + violation * 200 + latmis * 200
-      + lat + (max_util - 1) * 3000;
+      + lat + (max_util - 1) * 3000 + sched->num_passthroughs();
     obj = obj*100 + sched->num_links_mapped();
-
-
-    if(false) {
-      fprintf(stdout, "\n\nobjective rt:%d, left: %3d, " 
-            "lat: %3d, vio %d, mis: %d, ovr: %d, util: %d, "
-            "obj:%d, ins: %d/%zu, outs: %d/%zu,"
-            " insts: %d, links:%d, edge-links:%d  %s%s\n", 
-            _route_times,
-            sched->num_left(), lat, 
-            sched->violation(), latmis, ovr, max_util, obj,
-            sched->num_mapped<SSDfgInput>(),  sched->ssdfg()->nodes<SSDfgInput*>().size(),
-            sched->num_mapped<SSDfgOutput>(), sched->ssdfg()->nodes<SSDfgOutput*>().size(),
-            sched->num_mapped<SSDfgInst>(),
-            sched->num_links_mapped(),
-            sched->num_edge_links_mapped(),
-            succeed_sched ? ", all mapped" : "",
-            succeed_timing ? ", mismatch == 0" : "");
-    }
-
-//    sched->printGraphviz("hi.gv");
 
   return make_pair(succeed_sched - num_left, -obj);
 }
@@ -146,7 +126,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       fprintf(stdout, "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
               "obj:%d, ins: %d/%d, outs: %d/%d,"
-              " insts: %d/%d,%d, links:%d, edge-links:%d  %s%s", 
+              " insts: %d/%d,%d, pts:%d, links:%d, edge-links:%d  %s%s", 
               iter, total_msec()/1000.f, _route_times/total_msec(),
               cur_sched->num_left(), lat, 
               cur_sched->violation(), latmis, ovr, agg_ovr, 
@@ -154,6 +134,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
               cur_sched->num_mapped<SSDfgInput>(),  (int) ssDFG->nodes<SSDfgInput*>().size(),
               cur_sched->num_mapped<SSDfgOutput>(), (int) ssDFG->nodes<SSDfgOutput*>().size(),
               cur_sched->num_mapped<SSDfgInst>(),  presize, postsize,
+              cur_sched->num_passthroughs(),
               cur_sched->num_links_mapped(),
               cur_sched->num_edge_links_mapped(),
               succeed_sched ? ", all mapped" : "",
@@ -394,8 +375,11 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
     if (fu && sched->isPassthrough(fu)) {
       return -1; //someone else's pass through
     }
-    bool passthrough = (fu && !is_dest);
-    return t_cost + passthrough * 1000 + internet_dis;
+    int passthrough = 10 * (fu && !is_dest);
+    if(passthrough) 
+      passthrough += 50 * sched->thingsAssigned(fu);
+
+    return t_cost + passthrough + internet_dis;
   }
 
 }
