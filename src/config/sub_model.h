@@ -225,7 +225,7 @@ public:
       input_ports = default_setting["input_ports"].as<std::vector<std::string>>();
     }
     
-    // Fuck Insts (awww, that's mean)
+    // Insts 
     std::vector<std::string> insts;
     if(default_setting["instructions"] || prop["instructions"])
     try{
