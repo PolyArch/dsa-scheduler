@@ -38,8 +38,10 @@ And32                   32           2             1           1
 Or32                    32           2             1           1
 Xor32                   32           2             1           1
 Acc32                   32           2             1           1
+Concat32                32           2             1           1
 
 # 64-Bit Instructions
+Concat64                64           2             1           1
 Extract16               64           1             1           1
 Concat16                64           1             1           1
 BitsliceAcc64           64           2             1           1
