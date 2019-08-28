@@ -1,0 +1,10 @@
+Input: A
+Input: B
+Input: reset
+
+Div,Rem = DivRem64(A, B)
+
+O0 = Add64(Div, reset)
+O1 = Sub64(Rem, reset)
+
+Output: O[2]

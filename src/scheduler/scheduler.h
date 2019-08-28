@@ -36,65 +36,6 @@ std::pair<T,U> operator-(const std::pair<T,U> & l,
     return {l.first-r.first,l.second-r.second};
 }        
 
-class CandidateRouting {
-public:
-  struct EdgeProp {
-    int num_links = 0;
-    int num_passthroughs = 0;
-    std::unordered_set<sslink *> links;
-  };
-
-  std::unordered_map<std::pair<int, SS_CONFIG::sslink*>,
-    std::unordered_set<SSDfgEdge*>, boost::hash<std::pair<int, SS_CONFIG::sslink*>>> routing;
-
-  std::unordered_map<SSDfgEdge *, EdgeProp> edge_prop;
-
-  void fill_lat(Schedule *sched,
-                int &min_node_lat, int &max_node_lat, bool print = false) {
-    min_node_lat = 0; //need minimax, so that's why this is odd
-    max_node_lat = MAX_ROUTE;
-
-    if (edge_prop.empty())
-      return;
-
-    SSDfgNode *n = (*edge_prop.begin()).first->use();
-    bool output = dynamic_cast<SSDfgOutput *>(n);
-
-    for (auto edge : edge_prop) {
-      SSDfgEdge *source_dfgedge = edge.first;
-      auto i = edge_prop[source_dfgedge];
-      int num_links = i.num_links;
-      int num_passthroughs = i.num_passthroughs;
-
-      auto p = sched->lat_bounds(source_dfgedge->def());
-
-      int min_inc_lat = p.first + num_links;
-      int max_inc_lat = p.second + num_links +
-                        sched->ssModel()->maxEdgeDelay() * ((!output) + num_passthroughs);
-
-      if (print) {
-        std::cout << "  links: " << num_links << " pts: " << num_passthroughs << "\n";
-        std::cout << "  b low: " << p.first << " pts: " << p.second << "\n";
-        std::cout << "  max_extra:" << sched->ssModel()->maxEdgeDelay() * ((!output) + num_passthroughs) << "\n";
-      }
-
-      if (min_inc_lat > min_node_lat) min_node_lat = min_inc_lat;
-      if (max_inc_lat < max_node_lat) max_node_lat = max_inc_lat;
-    }
-    if (print) {
-      std::cout << "  min_inc_lat" << min_node_lat << " " << max_node_lat << "\n";
-    }
-
-  }
-
-
-  void clear() {
-    routing.clear();
-    edge_prop.clear();
-  }
-};
-
-
 class Scheduler {
 public:
   Scheduler(SS_CONFIG::SSModel *ssModel) : _ssModel(ssModel),
@@ -172,32 +113,7 @@ public:
   HeuristicScheduler(SS_CONFIG::SSModel *ssModel) : Scheduler(ssModel),
                                                     fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
 
-  virtual bool scheduleNode(Schedule *, SSDfgInst *) = 0;
-
-  virtual std::pair<int, int> scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
-                                           CandidateRouting &) = 0;
-
-  virtual std::pair<int, int> route(Schedule *sched, SSDfgEdge *dfgnode,
-                                    std::pair<int, SS_CONFIG::ssnode *> source,
-                                    std::pair<int, SS_CONFIG::ssnode *> dest,
-                                    CandidateRouting &) = 0;
-
-  virtual int
-  routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, CandidateRouting &, const std::pair<int, ssnode *> &);
-
-  std::pair<int, int> route_minimize_distance(Schedule *sched, SSDfgEdge *dfgnode,
-                                              std::pair<int, SS_CONFIG::ssnode *> source,
-                                              std::pair<int, SS_CONFIG::ssnode *> dest,
-                                              CandidateRouting &);
-
 protected:
-  bool assignVectorInputs(SSDfg *, Schedule *);
-
-  bool assignVectorOutputs(SSDfg *, Schedule *);
-
-  void apply_routing(Schedule *, CandidateRouting *);
-
-  void apply_routing(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>, CandidateRouting *);
 
   const std::pair<int, int> fscore;
 
@@ -212,6 +128,11 @@ protected:
   int rand_bt(int s, int e) {
     return rand() % (e - s) + s;
   }
+
+  int rand_bt_large(int s, int e) {
+    return (rand() * RAND_MAX + rand()) % (e - s) + s;
+  }
+
 
   int _route_times = 0;
 };

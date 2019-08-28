@@ -1,0 +1,6 @@
+Input: A
+Input: B
+
+O0,O1 = Acc16to32x4(A, B)
+
+Output: O[2]

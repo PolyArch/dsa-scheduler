@@ -14,10 +14,19 @@
 
 
 template<class Archive>
+void SSDfgValue::serialize(Archive & ar, const unsigned version) {
+  ar & BOOST_SERIALIZATION_NVP(_node);
+  ar & BOOST_SERIALIZATION_NVP(_index);
+  ar & BOOST_SERIALIZATION_NVP(_bitwidth);
+  ar & BOOST_SERIALIZATION_NVP(_uses);
+}
+
+template<class Archive>
 void SSDfgEdge::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_ID);
   ar & BOOST_SERIALIZATION_NVP(_ssdfg);
-  ar & BOOST_SERIALIZATION_NVP(nodes);
+  ar & BOOST_SERIALIZATION_NVP(_value);
+  ar & BOOST_SERIALIZATION_NVP(_use);
   ar & BOOST_SERIALIZATION_NVP(_etype);
   ar & BOOST_SERIALIZATION_NVP(_l);
   ar & BOOST_SERIALIZATION_NVP(_r);
@@ -36,6 +45,7 @@ void SSDfgNode::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_name);
   ar & BOOST_SERIALIZATION_NVP(_ops);
   ar & BOOST_SERIALIZATION_NVP(_inc_edge_list);
+  ar & BOOST_SERIALIZATION_NVP(_values);
   ar & BOOST_SERIALIZATION_NVP(_uses);
   ar & BOOST_SERIALIZATION_NVP(_min_lat);
   ar & BOOST_SERIALIZATION_NVP(_sched_lat);

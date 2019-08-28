@@ -20,26 +20,7 @@
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/functional/hash.hpp>
 
-
 using namespace SS_CONFIG;
-
-//How do you choose which switch in each row and FU to pass ??
-//struct sw_config {
-//  unsigned pred:2;
-//  unsigned opcode:5;
-//  unsigned fu_in1:2;    //cfg for 1st input of FU
-//  unsigned fu_in2:2;    //cfg for 2nd input of FU
-//  unsigned fu_out:2;    //cfg for 3rd input of FU
-//  unsigned  sw_s:3;     //select line for output muxes
-//  unsigned sw_se:3;
-//  unsigned  sw_e:3;
-//  unsigned sw_ne:3;
-//  unsigned  sw_n:3;
-//  unsigned sw_nw:3;
-//  unsigned  sw_w:3;
-//  unsigned sw_sw:3;
-//  unsigned   row:2;  //can address only 4 rows -- need to update it
-//};
 
 #define MAX_SCHED_LAT 1000000
 
@@ -71,9 +52,6 @@ public:
   void printOutputGraphviz(std::ofstream &ofs, ssnode *node);
 
   void printSwitchGraphviz(std::ofstream &ofs, ssswitch *sw);
-
-  //Scheduling Interface:
-  bool spilled(SSDfgNode *);
 
   //Old Interface:
 
@@ -280,9 +258,8 @@ public:
   }
 
   void unassign_edge(SSDfgEdge *edge) {
-    auto &ep = _edgeProp[edge->id()];
 
-    //std::cout << "unassign: " <<edge->name() << "\n";
+    auto &ep = _edgeProp[edge->id()];
 
     _edge_links_mapped -= ep.links.size();
 
@@ -300,6 +277,7 @@ public:
     for (auto &pt : ep.passthroughs) {
       auto &np = _nodeProp[pt.second->id()];
       np.num_passthroughs -= 1; //take one passthrough edge away
+      _num_passthroughs -=1;
       assert(np.num_passthroughs >= 0);
     }
 
@@ -420,7 +398,7 @@ public:
   //0: free
   //1: empty
   //>2: already there
-  int temporal_cost(std::pair<int, sslink *> link, SSDfgNode *node) {
+  int routing_cost(std::pair<int, sslink *> link, SSDfgValue *val) {
     assert(link.second);
     //Check all slots will be occupied empty.
     bool empty = true;
@@ -428,10 +406,11 @@ public:
       empty = false;
     if (empty)
       return 1;
-    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges)
-      if (elem->def() == node)
+    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges) {
+      if (elem->val() == val)
         return 0;
-    return _linkProp[link.second->id()].slots[link.first].edges.size();
+    }
+    return _linkProp[link.second->id()].slots[link.first].edges.size()+1;
   }
 
   bool input_matching_vector(SSDfgNode *node, SSDfgVecInput *in_v) {
@@ -454,7 +433,7 @@ public:
     return false;
   }
 
-  int temporal_cost_in(sslink *link, SSDfgVecInput *in_v) {
+  int routing_cost_in(sslink *link, SSDfgVecInput *in_v) {
     assert(link);
     auto &vec = _linkProp[link->id()].slots[0].edges;
     if (vec.empty()) return 1;
@@ -466,7 +445,7 @@ public:
   }
 
   //what a confusing function
-  int temporal_cost_out(std::pair<int, sslink*> link, SSDfgNode *node, SSDfgVecOutput *out_v) {
+  int routing_cost_out(std::pair<int, sslink*> link, SSDfgNode *node, SSDfgVecOutput *out_v) {
     assert(link.second);
     auto &vec = _linkProp[link.second->id()].slots[link.first].edges;
     if (vec.empty()) return 1;
@@ -498,6 +477,7 @@ public:
 
   //find first node for
   SSDfgNode *dfgNodeOf(ssnode *node) {
+    assert(node->id() < _nodeProp.size());
     auto &vec = _nodeProp[node->id()].vertices;
     return vec.size() == 0 ? nullptr : vec.begin()->second;
   }
@@ -630,6 +610,7 @@ public:
     assert(dfgNodeOf(n) == nullptr);
 
     _nodeProp[n->id()].num_passthroughs += 1; //add one to edges passing through
+    _num_passthroughs+=1;
   }
 
   bool isPassthrough(ssnode *n) {
@@ -713,7 +694,6 @@ public:
 
 private:
 
-
   //called by reconstructSchedule to trace link assignment
   void tracePath(ssnode *, SSDfgNode *,
                  std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &,
@@ -728,7 +708,6 @@ private:
           std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &routemap,
           std::map<ssnode *, SSDfgNode *> &dfgnode_for,
           std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &posMap);
-
 
 public:
 
@@ -753,9 +732,12 @@ public:
     }
   }
 
-  int colorOf(SSDfgNode *n) { return _cm.colorOf(n); }
+  int colorOf(SSDfgValue *v) { return _cm.colorOf(v); }
 
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
+  void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
+
+  int num_passthroughs() {return _num_passthroughs;}
 
   struct VertexProp {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
@@ -774,6 +756,7 @@ public:
     int extra_lat = 0;
     int vio=0;
     std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> links;
+    
     std::unordered_set<std::pair<int, ssnode*>, boost::hash<std::pair<int, ssnode*>>> passthroughs;
 
     void reset() {
@@ -805,7 +788,7 @@ public:
     struct LinkSlot {
       int lat = 0, order = -1;
       std::unordered_set<SSDfgEdge *> edges;
-      std::unordered_set<SSDfgNode *> nodes;
+      std::unordered_set<SSDfgValue *> values;
     };
 
     LinkSlot slots[8];
@@ -874,6 +857,7 @@ private:
   int _min_expected_route_latency=2; //this is probably fixed?
   int _max_expected_route_latency=6;
 
+  int _num_passthroughs=0;
 
   SwitchDir ssdir;
   ColorMapper _cm;

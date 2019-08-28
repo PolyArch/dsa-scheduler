@@ -903,7 +903,7 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
       auto v = elem.second;
       ofs << "<tr><td port=\"" << v->name() 
           << "\" border=\"1\" bgcolor=\"#" 
-          << std::hex << colorOf(v) << std::dec << "\">" 
+          << std::hex << colorOf(v->values()[0]) << std::dec << "\">" 
 //          << ((node->max_util()!=1) ? "T!" : "")
           << v->name() << "</td></tr>";
     }
@@ -913,17 +913,28 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
 
 void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
   for(auto link: node->out_links()) {
+
+    int ovr=0,agg_ovr=0,max_util=0;
+    get_link_overprov(link,ovr,agg_ovr,max_util);
+
     for (int slot= 0; slot < 8; ++slot) {
       auto &lp = _linkProp[link->id()];
-      vector<SSDfgNode*> temp;
-      for (auto *e : lp.slots[slot].edges)
-        temp.push_back(e->def());
+      vector<SSDfgValue*> temp;
+      for (auto *e : lp.slots[slot].edges) {
+        temp.push_back(e->val());
+      }
       sort(temp.begin(), temp.end());
       auto unique_end = unique(temp.begin(), temp.end());
-      for (auto iter = temp.begin(); iter != unique_end; ++iter)
+      for (auto iter = temp.begin(); iter != unique_end; ++iter) {
         ofs << link->orig()->name() << "->" << link->dest()->name()
-            << " [color=\"#" << std::hex << colorOf(*iter) << std::dec
-            << "\"];";
+            << " [color=\"#" << std::hex << colorOf(*iter) << std::dec << "\" "
+            << (link->max_util()>1 ? " style=dotted " : "")
+            << " label=\""; 
+        if(agg_ovr!=0) {
+          ofs<< "OVR:" << agg_ovr;
+        }
+        ofs<< "\"];";
+      }
     }
   } 
  
@@ -1027,7 +1038,7 @@ void Schedule::printGraphviz(const char* name) {
 /*sslink* Schedule::getNextLink(SSDfgEdge* dfgedge, sslink* link) {
   // auto &lp = _linkProp[link->id()].slots[0]; // this just gives corresponding edges
   // need to use switch dir here probably
-  /*SwitchDir::DIR cur_dir = link->dir();
+  SwitchDir::DIR cur_dir = link->dir();
   SSDfgNode dest_node = edge.dest_dfgnode();
   ssnode* n = locationOf(dest_node);
   // see where where they initialize num_links and extra_lat
@@ -1940,18 +1951,16 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
 
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
   queue<sslink*> openset;
-  //map<ssnode*,sslink*> came_from;
+
+  // TODO: Change this to a vector.
   unordered_map<sslink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
 
-  for(auto elem : _ssModel->subModel()->inputs()) {
-    ssinput *cand_input = const_cast<ssinput *>(elem);
-
-    SSDfgNode *dfgnode = dfgNodeOf(cand_input);
-    if (dfgnode != nullptr) {
-      sslink *firstOutLink = cand_input->getFirstOutLink();
+  for(auto elem : _ssModel->subModel()->nodes<ssinput*>()) {
+    if (SSDfgNode *dfgnode = dfgNodeOf(elem)) {
+      sslink *firstOutLink = elem->getFirstOutLink();
       openset.push(firstOutLink);
       lat_edge[firstOutLink] = latOf(dfgnode);
     }
@@ -1976,8 +1985,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
       SSDfgNode* next_dfgnode = dfgNodeOf(node);
       //cout << next_fu->name() << "\n"; 
       if(!next_dfgnode && !isPassthrough(node)) {
-        assert(next_dfgnode);
-        cout << "problem with latency calculation!\n";
+        assert(false && "problem with latency calculation!\n");
         max_lat=-1;
         max_lat_mis=-1;
         return;
@@ -1985,7 +1993,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
       SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode); 
       assert(next_dfginst || isPassthrough(node));
-    
+
       bool everyone_is_here = true;
 
       for(auto &inlink: next_fu->in_links()) {
@@ -2017,6 +2025,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
               if (!isPassthrough(node)) {
                 SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
                 if (!edge) {
+                  continue;
                   cout << "Edge: " << origNode->name() << " has no edge towards "
                        << next_dfgnode->name() << ", for link:"
                        << inlink->name() << "\n";
@@ -2024,8 +2033,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
                   _ssDFG->printGraphviz("viz/remap-fail2.dot");
                   printGraphviz("viz/remap-fail2.gv");
-
-                  assert(edge);
+                  assert(false);
                 }
                 if (edge_delay(edge)) {
                   curLat += edge_delay(edge);
@@ -2040,13 +2048,12 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
               }
 
               if (warnMismatch && max_latency != low_latency) {
-                cout << "Mismatch, min_lat:" << low_latency
-                     << ", max_lat:" << max_latency
+                cout << "Mismatch, min_lat:" << low_latency << ", max_lat:" << max_latency
                      << ", link:" << inlink->name() << "\n";
                 if (!isPassthrough(node)) {
                   SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
-                  cout << "(calcLat) Edge " << edge->name() << "  lat_edge: " << lat_edge[inlink] << "  extralat:"
-                       << edge_delay(edge) << "\n";
+                  cout << "(calcLat) Edge " << edge->name() << "  lat_edge: " << lat_edge[inlink]
+                       << "  extralat:" << edge_delay(edge) << "\n";
                 } else {
                   cout << "passthrough\n";
                 }
@@ -2093,9 +2100,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
           max_lat_mis=diff;
         }
       }
-    } else if (dynamic_cast<ssoutput*>(node)) {
-      ssoutput* ss_out = dynamic_cast<ssoutput*>(node);
+    } else if (auto ss_out = dynamic_cast<ssoutput*>(node)) {
       SSDfgNode* dfgnode = dfgNodeOf(ss_out);
+      if (!dfgnode)
+        continue;
       SSDfgEdge* inc_edge = dfgnode->first_inc_edge();
 
       int l = lat_edge[inc_link] + edge_delay(inc_edge);
@@ -2240,7 +2248,7 @@ void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode,
           //_ssnodeOf[dest_dfgnode]=ssout;
           assign_node(dest_dfgnode, make_pair(0, ssout));
 
-          SSDfgEdge* edge = _ssDFG->connect(dfgnode,dest_dfgnode,0, SSDfgEdge::data); 
+          SSDfgEdge* edge = _ssDFG->connect(dfgnode->values()[0],dest_dfgnode,0, SSDfgEdge::data); 
           for(auto& i : links) {
             //FIXME: for now, we do not use this function to rebuild the schedule, so I just put some random value for the slot
             assign_edgelink(edge, 0, i);
@@ -2262,7 +2270,7 @@ void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode,
               if(slot==n_ops) edge_type = dest_dfgnode->predInv()? 
                              SSDfgEdge::ctrl_false : SSDfgEdge::ctrl_true;
 
-              SSDfgEdge * edge = _ssDFG->connect(dfgnode,dest_dfgnode, slot, edge_type);
+              SSDfgEdge * edge = _ssDFG->connect(dfgnode->values()[0],dest_dfgnode, slot, edge_type);
               //FIXME: put a placeholder for the slot to pass compilation first. Later we will use this function to reconstruct the scheudle
               for(auto& i : links) {
                 assign_edgelink(edge, 0, i);
@@ -2323,40 +2331,46 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
 
   for (auto &n : _ssModel->subModel()->node_list()) {
     for (auto &elem: n->out_links()) {
-      for (int slot = 0; slot < 8; ++slot) {
-        auto &lp = _linkProp[elem->id()];
-        int util = 0;
-        //if (!lp.slots[slot].edges.empty())
-          //std::cout << elem->name() << " " << slot << "\n";
-
-        std::vector<SSDfgVec *> vecs;
-        std::vector<SSDfgNode*> nodes;
-
-        for (auto edge : lp.slots[slot].edges) {
-          //std::cout << edge->name() << "\n";
-          auto v = edge->def();
-          if (v->is_temporal()) {
-            if (auto input = dynamic_cast<SSDfgInput *>(v)) {
-              vecs.push_back(input->input_vec());
-              continue;
-            }
-            for (auto use : v->uses()) {
-              if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
-                vecs.push_back(out->output_vec());
-                continue;
-              }
-            }
-          } else {
-            nodes.push_back(v);
-          }
-        }
-        util = count_unique(nodes) + count_unique(vecs);
-        int cur_ovr = util - n->max_util();
-        ovr = std::max(cur_ovr, ovr);
-        agg_ovr += std::max(cur_ovr, 0);
-        max_util = std::max(util, max_util);
-      }
+      get_link_overprov(elem,ovr,agg_ovr,max_util);
     }
   }
 
+}
+
+void Schedule::get_link_overprov(sslink* link, 
+                                 int& ovr, int& agg_ovr, int& max_util) {
+  for (int slot = 0; slot < 8; ++slot) {
+    auto &lp = _linkProp[link->id()];
+    int util = 0;
+    //if (!lp.slots[slot].edges.empty())
+      //std::cout << elem->name() << " " << slot << "\n";
+
+    std::vector<SSDfgVec *> vecs;
+    std::vector<SSDfgValue*> values;
+
+    for (auto edge : lp.slots[slot].edges) {
+      //std::cout << edge->name() << "\n";
+      auto v = edge->def();
+      if (v->is_temporal()) {
+        if (auto input = dynamic_cast<SSDfgInput *>(v)) {
+          vecs.push_back(input->input_vec());
+          continue;
+        }
+        for (auto use : v->uses()) {
+          if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
+            vecs.push_back(out->output_vec());
+            continue;
+          }
+        }
+      } else {
+        auto val = edge->val();
+        values.push_back(val);
+      }
+    }
+    util = count_unique(values) + count_unique(vecs);
+    int cur_ovr = util - link->max_util();
+    ovr = std::max(cur_ovr, ovr);
+    agg_ovr += std::max(cur_ovr, 0);
+    max_util = std::max(util, max_util);
+  }
 }

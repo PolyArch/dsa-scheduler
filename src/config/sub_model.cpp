@@ -1430,7 +1430,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           else if(p==2) link->setdir(SwitchDir::IP2);
         }
       }
-      cout << "\n";
+      //cout << "\n";
       assert((unsigned)in_index == _inputs.size());
     }
 
@@ -1535,9 +1535,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   for(int i = temp_x; i < temp_x+temp_width; i++) {
     for (int j = temp_y; j < temp_y + temp_height; j++) {
       _fus[i][j]->set_max_util(64);
-      sslink *link = _fus[i][j]->add_link(_fus[i][j]);
-      link->set_max_util(100);
-      link->setdir(SwitchDir::IP0);
+      _fus[i][j]->isShared = true;
 
       if (i + 1 < temp_x + temp_width) {
         sslink *link = _fus[i][j]->add_link(_fus[i + 1][j]);
@@ -1569,7 +1567,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
       if (i < temp_x && i >= temp_x + temp_width && 
           j < temp_y && j >= temp_y + temp_height) {
-        link->set_max_util(8);
+        link->set_max_util(64);
       }
     }
   }
@@ -1583,11 +1581,10 @@ void ssio_interface::fill_vec() {
     int j = 0;
     for (auto &elem : vports_map[i])
       vports_vec[i][j++] = elem;
-    std::sort(vports_vec[i].begin(),
-              vports_vec[i].end(),
+    std::sort(vports_vec[i].begin(), vports_vec[i].end(),
               [] (const ssio_interface::EntryType& a,
                   const ssio_interface::EntryType &b) {
-                return a.second->size() > b.second->size();
+                return a.second->size() < b.second->size();
               });
   }
 }

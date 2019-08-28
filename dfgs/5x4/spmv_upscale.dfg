@@ -1,0 +1,9 @@
+Input: Val
+Input: Vec
+Input: reset
+
+M0 = Mul16x4(Val, Vec)
+
+O0,O1 = Acc16to32x4(M0, reset)
+
+Output: O[2]

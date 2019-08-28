@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "model_parsing.h"
+#include <set>
 
 using namespace SS_CONFIG;
 using namespace std;
@@ -17,6 +18,8 @@ InstModel::InstModel(char* filename) {
         return;
     }
     
+    std::set<string> existing_insts;
+
     char line[512];
     while(ifs.good())
     {
@@ -29,12 +32,15 @@ InstModel::InstModel(char* filename) {
         
         //Empty line or the first line
         if(str_line[0]=='#' || str_line.empty()) continue;
-        
-        ConfigInst* inst = new ConfigInst();
-        
+                
         char* token;
         token = strtok (line," ");
         string str_name(token);
+
+        if(existing_insts.count(str_name)) continue;
+        existing_insts.insert(str_name);
+
+        ConfigInst* inst = new ConfigInst();
         inst->setName(str_name);
         
         token = strtok (nullptr," ");
@@ -42,6 +48,9 @@ InstModel::InstModel(char* filename) {
         
         token = strtok (nullptr, " ");
         inst->setNumOperands(atoi(token));
+
+        token = strtok (nullptr, " ");
+        inst->setNumValues(atoi(token));
 
         token = strtok (nullptr, " ");
         inst->setLatency(atoi(token));
@@ -113,7 +122,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     "ss_inst_t inst_from_string(const char* str);\n"
     "const char* name_of_inst(ss_inst_t inst);\n"
     "int inst_lat(ss_inst_t inst);\n"
-    "int inst_thr(ss_inst_t inst);\n";
+    "int inst_thr(ss_inst_t inst);\n"
+    "int num_values(ss_inst_t inst);\n";
+
 
     //Generate an execute function for all bitwidths
     int    bitwidths[4] = {64,         32,         16,          8};
@@ -125,7 +136,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string suffix = suffixes[i];
     
       ofs << dtype << " execute" << suffix << "(ss_inst_t inst, " 
-          << "std::vector<" << dtype << ">& ops, " << dtype << "* reg, "
+          << "std::vector<" << dtype << ">& ops, " 
+          << "std::vector<" << dtype << ">& outs, " 
+          << dtype << "* reg, "
           << "bool &discard, std::vector<bool>& back_array);\n";
     }
 
@@ -211,7 +224,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofs << "case SS_NONE: return \"NONE\";\n";
     ofs << "case SS_ERR:  assert(0); return \"ERR\";\n";
     ofs << "case SS_NUM_TYPES:  assert(0); return \"ERR\";\n";
-    ofs << "    default: assert(0); return \"DEFAULT\";\n";
+    ofs << "    default: assert(0 && \"unknown inst\"); return \"DEFAULT\";\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";
 
@@ -223,7 +236,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     for(unsigned i = 0; i < _instList.size(); ++i) {
         ofs << "    case " << "SS_" << _instList[i]->name() << ": return " << _instList[i]->latency() << ";\n";
     }
-    ofs << "    default: return 1;\n";
+    ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";
 
@@ -234,9 +247,21 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     for(unsigned i = 0; i < _instList.size(); ++i) {
         ofs << "    case " << "SS_" << _instList[i]->name() << ": return " << _instList[i]->throughput() << ";\n";
     }
-    ofs << "    default: return 1;\n";
+    ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";
+
+    //FUNCTION: num_values
+    ofs <<
+    "int SS_CONFIG::num_values(ss_inst_t inst) {\n"
+    "  switch(inst) {\n";
+    for(unsigned i = 0; i < _instList.size(); ++i) {
+        ofs << "    case " << "SS_" << _instList[i]->name() << ": return " << _instList[i]->numValues() << ";\n";
+    }
+    ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+    ofs << "  }\n\n";
+    ofs << "}\n\n";
+
 
     // num_ops_array
     ofs << "int SS_CONFIG::num_ops[" << _instList.size()+2 << "]={0, 0\n";
@@ -269,8 +294,10 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
       string dtype = types[i];
       string suffix = suffixes[i];
 
-      ofs << dtype << " " << "SS_CONFIG::execute" << suffix << "(ss_inst_t inst, " 
-          << "std::vector<" << dtype << ">& ops, " << dtype << " *reg, "
+      ofs << dtype << " SS_CONFIG::execute" << suffix << "(ss_inst_t inst, " 
+          << "std::vector<" << dtype << ">& ops, " 
+          << "std::vector<" << dtype << ">& outs, " 
+          << dtype << " *reg, "
           << "bool &discard, std::vector<bool>& back_array) {\n";
 
      //somwhere below is an implementation of pass through, is it though? (tony, 2018)
