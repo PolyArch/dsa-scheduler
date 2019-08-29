@@ -234,18 +234,26 @@ ident_list
 edge_list
     : edge {
         auto res = new ConvergeEntry(); 
-        auto ne = dynamic_cast<ValueEntry*>($1);
-        assert(ne);
-        res->entries.push_back(ne);
+        if (auto ne = dynamic_cast<ValueEntry*>($1)) {
+          res->entries.push_back(ne);
+        } else if (auto ce = dynamic_cast<ConvergeEntry*>($1)) {
+          res->entries = ce->entries;
+        } else {
+          assert(0 && "Not supported edge list type!");
+        }
         $$ = res;
       }
     | edge_list edge {
-        auto ce = dynamic_cast<ConvergeEntry*>($1);
-        assert(ce);
-        auto ne = dynamic_cast<ValueEntry*>($2);
-        assert(ne);
-        ce->entries.insert(ce->entries.begin(), ne);
-        $$ = ce;
+        auto res = dynamic_cast<ConvergeEntry*>($1);
+        assert(res);
+        if (auto ne = dynamic_cast<ValueEntry*>($2)) {
+          res->entries.insert(res->entries.begin(), ne);
+        } else if (auto ce = dynamic_cast<ConvergeEntry*>($1)) {
+          res->entries.insert(res->entries.begin(), ce->entries.begin(), ce->entries.end());
+        } else {
+          assert(0 && "Not supported edge list type!");
+        }
+        $$ = res;
       }
     ;
 
@@ -257,7 +265,7 @@ edge
       }
     | IDENT ':' I_CONST ':' I_CONST {
         auto ne = dynamic_cast<ValueEntry*>(p->symbols.get_sym(*$1));
-        assert(ne);
+        assert(ne && "For now only result values supports slicing!");
         if (ne->l == $3 && ne->r == $5) {
           $$ = ne;
         } else {
