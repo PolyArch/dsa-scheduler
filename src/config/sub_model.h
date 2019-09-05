@@ -288,6 +288,10 @@ public:
   int done(int slot) {return _done[slot];}
   void set_done(int slot, int n) {_done[slot] = n;}
 
+  void update_dist_only(int slot, int dist) {
+    _node_dist[slot] = dist;
+  }
+
 
   void update_dist(int slot, int dist, int from_slot, sslink *from) {
     _node_dist[slot] = dist;

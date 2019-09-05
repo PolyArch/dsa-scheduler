@@ -90,12 +90,14 @@ std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
 
   //Now lets patch up the schedule to get recover
   //vertex->node and edge->link mappings
+  //TODO: FIXME
   for(int i = 0; i < (int)_linkProp.size(); ++i) {
     for (int j = 0; j < 8; ++j) {
       auto &lp = _linkProp[i];
       sslink *link = _ssModel->subModel()->link_list()[i];
       for (SSDfgEdge *e : lp.slots[j].edges) {
-        _edgeProp[e->id()].links.insert(make_pair(j, link));
+        // This screws up the order... FIXME FIXME FIXME
+        _edgeProp[e->id()].links.push_back(make_pair(j, link));
       }
     }
   }
@@ -108,15 +110,9 @@ std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBitsCheat(char* s) {
     }
   }
 
-  for(int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
-    for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
-      ssfu* ssfu_node = _ssModel->subModel()->fus()[i][j];
-      auto* dfg_inst = dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
-      if(dfg_inst) {
-        auto inst=dfg_inst->inst();
-        inst_histo[inst]+=1;
-      }
-    }
+  for(auto dfg_inst : _ssDFG->nodes<SSDfgInst*>()) {
+    auto inst=dfg_inst->inst();
+    inst_histo[inst]+=1;
   }
 
   //Lets also just throw the node id at the dfg for now to make temporal
@@ -767,8 +763,9 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
        
         //get the dfg node assigned to that FU  
         if(nodeAssigned(ssfu_node)!=0) {
+          //FIXME: obviously this should be fixed for slots...
           SSDfgInst* dfg_node = 
-            dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
+            dynamic_cast<SSDfgInst*>(dfgNodeOf(0,ssfu_node));
           
           int cur_bit_pos=FU_DIR_LOC;
 
@@ -845,7 +842,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
     for(int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
       ssfu* ssfu_node = fus[i][j];
       if(nodeAssigned(ssfu_node)!=0) {
-        SSDfgInst* dfg_node = dynamic_cast<SSDfgInst*>(dfgNodeOf(ssfu_node));
+        SSDfgInst* dfg_node = dynamic_cast<SSDfgInst*>(dfgNodeOf(0,ssfu_node));
         bool has_imm_slot = dfg_node->immSlot()!=-1;
         uint64_t ctrl_bits = dfg_node->ctrl_bits();
         if(has_imm_slot || ctrl_bits) {
@@ -1160,8 +1157,6 @@ void Schedule::iterativeFixLatency() {
         int routing_latency=edge_latency(edge);
         int edge_lat = routing_latency-1 + node->lat_of_inst();
 
-        //Outputs don't get an edge delay... so better correct for it
-        //TODO/FIXME: need a fine-grain way to do vec output
         int my_max_ed = max_ed;
         if(dynamic_cast<SSDfgVecOutput*>(useNode)) {
           my_max_ed=0;
@@ -1347,7 +1342,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
         continue; //skip if we've done it already
       }
 
-      SSDfgNode* next_dfgnode = dfgNodeOf(node);
+      SSDfgNode* next_dfgnode = dfgNodeOf(0,node);
       if(!next_dfgnode && !isPassthrough(node)) {
         assert(false && "problem with latency calculation!\n");
         max_lat=-1;

@@ -7,13 +7,42 @@
 #define DEBUG_SCHED (false)
 
 struct CandidateRoute {
-  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::ssnode*>>> thrus;
-  std::vector<std::pair<SSDfgEdge*, std::pair<int, SS_CONFIG::sslink*>>> links;
 
-  void swap(CandidateRoute &other) {
-    thrus.swap(other.thrus);
-    links.swap(other.links);
+  struct EdgeProp {
+    std::list<std::pair<int,ssnode*>> thrus;
+    std::list<std::pair<int,sslink*>> links;
+  };
+
+  //record an edge from the schedule
+  void fill_edge(SSDfgEdge* edge, Schedule* sched) {
+    edges[edge].links = sched->links_of(edge);
+    edges[edge].thrus = sched->thrus_of(edge);
   }
+  void fill_from(SSDfgNode* node,Schedule* sched) {
+    for(SSDfgEdge* e : node->in_edges()) fill_edge(e,sched);
+    for(SSDfgEdge* e : node->uses())     fill_edge(e,sched);
+  }
+
+  //Fill paths that were recorded to later undo them
+  void fill_paths_from_undo(CandidateRoute& undo_path,Schedule* sched) {
+    for(auto it : undo_path.edges) {
+      fill_edge(it.first,sched);
+    }
+  }
+
+  void apply(Schedule* sched) {
+    for(auto edge_prop : edges) {
+      sched->unassign_edge(edge_prop.first); //for partial routes
+      for (auto elem : edge_prop.second.thrus) {
+        sched->assign_edge_pt(edge_prop.first, elem);
+      }
+      for (auto elem : edge_prop.second.links) {
+        sched->assign_edgelink(edge_prop.first, elem.first, elem.second);
+      }
+    }
+  }
+
+  std::unordered_map<SSDfgEdge*,EdgeProp> edges;
 };
 
 class SchedulerSimulatedAnnealing : public HeuristicScheduler {
@@ -35,13 +64,19 @@ protected:
   std::pair<int, int> obj(Schedule*& sched, int& lat, 
       int& lat_mis, int& ovr, int& agg_ovr, int& max_util); 
 
+  std::pair<int, int> obj_creep(Schedule*& sched, int& lat, 
+      int& lat_mis, int& ovr, int& agg_ovr, int& max_util,
+      CandidateRoute& undo_path); 
+
+  bool length_creep(Schedule* sched, SSDfgEdge* edge, 
+      int& num, CandidateRoute& cand);
+
   template<typename T>
   bool scheduleHere(Schedule *sched, const std::vector<T> &nodes,
-                    const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots,
-                    CandidateRoute &path) {
+                    const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots) {
     assert(slots.size() == nodes.size());
     for (int i = 0; i < (int) nodes.size(); ++i) {
-      if (!scheduleHere(sched, nodes[i], slots[i], path)) {
+      if (!scheduleHere(sched, nodes[i], slots[i])) {
         for (int j = 0; j < i; ++j) {
           sched->unassign_dfgnode(nodes[j]);
         }
@@ -51,15 +86,13 @@ protected:
     return true;
   }
 
-  bool scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>,
-                    CandidateRoute &path);
+  bool scheduleHere(Schedule *, SSDfgNode *, std::pair<int, SS_CONFIG::ssnode *>);
 
-  bool route(Schedule *sched, SSDfgEdge *dfgnode, std::pair<int, SS_CONFIG::ssnode *> source,
-             std::pair<int, SS_CONFIG::ssnode *> dest, CandidateRoute &path);
 
-  bool route_minimize_distance(Schedule *sched, SSDfgEdge *dfgnode,
+  int route(Schedule *sched, SSDfgEdge *dfgnode,
                                std::pair<int, SS_CONFIG::ssnode *> source,
-                               std::pair<int, SS_CONFIG::ssnode *> dest, CandidateRoute &path);
+                               std::pair<int, SS_CONFIG::ssnode *> dest, 
+      std::list<std::pair<int,sslink*>>::iterator* ins_it, int max_path_lengthen);
 
   int routing_cost(SSDfgEdge *, int, int, sslink *, Schedule *, const std::pair<int, ssnode *> &);
 
@@ -110,7 +143,6 @@ int SchedulerSimulatedAnnealing::try_candidates(
   using std::vector;
   using std::pair;
   using std::make_pair;
-  SSModel *model = sched->ssModel();
   CandidateRoute best_path;
 
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
@@ -120,12 +152,14 @@ int SchedulerSimulatedAnnealing::try_candidates(
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
 
-    CandidateRoute path;
-    if (scheduleHere(sched, node,candidates[i], path)) {
+    if (scheduleHere(sched, node,candidates[i])) {
       ++candidates_succ;
 
       int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
-      pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
+      //pair<int, int> candScore = obj(sched, lat, latmis, ovr, agg_ovr, max_util);
+      CandidateRoute undo_path;
+      pair<int, int> candScore = obj_creep(sched, lat, latmis, ovr, 
+                                           agg_ovr, max_util,undo_path);
 
       if (!find_best) {
         return i;
@@ -134,22 +168,18 @@ int SchedulerSimulatedAnnealing::try_candidates(
       if (candScore > bestScore) {
         best_candidate = i;
         bestScore = candScore;
-        best_path.swap(path);
+        best_path.edges.clear();
+        best_path.fill_from(node,sched);
+        best_path.fill_paths_from_undo(undo_path,sched);
       }
 
+      undo_path.apply(sched); //revert to paths before creep-based path lengthening
       sched->unassign_dfgnode(node);
     }
-
-
   }
 
   if (best_candidate != -1) {
-    for (auto elem : best_path.thrus) {
-      sched->assign_edge_pt(elem.first, elem.second);
-    }
-    for (auto elem : best_path.links) {
-      sched->assign_edgelink(elem.first, elem.second.first, elem.second.second);
-    }
+    best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
   }
 

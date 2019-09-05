@@ -106,6 +106,10 @@ void SubModel::parse_io(std::istream& istream) {
         std::stringstream ssv(value);
              
         int is_input = -1;
+        if(ModelParsing::StartsWith(param, "VPORT")) {
+          assert(0 && "VPORT_IN/VPORT_OUT Depricated, switch to PORT_IN/PORT_OUT\n"
+                      "delete \":0\" \":1\" from port descriptions");
+        }
         if(ModelParsing::StartsWith(param, "PORT_IN")) {
           parse_list_of_ints(ssv,int_vec);
           is_input = 1;

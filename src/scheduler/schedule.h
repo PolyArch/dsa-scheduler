@@ -113,7 +113,7 @@ public:
       _edgeProp.resize(edge->id() + 1);
     }
     add_passthrough_node(pt.second);
-    _edgeProp[edge->id()].passthroughs.insert(pt);
+    _edgeProp[edge->id()].passthroughs.push_back(pt);
   }
 
   int groupMismatch(int g) {
@@ -137,7 +137,64 @@ public:
   void record_violation(SSDfgEdge* e, int violation) {
     _edgeProp[e->id()].vio=violation; 
   }
-  
+
+  void check_all_links_consistency() {
+    for(SSDfgEdge* edge : _ssDFG->edges()) {
+      check_links_consistency(edge);
+    }
+  }
+
+  void check_links_consistency(SSDfgEdge* edge) {
+    sslink* prev_link=nullptr;
+    bool fail=false;
+    int prev_num_edges=10000;
+
+    for(auto link : links_of(edge)) {
+      if(prev_link!=NULL && prev_link->dest() != link.second->orig()) {
+        std::cout << edge->name() << " has Failed Link Order Check\n";
+        fail=true;
+      
+      }
+
+      std::unordered_set<SSDfgEdge*> edges;
+      for(auto i : edge_list(link.first,link.second)) {
+        if(i->val()==edge->val()) {
+          edges.insert(i);
+        }
+      }
+      int new_num_edges=edges.size();
+     
+      if(new_num_edges>prev_num_edges) {
+        std::cout << "\n" << edge->name() << " has Failed Edge Consistency Check\n";
+        fail=true; //BAD!
+        break;
+      }
+      prev_num_edges=new_num_edges;
+      prev_link=link.second;
+    }
+    if(fail) {
+      for(auto link : links_of(edge)) {
+        std::cout << link.second->name() << " #edges";
+
+        std::unordered_set<SSDfgEdge*> edges;
+        for(auto i : edge_list(link.first,link.second)) {
+          if(i->val()==edge->val()) {
+            edges.insert(i);
+          }
+        }
+        int new_num_edges=edges.size();
+
+        std::cout << new_num_edges << " -- edges: ";
+        for(auto i : edges) {
+          std::cout << i->name() << " ";
+        }
+        std::cout << "\n";
+      }
+      std::cout.flush();
+      assert(0 && "inconsistent links");
+    }
+  }
+
   int vecPortOf(SSDfgVec* vec) {
     ssnode* n = locationOf(vec);
     if(n) return dynamic_cast<ssvport*>(n)->port();
@@ -246,8 +303,7 @@ public:
     std::cout << "\n";
   }
 
-  //pdf edge to sslink
-  void assign_edgelink(SSDfgEdge *dfgedge, int slot, sslink * slink) {
+  void assign_link_to_edge(SSDfgEdge *dfgedge, int slot, sslink * slink) {
     assert(slink);
     assert(dfgedge);
     //assert(_assignLink[slink]==nullptr || _assignLink[slink] == dfgedge->def());
@@ -260,11 +316,23 @@ public:
       _links_mapped++;
     lp.edges.insert(dfgedge);
 
-
     if ((int) _edgeProp.size() <= dfgedge->id()) {
-      _edgeProp.resize(dfgedge->id() + 1);
+      _edgeProp.resize(dfgedge->id() + 1); 
     }
-    _edgeProp[dfgedge->id()].links.insert(std::make_pair(slot, slink));
+  }
+
+  //pdf edge to sslink
+  void assign_edgelink(SSDfgEdge *dfgedge, int slot, sslink * slink,
+                       std::list<std::pair<int,sslink*>>::iterator it) {
+    assign_link_to_edge(dfgedge,slot,slink);
+    _edgeProp[dfgedge->id()].links.insert(it,std::make_pair(slot, slink));
+  }
+
+
+  //pdf edge to sslink
+  void assign_edgelink(SSDfgEdge *dfgedge, int slot, sslink * slink) {
+    assign_link_to_edge(dfgedge,slot,slink);
+    _edgeProp[dfgedge->id()].links.push_back(std::make_pair(slot, slink));
   }
 
   //void print_links(SSDfgEdge* dfgedge) {
@@ -287,10 +355,14 @@ public:
     return total_lat;
   }
 
-
-  std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> &links_of(SSDfgEdge *edge) {
+  std::list<std::pair<int, sslink*>> &links_of(SSDfgEdge *edge) {
     auto &ep = _edgeProp[edge->id()];
     return ep.links;
+  }
+
+  std::list<std::pair<int, ssnode*>> &thrus_of(SSDfgEdge *edge) {
+    auto &ep = _edgeProp[edge->id()];
+    return ep.passthroughs;
   }
 
   void setLatOfLink(std::pair<int, sslink*> link, int l) { _linkProp[link.second->id()].slots[link.first].lat = l; }
@@ -301,6 +373,15 @@ public:
     return !_linkProp[link->id()].slots[slot].edges.empty();
   }
 
+  SSDfgEdge* alt_edge_for_link(std::pair<int, sslink *> link, SSDfgValue *val) {
+    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges) {
+      if (elem->val() == val) {
+        return elem;
+      }
+    }
+    return nullptr;
+  }
+ 
   //return cost_to_route
   //0: free
   //1: empty
@@ -313,10 +394,8 @@ public:
       empty = false;
     if (empty)
       return 1;
-    for (auto elem : _linkProp[link.second->id()].slots[link.first].edges) {
-      if (elem->val() == val)
-        return 0;
-    }
+    if (alt_edge_for_link(link,val)) 
+      return 0; 
     return _linkProp[link.second->id()].slots[link.first].edges.size()+1;
   }
 
@@ -354,6 +433,22 @@ public:
     return vec.empty() ? nullptr : (*vec.begin())->def();
   }
 
+  //find first node for
+  SSDfgNode *dfgNodeOf(sslink* link) {
+    return dfgNodeOf(0,link);
+  }
+
+
+  //find first node for
+  SSDfgNode *dfgNodeOf(int slot, ssnode* node) {
+    assert(link);
+    auto &vec = _nodeProp[node->id()].vertices;
+    for(auto& i : vec) {
+      if(i.first == slot) return i.second;
+    }
+    return nullptr;
+  }
+
   size_t thingsAssigned(ssnode *node) {
     auto &np = _nodeProp[node->id()];
     return np.vertices.size() + np.num_passthroughs;
@@ -361,13 +456,6 @@ public:
 
   bool nodeAssigned(ssnode *node) {
     return !_nodeProp[node->id()].vertices.empty();
-  }
-
-  //find first node for
-  SSDfgNode *dfgNodeOf(ssnode *node) {
-    assert(node->id() < (int)_nodeProp.size());
-    auto &vec = _nodeProp[node->id()].vertices;
-    return vec.size() == 0 ? nullptr : vec.begin()->second;
   }
 
   //Find all the nodes for the given ssnode
@@ -391,14 +479,6 @@ public:
 
 
   void stat_printOutputLatency();
-
-  //wide vector ports
-  int numWidePorts() { return _wide_ports.size(); }
-
-  std::vector<int> &widePort(int i) { return _wide_ports[i]; }
-
-  void addWidePort(std::vector<int> &port) { _wide_ports.push_back(port); }
-
 
   SSModel *ssModel() { return _ssModel; }
 
@@ -477,8 +557,6 @@ public:
   bitslices<uint64_t> &slices() { return _bitslices; }
 
   void add_passthrough_node(ssnode *n) {
-    assert(dfgNodeOf(n) == nullptr);
-
     _nodeProp[n->id()].num_passthroughs += 1; //add one to edges passing through
     _num_passthroughs+=1;
   }
@@ -619,9 +697,10 @@ public:
     int num_links = 0;
     int extra_lat = 0;
     int vio=0; //temporary variable
-    std::unordered_set<std::pair<int, sslink*>, boost::hash<std::pair<int, sslink*>>> links;
-    
-    std::unordered_set<std::pair<int, ssnode*>, boost::hash<std::pair<int, ssnode*>>> passthroughs;
+    std::list<std::pair<int, sslink*>> links;
+    std::list<std::pair<int, ssnode*>> passthroughs;
+
+    //std::vector<uint64_t> sched_index; //Temporary for debugging -- indicates the order
 
     void reset() {
       num_links = 0;
@@ -629,6 +708,7 @@ public:
       links.clear();
       passthroughs.clear();
     }
+
 
   private:
     friend class boost::serialization::access;
@@ -684,9 +764,6 @@ private:
   int _links_mapped = 0, _edge_links_mapped = 0;
 
   std::map<int, int> _groupMismatch;
-
-  std::vector<std::vector<int> > _wide_ports;
-
   std::vector<VertexProp> _vertexProp;
   std::vector<EdgeProp> _edgeProp;
   std::vector<NodeProp> _nodeProp;

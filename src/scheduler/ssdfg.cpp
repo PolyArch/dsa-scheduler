@@ -494,9 +494,7 @@ std::vector<SSDfgNode*> &SSDfg::ordered_nodes() {
   if (_orderedNodes.size() == 0) {
     std::set<SSDfgNode *> done_nodes;
     for (SSDfgVecOutput *out : _vecOutputs) {
-      for (auto edge : out->in_edges()) {
-        order_nodes(edge->def(), done_nodes, _orderedNodes);
-      }
+      order_nodes(out, done_nodes, _orderedNodes);
     }
   }
   return _orderedNodes;
@@ -1342,7 +1340,7 @@ void SSDfg::printGams(std::ostream& os,
   os << "/;\n";
 }
 
-void SSDfg::addVecOutput(const std::string &name, int len, EntryTable &syms, int width) {
+void SSDfg::addVecOutput(const std::string &name, int len, EntryTable &syms, int width) { 
   add_parsed_vec<SSDfgVecOutput>(name, len, syms, width);
 }
 

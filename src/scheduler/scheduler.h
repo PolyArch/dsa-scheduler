@@ -81,9 +81,6 @@ public:
 
   void setTimeout(float timeout) { _reslim = timeout; }
 
-  //virtual void unroute(Schedule* sched, SSDfgEdge* dfgnode,
-  //                     SS_CONFIG::ssnode* source);
-
   bool running() {return !_should_stop;}
   void stop() {_should_stop=true;}
 

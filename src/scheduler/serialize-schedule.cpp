@@ -53,7 +53,6 @@ void Schedule::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_links_mapped);
   ar & BOOST_SERIALIZATION_NVP(_edge_links_mapped);
   ar & BOOST_SERIALIZATION_NVP(_groupMismatch);
-  ar & BOOST_SERIALIZATION_NVP(_wide_ports);
   ar & BOOST_SERIALIZATION_NVP(_vertexProp);
   ar & BOOST_SERIALIZATION_NVP(_edgeProp);
   ar & BOOST_SERIALIZATION_NVP(_nodeProp);
