@@ -45,15 +45,6 @@ void Schedule::LinkProp::serialize(Archive & ar, const unsigned version) {
 }
 
 template<class Archive>
-void Schedule::VecProp::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(min_lat);
-  ar & BOOST_SERIALIZATION_NVP(max_lat);
-  ar & BOOST_SERIALIZATION_NVP(lat);
-  ar & BOOST_SERIALIZATION_NVP(vport); 
-  ar & BOOST_SERIALIZATION_NVP(mask);
-}
-
-template<class Archive>
 void Schedule::serialize(Archive & ar, const unsigned version) {
   //Note: ssmodel not serialized 
   ar & BOOST_SERIALIZATION_NVP(_name);
@@ -63,8 +54,6 @@ void Schedule::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_edge_links_mapped);
   ar & BOOST_SERIALIZATION_NVP(_groupMismatch);
   ar & BOOST_SERIALIZATION_NVP(_wide_ports);
-  ar & BOOST_SERIALIZATION_NVP(_assignVPort);
-  ar & BOOST_SERIALIZATION_NVP(_vecProp);
   ar & BOOST_SERIALIZATION_NVP(_vertexProp);
   ar & BOOST_SERIALIZATION_NVP(_edgeProp);
   ar & BOOST_SERIALIZATION_NVP(_nodeProp);
@@ -79,6 +68,5 @@ BOOST_CLASS_EXPORT_GUID(Schedule::VertexProp,  "Schedule::VertexProp");
 BOOST_CLASS_EXPORT_GUID(Schedule::NodeProp,  "Schedule::NodeProp");
 BOOST_CLASS_EXPORT_GUID(Schedule::EdgeProp,  "Schedule::EdgeProp");
 BOOST_CLASS_EXPORT_GUID(Schedule::LinkProp,  "Schedule::LinkProp");
-BOOST_CLASS_EXPORT_GUID(Schedule::VecProp,  "Schedule::VecProp");
 BOOST_CLASS_EXPORT_GUID(Schedule,  "Schedule");
 

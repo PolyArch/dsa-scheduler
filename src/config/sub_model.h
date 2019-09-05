@@ -17,10 +17,9 @@
 namespace SS_CONFIG {
 
 class ssnode;
-class ssinput;
-class ssoutput;
 class ssvport;
 
+//TODO: Should we delete this class?
 class ssio_interface {
 public:
 
@@ -42,15 +41,7 @@ public:
 
   void fill_vec();
 
-  void sort_in_vports(std::vector<std::pair<int,int>>& portID2size) {
-    sort(portID2size, vports_map[1]);
-  }
-  
-  void sort_out_vports(std::vector<std::pair<int,int>>& portID2size) {
-    sort(portID2size, vports_map[0]);
-  }
-
- private:        
+private:        
     void sort(std::vector<std::pair<int,int>>& portID2size, 
          std::map<int,ssvport*>& vports);
 };
@@ -139,13 +130,19 @@ public:
     _in_links.push_back(link);
   }
 
-  virtual std::string name() const {
-    return std::string("loadslice");
+  virtual std::string name() const = 0; 
+
+  virtual std::string gams_name(int ) const = 0; 
+
+  //just for visualization
+  void setXY(int x, int y) {
+    _x = x;
+    _y = y;
   }
 
-  virtual std::string gams_name(int config = 0) const {
-    return std::string("loadslice");
-  }
+  int x() const { return _x; }
+
+  int y() const { return _y; }
 
   typedef std::vector<sslink *>::const_iterator const_iterator;
 
@@ -317,6 +314,7 @@ public:
 
 protected:
   int _ID = -1;
+  int _x=-1, _y=-1;
   std::string module_name;
   std::string module_type;
   int _node_dist[8];
@@ -350,15 +348,6 @@ class ssswitch : public ssnode {
 public:
 
   ssswitch() : ssnode() {}
-
-  void setXY(int x, int y) {
-    _x = x;
-    _y = y;
-  }
-
-  int x() const { return _x; }
-
-  int y() const { return _y; }
 
   virtual std::string name() const {
     std::stringstream ss;
@@ -412,12 +401,7 @@ public:
     return router_power_predict(features);
   }
 
-  ssinput *getInput(int i);
-
-  ssoutput *getOutput(int i);
-
 protected:
-  int _x, _y;
   double features[9];
   int back_pressure_fifo_depth;
 };
@@ -428,15 +412,6 @@ public:
   ssfu() : ssnode() {}
 
   void setFUDef(func_unit_def *fu_def) { _fu_def = fu_def; }
-
-  void setXY(int x, int y) {
-    _x = x;
-    _y = y;
-  }
-
-  int x() const { return _x; }
-
-  int y() const { return _y; }
 
   void set_prop(YAML::Node prop){
     // Default
@@ -466,7 +441,7 @@ public:
 
   virtual std::string name() const {
     std::stringstream ss;
-    ss << "FU" << "_" << _x << "_" << _y;
+    ss << "FU" << _x << "_" << _y;
     return ss.str();
   }
 
@@ -514,7 +489,6 @@ public:
   func_unit_def *fu_def() { return _fu_def; }
 
 protected:
-  int _x, _y;
   func_unit_def *_fu_def;
   double features[12];
   std::string output_select_mode;
@@ -526,65 +500,11 @@ private:
   friend class SubModel;
 };
 
-class ssinput : public ssnode { 
-    public:
-    
-    ssinput() : ssnode() {}
-      
-    void setPort(int port) {_port=port;}
-    int port() const {return _port;}
-    
-    std::string name() const {
-        std::stringstream ss;
-        ss << "IP" << "_" << _port;
-        return ss.str();
-    }
-    std::string gams_name(int config) const {
-        std::stringstream ss;
-        if(config!=0) {
-          ss << "I" << _port << "c" << config;
-        } else {
-          ss << "I" << _port;
-        }
-        return ss.str();
-    }
-    
-    protected:
-      int fifo_depth;
-      int _port;
-};  
-
-class ssoutput : public ssnode {
-    public:
-    ssoutput() : ssnode() {}
-      
-    void setPort(int port) {_port=port;}
-    int port() const {return _port;}
-    
-    std::string name() const {
-        std::stringstream ss;
-        ss << "OP" << "_" << _port;
-        return ss.str();
-    }
-    
-    std::string gams_name(int config) const {
-        std::stringstream ss;
-        if(config!=0) {
-          ss << "O" << _port << "i" << config;
-        } else {
-          ss << "O" << _port;
-        }
-        return ss.str();
-    }
-    
-    protected:
-      int fifo_depth;
-      int _port;
-};
-
 //This should be improved later
 class ssvport : public ssnode {
 public:
+  ssvport(int port_num) : _port(port_num) {}
+
   std::vector<int>& port_vec() {return _port_vec;}
   void set_port_vec(std::vector<int> p) {_port_vec=p;}
   size_t size() {return _port_vec.size();}
@@ -603,14 +523,28 @@ public:
       io_type = default_set["io_type"].as<std::string>();
     }
   }
+  virtual std::string name() const {
+    std::stringstream ss;
+    if(_out_links.size()>0) ss << "I";
+    else ss << "O";
+    ss<< _port; 
+    return ss.str(); 
+  }
+
+  virtual std::string gams_name(int i) const {
+    return name();
+  }
+
   void set_port2node(std::string portname,ssnode * node){
     port2node[portname] = node;
   }
   ssnode * convert_port2node(std::string portname){
     return port2node[portname];
   }
+  int port() {return _port;}
 
 private:
+  int _port = -1;
   std::vector<int> _port_vec;
   std::string io_type;
   int channel_buffer;
@@ -627,9 +561,6 @@ public:
   enum class PortType {
     opensp, everysw, threein, threetwo
   };
-
-  typedef std::vector<ssinput>::const_iterator const_input_iterator;
-  typedef std::vector<ssoutput>::const_iterator const_output_iterator;
 
   SubModel() {}
 
@@ -654,10 +585,6 @@ public:
 
   ssswitch *switchAt(int x, int y) { return _switches[x][y]; }
 
-  std::vector<ssinput*> &inputs() { return _inputs; }
-
-  std::vector<ssoutput*> &outputs() { return _outputs; }
-
   std::vector<std::vector<ssfu*> > &fus() { return _fus; }
 
   template<typename T> std::vector<T> &nodes();
@@ -670,10 +597,6 @@ public:
 
   bool multi_config() { return _multi_config; }
 
-  ssswitch *cross_switch() { return &_cross_switch; }
-
-  ssnode *load_slice() { return &_load_slice; }
-
   size_t num_fu() { return _fus.size(); }
 
   void parse_io(std::istream &istream);
@@ -682,45 +605,23 @@ public:
 
   void clear_all_runtime_vals();
 
-  void clear_fu_runtime_vals();
-
   const std::vector<sslink *> &link_list() { return _link_list; }
 
   const std::vector<ssnode *> &node_list() { return _node_list; }
 
-  void add_inputs(int n) {
-    _inputs.resize(n);
-    //Port num to each switch
-    for(unsigned i = 0; i < _inputs.size(); ++i) {
-      add_input(i);
-    }
+  const std::vector<ssvport *> &input_list() { return _input_list; }
+
+  const std::vector<ssvport *> &output_list() { return _output_list; }
+
+
+
+  void add_input(int i, ssnode* n) {
+    _io_map[true][i]=n;
+  }
+  void add_output(int i, ssnode* n) {
+    _io_map[false][i]=n;
   }
 
-  void add_outputs(int n) {
-    _outputs.resize(n);
-    //Port num to each switch
-    for(unsigned i = 0; i < _outputs.size(); ++i) {
-      add_output(i);
-    }
-  }
-
-  ssinput* add_input(int i) {
-    auto* in = new ssinput();
-    if(i >= (int)_inputs.size()) _inputs.resize(i+1);
-    assert(_inputs[i]==NULL);
-    _inputs[i]=in;
-    in->setPort(i);
-    return in;
-  }
-
-  ssoutput* add_output(int i) {
-    auto* out = new ssoutput();
-    if(i >= (int)_outputs.size()) _outputs.resize(i+1);
-    assert(_outputs[i]==NULL);
-    _outputs[i]=out;
-    out->setPort(i);
-    return out;
-  }
 
   ssfu* add_fu(){
     auto * fu = new ssfu();
@@ -756,35 +657,48 @@ public:
     return sw;
   }
 
+  ssvport* add_vport(bool is_input, int port_num) {
+    auto vport = new ssvport(port_num);
+    if(_ssio_interf.vports_map[is_input].count(port_num)) {
+      std::cout << "Error: Multiple " << (is_input ? "input" : "output") 
+                << " ports with port number " << port_num << "created\n\n";
+      assert(0 && "port duplication error");
+    }
+    _ssio_interf.vports_map[is_input][port_num] = vport;
+    _node_list.push_back(vport);
+    _vport_list.push_back(vport);
+    if(is_input) _input_list.push_back(vport);
+    else         _output_list.push_back(vport); 
+    return vport;
+  }
+
   void regroup_vecs(); //fills in the linear lists
 
 private:
-  //void CreateFUArray(int,int);
-  //void SetTotalFUByRatio();
-  //void RandDistributeFUs();
   void build_substrate(int x, int y);
 
-  void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config, int temp_x, int temp_y,
-                         int temp_width, int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay);
+  void connect_substrate(int x, int y, PortType pt, int ips, int ops, 
+      bool multi_config, int temp_x, int temp_y, int temp_width, 
+      int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay);
 
+  //temporary datastructure to help construct mapping
+  std::map<int, ssnode*> _io_map[2];
 
   int _sizex, _sizey;  //size of SS cgra
   bool _multi_config;
-  std::vector<ssinput*> _inputs;
-  std::vector<ssoutput*> _outputs;
   std::vector<std::vector<ssfu*> > _fus;
   std::vector<std::vector<ssswitch*> > _switches;
 
   //These are only valid after regroup_vecs()
-  std::vector<ssnode *> _io_list;
   std::vector<ssnode *> _node_list;
   std::vector<sslink *> _link_list;
+  std::vector<ssvport *> _vport_list; 
+  std::vector<ssvport *> _input_list;
+  std::vector<ssvport *> _output_list;
 
   std::vector<ssfu *> _fu_list;
   std::vector<ssswitch *> _switch_list;
 
-  ssswitch _cross_switch;
-  ssnode _load_slice;
   ssio_interface _ssio_interf;
 };
 

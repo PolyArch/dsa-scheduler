@@ -70,13 +70,11 @@ protected:
   bool map_io_to_completion(SSDfg *ssDFG, Schedule *sched);
 
   template<typename T> inline int
-  try_candidates(const std::vector<std::pair<int, int>> &candidates, Schedule *, T* node);
+  try_candidates(const std::vector<std::pair<int, ssnode*>> &candidates, Schedule *, T* node);
 
   template<typename T>
   static bool schedule_vec_impl(SchedulerSimulatedAnnealing *engine, T *vec, SSDfg *dfg,
                                 Schedule *sched);
-
-  template<typename T> inline bool schedule_it(T *node, SSDfg *ssDFG, Schedule *sched);
 
   template<typename T> inline bool map_one(SSDfg *ssDFG, Schedule *sched) {
     auto &nodes = ssDFG->nodes<T*>();
@@ -84,10 +82,11 @@ protected:
     int p = rand() % n;
     for(int i = 0; i < n; ++i) {
       p = (p + 1) % n;
-      T* to_map = nodes[p];
-      if (!sched->is_scheduled(to_map)) {
-        bool success = schedule_it<T>(to_map, ssDFG, sched);
-        return success;
+      T* node = nodes[p];
+      if (!sched->is_scheduled(node)) {
+        auto candidates = node->candidates(sched, _ssModel, 50);
+        int best_candidate = try_candidates<SSDfgNode>(candidates, sched, node);
+        return best_candidate != -1;
       }
     }
     return false;
@@ -106,7 +105,7 @@ protected:
 
 template<typename T>
 int SchedulerSimulatedAnnealing::try_candidates(
-  const std::vector<std::pair<int, int>> &candidates, Schedule *sched, T* node) {
+  const std::vector<std::pair<int, ssnode*>> &candidates, Schedule *sched, T* node) {
 
   using std::vector;
   using std::pair;
@@ -122,8 +121,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
     ++candidates_tried;
 
     CandidateRoute path;
-    if (scheduleHere(sched, node->ready_to_map(),
-                     node->ready_to_map(model, candidates[i]), path)) {
+    if (scheduleHere(sched, node,candidates[i], path)) {
       ++candidates_succ;
 
       int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX,  agg_ovr = INT_MAX, max_util = INT_MAX;
@@ -139,7 +137,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
         best_path.swap(path);
       }
 
-      sched->unassign<T*>(node);
+      sched->unassign_dfgnode(node);
     }
 
 
@@ -152,59 +150,10 @@ int SchedulerSimulatedAnnealing::try_candidates(
     for (auto elem : best_path.links) {
       sched->assign_edgelink(elem.first, elem.second.first, elem.second.second);
     }
-    auto software = node->ready_to_map();
-    auto hardware = node->ready_to_map(model, candidates[best_candidate]);
-    assert(software.size() == hardware.size());
-    for (size_t i = 0; i < software.size(); ++i) {
-      sched->assign_node(software[i], hardware[i]);
-    }
+    sched->assign_node(node, candidates[best_candidate]);
   }
 
   return best_candidate;
-}
-
-template<typename T>
-bool SchedulerSimulatedAnnealing::schedule_vec_impl(SchedulerSimulatedAnnealing *engine,
-                                               T *vec, SSDfg *dfg, Schedule *sched) {
-  auto candidates = vec->candidates(sched, engine->_ssModel, 50);
-  int best_candidate = engine->try_candidates<T>(candidates, sched, vec);
-
-  if (best_candidate != -1) {
-
-    int id = candidates[best_candidate].first;
-    int mask = candidates[best_candidate].second;
-    ssio_interface &si = engine->_ssModel->subModel()->io_interf();
-    std::pair<bool, int> vport_id(T::IsInput(), si.vports_vec[T::IsInput()][id].first);
-    std::vector<int> &vport_desc = si.vports_vec[T::IsInput()][id].second->port_vec();
-    std::vector<bool> mask_(vport_desc.size());
-    for (int m = 0; m < (int) vport_desc.size(); m++) {
-      mask_[m] = mask >> m & 1;
-    }
-    sched->assign_vport(vec, vport_id, mask_);
-    return true;
-
-  } else {
-    std::cout << "failed to schedule\n";
-  }
-
-  return false;
-}
-
-template<> inline bool
-SchedulerSimulatedAnnealing::schedule_it(SSDfgVecInput *vec, SSDfg *ssDFG, Schedule *sched) {
-  return schedule_vec_impl<SSDfgVecInput>(this, vec, ssDFG, sched);
-}
-
-template<> inline bool
-SchedulerSimulatedAnnealing::schedule_it(SSDfgVecOutput *vec, SSDfg *ssDFG, Schedule *sched) {
-  return schedule_vec_impl<SSDfgVecOutput>(this, vec, ssDFG, sched);
-}
-
-template<> inline bool
-SchedulerSimulatedAnnealing::schedule_it(SSDfgInst *node, SSDfg *ssDFG, Schedule *sched) {
-  auto candidates = node->candidates(sched, _ssModel, 50);
-  int best_candidate = try_candidates<SSDfgInst>(candidates, sched, node);
-  return best_candidate != -1;
 }
 
 template<typename T> inline void
@@ -216,8 +165,8 @@ SchedulerSimulatedAnnealing::unmap_one(SSDfg *dfg, Schedule *sched) {
     for (int i = 0; i < n; ++i) {
       p = (p + 1) % n;
       // TODO(@were): add extra estimation to this function...
-      if (sched->is_scheduled(nodes[p]) && nodes[p]->yield(sched, _ssModel->subModel())) {
-        sched->unassign<T*>(nodes[p]);
+      if (sched->is_scheduled(nodes[p])) {
+        sched->unassign_dfgnode(nodes[p]);
         return;
       }
     }

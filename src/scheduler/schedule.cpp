@@ -38,21 +38,6 @@ void Schedule::reset_simulation_state() {
   }
 }
 
-//For a given dfgnode return the input or ouput port num if the pdfgnode is a
-//ssinput ot ssoutput
-int Schedule::getPortFor(SSDfgNode* ssdfg_in)  { 
-  if (ssnode* n = locationOf(ssdfg_in)) {
-    if (ssinput *assigned_ssinput = dynamic_cast<ssinput*>(n)) {
-      return assigned_ssinput->port();
-    }
-
-    if (ssoutput *assigned_ssoutput = dynamic_cast<ssoutput*>(n)) {
-      return assigned_ssoutput->port();
-    }
-  }
-  return -1; 
-}
-
 std::map<SS_CONFIG::ss_inst_t,int> Schedule::interpretConfigBits(int size,
     uint64_t* bits) {
 
@@ -531,10 +516,14 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name,
   os << "#ifndef " << "__" << cfg_name << "_H__\n";
   os << "#define " << "__" << cfg_name << "_H__\n";
 
-  for(auto& i : _assignVPort) {
-    std::pair<bool,int> pn = i.first;
-    SSDfgVec* pv = i.second;
-    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn.second << "\n"; 
+  for(auto& pv : _ssDFG->nodes<SSDfgVecInput*>()) {
+    int pn = vecPortOf(pv);
+    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn << "\n"; 
+  }
+  os<< "\n";
+  for(auto& pv : _ssDFG->nodes<SSDfgVecOutput*>()) {
+    int pn = vecPortOf(pv);
+    os << "#define P_" << cfg_name << "_" << pv->name() << " " << pn << "\n"; 
   }
   os<< "\n";
 
@@ -590,7 +579,7 @@ void Schedule::printConfigBits_Hw(std::string & hw_config_filename){
         found = true;
         int module_id = it.second.get<int>("Module_ID");
         bool test = module_id > 0;
-        
+        //TODO: test is not used, fix        
       }else{
         continue; // Not this one, continue
       }
@@ -603,15 +592,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   //print_bit_loc();
 
   //Active Input Ports
-  for(auto& i : _assignVPort) {
-    std::pair<bool,int> pn = i.first;
-    //SSDfgVec* pv = i.second;
-    
-    if(pn.first) { //INPUT
-      _bitslices.write(IN_ACT_SLICE, pn.second,pn.second,1);
-    } else { //OUTPUT
-      _bitslices.write(OUT_ACT_SLICE,pn.second,pn.second,1);
-    }
+  for(auto& pv : _ssDFG->nodes<SSDfgVecOutput*>()) {
+    int pn = vecPortOf(pv);    
+    _bitslices.write(OUT_ACT_SLICE,pn,pn,1);
+  }
+  //Active Input Ports
+  for(auto& pv : _ssDFG->nodes<SSDfgVecInput*>()) {
+    int pn = vecPortOf(pv);    
+    _bitslices.write(IN_ACT_SLICE,pn,pn,1);
   }
 
   int max_lat_mis=0, max_lat=0;
@@ -623,18 +611,20 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SSDfgVecInput*>& vec = _ssDFG->vec_in_group(g);
     for(auto* vec_in : vec) {
-      int port_num = vecPortOf(vec_in).second;
-      int bit_pos=(g%2)*32+port_num;
-      _bitslices.write(IN_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
+      //TODO/FIXME: Encoding is broken here
+      //int port_num = vecPortOf(vec_in).second;
+      //int bit_pos=(g%2)*32+port_num;
+      //_bitslices.write(IN_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
     }
   }
 
   for(int g = 0; g < num_vec_groups; ++g) {
     vector<SSDfgVecOutput*>& vec = _ssDFG->vec_out_group(g);
     for(auto* vec_out : vec) {
-      int port_num = vecPortOf(vec_out).second;
-      int bit_pos=(g%2)*32+port_num;
-      _bitslices.write(OUT_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
+      //TODO/FIXME: Encoding is broken here
+      //int port_num = vecPortOf(vec_out).second;
+      //int bit_pos=(g%2)*32+port_num;
+      //_bitslices.write(OUT_ACT_GROUP12+g/2, bit_pos, bit_pos, 1);
     }
   }
 
@@ -656,13 +646,13 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       }
   
       //Is this port assigned?  if not can skip 
-      if(SSDfgVec* dfg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
-        vector<bool> mask = maskOf(dfg_vec_in);
+      //if(SSDfgVec* dfg_vec_in = vportOf(make_pair(true/*input*/,port_pair.first))) {
+        //vector<bool> mask = maskOf(dfg_vec_in);
   
-        for(unsigned i = 0; i < port_m.size(); ++i) {
-          _bitslices.write(io ? slice : VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
-        }
-      }
+        //for(unsigned i = 0; i < port_m.size(); ++i) {
+        //  _bitslices.write(io ? slice : VP_MAP_SLICE_OUT, start_bits_vp_mask+i,start_bits_vp_mask+i,mask[i]);
+        //}
+      //}
     
       start_bits_vp_mask=total_bits_vp_mask; //next
     }
@@ -908,7 +898,6 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
           << v->name() << "</td></tr>";
     }
   }
-
 }
 
 void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
@@ -962,27 +951,6 @@ void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
   ofs << ", pin=true];\n";  
 }
 
-void Schedule::printInputGraphviz(std::ofstream& ofs, ssnode* node) {
-  ofs << node->name() << "[shape=plaintext, ";
-  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
-
-  printMvnGraphviz(ofs,node);
-
-  ofs << "\n</table>>";
-  ofs << "];\n"; 
-}
-void Schedule::printOutputGraphviz(std::ofstream& ofs, ssnode* node) {
-  ofs << node->name() << "[shape=plaintext, ";
-  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
-
-  printMvnGraphviz(ofs,node);
-
-  ofs << "\n</table>>";
-  ofs << "];\n";  
-}
-
-
-
 void Schedule::printGraphviz(const char* name) {
   ofstream ofs(name);
   assert(ofs.good());
@@ -996,19 +964,6 @@ void Schedule::printGraphviz(const char* name) {
 
   for (auto elem : sub->fu_list())
     printFUGraphviz(ofs, elem);
-
-  for(ssinput* in : sub->inputs()) {
-    NodeProp& np = _nodeProp[in->id()];
-    if(!np.vertices.empty()) {
-      printInputGraphviz(ofs,in);
-    }
-  }
-  for(ssoutput* out : sub->outputs()) {
-    NodeProp& np = _nodeProp[out->id()];
-    if(!np.vertices.empty()) {
-      printOutputGraphviz(ofs,out);
-    }
-  }
  
   for(ssnode* node : sub->node_list())
     printMelGraphviz(ofs,node);
@@ -1016,46 +971,10 @@ void Schedule::printGraphviz(const char* name) {
   ofs << "}\n\n";
 }
 
-//for(auto& p : _vecProp) {
-//  SSDfgVec* vec = p.first;
-//  ofs << "subgraph cluster" << vec->name() << " {\n";
-//  if(SSDfgVecInput* invec = dynamic_cast<SSDfgVecInput*>(vec)) {
-//    for(auto I = invec->input_begin(), E = invec->input_end(); I!=E; ++I) {
-//      SSDfgInput* in = *I;
-//      auto& vp = _vertexProp[in->id()];
-//      printInputGraphviz(ofs,vp.node);
-//    }
-//  }
-//  if(SSDfgVecOutput* outvec = dynamic_cast<SSDfgVecOutput*>(vec)) {
-//    for(auto I = outvec->output_begin(), E = outvec->output_end(); I!=E; ++I) {
-//      SSDfgOutput* out = *I;
-//      auto& vp = _vertexProp[out->id()];
-//      printOutputGraphviz(ofs,vp.node);
-//    }
-//  }
-
-// TODO: check if it is required here..
-/*sslink* Schedule::getNextLink(SSDfgEdge* dfgedge, sslink* link) {
-  // auto &lp = _linkProp[link->id()].slots[0]; // this just gives corresponding edges
-  // need to use switch dir here probably
-  SwitchDir::DIR cur_dir = link->dir();
-  SSDfgNode dest_node = edge.dest_dfgnode();
-  ssnode* n = locationOf(dest_node);
-  // see where where they initialize num_links and extra_lat
-  // _came_from[]
-  // is routing here or there? should be here...
-  vector<sslink*> out_links = n->out_links();
-  for(auto it : out_links) {
-    if(it->dir() == cur_dir) {
-      return out_link;
-    }
-  }
- 
-  sslink* next_link = _edgeProp[dfgedge->id()].links.find(0,link>);// j is slot number...
-  return next_link;
-}*/
-
-
+#if 0
+// Lets keep this code around for inspiration, but basically we don't
+// need to reconstruct the schedule for simulation because we have the
+// option to keep the serialized version directly
 //reconstruct the schedule
 void Schedule::reconstructSchedule(
                   map<ssnode*, map<SwitchDir::DIR,SwitchDir::DIR> >& routeMap,
@@ -1100,172 +1019,7 @@ void Schedule::reconstructSchedule(
   }
   allocate_space();
 }
-
-/*
-struct edgeLinkItem{ 
-  sslink* dlink;
-  int SSDfgEdge*
-}
-*/
-void Schedule::calcAssignEdgeLink_single(SSDfgNode* dfgnode) {
-  //_assignEdgeLink
-
-  //paris of link to edge
-  list<tuple<int, sslink*,SSDfgEdge*>> openset;
-
-  auto node = location_of(dfgnode);
-
-  if(!node.second) {
-    //cerr << "SSDfgNode: " << dfgnode->name() << " is not scheduled\n";
-    return;
-  }
-  
-  for(auto source_dfgedge : dfgnode->in_edges()) {
-    SSDfgNode* source_dfgnode = source_dfgedge->def();
-
-    //route edge if source dfgnode is scheduled
-    if(is_scheduled(source_dfgnode)) {
-      for(auto& link: node.second->in_links()) {
-        for (int slot=0; slot < 8; ++slot) {
-          if (dfgNodeOf(slot, link) == source_dfgnode) {
-            openset.emplace_back(make_tuple(slot, link, source_dfgedge));
-          }
-        }
-      }
-    }
-  }
-  /*
-
-  
-  ssnode::const_iterator Il,El;
-  for(Il = node->ibegin(), El = node->iend(); Il!=El; ++Il) {
-      sslink* link = *Il;
-      if(dfgNodeOf(link,config)!=nullptr) {
-        set<SSDfgEdge*>& edgelist = _assignEdgeLink[make_pair(link,config)];
-        set<SSDfgEdge*>::iterator Ie,Ee;
-        for(Ie=edgelist.begin(), Ee=edgelist.end(); Ie!=Ee; Ie++) {
-          SSDfgEdge* dfgedge = *Ie;
-          openset.push_back(make_pair(make_pair(link,config),source_dfgedge));
-        }
-      }
-  }*/
-  
-  while(!openset.empty()) {
-    int slot = get<0>(openset.front());
-    sslink* cur_link = get<1>(openset.front());
-    SSDfgEdge* cur_edge = get<2>(openset.front());
-    ssnode* cur_node = cur_link->orig();
-    SSDfgNode* cur_dfgnode = cur_edge->def();
-    openset.pop_front();
-    
-    //cout << cur_link->name() << " gets " << cur_edge->name() << "\n";
-
-    //_linkProp[cur_link->id()].edges.insert(cur_edge);
-    assign_edgelink(cur_edge, slot, cur_link);
-    
-    for(auto &from_link: cur_node->in_links()) {
-
-        if(from_link->orig()==_ssModel->subModel()->cross_switch()) continue;
-        if(from_link->orig()==_ssModel->subModel()->load_slice()  ) continue;
-
-        if(dfgNodeOf(slot, from_link)==cur_dfgnode) {
-          openset.push_back(make_tuple(slot, from_link,cur_edge));
-        }
-    }
-  }
-
-}
-
-void Schedule::calcAssignEdgeLink() {
-  assert(0);
-
-  //for(auto& i : _linkProp) {
-  //  i.second.edges.clear();
-  //}
-  
-  for (SSDfgInst* dfginst : _ssDFG->inst_vec()) {
-    calcAssignEdgeLink_single(dfginst);
-  }
-  
-  for (auto dfgout : _ssDFG->outputs()) {
-    calcAssignEdgeLink_single(dfgout);
-  }
-  
-  
-  /*
-  
-  SubModel::const_input_iterator I,E;
-  for(I=_ssModel->subModel()->input_begin(),
-      E=_ssModel->subModel()->input_end(); I!=E; ++I) {
-     ssinput* cand_input = const_cast<ssinput*>(&(*I));
-    
-    if(dfgNodeOf(cand_input,config)!=nullptr) {
-       sslink* firstOutLink = cand_input->getFirstOutLink();
-       openset.push_back(firstOutLink);
-       lat_edge[firstOutLink]=0;
-    }
-  }
-    
-    
-  
-  while(!openset.empty()) {
-    sslink* inc_link = openset.front(); 
-    openset.pop_front();
-    
-    ssnode* node = inc_link->dest();
-    ssnode::const_iterator I,E,II,EE;
-    
-    SSDfgNode* cur_dfgnode = dfgNodeOf(inc_link,config);
-    assert(cur_dfgnode);
-    
-    if(ssfu* next_fu = dynamic_cast<ssfu*>(node)) {
-      SSDfgNode* next_dfgnode = dfgNodeOf(node,config);
-      //cout << next_fu->name() << "\n"; 
-      assert(next_dfgnode);
-      SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode); 
-      assert(next_dfginst);
-    
-      bool everyone_is_here = true;
-      int latency=0;
-      for(II = next_fu->ibegin(), EE = next_fu->iend(); II!=EE; ++II) {
-        sslink* inlink = *II;
-        if(dfgNodeOf(inlink,config) != nullptr) {
-          if(lat_edge.count(inlink)==1) {
-            if(lat_edge[inlink]>latency) {
-              latency=lat_edge[inlink];
-            }
-          } else {
-            everyone_is_here = false;
-            break;
-          }
-        }
-      }
-      if(everyone_is_here) {
-        sslink* new_link = next_fu->getFirstOutLink();
-        lat_edge[new_link] = latency + inst_lat(next_dfginst->inst());;
-        openset.push_back(new_link);
-      }
-    } else if (dynamic_cast<ssoutput*>(node)) {
-      if(lat_edge[inc_link] > max_lat) {
-        max_lat = lat_edge[inc_link];
-      }
-    } else {
-    
-      for(I = node->obegin(), E = node->oend(); I!=E; ++I) {
-        sslink* link = *I;
-        
-        if(dfgNodeOf(link,config) == dfgNodeOf(inc_link,config)) {
-          lat_edge[link] = lat_edge[inc_link] + 1;
-          openset.push_back(link);
-        }
-      }
-    }
-  }
-    
-
-  return max_lat; 
-  */
-}
+#endif
 
 void Schedule::stat_printOutputLatency() {
   int n = _ssDFG->num_vec_output();
@@ -1273,65 +1027,11 @@ void Schedule::stat_printOutputLatency() {
   for (int i = 0; i < n; i++) {
     SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
     cout << vec_out->gamsName() << ": ";
-    for (auto dfgout: vec_out->vector()) {
-      cout << latOf(dfgout) << " ";
+    for (auto inc_edge : vec_out->in_edges()) {
+      cout << latOf(inc_edge->def()) << " ";
     }
     cout << endl;
   }
-}
-
-void Schedule::checkOutputMatch(int &max_lat_mis) {
-
-  //int violation=0;
-
-  for (int i=0; i<_ssDFG->num_vec_output(); i++) {
-    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
-    int low_lat=10000, up_lat=0;
-    for (size_t j = 0; j < vec_out->length(); ++j) {
-      auto dfgout = vec_out->at(j);
-      int lat = latOf(dfgout);
-      if(lat < low_lat) {
-        low_lat = lat;
-      }
-      if(lat > up_lat) {
-        up_lat = lat;
-      }
-      int diff = up_lat - low_lat;
-      if(diff > max_lat_mis) {
-        max_lat_mis = diff;
-      }
-    }
-
-    //int min_vec_lat = 0;
-    //int max_vec_lat = 1000000;
-    //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-    //   SSDfgOutput* dfgout = vec_out->getOutput(m);
-
-    //   auto p = _latBounds[dfgout];
-    //   int min_inc_lat = p.first; 
-    //   int max_inc_lat = p.second;
- 
-    //   //earliest starting time is *latest* incomming edge
-    //   if(min_inc_lat > min_vec_lat) {
-    //     min_vec_lat = min_inc_lat;
-    //   }
-    //   //latest starting time is *earliest* incomming edge
-    //   if(max_inc_lat < max_vec_lat) {
-    //     max_vec_lat = max_inc_lat;
-    //   }
-    //}
-
-    //for(unsigned m=0; m < vec_out->num_outputs(); ++m) {
-    //   SSDfgOutput* dfgout = vec_out->getOutput(m);
-    //   assign_lat_bounds(dfgout,min_vec_lat,max_vec_lat);
-    //}
-
-
-    //if(min_vec_lat > max_vec_lat) {
-    //  violation += min_vec_lat-max_vec_lat;
-    //}
-  }
-  //add_violation(violation);
 }
 
 bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
@@ -1348,7 +1048,6 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   //int max_lat2=0;
   //int max_lat_mis2=0;
   //calcLatency(max_lat2, max_lat_mis2);
-  //checkOutputMatch(max_lat_mis2);
 
   //if(max_lat != max_lat2|| max_lat_mis!=max_lat_mis2) {
   //  cout << "max_lat: " << max_lat << " mis:" << max_lat_mis << "\n";
@@ -1366,192 +1065,10 @@ bool Schedule::fixLatency(int &max_lat, int &max_lat_mis) {
   return max_lat_mis==0;
 }
 
-bool Schedule::fixLatency_bwd() {
-  int n = _ssDFG->num_vec_output();
-  for (int i=0; i<n; i++) { //iterate over output vectors
-    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
-    int maxLat = 0;
-    
-    for (auto dfgout : vec_out->vector()) {
-      if (latOf(dfgout) > maxLat) {
-        maxLat = latOf(dfgout);
-      }
-    }
-    unordered_set<SSDfgNode*> visited;
-    //TODO: sort ports from small to large latency
-    for (size_t j = 0; j < vec_out->length(); ++j) {
-      auto dfgout = vec_out->at(j);
-      int ed = maxLat - latOf(dfgout); //extra delay to insert
-      //cout<<"Output "<<dfgout->name()<<"  maxLat: "<<maxLat<<" _latOf: "<<_latOf[dfgout]<<" ed: "<<ed<<endl;
-      if (ed > 0) {
-        bool succ = fixDelay(dfgout, ed, visited);
-        if (!succ) return false;
-      }
-    }
-  }
-  return true;
-}
-
-
-bool Schedule::fixDelay(SSDfgOutput* dfgout, int ed, unordered_set<SSDfgNode*>& visited) {
-
-  SSDfgInst* n = dfgout->out_inst();
-  if(!n || n->num_out()>1) { //bail if orig is input or has >1 use
-    return false;
-  }
-
-  //assert(n && "output is always associated with an instruction node or input node");
-  //cout<<"Fixing delay for node "<<n->name()<<" associated with output "<<dfgout->name()<<endl;
-  if (visited.count(n) == 1) {
-    cout<<"DFGNode "<<n->name()<<" is already visited!"<<endl;
-    assert(0);
-    return false;
-  }
-  visited.insert(n);
-
-  for(auto source_dfgedge : n->in_edges()) {
-
-    _edgeProp[source_dfgedge->id()].extra_lat = std::min(_ssModel->maxEdgeDelay(),
-        _edgeProp[source_dfgedge->id()].extra_lat + ed);
-
-    if (_edgeProp[source_dfgedge->id()].extra_lat + ed > _ssModel->maxEdgeDelay()) {
-      return false;
-    }
-  }
-  return true;
-}
-
-
-bool Schedule::fixLatency_fwd(int &max_lat, int &max_lat_mis) {
-  list<sslink*> openset;
-  //map<ssnode*,sslink*> came_from;
-  map<sslink *, int> lat_edge;
-
-  max_lat = 0;
-  max_lat_mis = 0;
-
-  for (auto elem : _ssModel->subModel()->inputs()) {
-    ssinput *cand_input = const_cast<ssinput *>(elem);
-
-    SSDfgNode *dfgnode = dfgNodeOf(cand_input);
-    if (dfgnode != nullptr) {
-      sslink *firstOutLink = cand_input->getFirstOutLink();
-      assert(firstOutLink);
-      openset.push_back(firstOutLink);
-      lat_edge[firstOutLink] = latOf(dfgnode);
-    }
-  }
-
-
-  //Outlinks of all the inputs
-  while (!openset.empty()) {
-    sslink *inc_link = openset.front();
-    openset.pop_front();
-
-    //dest node
-    ssnode *node = inc_link->dest();
-
-    if (ssfu *next_fu = dynamic_cast<ssfu *>(node)) {
-      SSDfgNode *next_dfgnode = dfgNodeOf(node);
-      //cout << next_fu->name() << "\n"; 
-      if (!next_dfgnode && !isPassthrough(node)) {
-        cout << "problem with latency calculation!\n";
-        cout << node->name() << " has no mapping\n";
-        max_lat = -1;
-        max_lat_mis = -1;
-        assert(next_dfgnode);
-        return false;
-      }
-
-      SSDfgInst *next_dfginst = dynamic_cast<SSDfgInst *>(next_dfgnode);
-      assert(next_dfginst || isPassthrough(node));
-
-      bool everyone_is_here = true;
-
-      int latency = 0;
-      int low_latency = 100000000;  //magic number, forgive me
-      for (auto &inlink: next_fu->in_links()) {
-        for (int slot = 0; slot < 8; ++slot) {
-          if (dfgNodeOf(slot, inlink) != nullptr) {
-            if (lat_edge.count(inlink) == 1) {
-              if (lat_edge[inlink] > latency) {
-                latency = lat_edge[inlink];
-              }
-              if (lat_edge[inlink] < low_latency) {
-                low_latency = latency;
-              }
-            } else {
-              everyone_is_here = false;
-              break;
-            }
-          }
-        }
-      }
-
-      if (everyone_is_here && !isPassthrough(node)) {
-        for (auto &inlink: next_fu->in_links()) {
-          for (int slot = 0; slot < 8; ++slot) {
-            SSDfgNode *origNode = dfgNodeOf(slot, inlink);
-            if (origNode != nullptr) {
-              SSDfgEdge *edge = origNode->getLinkTowards(next_dfgnode);
-              if (lat_edge[inlink] < latency) {
-                int diff = latency - lat_edge[inlink]; //latency per edge
-                assert(edge);
-                if (diff > _ssModel->maxEdgeDelay()) {
-
-                  //cout << diff  << " > " << _ssModel->maxEdgeDelay() << "\n";
-                  return false;
-                }
-                set_edge_delay(diff, edge);
-              }
-              //cout<<"Edge Name: "<<edge->name()<< " extra lat:" << _extraLatOfEdge[edge] << endl;
-              //cout << "(fwdPass) Edge "<<edge->name()<<"  maxLat: " << latency << "  lat_edge: "<<lat_edge[inlink]<<"  extralat: " << _extraLatOfEdge[edge] << "\n";
-            }
-          }
-        }
-        //cout << next_fu->name() << " latency " << latency <<"\n";
-      }
-
-      if (everyone_is_here) {
-        sslink *new_link = next_fu->getFirstOutLink();
-        if (isPassthrough(node)) {
-          lat_edge[new_link] = latency + 1; //TODO: Check this
-        } else { //regular inst
-          lat_edge[new_link] = latency + inst_lat(next_dfginst->inst());
-        }
-        openset.push_back(new_link);
-
-        int diff = latency - low_latency;
-        if (diff > max_lat_mis) {
-          max_lat_mis = diff;
-        }
-      }
-    } else if (dynamic_cast<ssoutput *>(node)) {
-      ssoutput *ss_out = dynamic_cast<ssoutput *>(node);
-      SSDfgNode *dfgnode = dfgNodeOf(ss_out);
-      assign_lat(dfgnode, lat_edge[inc_link]);
-
-      if (lat_edge[inc_link] > max_lat) {
-        max_lat = lat_edge[inc_link];
-      }
-    } else {
-      for (auto &link : node->out_links()) {
-        for (int slot = 0; slot < 8; ++slot) {
-          if (dfgNodeOf(slot, link) == dfgNodeOf(0, inc_link)) {
-            lat_edge[link] = lat_edge[inc_link] + 1;
-            openset.push_back(link);
-          }
-        }
-      }
-    }
-  }
-  return true;
-}
-
-std::vector<SSDfgInst*> Schedule::ordered_non_temporal() {
-  std::vector<SSDfgInst*> res;
-  for (SSDfgInst *i : _ssDFG->ordered_insts()) {
-    if (!i->is_temporal()) {
+std::vector<SSDfgNode*> Schedule::ordered_non_temporal() {
+  std::vector<SSDfgNode*> res;
+  for (SSDfgNode *i : _ssDFG->ordered_nodes()) {
+    if (!i->is_temporal() && !dynamic_cast<SSDfgVecInput*>(i)) {
       res.push_back(i);
     }
   }
@@ -1571,9 +1088,7 @@ void Schedule::iterativeFixLatency() {
 
   int _max_expected_route_latency=8;
 
-  // TODO: We didn't quite fix the problem of IO vectors in temporal region, though hopefully this isn't necessary
-
-  std::vector<SSDfgInst *> ordered_non_temp = ordered_non_temporal();
+  std::vector<SSDfgNode *> ordered_non_temp = ordered_non_temporal();
 
   while (changed || overflow) {
     changed = false;
@@ -1585,13 +1100,13 @@ void Schedule::iterativeFixLatency() {
       max_mis++;
     }
 
-    //FORWARD PASS -- INSTS
-    for (SSDfgInst *inst : ordered_non_temp) {
-      auto &vp = _vertexProp[inst->id()];
+    //FORWARD PASS 
+    for (SSDfgNode *node : ordered_non_temp) {
+      auto &vp = _vertexProp[node->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
 
-      for (auto edge : inst->in_edges()) {
+      for (auto edge : node->in_edges()) {
         SSDfgNode *origNode = edge->def();
         auto &orig_vp = _vertexProp[origNode->id()];
    
@@ -1617,86 +1132,38 @@ void Schedule::iterativeFixLatency() {
       vp.min_lat = new_min;
       vp.max_lat = new_max;
 
-      if (new_min > new_max) {
-        overflow = true;
-        break;
-      }
-
-      //cout << inst->name() << "  min_lat:" << vp.min_lat 
-      //                     << " max_lat:"<< vp.max_lat << "\n";
-    }
-
-    if (overflow) continue;
-
-    //FORWARD PASS -- VEC_OUTPUTS 
-    for (int i = 0; i < _ssDFG->num_vec_output(); i++) {
-      SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
-      auto &vecp = _vecProp[vec_out];
-      int new_min = vecp.min_lat;
-      int new_max = vecp.max_lat;
-
-
-      for (auto dfgout : vec_out->vector()) {
-        SSDfgEdge *edge = dfgout->first_inc_edge();
-
-        SSDfgNode *origNode = edge->def();
-        auto &orig_vp = _vertexProp[origNode->id()];
-
-        int routing_latency =edge_latency(edge);
-        int edge_lat = origNode->lat_of_inst() + routing_latency-1;
-
-        //cout << " -----------------" <<  edge->name() << ": " << edge_lat << "\n";
-
-        if(routing_latency!=0){
-          //no max_ed here because these are output nodes
-          new_max = std::min(new_max, orig_vp.max_lat + edge_lat + max_mis); 
-          new_min = std::max(new_min, orig_vp.min_lat + edge_lat);
-        } else {
-          new_min = std::max(new_min, orig_vp.min_lat + edge_lat +
-              _min_expected_route_latency); 
-          new_max = std::min(new_max, orig_vp.max_lat + edge_lat + max_mis +
-              _max_expected_route_latency); 
-        }
-      }
-      changed |= new_min != vecp.min_lat;
-      changed |= new_max != vecp.max_lat;
-      vecp.min_lat = new_min;
-      vecp.max_lat = new_max;
-
-      for (auto dfgout : vec_out->vector()) {
-        auto &vp = _vertexProp[dfgout->id()];
-        vp.min_lat = new_min;
-        vp.max_lat = new_max;
-      }
+      //cout << node->name() << "  min_lat:" << vp.min_lat 
+      //                     << " max_lat:"<< vp.max_lat  
+      //                     << " max_mis:" << max_mis << "\n";
 
       if (new_min > new_max) {
         overflow = true;
         break;
       }
-      //cout << vec_out->name() << "  min_lat:" << vecp.min_lat 
-      //                        << " max_lat:"<< vecp.max_lat << "\n";
+
     }
 
     if (overflow) continue;
 
     //BACKWARDS PASS
     for (int i = ordered_non_temp.size() - 1; i >= 0; i--) {
-      SSDfgInst *inst = ordered_non_temp[i];
-      auto &vp = _vertexProp[inst->id()];
+      SSDfgNode *node = ordered_non_temp[i];
+      auto &vp = _vertexProp[node->id()];
       int new_min = vp.min_lat;
       int new_max = vp.max_lat;
 
-      for (auto edge : inst->uses()) {
+      for (auto edge : node->uses()) {
         if (edge == nullptr) continue;
         SSDfgNode *useNode = edge->use();
         auto &use_vp = _vertexProp[useNode->id()];
 
         int routing_latency=edge_latency(edge);
-        int edge_lat = routing_latency-1 + inst->lat_of_inst();
+        int edge_lat = routing_latency-1 + node->lat_of_inst();
 
         //Outputs don't get an edge delay... so better correct for it
+        //TODO/FIXME: need a fine-grain way to do vec output
         int my_max_ed = max_ed;
-        if(dynamic_cast<SSDfgOutput*>(useNode)) {
+        if(dynamic_cast<SSDfgVecOutput*>(useNode)) {
           my_max_ed=0;
         }
 
@@ -1715,21 +1182,22 @@ void Schedule::iterativeFixLatency() {
       vp.min_lat = new_min;
       vp.max_lat = new_max;
 
+      //cout << node->name() << "  min_lat-b:" << vp.min_lat 
+      //                     << " max_lat-b:"<< vp.max_lat << "\n";
+
       if (new_min > new_max) {
         overflow = true;
         break;
       }
-      //cout << inst->name() << "  min_lat:" << vp.min_lat 
-      //                     << " max_lat:"<< vp.max_lat << " (b) \n";
-
     }
   }
 
   //cout << "iters until converge: " << iters << ", mismatch: " << max_mis << "\n";
   // NOW SET THE LATENCY!
 
-  for (SSDfgInst *inst : ordered_non_temp) {
-    auto &vp = _vertexProp[inst->id()];
+  //TODO: need to check how this allows delays or not on vector outputs
+  for (SSDfgNode *node : ordered_non_temp) {
+    auto &vp = _vertexProp[node->id()];
     //cout << inst->name() << "  min_lat:" << vp.min_lat << " max_lat:" 
     //                                    << vp.max_lat << "\n";
     int target = vp.min_lat;;// < vp.max_lat ? vp.min_lat : 
@@ -1738,7 +1206,7 @@ void Schedule::iterativeFixLatency() {
 
     int max = 0;
     //int mis = 0;
-    for (auto edge : inst->in_edges()) {
+    for (auto edge : node->in_edges()) {
       if (edge == nullptr) continue;
       SSDfgNode *origNode = edge->def();
 
@@ -1766,41 +1234,9 @@ void Schedule::iterativeFixLatency() {
       //                         << "links:" << link_count(edge)-1 << "\n";
     }
     //cout << " * mis: " << mis << "\n";
-    assign_lat(inst, inst->lat_of_inst() + max);
+    assign_lat(node, node->lat_of_inst() + max);
   }
 
-  //This code assumes delay fifos on vector outputs -- need to re-implement if we wanted this...
-  /*
-  for (int i = 0; i < _ssDFG->num_vec_output(); i++) {
-    SSDfgVecOutput *vec_out = _ssDFG->vec_out(i);
-    auto &vp = _vecProp[vec_out];
-
-    //cout << vec_out->name() << "  min_lat:" << vp.min_lat << " max_lat:" 
-    //                                   << vp.max_lat << "\n";
-
-    int target = vp.min_lat; // < vp.max_lat;// ? vp.min_lat : 
-    //  (vp.min_lat + vp.max_lat) / 2;
-
-    //cout << "target : " << target << "\n";
-
-    int mis = 0;
-    for (auto dfgout: vec_out->outputs()) {
-      SSDfgEdge *edge = dfgout->first_inc_edge();
-
-      SSDfgNode *origNode = edge->def();
-
-      int lat = latOf(origNode) + link_count(edge) - 1;
-      int diff = std::max(std::min(_ssModel->maxEdgeDelay(), target - lat), 0);
-      mis = std::max(mis, (target - lat) - diff);
-
-      set_edge_delay(diff, edge);
-      //cout << origNode->name() << " lat:" << lat << " diff"  << diff 
-      //                                 << " links:" << link_count(edge)-1 << "\n";
-    }
-    //cout << " * mis: " << mis << "\n";
-
-  }
-  */
 }
 
 void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) {
@@ -1809,79 +1245,18 @@ void Schedule::cheapCalcLatency(int &max_lat, int &max_lat_mis, bool set_delay) 
   max_lat=0;
   _groupMismatch.clear();
 
-  std::vector<SSDfgInst*> ordered_non_temp = ordered_non_temporal();
+  std::vector<SSDfgNode*> ordered_non_temp = ordered_non_temporal();
 
-  for(SSDfgInst* inst : ordered_non_temp) {
-    calcNodeLatency(inst,max_lat,max_lat_mis,set_delay);
-  }
-
-  for (int i=0; i<_ssDFG->num_vec_output(); i++) {
-    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
-    int low_lat=MAX_SCHED_LAT, up_lat=0;
-
-    for (auto dfgout : vec_out->vector()) {
-      SSDfgEdge* edge = dfgout->first_inc_edge();
-
-      int routing_latency = edge_latency(edge);
-      if(routing_latency==0) { // if edge is not scheduled...
-        routing_latency=_min_expected_route_latency;
-      }
-
-        int lat = latOf(edge->def()) + edge_delay(edge) + routing_latency-1;
-        //cout << edge->name() << "\n";
-        //cout << edge->def()->name() << "\n";
-        //cout << edge->use()->name() << "\n";
-        //cout << "C " << vec_out->name() << " " << lat << " -- "
-        //     << " def_lat:" << latOf(edge->def()) << " ed:" << edge_delay(edge)
-        //     << " link_count:" << link_count(edge) << "inst: "
-        //     << edge->def() << " " << edge->def()->name() << "\n";
-
-        assign_lat(dfgout,lat);
-
-        if(lat>up_lat) up_lat=lat;
-        if(lat<low_lat) low_lat=lat;
-    }
-
-    assign_lat_bounds(vec_out,low_lat,up_lat); //turn off, just for debug
- 
-    int diff = up_lat - low_lat;
-
-    if(!vec_out->is_temporal()) {
-      if(diff>max_lat_mis) max_lat_mis=diff;
-    }
-
-    if(max_lat < up_lat) max_lat=up_lat;
- 
-    if(diff > 0) {
-      add_violation(diff);
-    } 
-
-    /*
-    //Don't play with delay on output nodes because no delay fifos
-    if(set_delay && is_scheduled(vec_out)) { 
-      for (unsigned m=0; m < vec_out->num_outputs(); ++m) {
-        SSDfgOutput* dfgout = vec_out->getOutput(m);
-        SSDfgEdge* edge = dfgout->first_inc_edge();
-  
-        if(is_scheduled(dfgout)) {
-          int lat = latOf(edge->def()) + link_count(edge)-1; 
-          int diff = std::min(_ssModel->maxEdgeDelay(), up_lat - lat);
-          set_edge_delay(diff,edge);
-        }
-      }
-    }
-    */
-
-
-    //cout << "C " <<vec_out->name()<< " up:" << up_lat << " low:" << low_lat << "\n";
+  for(SSDfgNode* node : ordered_non_temp) {
+    calcNodeLatency(node,max_lat,max_lat_mis,set_delay);
   }
 }
 
-void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis, 
+void Schedule::calcNodeLatency(SSDfgNode* node, int &max_lat, int &max_lat_mis, 
     bool set_delay) {
   int low_lat=MAX_SCHED_LAT, up_lat=0;
 
-  for(auto edge : inst->in_edges()) {
+  for(auto edge : node->in_edges()) {
 
     SSDfgNode* origNode = edge->def();
 
@@ -1902,67 +1277,58 @@ void Schedule::calcNodeLatency(SSDfgInst* inst, int &max_lat, int &max_lat_mis,
     }
   }
 
-  assign_lat_bounds(inst,low_lat,up_lat); //FIXME: turn off, just for debug
+  assign_lat_bounds(node,low_lat,up_lat); //FIXME: turn off, just for debug
 
   int diff = up_lat - low_lat; // - _ssModel->maxEdgeDelay();
 
-  if(diff>max_lat_mis) {max_lat_mis=diff;}
-  if(diff>_groupMismatch[inst->group_id()]) {
-    _groupMismatch[inst->group_id()] = diff;
+  if(!node->is_temporal()) {
+    if(diff>max_lat_mis) {
+      max_lat_mis=diff;
+    }
+    if(diff>_groupMismatch[node->group_id()]) {
+      _groupMismatch[node->group_id()] = diff;
+    }
   }
 
-  int new_lat = inst->lat_of_inst() + up_lat;
-  assign_lat(inst,new_lat);
+  int new_lat = node->lat_of_inst() + up_lat;
+  assign_lat(node,new_lat);
 
   //ssnode* n = locationOf(inst);
   //cout << "C " << inst->name() << " node: " << n->name() 
   //  << " low_lat: " << low_lat << " up_lat:" << up_lat << " latmis:" 
   //  << max_lat_mis << "diff: " << diff << "\n";
   
-               
   if(max_lat < new_lat) max_lat=new_lat;
 
   if(diff > 0) {
     add_violation(diff);
-    record_violation(inst,diff);
+    record_violation(node,diff);
   } else {
-    record_violation(inst,0);
+    record_violation(node,0);
   }
 
   assert(!set_delay); //set delay depricated
 
-  /*
-  //Set the delay based on a simple model
-  if(set_delay && is_scheduled(inst)) {
-    for (auto edge : inst->in_edges()) {
-
-      SSDfgNode* origNode = edge->def();
-      if(is_scheduled(origNode)) {
-        if (origNode != nullptr) {
-          int lat = latOf(origNode) + link_count(edge)-1; 
-          int diff = std::min(_ssModel->maxEdgeDelay(), up_lat - lat);
-          set_edge_delay(diff,edge);
-        }
-      }
-    }
-  }*/
 }
 
-
+// Calculate the exact latency by traversing the schedule
+// -- Note that this function is performance non-critical, as its
+// purpose is to verify the schedule's latency calcuated cheaply
+// TODO: This function should be udpated for link slots
 void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
   queue<sslink*> openset;
 
-  // TODO: Change this to a vector.
   unordered_map<sslink*,int> lat_edge;
   
   max_lat=0;  
   max_lat_mis=0;
 
-  for(auto elem : _ssModel->subModel()->nodes<ssinput*>()) {
-    if (SSDfgNode *dfgnode = dfgNodeOf(elem)) {
-      sslink *firstOutLink = elem->getFirstOutLink();
-      openset.push(firstOutLink);
-      lat_edge[firstOutLink] = latOf(dfgnode);
+  for(auto elem : _ssModel->subModel()->nodes<ssvport*>()) {
+    for(auto link : elem->out_links()) {
+      if (SSDfgNode *dfgnode = dfgNodeOf(0,link)) {
+        openset.push(link);
+        lat_edge[link] = latOf(dfgnode);
+      }
     }
   }
     
@@ -1975,15 +1341,13 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
     //dest node
     ssnode* node = inc_link->dest();
     
-    if(ssfu* next_fu = dynamic_cast<ssfu*>(node)) {
-      sslink* new_link = next_fu->getFirstOutLink();
+    if(ssnode* next_node = dynamic_cast<ssfu*>(node)) {
+      sslink* new_link = next_node->getFirstOutLink();
       if(lat_edge.count(new_link)) {
-        //cout << "skipping because full:" << new_link->name() << "\n";
         continue; //skip if we've done it already
       }
 
       SSDfgNode* next_dfgnode = dfgNodeOf(node);
-      //cout << next_fu->name() << "\n"; 
       if(!next_dfgnode && !isPassthrough(node)) {
         assert(false && "problem with latency calculation!\n");
         max_lat=-1;
@@ -1996,7 +1360,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
       bool everyone_is_here = true;
 
-      for(auto &inlink: next_fu->in_links()) {
+      for(auto &inlink: next_node->in_links()) {
         for (int slot = 0; slot < 8; ++slot) {
           if (dfgNodeOf(slot, inlink) != nullptr) {
             if (!lat_edge.count(inlink)) {
@@ -2015,7 +1379,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
         //cout << "----------------------------------- DONE WITH " 
         //     <<  next_fu->name() << "\n";
         // Latency should be the same across all the incoming edges
-        for (auto &inlink: next_fu->in_links()) {
+        for (auto &inlink: next_node->in_links()) {
           for (int slot = 0; slot < 8; ++slot) {
             SSDfgNode *origNode = dfgNodeOf(slot, inlink);
             if (origNode != nullptr) {
@@ -2100,27 +1464,7 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
           max_lat_mis=diff;
         }
       }
-    } else if (auto ss_out = dynamic_cast<ssoutput*>(node)) {
-      SSDfgNode* dfgnode = dfgNodeOf(ss_out);
-      if (!dfgnode)
-        continue;
-      SSDfgEdge* inc_edge = dfgnode->first_inc_edge();
-
-      int l = lat_edge[inc_link] + edge_delay(inc_edge);
-
-      //cout<<"L output " << dfgnode->name() << " "
-      //       <<inc_link->name()<<" lat: "<< l << " - " << 
-      //       "lat: " << latOf(dfgnode) << endl; 
-
-      assign_lat(dfgnode,l);
-
-      dfgnode->set_sched_lat(l); //for graphviz printing
-
-      if(lat_edge[inc_link] > max_lat) {
-        max_lat = lat_edge[inc_link];
-      }
     } else {
-
       for (auto &out_link : node->out_links()) {
         for (int slot = 0; slot < 8; ++slot) {
 
@@ -2166,6 +1510,10 @@ void Schedule::calcLatency(int &max_lat, int &max_lat_mis, bool warnMismatch) {
 
 }
 
+#if 0
+// I am decomissioning this for now because its unclear if we need it.  I
+// will leave it for posterity + inspiration. -- Tony
+//
 //Trace the path of a schedule to help re-create the DFG
 //This is not a high-performance implementation, but shouldn't have to be
 //because its not called often
@@ -2287,6 +1635,7 @@ void Schedule::tracePath(ssnode* ssspot, SSDfgNode* dfgnode,
     }
   }
 }
+#endif
 
 template<typename T>
 int count_unique(std::vector<T> &vec) {
@@ -2307,10 +1656,10 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
       vector<SSDfgVec *> io;
       for (auto elem: np.vertices) {
         if (elem.second->is_temporal()) {
-          if (auto in = dynamic_cast<SSDfgInput *>(elem.second))
-            io.push_back(in->input_vec());
-          else if (auto out = dynamic_cast<SSDfgOutput *>(elem.second))
-            io.push_back(out->output_vec());
+          if (auto in = dynamic_cast<SSDfgVecInput *>(elem.second))
+            io.push_back(in);
+          else if (auto out = dynamic_cast<SSDfgVecOutput *>(elem.second))
+            io.push_back(out);
         } else {
           max_cnt = max(max_cnt, ++cnt[elem.first]);
         }
@@ -2352,13 +1701,13 @@ void Schedule::get_link_overprov(sslink* link,
       //std::cout << edge->name() << "\n";
       auto v = edge->def();
       if (v->is_temporal()) {
-        if (auto input = dynamic_cast<SSDfgInput *>(v)) {
-          vecs.push_back(input->input_vec());
+        if (auto input = dynamic_cast<SSDfgVecInput *>(v)) {
+          vecs.push_back(input);
           continue;
         }
         for (auto use : v->uses()) {
-          if (auto *out = dynamic_cast<SSDfgOutput *>(use->use())) {
-            vecs.push_back(out->output_vec());
+          if (auto *out = dynamic_cast<SSDfgVecOutput *>(use->use())) {
+            vecs.push_back(out);
             continue;
           }
         }

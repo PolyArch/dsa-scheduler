@@ -18,7 +18,7 @@ using namespace std;
 //Major things left to try that might improve the algorithm:
 //1. Overprovisioning while routing/placing 
 //  (DONE -- iterative+overprovisioning is incredibly useful for large graphs)
-//2. Simulated Annealing -- include a temperature that controls randomness?
+//2. True Simulated Annealing -- include a temperature that controls randomness?
 //3. Prioritizing nodes based on what their presumed effect on scheduling
 //   quality might be.  This may be difficult to gauge though.
 //4. Including multiple schedules to work on concurrently.  Sometimes its useful
@@ -38,6 +38,10 @@ using namespace std;
 //than our approximate version (Which uses multiple djkstra's instances).  Warning
 //that steiner problems often don't have polynomial solutions, so *some* approximation
 //is necessary.
+//9. For delay matching, it may be useful to insert dummy nodes at the places
+//in the graph where there is high latency violation -- OR -- change the router
+//so that it tries to route empty functional units when there it is a high-violation
+//edge
 
 void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
   //Sort the input ports once
@@ -45,9 +49,6 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
   ssio_interface& si =  subModel->io_interf();
 
   si.fill_vec();
-
-  ssDFG->sort<SSDfgVecInput>();
-  ssDFG->sort<SSDfgVecOutput>();
 
   sched = new Schedule(getSSModel(),ssDFG); //just a dummy one
 }
@@ -79,7 +80,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   std::pair<int, int> best_score = make_pair(0, 0);
   bool best_succeeded = false;
   bool best_mapped = false;
-  std::set<SSDfgOutput*> best_dummies;
 
   int last_improvement_iter = 0;
 
@@ -89,11 +89,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   int presize = ssDFG->inst_vec().size();
   int postsize = presize;
 
-  // An attempt to remap SSDfg
-  SS_CONFIG::SubModel* subModel = _ssModel->subModel();
-  int hw_num_fu = subModel->sizex()*subModel->sizey();
-
-  int remapNeeded = false; //ssDFG->remappingNeeded(); //setup remap structres
   int iter = 0;
   for (iter = 0; iter < _max_iters; ++iter) {
     if( (total_msec() > _reslim * 1000) || _should_stop ) {
@@ -106,12 +101,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       //Every so often, lets give up and start over from scratch
       delete cur_sched;
       cur_sched = new Schedule(getSSModel(),ssDFG);
-     
-      if(remapNeeded) { //remap every so often to try new possible dummy positions
-        ssDFG->remap(hw_num_fu);
-        postsize = ssDFG->inst_vec().size();
-        cur_sched->allocate_space();
-      }
     }
 
     // if we don't improve for some time, lets reset
@@ -133,13 +122,12 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       cur_sched->printGraphviz(ss.str().c_str());
 
       for(int i = 0; i < ssDFG->num_vec_input(); ++i) {
-        cout << cur_sched->vecPortOf(ssDFG->vec_in(i)).second << " ";
+        cout << cur_sched->vecPortOf(ssDFG->vec_in(i)) << " ";
       }
       cout << "|";
       for(int i = 0; i < ssDFG->num_vec_output(); ++i) {
-        cout << cur_sched->vecPortOf(ssDFG->vec_out(i)).second << " ";
+        cout << cur_sched->vecPortOf(ssDFG->vec_out(i)) << " ";
       }
-
 
       fprintf(stdout, "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, " 
               "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
@@ -149,8 +137,10 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
               cur_sched->num_left(), lat, 
               cur_sched->violation(), latmis, ovr, agg_ovr, 
               max_util, -score.second,
-              cur_sched->num_mapped<SSDfgInput>(),  (int) ssDFG->nodes<SSDfgInput*>().size(),
-              cur_sched->num_mapped<SSDfgOutput>(), (int) ssDFG->nodes<SSDfgOutput*>().size(),
+              cur_sched->num_mapped<SSDfgVecInput>(),  
+              (int) ssDFG->nodes<SSDfgVecInput*>().size(),
+              cur_sched->num_mapped<SSDfgVecOutput>(), 
+              (int) ssDFG->nodes<SSDfgVecOutput*>().size(),
               cur_sched->num_mapped<SSDfgInst>(),  presize, postsize,
               cur_sched->num_passthroughs(),
               cur_sched->num_links_mapped(),
@@ -168,11 +158,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     if (score > best_score) {
       sched->printGraphviz("viz/cur-best.gv");
-
-      if(remapNeeded) {
-        ssDFG->printGraphviz("viz/remap.dot");
-        best_dummies = ssDFG->getDummiesOutputs();
-      }
 
       best_score = score;
       *sched = *cur_sched; //shallow copy of sched should work?
@@ -201,11 +186,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     std::cout << "Totally " << this->candidates_succ << "/" << this->candidates_tried << std::endl;
   }
 
-  //Fix back up any dummies
-  if(remapNeeded) {
-    ssDFG->rememberDummies(best_dummies);
-  }
-
   if(cur_sched) {
     delete cur_sched;
   }
@@ -214,18 +194,18 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
 bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* sched) {
 
-  while (!(sched->is_complete<SSDfgInput>() && sched->is_complete<SSDfgOutput>())) {
+  while (!(sched->is_complete<SSDfgVecInput>() && sched->is_complete<SSDfgVecOutput>())) {
     int r = rand_bt(0, 2); 
     switch (r) {
       case 0: {
-        if (sched->is_complete<SSDfgInput>())
+        if (sched->is_complete<SSDfgVecInput>())
           break;
         bool success = map_one<SSDfgVecInput>(ssDFG, sched);
         if (!success) return false;
         break;
       }
       case 1: {
-        if (sched->is_complete<SSDfgOutput>())
+        if (sched->is_complete<SSDfgVecOutput>())
           break;
         bool success = map_one<SSDfgVecOutput>(ssDFG, sched);
         if (!success) return false;
@@ -249,7 +229,7 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
     int r = rand() % 16; //upper limit defines ratio of input/output scheduling
     switch(r) {
       case 0: {
-        if(sched->is_complete<SSDfgInput>())
+        if(sched->is_complete<SSDfgVecInput>())
           break;
         bool success = map_one<SSDfgVecInput>(ssDFG,sched);
         if(!success) {
@@ -258,7 +238,7 @@ bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sche
         break;
       }
       case 1: {
-        if(sched->is_complete<SSDfgOutput>())
+        if(sched->is_complete<SSDfgVecOutput>())
           break;
         bool success = map_one<SSDfgVecOutput>(ssDFG,sched);
         if(!success) { 
@@ -290,11 +270,11 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
     bool flag = sched->num_mapped<SSDfgNode>() != 0;
     while (flag) {
       r = rand_bt(0,100);
-      if (r == 0 && sched->num_mapped<SSDfgInput>()) {
+      if (r == 0 && sched->num_mapped<SSDfgVecInput>()) {
         unmap_one<SSDfgVecInput>(ssDFG, sched);
         i+=1;
         flag = false;
-      } else if (r == 1 && sched->num_mapped<SSDfgOutput>()) {
+      } else if (r == 1 && sched->num_mapped<SSDfgVecOutput>()) {
         unmap_one<SSDfgVecOutput>(ssDFG, sched);
         i+=1;
         flag = false;
@@ -307,8 +287,6 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
 
 }
 
-static int FU=0;
-
 bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
   int max_retries = 100;
 
@@ -318,7 +296,7 @@ bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sch
     if(_fake_it) {
       //Just map the i/o ports
       map_io_to_completion(ssDFG,sched);
-      if(sched->is_complete<SSDfgInput>() && sched->is_complete<SSDfgOutput>()) {
+      if(sched->is_complete<SSDfgVecInput>() && sched->is_complete<SSDfgVecOutput>()) {
         return true;
       }
     } else {
@@ -368,10 +346,11 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
   // FIXME(@were): Move these to a virtual method!
   int t_cost;
   if (is_temporal_in) {
-    t_cost = sched->routing_cost_in(link, dynamic_cast<SSDfgInput *>(def_dfgnode)->input_vec());
+    t_cost = sched->routing_cost_in(link, 
+                       dynamic_cast<SSDfgVecInput *>(def_dfgnode));
   } else if (is_temporal_out) {
     t_cost = sched->routing_cost_out(make_pair(from_slot, link), def_dfgnode,
-                                      dynamic_cast<SSDfgOutput *>(use_dfgnode)->output_vec());
+                       dynamic_cast<SSDfgVecOutput *>(use_dfgnode));
   } else { //NORMAL CASE!
     t_cost = sched->routing_cost(make_pair(from_slot, link), edge->val());
   }

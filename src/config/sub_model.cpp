@@ -45,7 +45,7 @@ void ssio_interface::sort(std::vector<std::pair<int,int>>& portID2size,
 
 std::string sslink::name() const {
     std::stringstream ss;
-    ss << "L" << "_" << _orig->name() << "_" << _dest->name();
+    ss << _orig->name() << "_to_" << _dest->name();
     return ss.str();
 }
 
@@ -75,39 +75,6 @@ std::string sslink::gams_name(int st, int end) const {
 
 // ---------------------- ssswitch --------------------------------------------
 
-ssinput* ssswitch::getInput(int i) {
-  ssnode::const_iterator I,E;   //Typedef for const_iterator for links
-  
-  int count = 0;
-  for(I=_in_links.begin(); I!=E; ++I) {
-      ssnode* node = (*I)->orig();
-      if(ssinput* input_node = dynamic_cast<ssinput*>(node)) {
-        if(count==i) {
-            return input_node;
-        }
-        ++count;
-      }
-  }
-  return nullptr; //failed to find input
-}
-
-//Get output based on the number in each sslink
-ssoutput* ssswitch::getOutput(int i) {
-  ssnode::const_iterator I,E;
-  
-  int count = 0;
-  for(I=_out_links.begin(); I!=E; ++I) {
-      ssnode* node = (*I)->dest();
-      if(ssoutput* output_node = dynamic_cast<ssoutput*>(node)) {
-        if(count==i) {
-            return output_node;
-        }
-        ++count;
-      }  
-  }
-  return nullptr; //failed to find output
-}
-
 void parse_list_of_ints(std::istream& istream, std::vector<int>& int_vec) {
   string cur_cap;
   while (getline(istream, cur_cap, ' ')) {
@@ -119,43 +86,6 @@ void parse_list_of_ints(std::istream& istream, std::vector<int>& int_vec) {
     int_vec.push_back(val);
   }
 }
-
-void parse_port_list(std::istream& istream,std::vector<std::pair<int,std::vector<int> > >& int_map) {
-  string cur_cap;
-
-  while (getline(istream, cur_cap, ',')) {
-    int port_val;
-
-    ModelParsing::trim(cur_cap);
-
-    if(cur_cap.empty()) { 
-      continue;
-    }
-
-    if(cur_cap.find(':')==std::string::npos) {
-      std::cout << "Incorrect Port Map Specification! (no colon)\n";
-      std::cout << "in \"" << cur_cap << "\"\n";
-      assert(0);
-    }
-
-    istringstream ss(cur_cap);
-
-    getline(ss, cur_cap, ':');
-    istringstream(cur_cap) >> port_val;         //cgra port num
-
-    std::vector<int> map_list;
-    while (getline(ss, cur_cap, ' ')) {
-      if(cur_cap.empty()) {
-        continue;
-      } 
-      int val;
-      istringstream(cur_cap)>>val;
-      map_list.push_back(val);
-    }
-    int_map.push_back(make_pair(port_val,map_list));
-  }
-}
-
 
 void SubModel::parse_io(std::istream& istream) {
     string param,value,portstring;
@@ -171,26 +101,12 @@ void SubModel::parse_io(std::istream& istream) {
         int port_num;
         istringstream(portstring) >> port_num;
 
-        std::vector<std::pair<int,std::vector<int> > > int_map;
         std::vector<int> int_vec;
 
         std::stringstream ssv(value);
              
-        static int message=0;
         int is_input = -1;
-        if(ModelParsing::StartsWith(param, "VPORT_IN")) {
-          if(message++==0) 
-            cout << "VPORT_IN depricated, ignoring colons, switch to PORT_IN\n";
-          parse_port_list(ssv,int_map);
-          for(auto& p : int_map) int_vec.push_back(p.first);
-          is_input = 1;
-        } else if(ModelParsing::StartsWith(param, "VPORT_OUT")) {
-          if(message++==0) 
-             cout << "VPORT_OUT depricated, ignoring colons, switch to PORT_IN\n";
-          parse_port_list(ssv,int_map);
-          for(auto& p : int_map) int_vec.push_back(p.first);
-          is_input = 0;
-        } else if(ModelParsing::StartsWith(param, "PORT_IN")) {
+        if(ModelParsing::StartsWith(param, "PORT_IN")) {
           parse_list_of_ints(ssv,int_vec);
           is_input = 1;
         } else if(ModelParsing::StartsWith(param, "PORT_OUT")) {
@@ -198,9 +114,28 @@ void SubModel::parse_io(std::istream& istream) {
           is_input = 0;
         }
         if (is_input != -1) {
-          ssvport *nvp = new ssvport();
+          ssvport *nvp = add_vport(is_input, port_num);
+          //Connect nodes to the vector, and also determine x/y
           nvp->set_port_vec(int_vec);
-          _ssio_interf.vports_map[is_input][port_num] = nvp;
+          int avgx=0;
+          int avgy=0;
+          for(int i : int_vec) {
+            if(_io_map[is_input].count(i)==0) {
+              cout << "Error: " << (is_input?"Input":"Output")
+                   << " port " << i << " is not available!\n";
+              assert(0);
+            } 
+            ssnode* n = _io_map[is_input][i];
+            if(is_input) nvp->add_link(n);
+            else n->add_link(nvp); 
+            avgx+=n->x();
+            avgy+=n->y();
+          }
+          avgx/=int_vec.size();
+          avgy/=int_vec.size();
+          if(avgx==0) avgx=-2;
+          if(avgy==0) avgy=-2;
+          nvp->setXY(avgx,avgy);
         }
     }
 }
@@ -303,20 +238,6 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
               cerr << "Unsupported FU Initialization Type\n";   
           }
           
-          /*else if(value.compare("RATIO_RAND")==0)
-          {
-              ReadPair(istream,param,value);
-              func_unit* fu = GetFU(trim(param));
-              while(istream.good() && fu)
-              {
-                  stringstream ss(value);
-                  ss >> fu->ratio;
-              }
-              
-              should_read=false;
-          }*/
-          
-          
         } 
     }
 
@@ -356,14 +277,14 @@ void SubModel::PrintGraphviz(ostream& ofs) {
   }
 
   //Input nodes
-  for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //ofs << _inputs[i]->name() <<"[ label = \"IPort[" << i << "]\" ];\n";
-    for(auto &elem : _inputs[i]->out_links()) {
-      const ssnode* dest_node = elem->dest();       //Dest nodes for input ndoes are switches
-      ofs << _inputs[i]->name() << " -> " << dest_node->name() << ";\n";
-    }
-    
-  }
+  //for (unsigned i = 0; i < _inputs.size(); ++i) {
+  //  //ofs << _inputs[i]->name() <<"[ label = \"IPort[" << i << "]\" ];\n";
+  //  for(auto &elem : _inputs[i]->out_links()) {
+  //    const ssnode* dest_node = elem->dest();       //Dest nodes for input ndoes are switches
+  //    ofs << _inputs[i]->name() << " -> " << dest_node->name() << ";\n";
+  //  }
+  //  
+  //}
  
   /*
   for (unsigned i = 0; i < outputs.size(); ++i) {
@@ -380,30 +301,17 @@ void SubModel::PrintGraphviz(ostream& ofs) {
   ofs << "}\n";
 }
 
-void SubModel::clear_fu_runtime_vals() {
-  for(auto& i : _fu_list) {
-    i->reset_runtime_vals();
-  }
-}
 
 void SubModel::clear_all_runtime_vals() {
-  for (auto &i : _inputs) {
-    i->reset_runtime_vals();
-  }
-  for (auto &i : _outputs) {
-    i->reset_runtime_vals();
-  }
-  clear_fu_runtime_vals();
-  for (auto &i : _switch_list) {
-    i->reset_runtime_vals();
-  }
+  for(ssnode* n : _node_list) {
+    n->reset_runtime_vals();
+  } 
 }
 
 namespace SS_CONFIG {
 
-template<> std::vector<ssinput*> &SubModel::nodes() { return _inputs; }
-template<> std::vector<ssoutput*> &SubModel::nodes() { return _outputs; }
 template<> std::vector<ssfu*> &SubModel::nodes() { return _fu_list; }
+template<> std::vector<ssvport*> &SubModel::nodes() { return _vport_list; }
 
 template<int is_input, typename T> void SubModel::PrintGamsIO(std::ostream &os) {
   bool first = true;
@@ -415,281 +323,12 @@ template<int is_input, typename T> void SubModel::PrintGamsIO(std::ostream &os) 
     for (auto port : elem.second->port_vec()) {
       assert((unsigned) port >= nodes_.size() && "TOO HIGH OP INDEX");
       if (first) first = false; else os << ", ";
-      os << "ip" << elem.first << "." << nodes_[port]->gams_name(0) << " " << i + 1; //no config supp.
+      //os << "ip" << elem.first << "." << nodes_[port]->gams_name(0) << " " << i + 1; //no config supp.
     }
   }
 }
 
 }
-
-#if 0
-
-//GAMS specific
-void SubModel::PrintGamsModel(ostream& ofs, unordered_map<string,pair<ssnode*,int> >& node_map, 
-                              unordered_map<string,pair<sslink*,int> >& link_map, int n_configs) {
-  
-  // --------------------------- First, print the node sets ------------------------
-  ofs << "$onempty\n";
-  ofs << "Sets\n";
-  ofs << "n \"Hardware Nodes\"\n /";
-
-    
-  bool first = true;
-  for(int config=0; config < n_configs; ++config) {
-    
-    //fus    
-    for (int i = 0; i < _sizex; ++i) {
-      for (int j = 0; j < _sizey; ++j) {
-          if(first) {
-              first = false;
-          } else {
-              ofs << ", ";   
-          }
-          ofs << _fus[i][j]->gams_name(config);
-          node_map[_fus[i][j]->gams_name(config)]=make_pair(&_fus[i][j],config);
-      }
-    }
-    //inputs
-    ofs << "\n";
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-        ofs << ", " << _inputs[i]->gams_name(config);
-        node_map[_inputs[i]->gams_name(config)]=make_pair(&_inputs[i],config);
-    }
-    //outputs
-    ofs << "\n";
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-        ofs << ", " << _outputs[i]->gams_name(config);
-        node_map[_outputs[i]->gams_name(config)]=make_pair(&_outputs[i],config);
-    }
-
-  }
-  ofs << "/\n";
-  
-  // --------------------------- next, print the capabilility sets  ------------------------
-  
-  //input nodes
-  first = true;
-  ofs << "inN(n) \"Input Nodes\"\n /";
-  
-  for(int config=0; config < n_configs; ++config) {
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-        if(first) {
-            first = false;
-        } else {
-            ofs << ", ";   
-        }
-        ofs << _inputs[i]->gams_name(config);
-    }
-  }
-  ofs << "/\n";
-  
-  //output nodes
-  first = true;
-  ofs << "outN(n) \"Output Nodes\"\n /";
-  
-  for(int config=0; config < n_configs; ++config) {
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-        if(first) {
-            first = false;
-        } else {
-            ofs << ", ";   
-        }
-        ofs << _outputs[i]->gams_name(config);
-    }
-  }
-  ofs << "/\n";
-  
-  for(int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
-    
-    ofs << name_of_inst(ss_inst) << "N(n) /";
-    
-    first=true;
-    for(int config=0; config < n_configs; ++config) {
-      
-      for (int i = 0; i < _sizex; ++i) {
-        for (int j = 0; j < _sizey; ++j) {
-          
-            if(_fus[i][j]->fu_def()==nullptr || _fus[i][j]->fu_def()->is_cap(ss_inst)){
-              if(first) {
-                  first = false;
-              } else {
-                  ofs << ", ";   
-              }
-              ofs << _fus[i][j]->gams_name(config);
-            }
-        }
-      }
-    }
-
-    ofs << "/\n";
-  }
-  
-  //create the kindN Set
-  ofs << "kindN(K,n) \"Capabilities of a Node\" \n";
-  
-  // --------------------------- print the switches  ------------------------
-  ofs << "r \"Routers (switches)\"\n /";
-  first = true;
-  for(int config=0; config < n_configs; ++config) {
-    for (int i = 0; i < _sizex+1; ++i) {
-      for (int j = 0; j < _sizey+1; ++j) {
-          if(first) {
-              first = false;
-          } else {
-              ofs << ", ";   
-          }
-          ofs << _switches[i][j]->gams_name(config);
-      }
-    }
-  }
-  
-
-  ofs << "/\n";
-  
-  
-  
-  ofs << "l \"Links\"\n /";
-  first = true;
-  //_switches
-  for(int config=0; config < n_configs; ++config) {
-    for (int i = 0; i < _sizex+1; ++i) {
-      for (int j = 0; j < _sizey+1; ++j) { 
-        ssnode::const_iterator I = _switches[i][j]->obegin(), E = _switches[i][j]->oend();
-        for(;I!=E;++I) {
-          if(first) {
-              first = false;
-          } else {
-              ofs << ", ";   
-          }
-          ofs << (*I)->gams_name(config);
-          link_map[(*I)->gams_name(config)]=make_pair(*I,config);
-        }
-      }
-    }
-  
-    //fus
-    for (int i = 0; i < _sizex; ++i) {
-      for (int j = 0; j < _sizey; ++j) {
-        ssnode::const_iterator I = _fus[i][j]->obegin(), E = _fus[i][j]->oend();
-        for(;I!=E;++I) {
-          ofs << ", " << (*I)->gams_name(config);
-          link_map[(*I)->gams_name(config)]=make_pair(*I,config);
-        }
-      }
-    }
-    //inputs
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      ssnode::const_iterator I = _inputs[i]->obegin(), E = _inputs[i]->oend();
-      for(;I!=E;++I) {
-        ofs << ", " << (*I)->gams_name(config);
-        link_map[(*I)->gams_name(config)]=make_pair(*I,config);
-      }
-    }
-  }
-  
-  //TODO: Print extra                 links for the cross switch
-  
-  ofs << "/;\n";
-  
-  // --------------------------- Enable the Sets ------------------------
-  ofs << "kindN('Input', inN(n))=YES;\n";
-  ofs << "kindN('Output', outN(n))=YES;\n";
-  
-  for(int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
-    ofs << "kindN(\'" << name_of_inst(ss_inst) << "\', " << name_of_inst(ss_inst) << "N(n))=YES;\n";
-  }
-  
-  
-  // --------------------------- Now Print the Linkage ------------------------
-  ofs << "parameter\n";
-  ofs << "Hnl(n,l) \"Node Outputs\" \n/";
-  //fus
-  first=true;
-  
-  for(int config=0; config < n_configs; ++config) {
-    for (int i = 0; i < _sizex; ++i) {
-      for (int j = 0; j < _sizey; ++j) {
-        ssnode::const_iterator I = _fus[i][j]->obegin(), E = _fus[i][j]->oend();
-        for(;I!=E;++I) {
-          CINF(ofs,first);
-          ofs << _fus[i][j]->gams_name(config) << "." << (*I)->gams_name(config) << " 1";
-        }
-      }
-    }
-    //inputs
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      ssnode::const_iterator I = _inputs[i]->obegin(), E = _inputs[i]->oend();
-      for(;I!=E;++I) {
-        ofs << ", " << _inputs[i]->gams_name(config) << "." << (*I)->gams_name(config) << " 1";
-      }
-    }
-  }
-  ofs << "/\n";
-  
-  
-  ofs << "Hrl(r,l) \"Router Outputs\" \n/";
-  first = true;
-  
-  for(int config=0; config < n_configs; ++config) {
-    for (int i = 0; i < _sizex+1; ++i) {
-      for (int j = 0; j < _sizey+1; ++j) {
-        ssnode::const_iterator I = _switches[i][j]->obegin(), E = _switches[i][j]->oend();
-        for(;I!=E;++I) {
-          CINF(ofs,first);
-          ofs << _switches[i][j]->gams_name(config) << "." << (*I)->gams_name(config) << " 1";
-        }
-      }
-    }
-  }
-  ofs << "/\n";
-  
-  ofs << "Hln(l,n) \"Node Inputs\" \n/";
-  //fus
-  first=true;
-  for(int config=0; config < n_configs; ++config) {  
-    for (int i = 0; i < _sizex; ++i) {
-      for (int j = 0; j < _sizey; ++j) {
-        ssnode::const_iterator I = _fus[i][j]->ibegin(), E = _fus[i][j]->iend();
-        for(;I!=E;++I) {
-          CINF(ofs,first);
-          ofs << (*I)->gams_name(config) << "." << _fus[i][j]->gams_name(config) << " 1";
-        }
-      }
-    }
-  }
-  ofs << "\n";
-  
-  //inputs
-  for(int config=0; config < n_configs; ++config) {
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-      ssnode::const_iterator I = _outputs[i]->ibegin(), E = _outputs[i]->iend();
-      for(;I!=E;++I) {
-        ofs << ", " << (*I)->gams_name(config) << "." << _outputs[i]->gams_name(config) << " 1";
-      }
-    }
-  }
-  ofs << "/\n";
-  
-  ofs << "Hlr(l,r) \"Router Inputs\" \n/";
-  first = true;
-  for(int config=0; config < n_configs; ++config) {
-    for (int i = 0; i < _sizex+1; ++i) {
-      for (int j = 0; j < _sizey+1; ++j) {
-        ssnode::const_iterator I = _switches[i][j]->ibegin(), E = _switches[i][j]->iend();
-        for(;I!=E;++I) {
-          CINF(ofs,first);
-          ofs << (*I)->gams_name(config) << "." <<  _switches[i][j]->gams_name(config) << " 1";
-        }
-      }
-    }
-  }
-  ofs << "/;\n";
-  
-}
-#endif
-
 
 int dist_grid(int x, int  y) {
   int dist = abs(x) + abs(y) + 1;
@@ -705,14 +344,6 @@ int dist_switch(int x, int  y) {
   if(y < 0) dist -= 1;
   return dist;
 }
-
-//void SubModel::AllToAllDist() {
-//  //this is pure laziness, but meh -- this only happens once : )
-//  std::map<ssnode*, ssnode*> dist;
-//
-//
-//
-//}
 
 
 void SubModel::PrintGamsModel(ostream& ofs, 
@@ -743,18 +374,21 @@ void SubModel::PrintGamsModel(ostream& ofs,
     }
 
     //inputs
-    ofs << "\n";
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      ofs << ", " << _inputs[i]->gams_name(config);
-      node_map[_inputs[i]->gams_name(config)] = make_pair(_inputs[i], config);
-    }
+    //TODO: Fix me or eliminate == no more inputs
+    //ofs << "\n";
+    //for (unsigned i = 0; i < _inputs.size(); ++i) {
+    //  ofs << ", " << _inputs[i]->gams_name(config);
+    //  node_map[_inputs[i]->gams_name(config)] = make_pair(_inputs[i], config);
+    //}
 
     //outputs
-    ofs << "\n";
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-      ofs << ", " << _outputs[i]->gams_name(config);
-      node_map[_outputs[i]->gams_name(config)] = make_pair(_outputs[i], config);
-    }
+    //TODO: Fix me or eliminate == no more inputs
+
+    //ofs << "\n";
+    //for (unsigned i = 0; i < _outputs.size(); ++i) {
+    //  ofs << ", " << _outputs[i]->gams_name(config);
+    //  node_map[_outputs[i]->gams_name(config)] = make_pair(_outputs[i], config);
+    //}
 
   }
   ofs << "/\n";
@@ -762,28 +396,30 @@ void SubModel::PrintGamsModel(ostream& ofs,
 
   // --------------------------- next, print the capabilility sets  ------------------------
   //input nodes
-  first = true;
-  ofs << "inN(n) \"Input Nodes\"\n /";
+  ///TODO: Fix me or eliminate == no more inputs
 
-  for (int config = 0; config < n_configs; ++config) {
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      CINF(ofs, first);
-      ofs << _inputs[i]->gams_name(config);
-    }
-  }
-  ofs << "/\n";
+  //first = true;
+  //ofs << "inN(n) \"Input Nodes\"\n /";
 
-  //output nodes
-  first = true;
-  ofs << "outN(n) \"Output Nodes\"\n /";
+  //for (int config = 0; config < n_configs; ++config) {
+  //  for (unsigned i = 0; i < _inputs.size(); ++i) {
+  //    CINF(ofs, first);
+  //    ofs << _inputs[i]->gams_name(config);
+  //  }
+  //}
+  //ofs << "/\n";
 
-  for (int config = 0; config < n_configs; ++config) {
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-      CINF(ofs, first);
-      ofs << _outputs[i]->gams_name(config);
-    }
-  }
-  ofs << "/\n";
+  ////output nodes
+  //first = true;
+  //ofs << "outN(n) \"Output Nodes\"\n /";
+
+  //for (int config = 0; config < n_configs; ++config) {
+  //  for (unsigned i = 0; i < _outputs.size(); ++i) {
+  //    CINF(ofs, first);
+  //    ofs << _outputs[i]->gams_name(config);
+  //  }
+  //}
+  //ofs << "/\n";
 
   //total capabilities 
   for (int i = 2; i < SS_NUM_TYPES; ++i) {
@@ -846,6 +482,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
     /*
     //Inputs and outputs are also switches
     //inputs
+    //TODO: FIXME or eleiminate, no more inputs
     ofs << "\n";
     for (unsigned i = 0; i < _inputs.size(); ++i) {
         ofs << ", " << _inputs[i]->gams_name(config);
@@ -858,13 +495,6 @@ void SubModel::PrintGamsModel(ostream& ofs,
         node_map[_outputs[i]->gams_name(config)]=make_pair(&_outputs[i],config);
     }
     */
-
-    if (_multi_config) {
-      if (config != n_configs - 1) {
-        ofs << ", " << _cross_switch.gams_name(config);
-        node_map[_cross_switch.gams_name(config)] = make_pair(&_cross_switch, config);
-      }
-    }
 
 
   }
@@ -897,56 +527,16 @@ void SubModel::PrintGamsModel(ostream& ofs,
     }
 
     //inputs
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      for (auto &elem : _inputs[i]->out_links()) {
-        ofs << ", " << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-    }
-
-    if (_multi_config) {
-      if (config != n_configs - 1) {
-        for (auto &elem: _cross_switch.in_links()) {
-          ofs << ", " << elem->gams_name(config);
-          link_map[elem->gams_name(config)] = make_pair(elem, config);
-        }
-        for (auto &elem : _cross_switch.out_links()) {
-          ofs << ", " << elem->gams_name(config, config + 1);
-          link_map[elem->gams_name(config, config + 1)] = make_pair(elem, config);
-        }
-      }
-
-      for (auto &elem: _load_slice.in_links()) {
-        ofs << ", " << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-      for (auto &elem: _load_slice.out_links()) {
-        ofs << ", " << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-    }
+    //TODO: FIxme or eliminate, no more inputs
+    //for (unsigned i = 0; i < _inputs.size(); ++i) {
+    //  for (auto &elem : _inputs[i]->out_links()) {
+    //    ofs << ", " << elem->gams_name(config);
+    //    link_map[elem->gams_name(config)] = make_pair(elem, config);
+    //  }
+    //}
 
   }
   ofs << "/;\n";
-
-  if (_multi_config) {
-    first = true;
-    ofs << "set loadlinks(l) \"loadslice links\" \n /";   // Loadslice Links
-    for (int config = 0; config < n_configs; ++config) {
-      for (auto &elem : _load_slice.in_links()) {
-        if (first) first = false;
-        else ofs << ", ";
-        ofs << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-      for (auto &elem: _load_slice.out_links()) {
-        ofs << ", " << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-
-    }
-    ofs << "/;\n";
-  }
 
   // --------------------------- Enable the Sets ------------------------
   ofs << "kindN('Input', inN(n))=YES;\n";
@@ -980,23 +570,25 @@ void SubModel::PrintGamsModel(ostream& ofs,
         }
       }
       //all inputs to me
-      for (unsigned i = 0; i < _inputs.size(); ++i) {
-        CINF(ofs, first);
-        ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-        int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-        ofs << _inputs[i]->gams_name(config) << "."
-            << _fus[x1][y1]->gams_name(config) << " " << d;
-      }
+      //    //TODO: FIXME or eleiminate, no more inputs
 
-      //all outputs to me
-      for (unsigned i = 0; i < _outputs.size(); ++i) {
-        CINF(ofs, first);
-        ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-        int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-        ofs << _fus[x1][y1]->gams_name(config) << "."
-            << _outputs[i]->gams_name(config) << " " << d;
-      }
-      ofs << "\n";
+      //for (unsigned i = 0; i < _inputs.size(); ++i) {
+      //  CINF(ofs, first);
+      //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
+      //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
+      //  ofs << _inputs[i]->gams_name(config) << "."
+      //      << _fus[x1][y1]->gams_name(config) << " " << d;
+      //}
+
+      ////all outputs to me
+      //for (unsigned i = 0; i < _outputs.size(); ++i) {
+      //  CINF(ofs, first);
+      //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
+      //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
+      //  ofs << _fus[x1][y1]->gams_name(config) << "."
+      //      << _outputs[i]->gams_name(config) << " " << d;
+      //}
+      //ofs << "\n";
     }
   }
   ofs << "/\n";
@@ -1012,17 +604,18 @@ void SubModel::PrintGamsModel(ostream& ofs,
           << _fus[x][y]->x() * 2 + 1;
     }
   }
-  for (unsigned i = 0; i < _inputs.size(); ++i) {
-    CINF(ofs, first);
-    ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-    ofs << _inputs[i]->gams_name(config) << " " << sw->x() * 2;
-  }
-  for (unsigned i = 0; i < _outputs.size(); ++i) {
-    CINF(ofs, first);
-    ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-    ofs << _outputs[i]->gams_name(config) << " " << sw->x() * 2;
-  }
-  ofs << "/\n";
+  //TODO: Fixme or eliminate, no more inputs
+  //for (unsigned i = 0; i < _inputs.size(); ++i) {
+  //  CINF(ofs, first);
+  //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
+  //  ofs << _inputs[i]->gams_name(config) << " " << sw->x() * 2;
+  //}
+  //for (unsigned i = 0; i < _outputs.size(); ++i) {
+  //  CINF(ofs, first);
+  //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
+  //  ofs << _outputs[i]->gams_name(config) << " " << sw->x() * 2;
+  //}
+  //ofs << "/\n";
 
   ofs << "PYn(n) \" Position X \"\n /";
   first = true;
@@ -1033,17 +626,19 @@ void SubModel::PrintGamsModel(ostream& ofs,
           << _fus[x][y]->y() * 2 + 1;
     }
   }
-  for (unsigned i = 0; i < _inputs.size(); ++i) {
-    CINF(ofs, first);
-    ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-    ofs << _inputs[i]->gams_name(config) << " " << sw->y() * 2;
-  }
-  for (unsigned i = 0; i < _outputs.size(); ++i) {
-    CINF(ofs, first);
-    ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-    ofs << _outputs[i]->gams_name(config) << " " << sw->y() * 2;
-  }
-  ofs << "/\n";
+
+  //TODO: Fixme or eliminate, no more inputs
+  //for (unsigned i = 0; i < _inputs.size(); ++i) {
+  //  CINF(ofs, first);
+  //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
+  //  ofs << _inputs[i]->gams_name(config) << " " << sw->y() * 2;
+  //}
+  //for (unsigned i = 0; i < _outputs.size(); ++i) {
+  //  CINF(ofs, first);
+  //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
+  //  ofs << _outputs[i]->gams_name(config) << " " << sw->y() * 2;
+  //}
+  //ofs << "/\n";
 
 
   // --------------------------- Print Port Interfaces --------------------
@@ -1051,8 +646,9 @@ void SubModel::PrintGamsModel(ostream& ofs,
   // Declare Port to Node Mapping
   first = true;
 
-  PrintGamsIO<1, ssinput>(ofs);
-  PrintGamsIO<0, ssoutput>(ofs);
+  //TODO: fixme or eliminate
+  //PrintGamsIO<1, ssinput>(ofs);
+  //PrintGamsIO<0, ssoutput>(ofs);
 
   ofs << "/\n";
 
@@ -1073,30 +669,32 @@ void SubModel::PrintGamsModel(ostream& ofs,
     }
 
     //inputs
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-      for (auto &elem: _inputs[i]->out_links()) {
-        ofs << ", " << _inputs[i]->gams_name(config) << "." << elem->gams_name(config) << " 1";
-      }
-    }
+    //TODO: fixme or eliminate, no more inputs
+    //for (unsigned i = 0; i < _inputs.size(); ++i) {
+    //  for (auto &elem: _inputs[i]->out_links()) {
+    //    ofs << ", " << _inputs[i]->gams_name(config) << "." << elem->gams_name(config) << " 1";
+    //  }
+    //}
 
-    if (_multi_config) {
-      //print loadslice and crosswitch links
-      if (config != n_configs - 1) {
-        //outputs
-        for (unsigned i = 0; i < _outputs.size(); ++i) {
-          for (auto &elem : _outputs[i]->out_links()) {
-            ofs << ", " << _outputs[i]->gams_name(config) << "." << elem->gams_name(config) << " 1";
-          }
-        }
-      }
-      //print final loadslice links
-      if (config == n_configs - 1) {
-        for (auto &elem : _load_slice.in_links()) {
-          ssnode *output = elem->orig();
-          ofs << ", " << output->gams_name(config) << "." << elem->gams_name(config) << " 1";
-        }
-      }
-    }
+    //if (_multi_config) {
+    //  //print loadslice and crosswitch links
+    //  if (config != n_configs - 1) {
+    //    //outputs
+    //    for (unsigned i = 0; i < _outputs.size(); ++i) {
+    //      for (auto &elem : _outputs[i]->out_links()) {
+    //        ofs << ", " << _outputs[i]->gams_name(config) << "." << elem->gams_name(config) << " 1";
+    //      }
+    //    }
+    //  }
+
+    //  //print final loadslice links
+    //  //if (config == n_configs - 1) {
+    //  //  for (auto &elem : _load_slice.in_links()) {
+    //  //    ssnode *output = elem->orig();
+    //  //    ofs << ", " << output->gams_name(config) << "." << elem->gams_name(config) << " 1";
+    //  //  }
+    //  //}
+    //}
   }
   ofs << "/\n";
 
@@ -1114,15 +712,6 @@ void SubModel::PrintGamsModel(ostream& ofs,
       }
     }
 
-    if (_multi_config) {
-      //if not last config, print routing
-      if (config != n_configs - 1) {
-        for (auto &elem : _cross_switch.out_links()) {
-          ofs << ", " << _cross_switch.gams_name(config)
-              << "." << elem->gams_name(config, config + 1) << " 1";
-        }
-      }
-    }
   }
   ofs << "/\n";
 
@@ -1139,30 +728,30 @@ void SubModel::PrintGamsModel(ostream& ofs,
       }
     }
     //outputs
-
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-      for (auto &elem : _outputs[i]->in_links()) {
-        ofs << ", " << elem->gams_name(config)
-            << "." << _outputs[i]->gams_name(config) << " 1";
-      }
-    }
-    if (_multi_config) {
-      if (config != 0) {
-        //outputs
-        for (unsigned i = 0; i < _inputs.size(); ++i) {
-          for (auto &elem: _inputs[i]->in_links()) {
-            ofs << ", " << elem->gams_name(config - 1, config)
-                << "." << _inputs[i]->gams_name(config) << " 1";
-          }
-        }
-      }
-      if (config == 0) {
-        for (auto &elem : _load_slice.out_links()) {
-          ssnode *input = elem->dest();
-          ofs << ", " << elem->gams_name(config) << "." << input->gams_name(config) << " 1";
-        }
-      }
-    }
+    //TODO: fixme or eliminate
+    //for (unsigned i = 0; i < _outputs.size(); ++i) {
+    //  for (auto &elem : _outputs[i]->in_links()) {
+    //    ofs << ", " << elem->gams_name(config)
+    //        << "." << _outputs[i]->gams_name(config) << " 1";
+    //  }
+    //}
+    //if (_multi_config) {
+    //  if (config != 0) {
+    //    //outputs
+    //    for (unsigned i = 0; i < _inputs.size(); ++i) {
+    //      for (auto &elem: _inputs[i]->in_links()) {
+    //        ofs << ", " << elem->gams_name(config - 1, config)
+    //            << "." << _inputs[i]->gams_name(config) << " 1";
+    //      }
+    //    }
+    //  }
+    //  if (config == 0) {
+    //    for (auto &elem : _load_slice.out_links()) {
+    //      ssnode *input = elem->dest();
+    //      ofs << ", " << elem->gams_name(config) << "." << input->gams_name(config) << " 1";
+    //    }
+    //  }
+    //}
   }
 
   ofs << "/\n";
@@ -1175,15 +764,6 @@ void SubModel::PrintGamsModel(ostream& ofs,
         for (auto &elem : _switches[i][j]->in_links()) {
           CINF(ofs, first);
           ofs << elem->gams_name(config) << "." << _switches[i][j]->gams_name(config) << " 1";
-        }
-      }
-    }
-    if (_multi_config) {
-      //if not last config, print routing
-      if (config != n_configs - 1) {
-        for (auto &elem: _cross_switch.in_links()) {
-          ofs << ", " << elem->gams_name(config)
-              << "." << _cross_switch.gams_name(config) << " 1";
         }
       }
     }
@@ -1230,23 +810,15 @@ void SubModel::build_substrate(int sizex, int sizey) {
 //This should be done after all the links are added
 void SubModel::regroup_vecs() {
   _node_list.clear();
-  _io_list.clear();
 
-  for (auto &elem: _inputs) {
+  for (auto &elem : _vport_list)
     elem->set_id(_node_list, _link_list);
-    _io_list.push_back(elem);
-  }
 
   for (auto &elem : _fu_list)
     elem->set_id(_node_list, _link_list);
 
   for (auto &elem: _switch_list)
     elem->set_id(_node_list, _link_list);
-
-  for (auto &elem: _outputs) {
-    elem->set_id(_node_list, _link_list);
-    _io_list.push_back(elem);
-  }
 }
 
 void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips, int ops, bool multi_config, int temp_x, int temp_y, int temp_width, int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay)  {
@@ -1334,87 +906,26 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     }
   }
 
-  if(portType == PortType::opensp) {  //OpenSplyser Inputs/Outputs
-
-    //Inputs to Switches
-    add_inputs((_sizex +_sizey)*ips);
-
-    //left-edge switches except top-left
-    for(int sw = 0; sw < _sizey; sw++) {
-      for(int p = 0; p < ips; p++) {
-        sslink * link = _inputs[sw*ips+p]->add_link(_switches[0][_sizey - sw]);
-        if(p==0) link->setdir(SwitchDir::IP0);
-        else if(p==1) link->setdir(SwitchDir::IP1);
-        else if(p==2) link->setdir(SwitchDir::IP2);
-      }
-    }
-
-    //Top switches except top-right
-    for(int sw = 0; sw < _sizex; sw++) {
-      for(int p = 0; p < ips; p++) {
-        sslink* link = _inputs[_sizey*ips + sw*ips+p]->add_link(_switches[sw][0]);
-        if(p==0) link->setdir(SwitchDir::IP0);
-        else if(p==1) link->setdir(SwitchDir::IP1);
-        else if(p==2) link->setdir(SwitchDir::IP2);
-     }
-    }
-
-    //Switches to Outputs
-    add_outputs((_sizex+_sizey)*ops);
-
-    //bottom op switches except bottom left
-    for(int sw = 0; sw < _sizex; sw++) {
-      for(int p = 0; p < ops; p++) {
-        sslink* link = _switches[sw+1][_sizey]->add_link(_outputs[sw*ops+p]);
-        if(p==0) link->setdir(SwitchDir::OP0);
-        else if(p==1) link->setdir(SwitchDir::OP1);
-        else if(p==2) link->setdir(SwitchDir::OP2);
-      }
-    }
-
-
-    for(int sw = 0; sw < _sizey; sw++) {
-      for(int p = 0; p < ops; p++) {
-        sslink* link = _switches[_sizex][_sizey-sw-1]->add_link(_outputs[_sizex*ops +sw*ops+p]);
-        if(p==0) link->setdir(SwitchDir::OP0);
-        else if(p==1) link->setdir(SwitchDir::OP1);
-        else if(p==2) link->setdir(SwitchDir::OP2);
-      }
-    }
-
-
-  } else if(portType == PortType::threein || portType == PortType::threetwo) {  //Three sides have inputs
-
+  if(portType == PortType::threein || portType == PortType::threetwo) {  
+    //Three sides have inputs
     bool bonus_middle = true;    
-
-    //Inputs to Switches
-    add_inputs((_sizex*(1+bonus_middle)+_sizey*2)*ips);
 
     int in_index=0;
     for(int sw = 0; sw < _sizey; sw++) {
       for(int p = 0; p < ips; p++) {
-        sslink * link = _inputs[in_index++]->add_link(_switches[0][_sizey-sw]);
-        if(p==0) link->setdir(SwitchDir::IP0);
-        else if(p==1) link->setdir(SwitchDir::IP1);
-        else if(p==2) link->setdir(SwitchDir::IP2);
+        add_input(in_index++,_switches[0][_sizey-sw]);
       }
     }
 
     for(int sw = 0; sw < _sizex; sw++) {
       for(int p = 0; p < ips; p++) {
-        sslink* link = _inputs[in_index++]->add_link(_switches[sw][0]);
-        if(p==0) link->setdir(SwitchDir::IP0);
-        else if(p==1) link->setdir(SwitchDir::IP1);
-        else if(p==2) link->setdir(SwitchDir::IP2);
-     }
+        add_input(in_index++,_switches[sw][0]);
+      }
     }
 
     for(int sw = 0; sw < _sizey; sw++) {
       for(int p = 0; p < ips; p++) {
-        sslink* link = _inputs[in_index++]->add_link(_switches[_sizex][sw]);
-        if(p==0) link->setdir(SwitchDir::IP0);
-        else if(p==1) link->setdir(SwitchDir::IP1);
-        else if(p==2) link->setdir(SwitchDir::IP2);
+        add_input(in_index++,_switches[_sizex][sw]);
       }
     }
 
@@ -1423,86 +934,50 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
       for(int sw = 0; sw < _sizex; sw++) {
         for(int p = 0; p < ips; p++) {
           //cout << in_index << " ";
-          assert((unsigned)in_index < _inputs.size());
-          sslink* link = _inputs[in_index++]->add_link(_switches[sw+1][_sizey]);
-          if(p==0) link->setdir(SwitchDir::IP0);
-          else if(p==1) link->setdir(SwitchDir::IP1);
-          else if(p==2) link->setdir(SwitchDir::IP2);
+          //assert((unsigned)in_index < _inputs.size());
+          add_input(in_index++,_switches[sw+1][_sizey]);
         }
       }
-      //cout << "\n";
-      assert((unsigned)in_index == _inputs.size());
+
     }
 
-
-
-
     if(portType == PortType::threein) {
-
       //Switches to Outputs
-      add_outputs((_sizex)*ops);
     
       int out_index=0;
       for(int sw = 0; sw < _sizex; sw++) {
         for(int p = 0; p < ops; p++) {
-          sslink* link = _switches[sw+1][_sizey]->add_link(_outputs[out_index++]);
-          if(p==0) link->setdir(SwitchDir::OP0);
-          else if(p==1) link->setdir(SwitchDir::OP1);
-          else if(p==2) link->setdir(SwitchDir::OP2);
+          add_output(out_index++,_switches[sw+1][_sizey]);
         }
       }
 
     } else if(portType == PortType::threetwo) {
-      //Switches to Outputs
-      add_outputs((_sizex+_sizey)*ops);
-    
+
       int out_index=0;
       for(int sw = 0; sw < _sizex; sw++) {
         for(int p = 0; p < ops; p++) {
-          sslink* link = _switches[sw+1][_sizey]->add_link(_outputs[out_index++]);
-          if(p==0) link->setdir(SwitchDir::OP0);
-          else if(p==1) link->setdir(SwitchDir::OP1);
-          else if(p==2) link->setdir(SwitchDir::OP2);
+          add_output(out_index++,_switches[sw+1][_sizey]);
         }
       }
       for(int sw = 0; sw < _sizey; sw++) {
         for(int p = 0; p < ops; p++) {
-          sslink* link = _switches[_sizex][_sizey-sw-1]->add_link(_outputs[out_index++]);
-          if(p==0) link->setdir(SwitchDir::OP0);
-          else if(p==1) link->setdir(SwitchDir::OP1);
-          else if(p==2) link->setdir(SwitchDir::OP2);
+          add_output(out_index++,_switches[_sizex][_sizey-sw-1]);
         }
       }
     }
 
 
   } else if(portType == PortType::everysw) {  //all switches have inputs/outputs
-      
-    add_inputs((_sizex+1)*(_sizey+1)*ips);
-    add_outputs((_sizex+1)*(_sizey+1)*ops);
-    //first connect _switches to FUs
     int inum=0;
     int onum=0;
 
     for(int i = 0; i < _sizex+1; i++) {
       for(int j = 0; j < _sizey+1; j++) {
         for(int p = 0; p < ips; p++) {
-          sslink* link = _inputs[inum]->add_link(_switches[i][_sizey-j]);
-          
-          if(p==0) link->setdir(SwitchDir::IP0);
-          else if(p==1) link->setdir(SwitchDir::IP1);
-          else if(p==2) link->setdir(SwitchDir::IP2);
-
-          inum++;
+          add_input(inum++,_switches[i][_sizey-j]);
         }
         for(int p = 0; p < ops; p++) {
-          sslink* link = _switches[i][_sizey-j]->add_link(_outputs[onum]);
-          
-          if(p==0) link->setdir(SwitchDir::OP0);
-          else if(p==1) link->setdir(SwitchDir::OP1);
-          else if(p==2) link->setdir(SwitchDir::OP2);
-         
-          onum++;
+          add_output(onum++,_switches[i][_sizey-j]);
         }
       }
     }
@@ -1514,19 +989,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   }
 
   _multi_config=multi_config;
-  
-  //if(multi_config) {
-  //  _cross_switch.setXY(999,999);
-  //  for(unsigned i = 0; i < _inputs.size(); i++) {
-  //    _load_slice->add_link(_inputs[i]);
-  //    _cross_switch->add_link(_inputs[i]);  //direction?
-
-  //  }
-  //  for(unsigned i = 0; i < _outputs.size(); i++) {
-  //    _outputs[i]->add_link(_load_slice);
-  //    _outputs[i]->add_link(_cross_switch);  
-  //  }
-  //}
 
   //The primitive temporal region that we are going to create just has local
   //connections to surrounding nodes.
@@ -1572,7 +1034,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     }
   }
 
-  regroup_vecs();
 }
 
 void ssio_interface::fill_vec() {
@@ -1590,83 +1051,3 @@ void ssio_interface::fill_vec() {
 }
 
 
-/*
-class PrioritizeFU { public : int operator()( const func_unit_def* x, const func_unit_def *y ) 
-{
-    return x->diff > y->diff;
-    } }; 
-  */
-
-/*
-void SubMo    for(int i = 0; i < _inputs.size(); i++) {
-      _inputs[i]->add_link(cross_switch);  //direction?
-    }
-    for(int i = 0; i < _outputs.size(); i++) {
-      cross_switch->add_link(_outputs[i]);  //TODO
-    }del::SetTotalFUByRatio()
-{
-    //map<int,int> fu2diff;
-    
-    float total = 0;
-
-    for(unsigned i=0; i < fu_set.size(); ++i) 
-        total += fu_set[i].ratio;  //get total ratio
-
-    int totalfus = _sizex*_sizey;
-
-    int int_total_fus = 0;
-
-    
-    priority_queue<func_unit*, vector<func_unit*>, PrioritizeFU> diff_queue;
-
-    int sign;
-    if(int_total_fus<totalfus) sign=1; //i need to add func units
-    else sign=-1; //i need to subtract func units
-
-    //setup rounded versions
-    for(unsigned i=0; i < fu_set.size(); ++i) 
-    {
-        if(fu_set[i].ratio==0) continue;
-        
-        float requested = fu_set[i].ratio/total * totalfus;
-        int new_total = (int)round(requested);
-        fu_set[i].diff = (((float)new_total)-requested)*sign;
-        
-        fu_set[i].total= new_total;
-        
-        diff_queue.push(&fu_set[i]);
-        int_total_fus+=new_total;
-    }
-
-    unsigned total_diff = abs(totalfus-int_total_fus);
-
-    assert(diff_queue.size()>total_diff);
-    for(unsigned i = 0; i < total_diff; ++i)
-    {
-        func_unit* fu = diff_queue.top(); diff_queue.pop();
-        
-        fu->total+= sign * 1;
-    }
-
-}*/
-
-/*
-void SubModel::RandDistributeFUs()
-{
-    map<func_unit*, int> curFUs;
-    map<func_unit*, int> maxFUs;
-    
-
-}
-*/
-
-/*
-void SubModel::CreateFUArray(int _sizex, int _sizey)
-{
-    // Create FU array
-    fu_array.resize(_sizex);
-    for (unsigned x = 0; x < fu_array.size(); x++) {
-        fu_array[x].resize(_sizey);
-    }
-}
-*/

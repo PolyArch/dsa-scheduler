@@ -51,6 +51,7 @@ void SSDfgNode::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_sched_lat);
   ar & BOOST_SERIALIZATION_NVP(_max_thr);
   ar & BOOST_SERIALIZATION_NVP(_group_id);
+  ar & BOOST_SERIALIZATION_NVP(_vtype);
 }
 
 template<class Archive>
@@ -73,30 +74,10 @@ void SSDfgInst::serialize(Archive & ar, const unsigned version) {
 }
 
 template<class Archive>
-void SSDfgIO::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgNode);
-  ar & BOOST_SERIALIZATION_NVP(vec_);
-}
-
-template<class Archive>
-void SSDfgInput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgIO);
-}
-
-template<class Archive>
-void SSDfgOutput::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgIO);
-}
-
-template<class Archive>
 void SSDfgVec::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(_name);
-  ar & BOOST_SERIALIZATION_NVP(_ID);
-  ar & BOOST_SERIALIZATION_NVP(_ssdfg);
-  ar & BOOST_SERIALIZATION_NVP(_group_id);
+  ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgNode);
   ar & BOOST_SERIALIZATION_NVP(_port_width);
   ar & BOOST_SERIALIZATION_NVP(_vp_len);
-  ar & BOOST_SERIALIZATION_NVP(vector_);
 }
 
 template<class Archive>
@@ -118,29 +99,19 @@ template<class Archive>
 void SSDfg::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(_nodes);
   ar & BOOST_SERIALIZATION_NVP(_insts);
-  ar & BOOST_SERIALIZATION_NVP(_inputs);
-  ar & BOOST_SERIALIZATION_NVP(_outputs);
-  ar & BOOST_SERIALIZATION_NVP(_orderedInsts);
-  ar & BOOST_SERIALIZATION_NVP(_orderedInstsGroup);
+  ar & BOOST_SERIALIZATION_NVP(_orderedNodes);
   ar & BOOST_SERIALIZATION_NVP(_vecInputs);
   ar & BOOST_SERIALIZATION_NVP(_vecOutputs);
   ar & BOOST_SERIALIZATION_NVP(_edges);
-  ar & BOOST_SERIALIZATION_NVP(removed_edges);
   ar & BOOST_SERIALIZATION_NVP(_vecInputGroups);
   ar & BOOST_SERIALIZATION_NVP(_vecOutputGroups);
   ar & BOOST_SERIALIZATION_NVP(_groupProps);
-  ar & BOOST_SERIALIZATION_NVP(dummy_map);
-  ar & BOOST_SERIALIZATION_NVP(dummys_per_port);
-  ar & BOOST_SERIALIZATION_NVP(dummies);
-  ar & BOOST_SERIALIZATION_NVP(dummiesOutputs);
 }
 
 //Boost Stuff
 BOOST_CLASS_EXPORT_GUID(SSDfgEdge,     "SSDfgEdge");
 BOOST_CLASS_EXPORT_GUID(SSDfgNode,     "SSDfgNode")
 BOOST_CLASS_EXPORT_GUID(SSDfgInst,     "SSDfgInst");
-BOOST_CLASS_EXPORT_GUID(SSDfgInput,    "SSDfgInput")
-BOOST_CLASS_EXPORT_GUID(SSDfgOutput,   "SSDfgOutput")
 BOOST_CLASS_EXPORT_GUID(SSDfgVec,      "SSDfgVec")
 BOOST_CLASS_EXPORT_GUID(SSDfgVecInput, "SSDfgVecInput")
 BOOST_CLASS_EXPORT_GUID(SSDfgVecOutput,"SSDfgVecOutput")
@@ -149,8 +120,6 @@ BOOST_CLASS_EXPORT_GUID(SSDfg,         "SSDfg")
 SERIALIZABLE(SSDfgEdge);
 SERIALIZABLE(SSDfgNode);
 SERIALIZABLE(SSDfgInst);
-SERIALIZABLE(SSDfgInput);
-SERIALIZABLE(SSDfgOutput);
 SERIALIZABLE(SSDfgVec);
 SERIALIZABLE(SSDfgVecInput);
 SERIALIZABLE(SSDfgVecOutput);

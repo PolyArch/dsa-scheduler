@@ -181,6 +181,7 @@ SSModel::SSModel(const char* filename, bool multi_config) {
             _subModel->parse_io(ifs);
         }
     }
+    _subModel->regroup_vecs();
 }
 
 //YAML Parser
@@ -339,22 +340,22 @@ void SSModel::parse_yaml(const std::string& fn) {
       }
       // Get Properties
       YAML::Node vp_prop = vector_ports[vp_name];
-      auto * vp = new ssvport();
+      std::string io_type = vp_prop["io_type"].as<std::string>();
+      int is_input = io_type=="in";
+
+      auto * vp = _subModel->add_vport(is_input,-1); //TODO: fix port number
+
       vp -> set_properties(vp_prop); // Set Universal Prop
       vp -> set_prop(vp_prop); // Set Vector Port Specific Prop
       all_modules[vp_name] = vp;
-      std::string io_type = vp_prop["io_type"].as<std::string>();
-      
-      int is_input = io_type=="in";
-
       if (io_type == "in"){
         int port_idx = num_ivp++;
         io.vports_map[is_input][port_idx] = vp;
         for(auto & output_port : vp -> get_output_ports()){
           int input_node_idx = num_inputs ++;
           vp -> port_vec().push_back(input_node_idx);
-          ssinput * in = _subModel -> add_input(input_node_idx);
-          vp -> set_port2node(output_port,in);
+          //ssinput * in = _subModel -> add_input(input_node_idx);
+          //vp -> set_port2node(output_port,in);
         }
       }else if(io_type == "out"){
         int port_idx = num_ovp++;
@@ -362,8 +363,8 @@ void SSModel::parse_yaml(const std::string& fn) {
         for (auto & input_port : vp -> get_input_ports()){
           int output_node_index = num_outputs ++;
           vp -> port_vec().push_back(output_node_index);
-          ssoutput * out = _subModel -> add_output(output_node_index);
-          vp -> set_port2node(input_port,out);
+          //ssoutput * out = _subModel -> add_output(output_node_index);
+          //vp -> set_port2node(input_port,out);
         }
 
       }else{
@@ -521,7 +522,8 @@ void SSModel::parse_json(std::istream& istream) {
     auto& port_def = p.second;
     std::string type = port_def.get<std::string>("InOrOut", "");
 
-    auto* vp = new ssvport();
+    int is_input = type=="InputPorts";
+    auto* vp = _subModel->add_vport(is_input,-1); //FIXME: port number
     sym_tab[elem_name]=vp;
 
     cout << "new port: \"" << elem_name << "\" \n";
@@ -535,7 +537,6 @@ void SSModel::parse_json(std::istream& istream) {
     }
  
     // TODO(@were): merge this
-    int is_input = type=="InputPorts";
     if(type=="InputPorts") {
       int port_num = num_ivp++;
       io.vports_map[is_input][port_num]=vp;
@@ -544,8 +545,8 @@ void SSModel::parse_json(std::istream& istream) {
         cout << "added input to vec: " << node_id << "\n";
 
         vp->port_vec().push_back(node_id);
-        ssinput* in = _subModel->add_input(node_id);  
-        in->add_link(n);
+        //ssinput* in = _subModel->add_input(node_id);  
+        //in->add_link(n);
       }
     } else if(type=="OutputPorts") {
       int port_num = num_ovp++;
@@ -555,8 +556,8 @@ void SSModel::parse_json(std::istream& istream) {
         cout << "added output to vec: " << node_id << "\n";
 
         vp->port_vec().push_back(node_id);
-        ssoutput* out = _subModel->add_output(node_id);  
-        n->add_link(out);
+        //ssoutput* out = _subModel->add_output(node_id);  
+        //n->add_link(out);
       }
     } else {
       assert(0 && "unknown type");

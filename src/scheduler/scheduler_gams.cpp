@@ -74,16 +74,16 @@ void GamsScheduler::print_mipstart(ofstream& ofs,  Schedule* sched, SSDfg* ssDFG
   //Ports
   for(int i = 0; i < ssDFG->num_vec_input(); ++i) {
     SSDfgVecInput* vec_in = ssDFG->vec_in(i);
-    pair<bool,int> vecPort = sched->vecPortOf(vec_in); 
+    int vecPort = sched->vecPortOf(vec_in); 
     ofs << "Mp.l('" << vec_in->gamsName() << "','"
-        << "ip" << vecPort.second << "')=1;\n";
+        << "ip" << vecPort << "')=1;\n";
   }
 
   for(int i = 0; i < ssDFG->num_vec_output(); ++i) {
     SSDfgVecOutput* vec_out = ssDFG->vec_out(i);
-    pair<bool,int> vecPort = sched->vecPortOf(vec_out); 
+    int vecPort = sched->vecPortOf(vec_out); 
     ofs << "Mp.l('" << vec_out->gamsName() << "','"
-        << "op" << vecPort.second << "')=1;\n";
+        << "op" << vecPort << "')=1;\n";
   }
 
   //Ordering
@@ -493,7 +493,8 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
       }
       //cout << "\n";
 
-      schedule->assign_vport(pv,pn,mask);
+      //TODO:FIXME: no more vports
+      //schedule->assign_vport(pv,pn,mask);
 
     } else if(parse_stage==PASSTHROUGH) {
       stringstream ss(line);
@@ -628,17 +629,19 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
         }
         
         schedule->assign_edgelink(dfgedge, 0, slink);
-        
-        if(ssinput* ssin = dynamic_cast<ssinput*>(slink->orig())) {
-          schedule->assign_node(dfgnode, make_pair(0, ssin));
-        } else if(ssoutput* ssout = dynamic_cast<ssoutput*>(slink->dest())) {
-          //find output for this output edge
-          for(auto elem : dfgnode->uses()) {
-            if(SSDfgOutput* dfg_out = dynamic_cast<SSDfgOutput*>(elem->use())) {
-              schedule->assign_node(dfg_out, make_pair(0, ssout));
-            }
-          }
-        }
+       
+        //TODO:FIXME: No more inputs/outputs
+         
+        //if(ssinput* ssin = dynamic_cast<ssinput*>(slink->orig())) {
+        //  schedule->assign_node(dfgnode, make_pair(0, ssin));
+        //} else if(ssoutput* ssout = dynamic_cast<ssoutput*>(slink->dest())) {
+        //  //find output for this output edge
+        //  for(auto elem : dfgnode->uses()) {
+        //    if(SSDfgOutput* dfg_out = dynamic_cast<SSDfgOutput*>(elem->use())) {
+        //      schedule->assign_node(dfg_out, make_pair(0, ssout));
+        //    }
+        //  }
+        //}
         
       }
     }

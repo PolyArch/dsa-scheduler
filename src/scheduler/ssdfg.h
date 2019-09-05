@@ -124,12 +124,12 @@ public:
   template<class Archive> void serialize(Archive &ar, const unsigned int version);
 
 private:
-  int _ID;
-  SSDfg *_ssdfg;
-  SSDfgValue* _value; //value which produces the node
-  SSDfgNode* _use; //operand which consumes the edge
+  int _ID=-1;
+  SSDfg *_ssdfg=0;
+  SSDfgValue* _value=0; //value which produces the node
+  SSDfgNode* _use=0; //operand which consumes the edge
   EdgeType _etype;
-  int _l, _r;
+  int _l=-1, _r=-1;
 
   //Runtime Types
   std::queue<std::pair<uint64_t, bool>> _data_buffer;
@@ -202,6 +202,8 @@ public:
 
   virtual void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
 
+  virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
+
   // some issue with this function
   virtual uint64_t invalid();
 
@@ -218,7 +220,7 @@ public:
   void removeIncEdge(SSDfgNode *orig);
   void removeOutEdge(SSDfgNode *dest);
   void reset_node();
-
+  
   void validate();
 
   virtual int compute(bool print, bool verif) { return 0; }
@@ -254,7 +256,9 @@ public:
 
   size_t num_out() const { return _uses.size(); }
 
-  void setName(std::string name) { _name = name; }
+  bool has_name() {return !_name.empty();}
+
+  void set_name(std::string name) { _name = name; }
 
   const std::vector<SSDfgOperand> &ops() {return _ops; }
 
@@ -268,19 +272,29 @@ public:
 
   bool get_bp();
 
+  //retrieve the value of the def
+  uint64_t retrieve(int operand_index) { 
+    assert(_ops.size() > (unsigned)operand_index); 
+    return _ops[operand_index].get_value(); 
+  }
+
   // Check's all consumers for backpressure-freedom,
   // If backpressure,
   void set_node(SSDfgValue* dfg_val, 
       uint64_t v, bool valid, bool avail, bool print, bool verif);
 
   // sets value in non-backcgra
-  void set_value(uint64_t v, bool valid) { 
-    _values[0]->set_val(v); 
+  void set_value(int value_id, uint64_t v, bool valid) { 
+    _values[value_id]->set_val(v); 
     _invalid = !valid; 
   }
 
   // sets value at this cycle
   void set_value(SSDfgValue* dfg_val,uint64_t v, bool valid, bool avail, int cycle);
+
+  // sets value with val index (this interface makes more sense?)
+  void set_value(int i,uint64_t v, bool valid, bool avail, int cycle);
+
   //--------------------------------------------
 
   bool get_avail() { return _avail; }
@@ -294,7 +308,6 @@ public:
   void set_sched_lat(int i) { _sched_lat = i; }
 
   int inc_inputs_ready(bool print, bool verif);
-
 
   int inc_inputs_ready_backcgra(bool print, bool verif);
 
@@ -311,9 +324,11 @@ public:
   virtual int bitwidth() { return 64; }
   //---------------------------------------------------------------------------
 
-  V_TYPE type() { return _vtype; }
+  V_TYPE type() { assert(_vtype!=V_INVALID); return _vtype; }
 
   int group_id() { return _group_id; }
+
+  void set_group_id(int id) { _group_id = id; }
 
   int num_inc_edges() { return _inc_edge_list.size(); }
 
@@ -325,7 +340,7 @@ private:
   void serialize(Archive &ar, const unsigned int version);
 
 protected:
-  SSDfg *_ssdfg;  //sometimes this is just nice to have : )
+  SSDfg *_ssdfg=0;  //sometimes this is just nice to have : )
 
   int _node_id = -1; //hack for temporal simulator to remember _node_id
 
@@ -350,15 +365,6 @@ protected:
   int _group_id = 0; //which group do I belong to
 
   V_TYPE _vtype;
-};
-
-class ScheduleUnit {
-public:
-  ScheduleUnit() = default;
-  virtual std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
-  virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>>
-  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) = 0;
-  virtual std::vector<SSDfgNode*> ready_to_map() = 0;
 };
 
 typedef std::vector<std::string> string_vec_t;
@@ -396,7 +402,7 @@ struct ValueEntry : ParseResult {
 
   ValueEntry(SSDfgValue *value_, int l_ = 0, int r_ = 63) : value(value_), l(l_), r(r_) {}
 
-  SSDfgValue *value;
+  SSDfgValue *value=0;
   int l, r;
 };
 
@@ -453,21 +459,15 @@ struct ControlEntry : ParseResult {
 };
 
 //Instruction
-class SSDfgInst : public SSDfgNode, ScheduleUnit {
+class SSDfgInst : public SSDfgNode {
 public:
-  using MapsTo = SS_CONFIG::ssfu;
   static const int KindValue = V_INST;
 
   SSDfgInst() {}
 
-  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(
+      Schedule *, SS_CONFIG::SSModel *, int n) override;
 
-  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
-  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
-
-  std::vector<SSDfgNode*> ready_to_map() override {
-    return {this};
-  }
 
   SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
@@ -498,15 +498,15 @@ public:
   SS_CONFIG::ss_inst_t inst() { return _ssinst; }
 
   //Adding new function in the header file
-  int update_next_nodes(bool print, bool verif);
+  int update_next_nodes(bool print, bool verif) override;
 
-  virtual int maxThroughput();
+  virtual int maxThroughput() override;
 
-  virtual void depInsts(std::vector<SSDfgInst *> &insts);
+  virtual void depInsts(std::vector<SSDfgInst *> &insts) override;
 
-  std::string name();
+  virtual std::string name() override;
 
-  std::string gamsName();
+  std::string gamsName() override;
 
   void setImmSlot(int i);
 
@@ -518,16 +518,16 @@ public:
 
   uint64_t do_compute(bool &discard);
 
-  virtual int compute(bool print, bool verif);
+  virtual int compute(bool print, bool verif) override;
 
   void print_output(std::ostream& os);
 
   // new line added
-  virtual int compute_backcgra(bool print, bool verif);
+  virtual int compute_backcgra(bool print, bool verif) override;
 
   void set_verif_id(std::string s) { _verif_id = s; }
 
-  virtual uint64_t invalid() { return _invalid; }
+  virtual uint64_t invalid() override { return _invalid; }
 
   /// Control signal, either controlled by an dependent inst or itself
   /// {
@@ -539,9 +539,9 @@ public:
   uint64_t self_bits() { return _self_bits.bits(); }
   /// }
 
-  virtual int bitwidth() { return SS_CONFIG::bitwidth[_ssinst]; }
-
-  bool yield(Schedule *, SS_CONFIG::SubModel *) { return true; }
+  virtual int bitwidth() override { 
+    return SS_CONFIG::bitwidth[_ssinst]; 
+  }
 
   uint64_t getout(int i) {
     switch(bitwidth()) {
@@ -588,115 +588,13 @@ private:
   SS_CONFIG::ss_inst_t _ssinst;
 };
 
-class SSDfgVec;
-class SSDfgIO : public SSDfgNode {
-public:
-  SSDfgIO() {}
-
-  SSDfgIO(SSDfg *ssdfg, const std::string& name, SSDfgVec *vec_, V_TYPE v);
-
-  friend class boost::serialization::access;
-
-  template<class Archive>
-  void serialize(Archive &ar, const unsigned version);
-  SSDfgVec *vector() { return vec_; }
-
-protected:
-  SSDfgVec *vec_;
-
-};
-
-class SSDfgVecInput;
-
-class SSDfgInput : public SSDfgIO {
-public:
-  using MapsTo = SS_CONFIG::ssinput;
-
-  static const int KindValue = V_INPUT;
-
-  SSDfgInput() {}
-
-  SSDfgInput(SSDfg *ssdfg, const std::string &name, SSDfgVec *vec_) : SSDfgIO(ssdfg, name, vec_, V_INPUT) {}
-
-  SSDfgVecInput *input_vec();
-
-  std::string gamsName() override;
-
-  std::string name() override;
-
-  // after inc inputs ready?
-  int compute_backcgra(bool print, bool verif) override;
-
-  int compute(bool print, bool verif) override;
-
-private:
-  friend class boost::serialization::access;
-
-  template<class Archive>
-  void serialize(Archive &ar, const unsigned int version);
-
-};
-
-class SSDfgVecOutput;
-class SSDfgOutput : public SSDfgIO {
-public:
-  SSDfgOutput() {}
-
-  using MapsTo = SS_CONFIG::ssoutput;
-  static const int KindValue = V_OUTPUT;
-
-  void printDirectAssignments(std::ostream &os, std::string dfg_name);
-  //virtual void printEmuDFG(std::ostream& os, std::string dfg_name, std::string* realName, int* iter, std::vector<int>* output_sizes);
-
-  SSDfgOutput(SSDfg *ssdfg, const std::string &name, SSDfgVec *vec_) : SSDfgIO(ssdfg, name, vec_, V_OUTPUT) {}
-
-  SSDfgVecOutput *output_vec();
-
-  std::string gamsName() override;
-
-  std::string name() override;
-
-  //returns the instruction producing the
-  //value to this output node
-  //Returns nullptr if the producing instruction is an input!
-  //TODO:FIXME: This might not be safe for decomp-CGRA
-  SSDfgInst *out_inst() { return dynamic_cast<SSDfgInst *>(_ops[0].edges[0]->def()); }
-
-  //retrieve the value of the def
-  uint64_t retrieve() { assert(_ops.size() == 1); return _ops[0].get_value(); }
-
-  uint64_t parent_invalid() { return _ops[0].edges[0]->def()->invalid(); }
-
-  virtual uint64_t invalid() override { return _invalid; }
-
-private:
-  friend class boost::serialization::access;
-
-  template<class Archive>
-  void serialize(Archive &ar, const unsigned int version);
-
-};
 
 //vector class
-class SSDfgVec {
+class SSDfgVec : public SSDfgNode {
 public:
   SSDfgVec() {}
 
-  SSDfgVec(int len, const std::string &name, int id, SSDfg *ssdfg);
-
-  bool yield(Schedule *, SS_CONFIG::SubModel *);
-
-  int id() { return _ID; }
-
-  void set_group_id(int id) { _group_id = id; }
-
-  int group_id() { return _group_id; }
-
-  bool is_temporal();
-
-  virtual std::string gamsName() = 0;
-
-  virtual std::string name() { return _name; }
+  SSDfgVec(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg);
 
   void set_port_width(int n) { _port_width=n; }
 
@@ -708,13 +606,15 @@ public:
 
   int logical_len() { return _vp_len; }
 
-  virtual int wasted_width(Schedule *, SubModel *) = 0;
+  int length() { return _ops.size(); }
 
-  std::vector<SSDfgIO*> &vector() { return vector_; }
+  virtual std::string gamsName() {
+    return _name;
+  }
 
-  virtual void add(SSDfgIO *) = 0;
-
-  unsigned length() { return vector().size(); }
+  virtual std::string name() override{
+    return _name;
+  }
 
 private:
   friend class boost::serialization::access;
@@ -723,58 +623,24 @@ private:
   void serialize(Archive &ar, const unsigned version);
 
 protected:
-  std::string _name;
-  int _ID;
-  SSDfg *_ssdfg;
-  int _group_id = 0; //which group do I belong to
   int _port_width;
   int _vp_len;
-
-  std::vector<SSDfgIO*> vector_;
-
-  std::vector<SSDfgNode*> _to_node_vector() {
-    SSDfgNode **from = (SSDfgNode**)(&vector_[0]);
-    SSDfgNode **to = from + vector_.size();
-    return std::vector<SSDfgNode*>(from, to);
-  }
 };
 
 
-class SSDfgVecInput : public SSDfgVec, ScheduleUnit {
+class SSDfgVecInput : public SSDfgVec {
 public:
-  using Scalar = SSDfgInput;
-
   static std::string Suffix() { return ""; }
   static std::string GamsPort() { return "IN PORT "; }
   static bool IsInput() { return true; }
 
+  static const int KindValue = V_INPUT;
+
   SSDfgVecInput() {}
 
-  SSDfgVecInput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
+  SSDfgVecInput(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, name, id, ssdfg) {}
 
-  virtual std::string gamsName() override;
-
-  int wasted_width(Schedule *, SubModel *) override;
-
-  bool backPressureOn();
-
-  void add(SSDfgIO *in)  override {
-    assert(dynamic_cast<Scalar*>(in));
-    vector_.push_back(in);
-  }
-
-  SSDfgInput *at(int i) {
-    return dynamic_cast<Scalar*>(vector_[i]);
-  }
-
-  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
-
-  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
-  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
-
-  std::vector<SSDfgNode*> ready_to_map() override {
-    return _to_node_vector();
-  }
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
 
   friend class boost::serialization::access;
 
@@ -783,39 +649,24 @@ public:
 
 };
 
-class SSDfgVecOutput : public SSDfgVec, ScheduleUnit {
+class SSDfgVecOutput : public SSDfgVec {
 public:
-  using Scalar = SSDfgOutput;
-
   static std::string Suffix() { return "_out"; }
   static bool IsInput() { return false; }
   static std::string GamsPort() { return "OUT PORT "; }
 
+  static const int KindValue = V_OUTPUT;
+
   SSDfgVecOutput() {}
 
-  SSDfgVecOutput(int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(len, name, id, ssdfg) {}
+  SSDfgVecOutput(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, name, id, ssdfg) {}
 
-  std::vector<std::pair<int, int>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
+  std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(
+      Schedule *, SS_CONFIG::SSModel *, int n) override;
 
-  std::vector<std::pair<int, SS_CONFIG::ssnode*>>
-  ready_to_map(SS_CONFIG::SSModel *, const std::pair<int, int> &) override;
-
-  int wasted_width(Schedule *, SubModel *) override;
-
-  virtual std::string gamsName() override;
-
-  std::vector<SSDfgNode*> ready_to_map() override {
-    return _to_node_vector();
-  }
-
-  void add(SSDfgIO *in)  override {
-    assert(dynamic_cast<Scalar*>(in));
-    vector_.push_back(in);
-  }
-
-  SSDfgOutput *at(int i) {
-    return dynamic_cast<Scalar*>(vector_[i]);
-  }
+  //SSDfgNode *at(int i) {
+  //  return _ops[i]->node();
+  //}
 
   friend class boost::serialization::access;
 
@@ -869,20 +720,12 @@ public:
   ~SSDfg() {
   }
 
-  void remap(int num_HW_FU);
-
-  bool remappingNeeded();
-
-  void rememberDummies(std::set<SSDfgOutput *> d);
-
-  void removeDummies();
-
   void reset_simulation_state();
 
-  static void order_insts(SSDfgInst *inst, std::set<SSDfgInst *> &done_nodes, // done insts
-                          std::vector<SSDfgInst *> &ordered_insts);
+  static void order_nodes(SSDfgNode *node, std::set<SSDfgNode *> &done_nodes,
+                          std::vector<SSDfgNode *> &ordered_nodes);
 
-  std::vector<SSDfgInst *> &ordered_insts(); 
+  std::vector<SSDfgNode *> &ordered_nodes(); 
 
   void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
 
@@ -924,15 +767,9 @@ public:
 
   ParseResult *create_inst(std::string opcode, std::vector<ParseResult*> &args);
 
-  typedef std::vector<SSDfgOutput *>::const_iterator const_output_iterator;
-
   template<typename T> inline std::vector<T> &nodes();
 
   const std::vector<SSDfgInst *> &inst_vec() { return _insts; }
-
-  const std::vector<SSDfgInput*> &inputs() { return _inputs; }
-
-  const std::vector<SSDfgOutput*> &outputs() { return _outputs; }
 
   int num_vec_input() { return _vecInputs.size(); }
 
@@ -962,28 +799,6 @@ public:
       _vecOutputGroups.resize(group + 1);
     }
     _vecOutputGroups[group].push_back(out);
-  }
-
-  int find_group_for_vec(SSDfgVecInput *in) {
-    for (unsigned i = 0; i < _vecInputGroups.size(); ++i) {
-      for (SSDfgVecInput *v : _vecInputGroups[i]) {
-        if (v == in) {
-          return i;
-        }
-      }
-    }
-    assert(0 && "Vec Input not found");
-  }
-
-  int find_group_for_vec(SSDfgVecOutput *out) {
-    for (unsigned i = 0; i < _vecOutputGroups.size(); ++i) {
-      for (SSDfgVecOutput *v : _vecOutputGroups[i]) {
-        if (v == out) {
-          return i;
-        }
-      }
-    }
-    assert(0 && "Vec Output not found");
   }
 
   SSDfgVecInput *vec_in(int i) { return _vecInputs[i]; }
@@ -1041,8 +856,6 @@ public:
   int cycle(bool print, bool verif);
 
 // ---------------------------------------------------------------------------
-
-  std::set<SSDfgOutput *> getDummiesOutputs() { return dummiesOutputs; }
 
   void calc_minLats();
 
@@ -1120,18 +933,13 @@ private:
 
   //redundant storage:
   std::vector<SSDfgInst *> _insts;
-  std::vector<SSDfgInput *> _inputs;
-  std::vector<SSDfgOutput *> _outputs;
 
-  std::vector<SSDfgInst *> _orderedInsts;
-  std::vector<std::vector<SSDfgInst *>> _orderedInstsGroup;
+  std::vector<SSDfgNode *> _orderedNodes;
 
   std::vector<SSDfgVecInput *> _vecInputs;
   std::vector<SSDfgVecOutput *> _vecOutputs;
 
   std::vector<SSDfgEdge *> _edges;
-
-  std::map<std::pair<SSDfgNode *, SSDfgNode *>, SSDfgEdge *> removed_edges;
 
   std::vector<std::vector<SSDfgVecInput *>> _vecInputGroups;
   std::vector<std::vector<SSDfgVecOutput *>> _vecOutputGroups;
@@ -1140,30 +948,16 @@ private:
   int _num_node_ids = 0;
   int _num_edge_ids = 0;
 
-  //Dummy Stuffs:
-  std::map<SSDfgOutput *, SSDfgInst *> dummy_map;
-  std::map<SSDfgNode *, int> dummys_per_port;
-  std::set<SSDfgInst *> dummies;
-  std::set<SSDfgOutput *> dummiesOutputs;
-
   std::ostream *_dbg_stream;
 };
 
+//slightly obscure syntax sugar  :p
 template<> inline std::vector<SSDfgNode*> & SSDfg::nodes() { return _nodes; }
-template<> inline std::vector<SSDfgInput*> & SSDfg::nodes() { return _inputs; }
-template<> inline std::vector<SSDfgOutput*> & SSDfg::nodes() { return _outputs; }
 template<> inline std::vector<SSDfgInst*> & SSDfg::nodes() { return _insts; }
 template<> inline std::vector<SSDfgVecInput*> & SSDfg::nodes() { return _vecInputs; }
 template<> inline std::vector<SSDfgVecOutput*> & SSDfg::nodes() { return _vecOutputs; }
 template<> inline std::vector<std::vector<SSDfgVecInput*>> & SSDfg::nodes() { return _vecInputGroups; }
 template<> inline std::vector<std::vector<SSDfgVecOutput*>> & SSDfg::nodes() { return _vecOutputGroups; }
-
-template<typename T> inline void SSDfg::sort() {
-  auto &to_sort = nodes<T*>();
-  std::sort(to_sort.begin(), to_sort.end(), [](T *&left, T *&right) {
-      return left->vector().size() > right->vector().size();
-  });
-}
 
 // TODO(@were): add enable_if!
 template<typename T> inline void SSDfg::add(T *node) {
@@ -1181,22 +975,20 @@ inline void SSDfg::add_parsed_vec(const std::string &name, int len, EntryTable &
 
   int n = std::max(1, len);
   int slice = 64 / width;
-  int t = ceil(n / float(slice));
-  T *vec = new T(t, name, (int) nodes<T*>().size(), this);
-  insert_vec<T>(vec);
+  //int t = ceil(n / float(slice)); -- FIXME: do we need this?
+  //I think it's somewhat likely i am breaking decomposability
+  auto v = std::is_same<T, SSDfgVecInput>::value ? 
+    SSDfgVec::V_TYPE::V_INPUT :  SSDfgVec::V_TYPE::V_OUTPUT;
+  T *vec = new T(v, len, name, (int) nodes<T*>().size(), this);
+  add(vec);
   vec->set_port_width(width);
   vec->set_vp_len(n);
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; i += slice) {
-    typename T::Scalar *node = new typename T::Scalar(this, name + T::Suffix(), vec);
- 
     left_len = slice;
     if(n-i>0) {
       left_len = std::min(n-i,slice);
     }
- 
-    add<typename T::Scalar>(node);
-    vec->add(node);
  
     for (int j = 0; j < left_len*width; j += width) {
       std::stringstream ss;
@@ -1211,14 +1003,15 @@ inline void SSDfg::add_parsed_vec(const std::string &name, int len, EntryTable &
           int num_entries = ce->entries.size();
           assert(num_entries > 0 && num_entries <= 16);
           for (auto elem : ce->entries)
-            connect(elem->value, node, 0, SSDfgEdge::data, elem->l, elem->r);
+            connect(elem->value, vec, i, 
+                SSDfgEdge::data, elem->l, elem->r);
         } else if (auto ne = dynamic_cast<ValueEntry*>(sym)) {
-          connect(ne->value, node, 0, SSDfgEdge::data, ne->l, ne->r);
+          connect(ne->value, vec, i, SSDfgEdge::data, ne->l, ne->r);
         }
       } else if (std::is_same<T, SSDfgVecInput>::value) {
-        syms.set(ss.str(), new ValueEntry(node->values()[0], j, j + width - 1));
+        SSDfgValue* value = vec->values()[i];
+        syms.set(ss.str(), new ValueEntry(value, j, j + width - 1));
       }
-
     }
   }
 }
@@ -1233,7 +1026,7 @@ void SSDfg::printPortCompatibilityWith(std::ostream &os, SS_CONFIG::SSModel *ssM
     for(auto& port_interf : ssModel->subModel()->io_interf().vports_map[is_io]) {
       const std::vector<int>& port_m = port_interf.second->port_vec();
 
-      if(port_m.size() >= vec->length()) {
+      if(port_m.size() >= (unsigned)vec->length()) {
         matching_ports.push_back(port_interf.first);
         if (!first)
           os << ", ";
