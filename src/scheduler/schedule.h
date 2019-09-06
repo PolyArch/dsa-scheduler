@@ -449,6 +449,11 @@ public:
     return nullptr;
   }
 
+  //find first node for
+  SSDfgNode *dfgNodeOf(ssnode* node) {
+    return dfgNodeOf(0,node);
+  }
+
   size_t thingsAssigned(ssnode *node) {
     auto &np = _nodeProp[node->id()];
     return np.vertices.size() + np.num_passthroughs;
