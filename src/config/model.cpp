@@ -341,16 +341,22 @@ void SSModel::parse_yaml(const std::string& fn) {
       // Get Properties
       YAML::Node vp_prop = vector_ports[vp_name];
       std::string io_type = vp_prop["io_type"].as<std::string>();
-      int is_input = io_type=="in";
-
-      auto * vp = _subModel->add_vport(is_input,-1); //TODO: fix port number
-
+      bool is_input = io_type == "in";
+      ssvport * vp;
+      if(io_type == "in"){
+        cout << "init in vport " << num_ivp <<"\n";
+        vp = _subModel->add_vport(is_input,num_ivp++);
+      }
+      else if(io_type == "out"){
+        cout << "init out vport " << num_ovp <<"\n";
+        vp = _subModel->add_vport(is_input,num_ovp++);
+      }        
       vp -> set_properties(vp_prop); // Set Universal Prop
       vp -> set_prop(vp_prop); // Set Vector Port Specific Prop
       all_modules[vp_name] = vp;
+
       if (io_type == "in"){
-        int port_idx = num_ivp++;
-        io.vports_map[is_input][port_idx] = vp;
+        int port_idx = num_ivp;
         for(auto & output_port : vp -> get_output_ports()){
           int input_node_idx = num_inputs ++;
           vp -> port_vec().push_back(input_node_idx);
@@ -358,8 +364,7 @@ void SSModel::parse_yaml(const std::string& fn) {
           //vp -> set_port2node(output_port,in);
         }
       }else if(io_type == "out"){
-        int port_idx = num_ovp++;
-        io.vports_map[is_input][port_idx] = vp;
+        int port_idx = num_ovp;
         for (auto & input_port : vp -> get_input_ports()){
           int output_node_index = num_outputs ++;
           vp -> port_vec().push_back(output_node_index);
@@ -370,7 +375,6 @@ void SSModel::parse_yaml(const std::string& fn) {
       }else{
         assert(0 && "unknown vector port type");
       }
-    
     }
   }else{
     assert(0 && "No Vector Port?");
@@ -407,8 +411,8 @@ void SSModel::parse_yaml(const std::string& fn) {
       right_module_name = split(sright,".")[0];
       right_port_name = split(sright,".")[1];
 
-      left_module = if_isVector(all_modules[left_module_name],left_port_name);
-      right_module = if_isVector(all_modules[right_module_name],right_port_name);
+      left_module = all_modules[left_module_name];
+      right_module = all_modules[right_module_name];
 
       if(contains(connection,"<->")){
         left_module -> add_link(right_module,left_port_name,right_port_name);
