@@ -181,7 +181,7 @@ SSModel::SSModel(const char* filename, bool multi_config) {
             _subModel->parse_io(ifs);
         }
     }
-    _subModel->regroup_vecs();
+    _subModel->post_process();
 }
 
 //YAML Parser
@@ -428,7 +428,7 @@ void SSModel::parse_yaml(const std::string& fn) {
   }else{
     assert(0 && "No Connection ?");
   }
-  _subModel->regroup_vecs();
+  _subModel->post_process();
    assert(num_inputs>0);
   assert(num_outputs>0);
   cout << "YAML IR Parser finished\n";
@@ -487,7 +487,6 @@ void SSModel::parse_json(std::istream& istream) {
 
        auto link = fu->add_link(fu); //For decomposability
        link->setdir(SwitchDir::IP0);
-
 
        sym_tab[elem_name]=fu;
        auto& fu_def1 = node_def.get_child("Instructions");
@@ -583,7 +582,7 @@ void SSModel::parse_json(std::istream& istream) {
     
   }
 
-  _subModel->regroup_vecs();
+  _subModel->post_process();
 
   assert(num_inputs>0);
   assert(num_outputs>0);

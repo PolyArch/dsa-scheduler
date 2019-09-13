@@ -73,10 +73,10 @@ protected:
 
   template<typename T>
   bool scheduleHere(Schedule *sched, const std::vector<T> &nodes,
-                    const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &slots) {
-    assert(slots.size() == nodes.size());
+                    const std::vector<std::pair<int, SS_CONFIG::ssnode*>> &cand) {
+    assert(cand.size() == nodes.size());
     for (int i = 0; i < (int) nodes.size(); ++i) {
-      if (!scheduleHere(sched, nodes[i], slots[i])) {
+      if (!scheduleHere(sched, nodes[i], cand[i])) {
         for (int j = 0; j < i; ++j) {
           sched->unassign_dfgnode(nodes[j]);
         }

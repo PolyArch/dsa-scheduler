@@ -30,9 +30,9 @@ int ColorMapper::colorOf(SSDfgValue* val, bool reset) {
         colorMap[node] = std::make_tuple(x,y,z);
     }
     auto rgb = colorMap[node];
-    int r = std::max(std::get<0>(rgb) - val->index() * 30,0);
-    int g = std::max(std::get<1>(rgb) - val->index() * 20,0);
-    int b = std::max(std::get<2>(rgb) - val->index() * 40,0);
+    int r = std::max(std::get<0>(rgb) - val->index() * 15,0);
+    int g = std::max(std::get<1>(rgb) - val->index() * 10,0);
+    int b = std::max(std::get<2>(rgb) - val->index() * 20,0);
     return getrgb(r,g,b);
 }
 

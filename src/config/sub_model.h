@@ -16,6 +16,8 @@
 
 namespace SS_CONFIG {
 
+const int MAX_SUBNETS = 8;
+
 class ssnode;
 class ssvport;
 
@@ -87,13 +89,35 @@ public:
 
   int set_max_util(int m) { return _max_util = m; }
 
+  bool flow_control() {return _flow_control;}
+
+  int  bitwidth() {return _bitwidth;}
+
+  int  decomp_bitwidth() {return _decomp_bitwidth;}
+
   void set_lat(int i) {_lat=i;}
   int lat() {return _lat;}
 
+  void set_out_index(int i) {_out_index=i;}
+  void set_in_index(int i) {_in_index=i;}
+
+  int in_index() {return _in_index;}
+  int out_index() {return _out_index;}
+
 protected:
   int _ID = -1;
-  int _max_util = 1; // by default, assume its a dedicated link
-  int _lat=1;
+
+  // By default, assume single-flopped, dedicated, and flow-control, 64-bit
+  int _lat = 1; //whether there is a latch at the end of this stage
+  int _max_util = 1; // max instructions can map to this link
+  bool _flow_control = true; // whether link supports backpressure
+  int _bitwidth = 64;  // bitwidth of link
+  int _decomp_bitwidth = 8; // minimum bitwidth the link may be decomposed into
+
+  //this is so we know the relative index of this link in the input and output
+  //nodes to which this node belongs
+  int _in_index=-1; 
+  int _out_index=-1;
 
   ssnode *_orig;
   ssnode *_dest;
@@ -116,23 +140,29 @@ public:
       if(_cycle_link) assert(0 && "two cycle links, why?");
       _cycle_link=link;
     }
+    link->set_out_index(_out_links.size());
     _out_links.push_back(link);
+
     node->add_back_link(link);
     return link;
   }
-  sslink * add_link(ssnode *sink_n,std::string source_port, std::string sink_port){
+  sslink *add_link(ssnode *sink_n,std::string source_port, std::string sink_port){
     sslink* link = add_link(sink_n);
     link->set_port_names(source_port,sink_port);
     return link;
   }
 
   void add_back_link(sslink *link) {
+    link->set_in_index(_in_links.size());
     _in_links.push_back(link);
   }
 
   virtual std::string name() const = 0; 
 
   virtual std::string gams_name(int ) const = 0; 
+
+  virtual bool is_input() {return false;}
+  virtual bool is_output() {return false;}
 
   //just for visualization
   void setXY(int x, int y) {
@@ -282,7 +312,6 @@ public:
 
   int node_dist(int slot) { return _node_dist[slot]; }
 
-
   std::pair<int, sslink *> came_from(int slot) { return _came_from[slot]; }
 
   int done(int slot) {return _done[slot];}
@@ -310,26 +339,62 @@ public:
 
   int set_max_util(int m) { return _max_util = m; }
 
-  bool is_shared(){ return isShared;}
+  bool is_shared(){ return isShared;} // TODO: max_util > 1
 
   void set_name(std::string na){module_name = na;}
 
   std::string get_name(){return module_name;}
 
+  bool flow_control() {return _flow_control;}
+
+  int  bitwidth() {return _bitwidth;}
+
+  void setup_default_routing_table(sslink* inlink, sslink* outlink);
+  void setup_routing_memo();
+  void setup_routing_memo_node(int i, int slot, int bitwidth);
+  std::vector<std::pair<int,sslink*>>& linkslots_for(std::pair<int,sslink*>& p, int bitwidth) {
+    int slot = p.first;
+    sslink* l = p.second;
+    int l_ind = 0;
+    if(l) l_ind = l->in_index();
+    auto & ret = _routing_memo.at(l_ind*4*MAX_SUBNETS + slot*4 + (31-__builtin_clz(bitwidth)));
+    assert(is_output() || ret.size()!=0);
+    return ret;
+  }
+
+
 protected:
   int _ID = -1;
-  int _x=-1, _y=-1;
+  int _x=-1, _y=-1; //just for visualization
+
+  int _max_util = 1; 
+  bool _flow_control = true; // whether PE supports backpressure
+  int _bitwidth = 64;  // maximum bitwidth of PE
+
   std::string module_name;
-  std::string module_type;
+  std::string module_type; //TODO: move this to _flow_control/max_util
+ 
+  sslink *_cycle_link=nullptr; //to
+
+  std::vector<sslink *> _in_links; //Incomming and outgoing links
+  std::vector<sslink *> _out_links;
+
+  // This table stores the subnetwork routing
+  // [output][slot][input][slot]
+  std::vector<std::vector<std::vector<std::vector<bool>>>> _subnet_table;
+
+  // Maps [input_link_id][slot_number][bitwidth] -> vector of legal links/slots
+  std::vector<std::vector<std::pair<int,sslink*>>> _routing_memo;
+
+  //Variables used for scheduling -- these should be moved out at some point (TODO)
   int _node_dist[8];
   int _done[8];
   std::pair<int, sslink*>_came_from[8];
-  sslink *_cycle_link=nullptr;
 
-  int _max_util = 1; // by default, assume its a dedicated link
-  std::vector<sslink *> _in_links;
-  std::vector<sslink *> _out_links;
-
+  // @Sihao: The following needs to be integrated with the above so that 
+  // the scheduler uses the correct variables, eg. "isShared" should
+  // become maxUtil, etc. -- Tony
+  
   //Sihao 
   // I/O
   std::string config_input_port;
@@ -539,6 +604,22 @@ public:
     return name();
   }
 
+  int output_bitwidth() {
+    int bitwidth = 0; 
+    for(auto link : _in_links) {
+      bitwidth += link->bitwidth();
+    }
+    return bitwidth;
+  }
+
+  int input_bitwidth() {
+    int bitwidth = 0; 
+    for(auto link : _out_links) {
+      bitwidth += link->bitwidth();
+    }
+    return bitwidth;
+  }
+
   void set_port2node(std::string portname,ssnode * node){
     port2node[portname] = node;
   }
@@ -546,6 +627,8 @@ public:
     return port2node[portname];
   }
   int port() {return _port;}
+  virtual bool is_input() {return _in_links.size()==0;}
+  virtual bool is_output() {return _out_links.size()==0;}
 
 private:
   int _port = -1;
@@ -676,7 +759,8 @@ public:
     return vport;
   }
 
-  void regroup_vecs(); //fills in the linear lists
+  //This function should be called when the entire topology complete
+  void post_process(); 
 
 private:
   void build_substrate(int x, int y);

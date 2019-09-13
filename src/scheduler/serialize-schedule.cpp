@@ -7,10 +7,17 @@
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/map.hpp>
+#include <boost/serialization/list.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/unordered_set.hpp>
 #include <boost/serialization/export.hpp>
 
+template <class Archive>
+void serialize(Archive& ar, std::pair<int, int>& pr, const unsigned int version)
+{
+    ar & pr.first;
+    ar & pr.second;
+}
 
 template<class Archive>
 void Schedule::VertexProp::serialize(Archive & ar, const unsigned version) {
@@ -22,17 +29,22 @@ void Schedule::VertexProp::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(width);
 }
 
+
 template<class Archive>
 void Schedule::EdgeProp::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_NVP(num_links); 
   ar & BOOST_SERIALIZATION_NVP(extra_lat); 
   //need to restore links & passthroughs
+  ar & BOOST_SERIALIZATION_NVP(links_ser); 
+  ar & BOOST_SERIALIZATION_NVP(passthroughs_ser); 
 }
 
 template<class Archive>
 void Schedule::NodeProp::serialize(Archive & ar, const unsigned version) {
-  ar & BOOST_SERIALIZATION_NVP(num_passthroughs);
-  ar & BOOST_SERIALIZATION_NVP(vertices);
+  for (int i = 0; i < 8; ++i) {
+    ar & BOOST_SERIALIZATION_NVP(slots[i].num_passthroughs);
+    ar & BOOST_SERIALIZATION_NVP(slots[i].vertices);
+  }
 }
 
 template<class Archive>

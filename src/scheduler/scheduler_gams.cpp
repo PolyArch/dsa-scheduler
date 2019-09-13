@@ -508,7 +508,7 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG,Schedule*& schedule) {
         if(ssnode==nullptr) {
           cerr << "null ssnode:\"" << ssnode_name << "\"\n";
         }
-        schedule->add_passthrough_node(ssnode);
+        schedule->add_passthrough_node(0,ssnode);
 
       }
 

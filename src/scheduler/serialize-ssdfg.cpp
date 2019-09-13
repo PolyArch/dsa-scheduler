@@ -76,6 +76,7 @@ void SSDfgInst::serialize(Archive & ar, const unsigned version) {
 template<class Archive>
 void SSDfgVec::serialize(Archive & ar, const unsigned version) {
   ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(SSDfgNode);
+  ar & BOOST_SERIALIZATION_NVP(_bitwidth);
   ar & BOOST_SERIALIZATION_NVP(_port_width);
   ar & BOOST_SERIALIZATION_NVP(_vp_len);
 }

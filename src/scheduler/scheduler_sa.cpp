@@ -121,7 +121,8 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
 
     //Back to normal stuff
     bool bad_spot=false;
-    for(auto alt_edge : edge_list) {
+    for(auto& it : edge_list) {
+      SSDfgEdge* alt_edge = it.first;
       if(sched->vioOf(alt_edge) < num+1) {
         bad_spot=true;
         break;
@@ -129,7 +130,8 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
     }
     if(bad_spot) continue;
 
-    for(auto edge : edge_list) {
+    for(auto& it : edge_list) {
+      SSDfgEdge* edge = it.first;
       if(!undo_routing.edges.count(edge)) 
         undo_routing.fill_edge(edge,sched);
     }
@@ -139,7 +141,8 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
       int inserted = route(sched,edge,source,source,&(++it),num+1);
       if(inserted) {
         //cout << "inserted " << inserted << " links into edge " << edge->name() << "\n";
-        for(auto alt_edge : edge_list) {
+        for(auto& it : edge_list) {
+          SSDfgEdge* alt_edge = it.first;
           sched->record_violation(alt_edge,sched->vioOf(alt_edge)-inserted);
           if(alt_edge==edge) continue;
           auto& alt_links = sched->links_of(alt_edge); 
@@ -168,7 +171,8 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
         changed=true;
       }
 
-      for(auto alt_edge : edge_list) {
+      for(auto& it : edge_list) {
+        SSDfgEdge* alt_edge = it.first;
         sched->check_links_consistency(alt_edge);
       }
     }
@@ -176,75 +180,6 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
   return changed;
 }
 
-/*
-bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
-    SSDfgEdge* edge, int& num, CandidateRoute& undo_routing) {
-  bool changed=false;
-
-  int chances_left=100;
-  while(chances_left-- && num > 0) {
-    auto& links = sched->links_of(edge); 
-    int rand_link_no=rand_bt(0,links.size());
-    auto it = links.begin(); 
-    for(int i = 0; i < rand_link_no;++i) ++it;
-    std::pair<int,sslink*> rand_link=*it;
-
-    auto& edge_list = sched->edge_list(rand_link.first,rand_link.second);
-    if(edge_list.size() >1) continue;
-    bool bad_spot=false;
-    for(auto edge : edge_list) {
-      if(sched->vioOf(edge) > num) {
-        bad_spot=true;
-        break;
-      }
-    }
-    if(bad_spot) continue;
-
-    //Preserve the first time you undo an edge
-    for(auto edge : edge_list)
-      if(!undo_routing.edges.count(edge)) 
-        undo_routing.fill_edge(edge,sched);
-
-    if(ssswitch* sw = dynamic_cast<ssswitch*>(rand_link.second->dest())) {
-      auto source = make_pair(rand_link.first,sw);
-      int inserted = route(sched,edge,source,source,true,num+1);
-      if(inserted) {
-        //cout << "inserted " << inserted << " links into edge " << edge->name() << "\n";
-
-        for(auto alt_edge : edge_list) {
-          sched->record_violation(alt_edge,sched->vioOf(alt_edge)-inserted);
-          if(alt_edge==edge) continue;
-          auto& alt_links = sched->links_of(alt_edge); 
-          auto alt_it = alt_links.begin(); 
-          for(int i = 0; i < rand_link_no;++i) {
-            ++alt_it;
-            assert(alt_it!=alt_links.end());
-          }
- 
-          auto from_it = it; 
-          for(int i = 0; i < inserted; ++i) {
-            std::pair<int,sslink*> from_link=*from_it;
-            sched->assign_edgelink(alt_edge, from_link.first, from_link.second,alt_it);
-            if (auto fu = dynamic_cast<ssfu*>(from_link.second->dest())) {
-              if (i+1 !=inserted) {
-                sched->assign_edge_pt(alt_edge, make_pair(from_link.first,fu));
-              }
-            }
-
-            from_it++; //increment the iterator to copy a new node
-            alt_it++;  
-          }
-        }
-       
-        num-=inserted;
-        chances_left++;
-        changed=true;
-      }
-    }
-  }
-  return changed;
-}
-*/
 
 std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep( Schedule*& sched, 
     int& lat, int& latmis, int& ovr, int& agg_ovr, int& max_util,
@@ -273,20 +208,20 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep( Schedule*& sched,
       while(creep_it != ordered_non_temp.rend()) {
         if(latmis==0) break;
 
+        SSDfgNode* v = *creep_it;
+        if(v->is_temporal()) continue;
+        //int node_vio = sched->vioOf(v);
+
         int r = rand_bt(0,4);
         if(r!=0) continue;
-
-        SSDfgNode* v = *creep_it;
-        //int node_vio = sched->vioOf(v);
 
         for(auto e : v->in_edges()) {
           int vio = sched->vioOf(e);
           if(vio) {
             vio = rand_bt(0,vio);
-        bool changed=false;
+            bool changed=false;
             changed |= length_creep(sched,e,vio,undo_routing);
             if(changed) obj(sched,lat,latmis,ovr,agg_ovr,max_util);
-
           }
         }
 
@@ -596,13 +531,13 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
   // FIXME(@were): Move these to a virtual method!
   int t_cost;
   if (is_temporal_in) {
-    t_cost = sched->routing_cost_in(link, 
+    t_cost = sched->routing_cost_temporal_in(link, 
                        dynamic_cast<SSDfgVecInput *>(def_dfgnode));
   } else if (is_temporal_out) {
-    t_cost = sched->routing_cost_out(make_pair(from_slot, link), def_dfgnode,
-                       dynamic_cast<SSDfgVecOutput *>(use_dfgnode));
+    t_cost = sched->routing_cost_temporal_out(make_pair(from_slot, link), 
+              def_dfgnode, dynamic_cast<SSDfgVecOutput *>(use_dfgnode));
   } else { //NORMAL CASE!
-    t_cost = sched->routing_cost(make_pair(from_slot, link), edge->val());
+    t_cost = sched->routing_cost(make_pair(from_slot, link), edge);
   }
 
   if (t_cost >= 2) { //square law avoidance of existing routes
@@ -614,21 +549,14 @@ int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot, in
   bool is_dest = (next == dest.second && next_slot == dest.first);
 
   ssfu *fu = dynamic_cast<ssfu*>(next);
-  if (fu && sched->dfgNodeOf(next_slot,fu) && !is_dest)
-    return -1;  //stop if run into fu
-  if (t_cost == 0) {
-    return 0 + internet_dis; //free link because schedule or candidate routing already maps
-  } else {
-    if (fu && sched->isPassthrough(fu)) {
-      return -1; //someone else's pass through
-    }
-    int passthrough = 10 * (fu && !is_dest);
-    if(passthrough) 
-      passthrough += 50 * sched->thingsAssigned(fu);
-
-    return t_cost + passthrough + internet_dis;
+  if (fu && !is_dest) {
+    t_cost += 10;
+    int count = sched->dfg_nodes_of(next_slot,fu).size();
+    t_cost +=  20 * count * count;
   }
 
+  t_cost+=internet_dis;
+  return t_cost;
 }
 
 void insert_edge(std::pair<int,sslink*> link, Schedule* sched, 
@@ -653,12 +581,7 @@ SchedulerSimulatedAnnealing::route(Schedule *sched,
   bool path_lengthen = ins_it!=nullptr;
 
   _ssModel->subModel()->clear_all_runtime_vals();
-  int bitwidth = edge->bitwidth();
-
-  if (edge->def()->bitwidth() > edge->bitwidth() && source.first != edge->l() / 8) {
-    source.first = edge->l() / 8;
-  }
-
+  
   if(!path_lengthen) _route_times++;
 
   //FIXME: comment/delete this later
@@ -672,6 +595,9 @@ SchedulerSimulatedAnnealing::route(Schedule *sched,
 
   // Distance, random priority, slot, node
   set<std::tuple<int, int, int, ssnode*>> openset;
+
+  source.first = edge->def()->slot_for_use(edge, source.first);
+  dest.first   = edge->use()->slot_for_op(edge, dest.first);
 
   int new_rand_prio = 0; //just pick zero
   source.second->set_done(source.first,new_rand_prio); //remeber for deleting
@@ -694,45 +620,62 @@ SchedulerSimulatedAnnealing::route(Schedule *sched,
       }
     }
 
-    for (auto link : node->out_links()) {
-      ssnode *next = link->dest();
-      bool is_fu = dynamic_cast<ssfu*>(next) != nullptr;
+    auto p_in = node->came_from(slot);
+    p_in.first = slot;
+    auto& linkslots = node->linkslots_for(p_in,edge->bitwidth()/8);
+    //if(p_in.second) {
+    //  cout << p_in.second->name() << ":" <<p_in.first << " can: ";
+    //} else {
+    //  cout << node->name() << ":" <<p_in.first << " can: ";
+    //}
+    //for(auto p_in : linkslots) {
+    //  cout << p_in.second->name() << ":" <<p_in.first << " ";
+    //}
+    //cout << "\n";
+    for (auto next_pair : linkslots)  {
+      int next_slot = next_pair.first;
+      //if(next_slot != slot && ((slot+1)%8) != next_slot) {
+      //  cout << node->name() << " " << slot << "     edge:";
+      //  if(p_in.second) {
+      //    cout << p_in.second->name() << ":" <<p_in.first << " bad-can: ";
+      //  } else {
+      //    cout << node->name() << ":" <<p_in.first << " bad-can: ";
+      //  }
+      //  cout << next_pair.second->name() << ":" << next_pair.first << "\n";
+      //}
+      sslink* next_link = next_pair.second;
+      ssnode *next = next_link->dest();
 
-      for (int delta = 0; delta <= (is_fu ? (64 / bitwidth - 1) : 1); ++delta) {
-        int next_slot = slot + delta * bitwidth / 8;
-        next_slot = (next_slot + 8) % 8;
-        int route_cost;
-        if(!path_lengthen) { // Normal thing
-          route_cost = routing_cost(edge, slot, next_slot, link, sched, dest);
-        } else {
-          //For path lengthening, only route on free spaces
-          route_cost = sched->routing_cost(make_pair(slot,link),edge->val());
-          if(route_cost!=1 || sched->dfgNodeOf(next_slot,next)) route_cost =-1;
-        }
- 
-        if (route_cost == -1) continue;
-
-        int new_dist = cur_dist + route_cost;
-
-        int next_dist = next->node_dist(next_slot);
-
-        bool found_dest = (make_pair(next_slot,next) == dest);
-
-        if (next_dist == -1 || next_dist > new_dist || found_dest) {
-          if (next_dist != -1) {
-            int next_rand_prio = next->done(next_slot);
-            auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, 
-                                                     next_slot, next));
-              if(iter != openset.end())
-                openset.erase(iter);
-          }
-          int new_rand_prio = rand_bt(0,20);
-          next->set_done(next_slot,new_rand_prio); //remeber for later for deleting
-          openset.emplace(new_dist, new_rand_prio,next_slot, next);
-          next->update_dist(next_slot, new_dist, slot, link);
-        } 
+      int route_cost;
+      if(!path_lengthen) { // Normal thing
+        route_cost = routing_cost(edge, slot, next_slot, next_link, sched, dest);
+      } else {
+        //For path lengthening, only route on free spaces
+        route_cost = sched->routing_cost(next_pair,edge);
+        if(route_cost!=1 || sched->dfgNodeOf(next_slot,next)) route_cost =-1;
       }
+ 
+      if (route_cost == -1) continue;
 
+      int new_dist = cur_dist + route_cost;
+
+      int next_dist = next->node_dist(next_slot);
+
+      bool over_ride = (path_lengthen && make_pair(next_slot,next) == dest);
+
+      if (next_dist == -1 || next_dist > new_dist || over_ride) {
+        if (next_dist != -1) {
+          int next_rand_prio = next->done(next_slot);
+          auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, 
+                                                   next_slot, next));
+            if(iter != openset.end())
+              openset.erase(iter);
+        }
+        int new_rand_prio = rand_bt(0,16);
+        next->set_done(next_slot,new_rand_prio); //remeber for later for deleting
+        openset.emplace(new_dist, new_rand_prio,next_slot, next);
+        next->update_dist(next_slot, new_dist, slot, next_link);
+      } 
     }
   }
 
@@ -752,14 +695,21 @@ SchedulerSimulatedAnnealing::route(Schedule *sched,
     count++;
     link = x.second->came_from(x.first);
 
-    if((alt_edge=sched->alt_edge_for_link(link,edge->val()))) {
+    auto link_backup = link;
+
+    link.first = x.first;
+
+    //cout << link.second->name() << " " << link.first << " <- ";
+
+    if((alt_edge=sched->alt_edge_for_link(link,edge))) {
       break;
     }
     insert_edge(link,sched,edge,it,dest,x);
     it--; //dec iter to insert backwards
 
-    x = std::make_pair(link.first, link.second->orig());
+    x = std::make_pair(link_backup.first, link.second->orig());
   }
+  //cout << "\n";
 
 
   //Need to make sure we add back the other links in-order.

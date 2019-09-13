@@ -124,6 +124,11 @@ void SSDfgEdge::pop_buffer_val(bool print, bool verif) {
   compute_after_pop(print, verif);
 }
 
+int is_subset_at_pos(SSDfgEdge* alt_edge, int pos) {
+
+  return 0;
+}
+
 int SSDfgEdge::bitwidth() { return _r - _l + 1; }
 
 int SSDfgEdge::l() { return _l; }
@@ -234,18 +239,100 @@ uint64_t SSDfgNode::invalid() {
 }
 
 //Add edge to operand in least to most significant bit order
-void SSDfgNode::addOperand(unsigned pos, SSDfgEdge *e) {
-  assert(pos <= 1000);
-  if (_ops.size() <= pos) {
-    _ops.resize(pos + 1);
+void SSDfgNode::addOperand(unsigned operand_slot, SSDfgEdge *e, int pos_within_op) {
+  assert(operand_slot <= 1000);
+  if (_ops.size() <= operand_slot) {
+    _ops.resize(operand_slot + 1);
   }
-  _ops[pos].edges.push_back(e);
+  e->set_operand_slot(operand_slot);
+  auto& edge_vec = _ops[operand_slot].edges;
+  if(pos_within_op==-1) {
+    edge_vec.push_back(e);
+  } else {
+    edge_vec.insert(edge_vec.begin()+pos_within_op,e);
+  }
+
   _inc_edge_list.push_back(e);
+}
+
+SSDfg* SSDfgValue::ssdfg() {
+   return _node->ssdfg();
 }
 
 void SSDfgValue::addOutEdge(SSDfgEdge *edge) {
   _uses.push_back(edge);
   _node->addOutEdge(edge); // also add to host node
+}
+
+void SSDfgValue::slice(SSDfgEdge* e, int bitwidth) {
+  if(e->bitwidth() == bitwidth) return;
+  assert(e->bitwidth() > bitwidth);
+  assert(bitwidth!=0);
+  
+  int orig_bitwidth= e->bitwidth();
+
+  cout << "Slicing edge \"" << e->name() << "\" into " << bitwidth << " bits pieces\n";
+
+  //Modify existing edge to be of smaller bitwidth
+  e->set_r(e->l()+bitwidth-1);
+
+  //Need to find what position within the vector of edges to put the
+  //newly created edges in the destination
+  auto& edge_list_for_use_op = e->use()->ops()[e->operand_slot()].edges;
+  unsigned ith_edge=0;
+  for(; ith_edge < edge_list_for_use_op.size(); ++ith_edge) {
+    if(edge_list_for_use_op[ith_edge]==e) {
+      break;
+    }
+  }
+
+  //Add additional edges and update the operand structures
+  for(int i = bitwidth; i < orig_bitwidth; i+=bitwidth) {
+    ssdfg()->connect(this, e->use(), e->operand_slot(), e->etype(), 
+                     e->l()+i, e->l()+i+bitwidth-1, ith_edge+1);
+    ith_edge++;
+  }
+}
+
+//Gauranteed here the e1->l() is < e2->l()
+void SSDfgValue::slice_overlapping_edge(SSDfgEdge* e1, SSDfgEdge* e2) {
+  std::vector<int> points;
+  points.push_back(e1->l());
+  points.push_back(e1->r()+1);
+  points.push_back(e2->l());
+  points.push_back(e2->r()+1);
+  std::sort(points.begin(),points.end());
+  int prev_p=points[0];
+  int max_diff=0;
+  for(int p : points) {
+    if(p==prev_p) continue;
+    int diff = p-prev_p;
+    if(max_diff<diff) max_diff=diff;
+    prev_p=p;
+  }
+  
+  slice(e1,max_diff);
+  slice(e2,max_diff);
+}
+
+void SSDfgValue::slice_overlapping_edges() {
+  //Just do n^2 algorithm for now
+  bool change=true;
+  while(change) {
+    change=false;
+    for(SSDfgEdge* e1 : _uses) {
+      for(SSDfgEdge* e2 : _uses) {
+        if(e1 == e2) continue;
+        if(e1->l() == e2->l() && e1->r() == e2->r()) continue; 
+        if(e1->l() <= e2->r() && e1->r() >= e2->l()) {
+          slice_overlapping_edge(e1,e2); 
+          change=true;
+          break;
+        }
+      }
+      if(change) break;
+    }
+  }
 }
 
 void SSDfgNode::addOutEdge(SSDfgEdge *edge) {
@@ -307,13 +394,11 @@ void SSDfgNode::reset_node() {
 SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v) :
       _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _vtype(v) {
   _group_id = _ssdfg->num_groups() - 1;
-  _values.resize(1,new SSDfgValue(this,0));
 }
 
 SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string &name) :
         _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()),  _name(name), _vtype(v)  {
   _group_id = _ssdfg->num_groups() - 1;
-  _values.resize(1,new SSDfgValue(this,0));
 }
 
 int SSDfgNode::inc_inputs_ready_backcgra(bool print, bool verif) {
@@ -687,6 +772,7 @@ SSDfg::SSDfg(string filename) : SSDfg() {
   string line;
   start_new_dfg_group();
   parse_dfg(filename.c_str(),this);
+  preprocess_graph();
   calc_minLats();
   check_for_errors();
 }
@@ -978,10 +1064,12 @@ int SSDfgInst::update_next_nodes(bool print, bool verif){
   return 0;
 }
 
-SSDfgVec::SSDfgVec(V_TYPE v, int len, const std::string &name, 
-    int id, SSDfg* ssdfg) : SSDfgNode(ssdfg,v,name)  {
-  for(int i = _values.size(); i < len; ++i) {
-    _values.push_back(new SSDfgValue(this,i));
+SSDfgVec::SSDfgVec(V_TYPE v, int num_values, int bitwidth, const std::string &name, 
+    int id, SSDfg* ssdfg) : SSDfgNode(ssdfg,v,name), _bitwidth(bitwidth)  {
+
+  _values.push_back(new SSDfgValue(this,0,bitwidth));
+  for(int i = 1; i < num_values; ++i) {
+    _values.push_back(new SSDfgValue(this,i,bitwidth));
   }
   _group_id = ssdfg->num_groups() - 1;
 }
@@ -1020,27 +1108,32 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   os << "\n";
 
   //print edges
-  for (auto e : _uses) {
+  for (auto v : _values) {
 
-    if(e->etype()==SSDfgEdge::data) {
-       ncolor="black";
-    } else if(e->etype()==SSDfgEdge::ctrl_true) {
-       ncolor="blue";
-    } else if(e->etype()==SSDfgEdge::ctrl_false) {
-       ncolor="red";
+    for (auto e : v->edges()) {
+      if(e->etype()==SSDfgEdge::data) {
+         ncolor="black";
+      } else if(e->etype()==SSDfgEdge::ctrl_true) {
+         ncolor="blue";
+      } else if(e->etype()==SSDfgEdge::ctrl_false) {
+         ncolor="red";
+      }
+  
+      SSDfgNode* n = e->use();
+      os << "N" << _ID << " -> N" << n->_ID << "[ color=";
+      os << ncolor;
+      os << " label = \"";
+      if(v->index() != 0) {
+        os << "v" << v->index() << " ";
+      }
+      if(sched) {
+        os << "l:" << sched->link_count(e)
+           << "\\nex:" << sched->edge_delay(e)
+           << "\\npt:" << sched->num_passthroughs(e);
+      }
+      os << e->l() << ":" << e->r();
+      os << "\"];\n";
     }
-
-    SSDfgNode* n = e->use();
-    os << "N" << _ID << " -> N" << n->_ID << "[ color=";
-    os << ncolor;
-    os << " label = \"";
-    if(sched) {
-      os << "l:" << sched->link_count(e)
-         << "\\nex:" << sched->edge_delay(e)
-         << "\\npt:" << sched->num_passthroughs(e);
-    }
-    os << e->l() << ":" << e->r();
-    os << "\"];\n";
   }
 
   os << "\n";
@@ -1052,10 +1145,11 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
 //added to in least to most significant order!
 SSDfgEdge* SSDfg::connect(SSDfgValue* orig, SSDfgNode* dest, 
                           int dest_slot,
-                           SSDfgEdge::EdgeType etype, int l, int r) {
+                           SSDfgEdge::EdgeType etype, int l, int r,
+                           int operand_pos) {
 
   SSDfgEdge* new_edge = new SSDfgEdge(orig, dest, etype, this, l, r);
-  dest->addOperand(dest_slot,new_edge);
+  dest->addOperand(dest_slot,new_edge,operand_pos);
   orig->addOutEdge(new_edge); //this also adds to the node
   _edges.push_back(new_edge);
 
@@ -1064,8 +1158,6 @@ SSDfgEdge* SSDfg::connect(SSDfgValue* orig, SSDfgNode* dest,
 
 //Disconnect two nodes in DFG
 void SSDfg::disconnect(SSDfgNode* orig, SSDfgNode* dest) {
-  assert(orig != dest && "we only allow acyclic dfgs");
-
   dest->removeIncEdge(orig);
   orig->removeOutEdge(dest);
   assert(false && "edge was not found");
@@ -1104,6 +1196,16 @@ void SSDfg::printGraphviz(ostream& os, Schedule* sched)
 
   os << "}\n";
 }
+
+//After parsing, preprocess graph to establish reuqired invariants
+void SSDfg::preprocess_graph() {
+  for(auto node : _nodes) {
+    for(auto val : node->values()) {
+      val->slice_overlapping_edges();
+    }
+  }
+}
+
 
 void SSDfg::calc_minLats() {
   list<SSDfgNode* > openset;
@@ -1524,7 +1626,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
     possible_candidates++;
 
     if (!is_temporal()) {
-      if (sched->isPassthrough(cand_fu))
+      if (sched->isPassthrough(0,cand_fu)) //FIXME -- this can't be right
         continue;
       //Normal Dedidated Instructions
       
@@ -1532,16 +1634,10 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
         continue;
       }
       
-      auto status = sched->dfg_nodes_of(cand_fu);
-      uint8_t occupied(0);
-      for (auto elem : status) {
-        occupied |= (1 << elem.second->bitwidth() / 8) - 1;
-      }
       for (int k = 0; k < 8; k += this->bitwidth() / 8) {
-        int cnt = 1, tmp = cnt >> k & ((1 << this->bitwidth()) - 1);
-        while (tmp) {
-          ++cnt;
-          tmp -= tmp & -tmp;
+        int cnt = 1;
+        for(int sub_slot = k; sub_slot < k+this->bitwidth()/8; ++sub_slot) {
+          cnt+=sched->dfg_nodes_of(sub_slot,cand_fu).size();
         }
         if (rand() % (cnt * cnt) == 0) {
           spots.emplace_back(k,fus[i]);
@@ -1553,7 +1649,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
       //For temporaly-shared instructions
       //For now the approach is to *not* consume dedicated resources, although
       //this can be changed later if that's helpful.
-      if ((int)sched->thingsAssigned(cand_fu) + 1 < cand_fu->max_util()) {
+      if ((int)sched->dfg_nodes_of(0,cand_fu).size() + 1 < cand_fu->max_util()) {
         spots.emplace_back(0,fus[i]);
       }
     }
@@ -1581,11 +1677,14 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
 std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(
     Schedule *sched, SSModel *model, int n) {
   auto& vports = model->subModel()->input_list();
-  int size = is_temporal() ? 1 : _values.size(); //FIXME for decomp
+  
+  //Lets write size in units of bits
+  int phys_bitwidth = is_temporal() ? 64 : (_values.size() * bitwidth());
+
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
-    if((int)cand->out_links().size() >= size) {
+    if((int)cand->input_bitwidth() >= phys_bitwidth) {
       spots.push_back(make_pair(0,cand));
     } 
   }
@@ -1595,11 +1694,13 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(
 
 std::vector<std::pair<int, ssnode*>> SSDfgVecOutput::candidates(Schedule *sched, SSModel *model, int n) {
   auto& vports = model->subModel()->output_list();
-  int size = is_temporal() ? 1 : _ops.size(); //FIXME for decomp
+
+  //Lets write size in units of bits
+  int phys_bitwidth = is_temporal() ? 64 : (_ops.size() * bitwidth());
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
-    if((int)cand->in_links().size() >= size) {
+    if((int)cand->output_bitwidth() >= phys_bitwidth) {
       spots.push_back(make_pair(0,cand));
     } 
   }

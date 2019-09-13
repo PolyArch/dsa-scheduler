@@ -137,8 +137,24 @@ void SubModel::parse_io(std::istream& istream) {
           }
           avgx/=int_vec.size();
           avgy/=int_vec.size();
-          if(avgx==0) avgx=-2;
-          if(avgy==0) avgy=-2;
+
+          if(avgx<=1) avgx=-1;
+          if(avgx>=sizex()-1) avgx=sizex();
+
+          if(avgy<=1) avgy=-1;
+          if(avgy>=sizey()-1) avgy=sizey();
+
+          bool changed=true;
+          while(changed) {
+            changed=false;
+            for(auto alt_port : _vport_list) {
+              if(avgx==alt_port->x() && avgy==alt_port->y()) {
+                avgx+=1; 
+                changed=true;
+                break;
+              } 
+            }
+          }
           nvp->setXY(avgx,avgy);
         }
     }
@@ -299,8 +315,6 @@ void SubModel::PrintGraphviz(ostream& ofs) {
       ofs << orig_node->name() << " -> " << outputs[i]->name() << ";\n";
     }
   }*/
-
-   
 
   ofs << "}\n";
 }
@@ -809,20 +823,178 @@ void SubModel::build_substrate(int sizex, int sizey) {
   }
 }
 
+void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
+  std::vector<std::pair<int,sslink*>>& links = _routing_memo.at(i*4*MAX_SUBNETS + in_off*4 + bitwidth_log);
+  int slots=1;
+  for(int b = 0; b < bitwidth_log; ++b) slots*=2;
+ 
+  int in_slots;
+  int in_index;
+  if(_in_links.size() > 0) { 
+    sslink* inlink =   _in_links[i];
+    in_slots = inlink->bitwidth()/8;
+    in_index = inlink->in_index();
+    //cout << inlink->name() << ":" << in_off << ", size:" << slots << " -- "; 
+
+  } else { //no inputs (like an input ssvport)
+    in_slots = bitwidth()/8;
+    in_index = 0;
+    //cout << "any for " << name() << ":" << in_off << ", size:" << slots << "--";
+  }
+
+  //if(_out_links.size()==0) {
+  //  cout << "  NO B/C OUTLINKS IS 0 \n";
+  //  return;
+  //}
+
+
+  for(sslink* outlink : _out_links) {
+    //start at each output offset 
+    for(int out_off = 0; out_off < outlink->bitwidth()/8; ++out_off) {
+
+      bool failed=false;
+
+      for(int i = 0; i < slots; ++i) {
+        int out_slot = (out_off + i) % (outlink->bitwidth()/8);
+        int in_slot  = (in_off + i) % (in_slots);
+        if(!_subnet_table[outlink->out_index()][out_slot][in_index][in_slot]) {
+          failed=true;
+          break;
+        }
+      }
+
+      if(!failed) {
+        //cout << outlink->name() << ":" << out_off << " ";
+
+        links.push_back(make_pair(out_off,outlink));
+      }
+    }
+  }
+  //cout << "\n";
+}
+
+void ssnode::setup_default_routing_table(sslink* inlink, sslink* outlink) {
+
+  for(sslink* outlink : _out_links) {
+    //By default we just want each corresponding output + one decomposable
+    //bitwidth away
+    
+    int in_slots;
+    int in_index;
+    if(inlink) {
+      in_slots=inlink->bitwidth()/8;
+      in_index=inlink->in_index();
+    } else {
+      in_slots=bitwidth()/8;
+      in_index=0;
+    }
+
+    int min_slots = std::min(in_slots,outlink->bitwidth()/8);
+
+    for(int out_off=0; out_off < outlink->bitwidth()/8; out_off+=min_slots) {
+      for(int in_off=0; in_off < in_slots; in_off+=min_slots) {
+        //Now we've created a square region.
+        //first, avoid connecting multiple subnetworks to one output if the
+        //switch is not decomposable at all
+        if(outlink->decomp_bitwidth()==outlink->bitwidth() && in_off!=0) continue;
+
+        //first connect same subnet
+        for(int i = 0; i < min_slots; ++i) {
+          _subnet_table.at(outlink->out_index()).at(out_off+i).at(in_index).at(in_off+i)=true;
+        }
+
+        //If its an FU, don't subnet hop
+        if(dynamic_cast<ssfu*>(outlink->orig()) || 
+           dynamic_cast<ssvport*>(outlink->orig())) {
+          continue;
+        }
+
+        // If we aren't also changing bitwidths, lets allow some subnet connections
+        if(in_slots != outlink->bitwidth()/8) continue;
+
+        for(int i = 0; i < min_slots; ++i) {
+          int out = out_off +((i+outlink->decomp_bitwidth()/8) % min_slots);
+          _subnet_table.at(outlink->out_index()).at(out).at(in_index).at(in_off+i)=true;
+        } 
+      }
+    }
+  }
+}
+
+
+void ssnode::setup_routing_memo() {
+  if(_subnet_table.size()==0) {
+    //Allocate the space for the table
+    _subnet_table.resize(_out_links.size());
+    for(sslink* outlink : _out_links) {
+      _subnet_table[outlink->out_index()].resize(MAX_SUBNETS);
+      for(int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
+        _subnet_table[outlink->out_index()][o_sub].resize(std::max(1,(int)_in_links.size()));
+        for(sslink* inlink : _in_links) {
+          _subnet_table[outlink->out_index()][o_sub][inlink->in_index()].resize(MAX_SUBNETS);
+        }
+        if(_in_links.size()==0) {
+          _subnet_table[outlink->out_index()][o_sub][0].resize(MAX_SUBNETS);
+        }
+      }
+    }
+
+    for(sslink* outlink : _out_links) {
+      for(sslink* inlink : _in_links) {
+        setup_default_routing_table(inlink,outlink);     
+      }
+      if(_in_links.size()==0) {
+        setup_default_routing_table(nullptr,outlink);     
+      }
+    }
+  }
+
+  //for(sslink* outlink : _out_links) {
+  //  for(sslink* inlink : _in_links) {
+  //    cout << inlink->name() << " -> " << outlink->name() << "\n";
+  //    for(int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
+  //      for(int i_sub = 0; i_sub < MAX_SUBNETS; ++i_sub) {
+  //        cout <<            _subnet_table[outlink->out_index()][o_sub][inlink->in_index()][i_sub] << " ";
+  //      }
+  //      cout << "\n";
+  //    }
+  //  }
+  //}
+
+
+  //Now, no matter what _subnet table will be filled
+  //Now lets memo-ize it so that the scheduler isn't dog slow
+  //allocate space for the memo table
+  _routing_memo.resize(std::max(1,(int)_in_links.size()) * _bitwidth/8 * 4);
+
+  for(int i = 0; i < std::max(1,(int)_in_links.size()); ++i) {
+    for(int slot = 0; slot < 8; ++slot) {
+      for(int bitwidth = 0; bitwidth <= 3; ++bitwidth) {
+        setup_routing_memo_node(i,slot,bitwidth); 
+      }
+    }
+  }
+}
 
 //Group Nodes/Links and Set IDs
 //This should be done after all the links are added
-void SubModel::regroup_vecs() {
+void SubModel::post_process() {
   _node_list.clear();
 
-  for (auto &elem : _vport_list)
+  for (auto elem : _vport_list)
     elem->set_id(_node_list, _link_list);
 
-  for (auto &elem : _fu_list)
+  for (auto elem : _fu_list)
     elem->set_id(_node_list, _link_list);
 
-  for (auto &elem: _switch_list)
+  for (auto elem: _switch_list)
     elem->set_id(_node_list, _link_list);
+
+  //Setup the subnetwork topology lookup tables for each node if it has not been
+  //setup already during configuration.
+  for (auto node : _node_list) {
+    node->setup_routing_memo();
+  }
 }
 
 void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips, int ops, bool multi_config, int temp_x, int temp_y, int temp_width, int temp_height, int skip_hv_dist, int skip_diag_dist, int skip_delay)  {

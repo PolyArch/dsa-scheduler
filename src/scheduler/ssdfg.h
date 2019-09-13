@@ -34,18 +34,27 @@ class SSDfg;
 class SSDfgEdge;
 
 // Datastructure describing a value created by an input vector or an instruction
-// Values are always routed "together" on adjacent subnetworks
 class SSDfgValue {
 public:
   SSDfgValue() {} //for serialization
-  SSDfgValue(SSDfgNode* node, int index) : _node(node), _index(index) {}
+  SSDfgValue(SSDfgNode* node, int index, int bitwidth) : 
+    _node(node), _index(index), _bitwidth(bitwidth) {}
 
   SSDfgNode *node() const {return _node;}
+
   int index() const {return _index;}
   const std::vector<SSDfgEdge*> edges() const {return _uses;}
+
   int bitwidth() const {return _bitwidth;}
 
   void addOutEdge(SSDfgEdge* edge);
+  SSDfg* ssdfg();
+  void slice(SSDfgEdge* e1, int bitwidth);
+  void slice_overlapping_edge(SSDfgEdge* e1, SSDfgEdge* e2);
+
+  //This is a performance-non-critical function, so do it in a stupid slow
+  //way that is gauranteed to work
+  void slice_overlapping_edges();
 
   friend class boost::serialization::access;
   template<class Archive> void serialize(Archive &ar, const unsigned int version);
@@ -101,7 +110,7 @@ public:
   bool is_buffer_full();
 
   bool is_buffer_empty();
-
+ 
   //Calculate the value based on the origin's value, and the edge's
   //index and bitwidth fields
   uint64_t extract_value(uint64_t v_in);
@@ -112,9 +121,17 @@ public:
 
   void pop_buffer_val(bool print, bool verif);
 
-  int bitwidth();
+  //Return true if this edges is a subset of the other edge at the given position
+  bool is_subset_at_pos(SSDfgEdge* alt_edge, int pos);
+
+  void set_r(int r) {_r=r;}
+
+  virtual int bitwidth();
   int l();
   int r();
+
+  void set_operand_slot(int s) {_op_slot=s;}
+  int operand_slot() {return _op_slot;}
 
   uint64_t get_value();
 
@@ -130,6 +147,7 @@ private:
   SSDfgNode* _use=0; //operand which consumes the edge
   EdgeType _etype;
   int _l=-1, _r=-1;
+  int _op_slot=-1;
 
   //Runtime Types
   std::queue<std::pair<uint64_t, bool>> _data_buffer;
@@ -193,7 +211,7 @@ public:
   virtual ~SSDfgNode() {}
 
   SSDfgNode() {
-    _values.resize(1,new SSDfgValue(this,0));
+    //_values.resize(1,new SSDfgValue(this,0,bitwidth()));
   }
 
   enum V_TYPE {
@@ -203,6 +221,16 @@ public:
   virtual void printGraphviz(std::ostream &os, Schedule *sched = nullptr);
 
   virtual std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) = 0;
+
+  //Get the slot corresponding to this edge
+  virtual int slot_for_use(SSDfgEdge* edge, int node_slot) {
+    int slot = node_slot+edge->l()/8;
+    assert(slot < 8);
+    return slot;
+  }
+  virtual int slot_for_op(SSDfgEdge* edge, int node_slot) {
+    return node_slot;
+  }
 
   // some issue with this function
   virtual uint64_t invalid();
@@ -214,13 +242,13 @@ public:
   typedef std::vector<SSDfgOperand>::const_iterator const_op_iterator;
 
   //Add edge to operand in least to most significant bit order
-  void addOperand(unsigned pos, SSDfgEdge *e);
+  void addOperand(unsigned pos, SSDfgEdge *e, int pos_within_op);
   void addOutEdge(SSDfgEdge *edge);
   void remove_edge(SSDfgNode *to_erase, int idx);
   void removeIncEdge(SSDfgNode *orig);
   void removeOutEdge(SSDfgNode *dest);
-  void reset_node();
-  
+  void reset_node();  
+
   void validate();
 
   virtual int compute(bool print, bool verif) { return 0; }
@@ -321,7 +349,7 @@ public:
 
   bool is_temporal();
 
-  virtual int bitwidth() { return 64; }
+  virtual int bitwidth() =0;
   //---------------------------------------------------------------------------
 
   V_TYPE type() { assert(_vtype!=V_INVALID); return _vtype; }
@@ -331,6 +359,8 @@ public:
   void set_group_id(int id) { _group_id = id; }
 
   int num_inc_edges() { return _inc_edge_list.size(); }
+
+  SSDfg* ssdfg() {return _ssdfg;}
 
 private:
 
@@ -468,16 +498,14 @@ public:
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(
       Schedule *, SS_CONFIG::SSModel *, int n) override;
 
-
   SSDfgInst(SSDfg *ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(is_dummy), _imm_slot(-1),
     _subFunc(0), _reg(8, 0), _ssinst(inst) {
     //DFG Node makes a value by default, so start at 1
-    for(int i = 1; i < SS_CONFIG::num_values(_ssinst); ++ i) {
-      _values.push_back(new SSDfgValue(this,i));
+    for(int i = _values.size(); i < SS_CONFIG::num_values(_ssinst); ++ i) {
+      _values.push_back(new SSDfgValue(this,i,bitwidth()));
     }
   }
-
 
   SSDfgInst(SSDfg *ssdfg) :
     SSDfgNode(ssdfg, V_INST), _predInv(false), _isDummy(false), _imm_slot(-1), _subFunc(0),
@@ -594,7 +622,7 @@ class SSDfgVec : public SSDfgNode {
 public:
   SSDfgVec() {}
 
-  SSDfgVec(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg);
+  SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string &name, int id, SSDfg *ssdfg);
 
   void set_port_width(int n) { _port_width=n; }
 
@@ -608,13 +636,11 @@ public:
 
   int length() { return _ops.size(); }
 
-  virtual std::string gamsName() {
-    return _name;
-  }
+  virtual std::string gamsName() {return _name;}
 
-  virtual std::string name() override{
-    return _name;
-  }
+  virtual std::string name() override {return _name;}
+
+  virtual int bitwidth() override {return _bitwidth;}
 
 private:
   friend class boost::serialization::access;
@@ -623,6 +649,7 @@ private:
   void serialize(Archive &ar, const unsigned version);
 
 protected:
+  int _bitwidth; // element bitwidth
   int _port_width;
   int _vp_len;
 };
@@ -638,7 +665,7 @@ public:
 
   SSDfgVecInput() {}
 
-  SSDfgVecInput(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, name, id, ssdfg) {}
+  SSDfgVecInput(V_TYPE v, int len, int width, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, width, name, id, ssdfg) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule *, SS_CONFIG::SSModel *, int n) override;
 
@@ -659,7 +686,7 @@ public:
 
   SSDfgVecOutput() {}
 
-  SSDfgVecOutput(V_TYPE v, int len, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, name, id, ssdfg) {}
+  SSDfgVecOutput(V_TYPE v, int len, int width, const std::string &name, int id, SSDfg *ssdfg) : SSDfgVec(v, len, width, name, id, ssdfg) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(
       Schedule *, SS_CONFIG::SSModel *, int n) override;
@@ -667,6 +694,20 @@ public:
   //SSDfgNode *at(int i) {
   //  return _ops[i]->node();
   //}
+
+  virtual int slot_for_op(SSDfgEdge* edge, int node_slot) override {
+    //need to figure out which operand, then count bits within that operand
+    for(SSDfgOperand& op : _ops) {
+      int slot = 0;
+      for(SSDfgEdge* cur_edge : op.edges) {
+        if(cur_edge == edge) return slot;
+        slot+=cur_edge->bitwidth()/8;
+      }
+    }
+    assert(0 && "edge not present in any operands");
+    return -1;
+  }
+
 
   friend class boost::serialization::access;
 
@@ -760,7 +801,8 @@ public:
 
 
   SSDfgEdge *connect(SSDfgValue *orig, SSDfgNode *dest, int slot,
-                      SSDfgEdge::EdgeType etype, int l = 0, int r = 63);
+                      SSDfgEdge::EdgeType etype, int l = 0, int r = 63,
+                      int operand_pos=-1);
 
 
   void disconnect(SSDfgNode *orig, SSDfgNode *dest);
@@ -825,8 +867,6 @@ public:
 
   double count_starving_nodes();
 
-
-
   //Simulator pushes data to vector given by vector_id
   bool push_vector(SSDfgVecInput *vec_in, std::vector<uint64_t> data, std::vector<bool> valid, bool print, bool verif);
 
@@ -856,6 +896,8 @@ public:
   int cycle(bool print, bool verif);
 
 // ---------------------------------------------------------------------------
+
+  void preprocess_graph();
 
   void calc_minLats();
 
@@ -979,7 +1021,7 @@ inline void SSDfg::add_parsed_vec(const std::string &name, int len, EntryTable &
   //I think it's somewhat likely i am breaking decomposability
   auto v = std::is_same<T, SSDfgVecInput>::value ? 
     SSDfgVec::V_TYPE::V_INPUT :  SSDfgVec::V_TYPE::V_OUTPUT;
-  T *vec = new T(v, len, name, (int) nodes<T*>().size(), this);
+  T *vec = new T(v, len, width, name, (int) nodes<T*>().size(), this);
   add(vec);
   vec->set_port_width(width);
   vec->set_vp_len(n);
