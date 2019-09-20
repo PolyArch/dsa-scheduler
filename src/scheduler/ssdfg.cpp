@@ -1677,10 +1677,8 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule *sched, SSMo
 std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(
     Schedule *sched, SSModel *model, int n) {
   auto& vports = model->subModel()->input_list();
-  
   //Lets write size in units of bits
   int phys_bitwidth = is_temporal() ? 64 : (_values.size() * bitwidth());
-
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
@@ -1688,22 +1686,17 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(
       spots.push_back(make_pair(0,cand));
     } 
   }
-  cout << "spot size = " <<spots.size() << "\n";
   assert(spots.size() > 0 && "Uh oh, no spots for inputs!\n");
   return spots;
 }
 
 std::vector<std::pair<int, ssnode*>> SSDfgVecOutput::candidates(Schedule *sched, SSModel *model, int n) {
   auto& vports = model->subModel()->output_list();
-
-  cout << "The Size of Output List is " << vports.size() << "\n";
-
   //Lets write size in units of bits
   int phys_bitwidth = is_temporal() ? 64 : (_ops.size() * bitwidth());
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
-    cout << "output bandwidth = " << (int)cand->output_bitwidth() << "\n";
     if((int)cand->output_bitwidth() >= phys_bitwidth) {
       spots.push_back(make_pair(0,cand));
     } 
