@@ -17,3 +17,5 @@ compile_commands.json
 CMakeLists.txt
 cmake-build-debug/*
 .vscode
+test_config/*
+sched/*
