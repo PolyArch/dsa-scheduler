@@ -1173,7 +1173,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   for(int i = temp_x; i < temp_x+temp_width; i++) {
     for (int j = temp_y; j < temp_y + temp_height; j++) {
       _fus[i][j]->set_max_util(64);
-      _fus[i][j]->isShared = true;
 
       if (i + 1 < temp_x + temp_width) {
         sslink *link = _fus[i][j]->add_link(_fus[i + 1][j]);

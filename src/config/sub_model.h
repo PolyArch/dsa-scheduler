@@ -208,94 +208,54 @@ public:
     return _cycle_link;
   }
 
-  std::vector<std::string> get_output_ports(){
-    return output_ports;
-  }
-
-  std::vector<std::string> get_input_ports(){
-    return input_ports;
-  }
-
   int id() { return _ID; }
 
-  void set_properties(YAML::Node prop){
-    // Default
-    YAML::Node default_setting = prop["<<"];
+  void set_ssnode_prop(YAML::Node prop){
+    int id;
+    std::string name;
+    std::string nodeType;
 
-    // Module Type
-    if(default_setting["module_type"] || prop["module_type"])
-    try{
-      module_type = prop["module_type"].as<std::string>();
-    }catch(...){
-      module_type = default_setting["module_type"].as<std::string>();
+    std::vector<std::vector<bool>> temp_subnet_table;
+
+    if(prop["id"]){
+      id = prop["id"].as<int>();
     }
-    // I/O
-    // Config Input Port
-    if(default_setting["config_input_port"] || prop["config_input_port"])
-    try{
-      config_input_port = prop["config_input_port"].as<std::string>();
-    }catch(...){
-      config_input_port = default_setting["config_input_port"].as<std::string>();
+    if(prop["nodeType"]){
+      nodeType = prop["nodeType"].as<std::string>();
     }
-    // Config Output Port
-    if(default_setting["config_output_port"] || prop["config_output_port"])
-    try{
-      config_output_port = prop["config_output_port"].as<std::string>();
-    }catch(...){
-      config_output_port = default_setting["config_output_port"].as<std::string>();
+    name = nodeType + "_" + std::to_string(id);
+    set_id(id);
+    set_name(name);
+
+    if(prop["inter_subnet_connection"]){
+      int output_link_size;
+      int output_slot_size;
+      std::cout << "hit inter subnet connection\n";
+      YAML::Node subnet_table_node = prop["subnet_inter_connection"];
+      output_link_size = subnet_table_node.size();
+      temp_subnet_table.resize(output_link_size);
+      std::cout << prop["subnet_inter_connection"].IsSequence() << "\n";
+      for (int output_idx = 0; output_idx < output_link_size; output_idx++){
+        output_slot_size = subnet_table_node[output_idx].size();
+        temp_subnet_table[output_idx].resize(output_slot_size);
+        for (int output_slot_idx = 0; output_slot_idx < output_slot_size; output_slot_idx++){
+          temp_subnet_table[output_idx][output_slot_idx] =
+          subnet_table_node[output_idx][output_slot_idx].as<bool>();
+        }
+      }
+      // Print Subnet Table
+      for (int i = 0; i<output_link_size; i++){
+        for (int j = 0; j<output_slot_size; j++){
+          std::cout << temp_subnet_table[i][j] << " ";
+        }
+        std::cout <<"\n";
+      } 
+      std::cout << "inter subnet connection parsed successfully\n";
     }
-    // Input Ports
-    if(default_setting["input_ports"] || prop["input_ports"])
-    try{
-      input_ports = prop["input_ports"].as<std::vector<std::string>>();
-    }catch(...){
-      input_ports = default_setting["input_ports"].as<std::vector<std::string>>();
-    }
-    
-    // Insts 
-    std::vector<std::string> insts;
-    if(default_setting["instructions"] || prop["instructions"])
-    try{
-      insts = prop["instructions"].as<std::vector<std::string>>();
-    }catch(...){
-      insts = default_setting["instructions"].as<std::vector<std::string>>();
-    }
-    
-    // Output Ports
-    if(default_setting["output_ports"] || prop["output_ports"])
-    try{
-      output_ports = prop["output_ports"].as<std::vector<std::string>>();
-    }catch(...){
-      output_ports = default_setting["output_ports"].as<std::vector<std::string>>();
-    }
-    // decomposer 
-    if(default_setting["decomposer"] || prop["decomposer"])
-    try{
-      decomposer = prop["decomposer"].as<int>();
-    }catch(...){
-      decomposer = default_setting["decomposer"].as<int>();
-    }
-    // Shared / Dedicated
-    if(default_setting["isShared"] || prop["isShared"])
-    try{
-      isShared = prop["isShared"].as<bool>();
-    }catch(...){
-      isShared = default_setting["isShared"].as<bool>();
-    }
-    // Shared Slot Size
-    if(default_setting["shared_slot_size"]||prop["shared_slot_size"])
-    try{
-      shared_slot_size = prop["shared_slot_size"].as<int>();
-    }catch(...){
-      shared_slot_size = default_setting["shared_slot_size"].as<int>();
-    }
-    // Static / Dynamic
-    if(default_setting["protocol"]||prop["protocol"])
-    try{
-      protocol = prop["protocol"].as<std::string>();
-    }catch(...){
-      protocol = default_setting["protocol"].as<std::string>();
-    }
+  }
+
+  void set_id(int id){
+    _ID = id;
   }
 
   void set_id(std::vector<ssnode *> &node_list,
@@ -339,7 +299,7 @@ public:
 
   int set_max_util(int m) { return _max_util = m; }
 
-  bool is_shared(){ return isShared;} // TODO: max_util > 1
+  bool is_shared(){ return _max_util > 1;} // TODO: max_util > 1
 
   void set_name(std::string na){module_name = na;}
 
@@ -372,8 +332,8 @@ protected:
   int _bitwidth = 64;  // maximum bitwidth of PE
 
   std::string module_name;
-  std::string module_type; //TODO: move this to _flow_control/max_util
- 
+  // module_type removed, use _flow_control and _max_util to refer it
+
   sslink *_cycle_link=nullptr; //to
 
   std::vector<sslink *> _in_links; //Incomming and outgoing links
@@ -394,20 +354,11 @@ protected:
   // @Sihao: The following needs to be integrated with the above so that 
   // the scheduler uses the correct variables, eg. "isShared" should
   // become maxUtil, etc. -- Tony
+  // @Tony: fixed, now just decomposer to be integrated
   
-  //Sihao 
-  // I/O
-  std::string config_input_port;
-  std::string config_output_port;
-  std::vector<std::string> input_ports;
-  std::vector<std::string> output_ports;
+  // @Sihao 
   // Decomposability
   int decomposer;
-  // Shared / Dedicated
-  bool isShared;
-  int shared_slot_size;
-  // Static / Dynamic
-  std::string protocol;
 
 private:
   friend class SubModel;
@@ -435,30 +386,32 @@ public:
   }
 
   void set_prop(YAML::Node prop){
+    set_ssnode_prop(prop);
     // Default
     YAML::Node default_setting = prop["<<"];
     // back_pressure_fifo_depth 
-    if(default_setting["back_pressure_fifo_depth "] || prop["back_pressure_fifo_depth"])
-    try{
-      back_pressure_fifo_depth = prop["back_pressure_fifo_depth"].as<int>();
-    }catch(...){
-      back_pressure_fifo_depth = default_setting["back_pressure_fifo_depth"].as<int>();
+    if(prop["max_fifo_depth "]){
+      max_fifo_depth = prop["max_fifo_depth"].as<int>();
+    }else{
+      if(_flow_control){
+        max_fifo_depth = 2;
+      }
     }
   }
 
   void collect_features(){
-    features[0] = isShared ? 0.0 : 1.0;
-    features[1] = isShared ? 1.0 : 0.0;
+    features[0] = _max_util > 1 ? 0.0 : 1.0;
+    features[1] = _max_util > 1 ? 1.0 : 0.0;
     assert(features[0] || features[1]);
-    features[2] = protocol == "Data" ? 1.0:0.0;
-    features[3] = protocol == "DataValidReady" ?1.0:0.0;
+    features[2] = !_flow_control ? 1.0:0.0;
+    features[3] = _flow_control ?1.0:0.0;
     assert((features[2] || features[3]) && "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = decomposer;
     assert(!(decomposer == 0) && !(decomposer & (decomposer - 1))&&"Decomposer need to be power of two");
-    features[5] = back_pressure_fifo_depth;
-    features[6] = input_ports.size();
-    features[7] = output_ports.size();
-    features[8] = shared_slot_size;
+    features[5] = max_fifo_depth;
+    features[6] = _in_links.size();
+    features[7] = _out_links.size();
+    features[8] = _max_util;
   }
 
   double get_area(){
@@ -472,7 +425,7 @@ public:
 
 protected:
   double features[9];
-  int back_pressure_fifo_depth;
+  int max_fifo_depth;
 };
     
 class ssfu : public ssnode {
@@ -483,6 +436,7 @@ public:
   void setFUDef(func_unit_def *fu_def) { _fu_def = fu_def; }
 
   void set_prop(YAML::Node prop){
+    set_ssnode_prop(prop);
     // Default
     YAML::Node default_setting = prop["<<"];
     // delay_fifo_depth 
@@ -525,11 +479,11 @@ public:
   }
 
   double* collect_features(){
-    features[0] = isShared ? 0.0 : 1.0;
-    features[1] = isShared ? 1.0 : 0.0;
+    features[0] = _max_util > 1 ? 0.0 : 1.0;
+    features[1] = _max_util > 1 ? 1.0 : 0.0;
     assert(features[0] || features[1]);
-    features[2] = protocol == "Data" ? 1.0:0.0;
-    features[3] = protocol == "DataValidReady" ?1.0:0.0;
+    features[2] = !_flow_control ? 1.0:0.0;
+    features[3] = _flow_control ? 1.0:0.0;
     assert((features[2] || features[3]) && "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = output_select_mode=="Individual" ? 1.0:0.0;
     features[5] = output_select_mode=="Universal" ? 1.0:0.0;
@@ -537,10 +491,10 @@ public:
     features[6] = decomposer;
     assert(!(decomposer == 0) && !(decomposer & (decomposer - 1))&&"Decomposer need to be power of two");
     features[7] = delay_fifo_depth;
-    features[8] = input_ports.size();
-    features[9] = output_ports.size();
+    features[8] = _in_links.size();
+    features[9] = _out_links.size();
     features[10] = register_file_size;
-    features[11] = shared_slot_size;
+    features[11] = _max_util;
     return features;
   }
 
@@ -563,7 +517,7 @@ protected:
   std::string output_select_mode;
   int delay_fifo_depth;
   int register_file_size;
-
+  std::vector<int> max_delay_depth;
 
 private:
   friend class SubModel;

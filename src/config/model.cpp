@@ -3,16 +3,12 @@
 #include <sstream>
 #include <cstdlib> 
 #include <math.h>
-
 #include <assert.h>
-
 #include "model.h"
 #include "model_parsing.h"
-
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include "ssinst.h"
-
 #include <yaml-cpp/yaml.h>
 
 namespace pt = boost::property_tree;
@@ -186,22 +182,47 @@ SSModel::SSModel(const char* filename, bool multi_config) {
 
 //YAML Parser
 void SSModel::parse_yaml(const std::string& fn) {
+  assert(0 && "Yaml Parser is currently not working due to UNDEFINED Node Type of yaml-cpp library, please switch to JSON");
   // Initialize SubModel
   _subModel = new SubModel();
   std::map<std::string,ssnode*> all_modules;
 
   // Read YAML File
-  YAML::Node hw_desc = YAML::LoadFile(fn);
-  
+  YAML::Node ssfabric = YAML::LoadFile(fn);
+
   // Set System Variables
-  YAML::Node cgra_system;
-  if (hw_desc["system"]) cgra_system = hw_desc["system"];
   _fuModel = NULL;
+
+  // TODO: Yaml is not working when parsing subnet_table
+  //   inter_subnet_connection:
+  //   - [true, true, false, false]
+  //   - [false, false, true, true]
+  // Cannot be Extracted
+  YAML::Node ssnodes;
+  if(ssfabric["nodes"]){
+    ssnodes = ssfabric["nodes"];
+    for (unsigned i = 0; i < ssnodes.size();i++){
+      YAML::Node node = ssnodes[i];
+      string nodeType= node["nodeType"].as<std::string>();
+      cout << "Initialize " << nodeType << "\n" ;
+      if(nodeType == "switch"){
+        ssswitch* sw = _subModel -> add_switch();
+        int id = node["id"].as<int>();
+        sw -> set_prop(node);
+      }
+      if(nodeType == "function unit"){
+
+      }
+      if(nodeType == "vector port"){
+
+      }
+    }
+  }
 
   // Instantiate Routers
   YAML::Node routers;
-  if (hw_desc["routers"]) {
-    routers = hw_desc["routers"];
+  if (ssfabric["routers"]) {
+    routers = ssfabric["routers"];
     for(YAML::const_iterator it=routers.begin();it!=routers.end();++it) {
       // Get the name of router
       const std::string router_name = it->first.as<std::string>();
@@ -212,7 +233,6 @@ void SSModel::parse_yaml(const std::string& fn) {
       ssswitch* sw = _subModel -> add_switch();
       sw -> set_name(router_name);
       sw -> set_prop(router_properties);
-      sw -> set_properties(router_properties);
       all_modules[router_name] = sw;
       // Output for debug
       std::cout << "Initiatie " << router_name << "\n";
@@ -222,8 +242,8 @@ void SSModel::parse_yaml(const std::string& fn) {
   // Inistantiate Processing Elements
   YAML::Node processing_elements;
   YAML::Node default_node;
-  if(hw_desc["dedicated_pes"]) {
-    processing_elements = hw_desc["dedicated_pes"];
+  if(ssfabric["dedicated_pes"]) {
+    processing_elements = ssfabric["dedicated_pes"];
     for (YAML::const_iterator it = processing_elements.begin();it != processing_elements.end();++it){
       // Get the name of Processing Elements
       const std::string pe_name = it->first.as<std::string>();
@@ -236,7 +256,6 @@ void SSModel::parse_yaml(const std::string& fn) {
       YAML::Node pe_properties = processing_elements[pe_name];
       ssfu * fu = _subModel -> add_fu();
       fu -> set_name(pe_name);
-      fu -> set_properties(pe_properties);
       fu -> set_prop(pe_properties);
       // We can have a traditional shared processing element
       if(fu -> is_shared() ){
@@ -276,8 +295,8 @@ void SSModel::parse_yaml(const std::string& fn) {
 
   // Instantiate Triggered Processing Elements
   YAML::Node trig_processing_elements;
-  if(hw_desc["shared_pes"]) {
-    trig_processing_elements = hw_desc["shared_pes"];
+  if(ssfabric["shared_pes"]) {
+    trig_processing_elements = ssfabric["shared_pes"];
     for(YAML::const_iterator it = trig_processing_elements.begin();it != trig_processing_elements.end();++it){
       // Get the name of Triggered Processing Elements
       const std::string trig_pe_name = it->first.as<std::string>();
@@ -291,7 +310,6 @@ void SSModel::parse_yaml(const std::string& fn) {
       ssfu * fu = _subModel -> add_fu();
       fu -> set_name(trig_pe_name);
       fu -> set_prop(trig_pe_prop);
-      fu -> set_properties(trig_pe_prop);
       // Triggered-Inst Processing Element is naturally Shared
       fu -> set_max_util(64);
       fu -> add_link(fu);
@@ -328,8 +346,8 @@ void SSModel::parse_yaml(const std::string& fn) {
   // Num of vector port
   int num_ivp=0;
   int num_ovp=0;
-  if(hw_desc["vector_ports"]) {
-    vector_ports = hw_desc["vector_ports"];
+  if(ssfabric["vector_ports"]) {
+    vector_ports = ssfabric["vector_ports"];
     for (YAML::const_iterator it = vector_ports.begin();it!=vector_ports.end();++it){
       // Get Name
       const std::string vp_name = it->first.as<std::string>();
@@ -351,27 +369,21 @@ void SSModel::parse_yaml(const std::string& fn) {
         cout << "init out vport " << num_ovp <<"\n";
         vp = _subModel->add_vport(is_input,num_ovp++);
       }        
-      vp -> set_properties(vp_prop); // Set Universal Prop
       vp -> set_prop(vp_prop); // Set Vector Port Specific Prop
       all_modules[vp_name] = vp;
 
       if (io_type == "in"){
         int port_idx = num_ivp;
-        for(auto & output_port : vp -> get_output_ports()){
+        for(auto & output_port : vp -> out_links()){
           int input_node_idx = num_inputs ++;
           vp -> port_vec().push_back(input_node_idx);
-          //ssinput * in = _subModel -> add_input(input_node_idx);
-          //vp -> set_port2node(output_port,in);
         }
       }else if(io_type == "out"){
         int port_idx = num_ovp;
-        for (auto & input_port : vp -> get_input_ports()){
+        for (auto & input_port : vp -> in_links()){
           int output_node_index = num_outputs ++;
           vp -> port_vec().push_back(output_node_index);
-          //ssoutput * out = _subModel -> add_output(output_node_index);
-          //vp -> set_port2node(input_port,out);
         }
-
       }else{
         assert(0 && "unknown vector port type");
       }
@@ -382,8 +394,8 @@ void SSModel::parse_yaml(const std::string& fn) {
 
   // Connect Everything Up
   std::vector<std::string> topology;
-  if(hw_desc["topology"]){
-    topology = hw_desc["topology"].as<vector<std::string>>();
+  if(ssfabric["topology"]){
+    topology = ssfabric["topology"].as<vector<std::string>>();
     for (auto & connection : topology){
       // Skip "this"
       ssnode * left_module;
@@ -431,6 +443,7 @@ void SSModel::parse_yaml(const std::string& fn) {
   _subModel->post_process();
    assert(num_inputs>0);
   assert(num_outputs>0);
+  
   cout << "YAML IR Parser finished\n";
   return;
 }
@@ -440,7 +453,7 @@ void SSModel::parse_json(std::istream& istream) {
   pt::ptree root;
   read_json(istream,root);
 
-  std::map<std::string,ssnode*> sym_tab;
+  std::map<int,ssnode*> sym_tab;
 
   //Null Fu Model
   _fuModel = NULL;
@@ -448,144 +461,115 @@ void SSModel::parse_json(std::istream& istream) {
   //Now create the submodel
   _subModel=new SubModel();
 
-  int logical_rows = root.get<int>("numRows", 0);
-  int logical_cols = root.get<int>("numCols", 0);
+  // Row and Col number of Cgra
+  int logical_rows = root.get<int>("numRow", 0);
+  int logical_cols = root.get<int>("numCol", 0);
   printf("JSON Rows: %d, Cols %d\n", logical_rows, logical_cols);
 
-
-  std::map<int,ss_inst_t> inst_map;
-  for(auto& p : root.get_child("ISAencode")) {
+  // Instruction Set of this Design
+  std::map<ss_inst_t,int> inst_enc_map;
+  for(auto& p : root.get_child("Instruction Set")) {
     std::string inst_name = p.first;
-    int idx =  p.second.get_value<int>();
-
-    if(inst_name=="numISA") continue;
-
-    ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
-        
+    int enc =  p.second.get_value<int>();
+    ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());    
     if(ss_inst==SS_NONE || ss_inst==SS_ERR) {
       cerr << "ERROR IN PARSING INSTRUCTION: \"" << inst_name << "\"\n";
       assert(0);
       return;
     }
-
-    inst_map[idx] = ss_inst;
+    inst_enc_map[ss_inst] = enc;
   }
 
+  // Vector Port
+  auto & io = _subModel->io_interf();
+  int num_ivp=0;    int num_ovp=0;   // Count the number of vector port
+  int num_inputs=0; int num_outputs=0; // Calculate the num of Input and Output in the fabric
   //Look through all of the children of grid IR
-  for(auto& p : root.get_child("GridIR")) {
-    std::string elem_name = p.first;
+  for(auto& p : root.get_child("nodes")) {
+    // Get Node and its properties
     auto& node_def = p.second;
-    int y = node_def.get<int>("row", 0);
-    int x = node_def.get<int>("col", 0);
+    int y = node_def.get<int>("row_idx", 0);
+    int x = node_def.get<int>("col_idx", 0);
+    // Construct it Identification
+    string type = node_def.get<std::string>("nodeType", "");
+    int id = node_def.get<int>("id",-1);
 
-    string type = node_def.get<std::string>("type", "");
-    if(type=="Switch") {
-       ssswitch* sw = _subModel->add_switch(x,y);
-       sym_tab[elem_name]=sw;
-    } else if(type=="FU") {
-       ssfu* fu = _subModel->add_fu(x,y);
+    // Initialize based on Type
+    if(type=="switch") {
+      ssswitch* sw = _subModel->add_switch(x,y);
+      sym_tab[id]=sw;
+    } else if(type=="function unit") {
+      // Set Possible x,y for visualization 
+      ssfu* fu = _subModel->add_fu(x,y);
 
-       auto link = fu->add_link(fu); //For decomposability
-       link->setdir(SwitchDir::IP0);
+      auto link = fu->add_link(fu); //For decomposability
+      link->setdir(SwitchDir::IP0);
 
-       sym_tab[elem_name]=fu;
-       auto& fu_def1 = node_def.get_child("Instructions");
-       auto& fu_def2 = fu_def1.get_child("outPut_0");
+      sym_tab[id]=fu;
+      auto& insts = node_def.get_child("Insts");
     
-       //TODO: FIXME: Memory leak 
-       func_unit_def* fudef = new func_unit_def("NA");
-       fu->setFUDef(fudef);
+      //TODO: FIXME: Memory leak 
+      func_unit_def* fudef = new func_unit_def("NA");
+      fu->setFUDef(fudef);
 
-       for(auto& enc_def : fu_def2.get_child("subNet_0")) {
-         int num = enc_def.second.get_value<int>();
+      for(auto& inst : insts) {
+        std::string inst_name = inst.second.get_value<std::string>();
+        ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
+        int enc = inst_enc_map[ss_inst];
+        cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id << "\n";
 
-         ss_inst_t inst = inst_map[num];
-         cout << "adding capability " << name_of_inst(inst) << "to fu" << elem_name << "\n";
-
-         fudef->add_cap(inst);
-         fudef->set_encoding(inst,num);
-       }
+        fudef->add_cap(ss_inst);
+        fudef->set_encoding(ss_inst,enc);
+      }
+    } else if (type == "vector port") {
+      bool is_input;
+      auto & nodes_in_grid = node_def.get_child("nodeType"); // Just for Initialization
+      try{
+        nodes_in_grid = node_def.get_child("input_nodes");
+        is_input = false;num_ovp ++;
+      }catch(...){
+        try{
+          nodes_in_grid = node_def.get_child("output_nodes");
+          is_input = true;num_ivp ++;
+        }catch(...){
+          assert(0 && "vector port without connection?");
+        }
+      }
+      int port_num = is_input ? num_ivp : num_ovp;
+      auto * vp = _subModel -> add_vport(is_input, port_num);
+      sym_tab[id] = vp;
+      cout << "new " << (is_input ? "input" : "output") << " port: \"" << id << "\" \n";
+      io.vports_map[is_input][port_num]=vp;
+      for(auto & node : nodes_in_grid){
+        int node_id;
+        if(is_input){node_id = num_inputs++;}else{node_id = num_outputs ++;}
+        cout << "add connect to " << (is_input ? "input" : "output") << " vec: " << node_id << "\n";
+        vp->port_vec().push_back(node_id);
+      }
     } else {
-      std::cerr << elem_name << "has unknown type" << type << "\n";
+      std::cerr << id << "has unknown type" << type << "\n";
       assert(0&&"unknown type");
     }
   }
 
-  auto& io = _subModel->io_interf();
-
-  int num_inputs=0;
-  int num_outputs=0;
-
-  int num_ivp=0;
-  int num_ovp=0;
-
-  //Instantiate all the input and output ports
-  for(auto& p : root.get_child("InterfacePort")) {
-    std::string elem_name = p.first;
-    auto& port_def = p.second;
-    std::string type = port_def.get<std::string>("InOrOut", "");
-
-    int is_input = type=="InputPorts";
-    auto* vp = _subModel->add_vport(is_input,-1); //FIXME: port number
-    sym_tab[elem_name]=vp;
-
-    cout << "new port: \"" << elem_name << "\" \n";
-
-    std::vector<ssnode*> nodes;
-    for(auto& p : port_def.get_child("gridModules")) {
-      string s = p.second.get_value<std::string>();
-      ssnode* n = sym_tab[s];
-      assert(n);
-      nodes.push_back(n);
-    }
- 
-    // TODO(@were): merge this
-    if(type=="InputPorts") {
-      int port_num = num_ivp++;
-      io.vports_map[is_input][port_num]=vp;
-      for(ssnode* n:nodes) {
-        int node_id = num_inputs++;
-        cout << "added input to vec: " << node_id << "\n";
-
-        vp->port_vec().push_back(node_id);
-        //ssinput* in = _subModel->add_input(node_id);  
-        //in->add_link(n);
-      }
-    } else if(type=="OutputPorts") {
-      int port_num = num_ovp++;
-      io.vports_map[is_input][port_num]=vp;
-      for(ssnode* n:nodes) {
-        int node_id = num_outputs++;
-        cout << "added output to vec: " << node_id << "\n";
-
-        vp->port_vec().push_back(node_id);
-        //ssoutput* out = _subModel->add_output(node_id);  
-        //n->add_link(out);
-      }
-    } else {
-      assert(0 && "unknown type");
-    }
-  }
-
   //Connect everything up
-  for(auto& p : root.get_child("ConnectionIR")) {
+  for(auto& p : root.get_child("topology")) {
+
     std::string elem_name = p.first;
     auto& p_def = p.second;
-    string from_str = p_def.get<std::string>("fromModule", "");
-    string to_str   = p_def.get<std::string>("toModule", "");
 
-    ssnode* from_module = sym_tab[from_str]; 
-    ssnode* to_module   = sym_tab[to_str]; 
+    int source_id = p_def.get<int>("source.id");
+    int sink_id = p_def.get<int>("sink.id");
+    ssnode* from_module = sym_tab[source_id]; 
+    ssnode* to_module   = sym_tab[sink_id]; 
     assert(from_module && to_module);
-
     from_module->add_link(to_module);
-    
   }
 
   _subModel->post_process();
 
-  assert(num_inputs>0);
-  assert(num_outputs>0);
+  assert(num_outputs > 0);
+  assert(num_inputs > 0);
 }
 
 
