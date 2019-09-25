@@ -562,8 +562,16 @@ void SSModel::parse_json(std::istream& istream) {
     std::string elem_name = p.first;
     auto& p_def = p.second;
 
-    int source_id = p_def.get<int>("source.id");
-    int sink_id = p_def.get<int>("sink.id");
+    int source_id;auto & source = p_def.get_child("source");
+    int sink_id;auto & sink = p_def.get_child("sink");
+    for (auto identifier:source){
+      source_id = identifier.second.get_value<int>();
+      break; // only take the first element (id) out
+    }
+    for (auto identifier:sink){
+      sink_id = identifier.second.get_value<int>();
+      break; // only take the first element (id) out
+    }
     ssnode* from_module = sym_tab[source_id]; 
     ssnode* to_module   = sym_tab[sink_id]; 
     assert(from_module && to_module);

@@ -227,10 +227,12 @@ public:
     // parser the subnet table
     auto subnet_table_node = prop.get_child_optional("subnet_table");
     if (subnet_table_node.is_initialized()){
+      /*
       std::cout<< "Parsing new subnet table : \n";
       std::cout << "num_input_nodes = " << num_input_nodes <<
               ", num_output_nodes = " << num_output_nodes<<
               ", decomposer = "<< decomposer <<"\n";
+      */
       // Convert to temp subnet_table
       std::vector<std::vector<bool>> temp_subnet_table;
       int output_slot_size, input_slot_size;
@@ -250,20 +252,20 @@ public:
         for (auto & input_slot : input_slots){
           temp_subnet_table[output_slot_idx][input_slot_idx] =
             input_slot.second.get_value<bool>();
-          std::cout << temp_subnet_table[output_slot_idx][input_slot_idx];
+          //std::cout << temp_subnet_table[output_slot_idx][input_slot_idx];
           input_slot_idx++;
           if(input_slot_idx % decomposer == 0){
-            std::cout <<" ";
+            //std::cout <<" ";
           }
         }
-        std::cout << "\n";
+        //std::cout << "\n";
         output_slot_idx++;
         if(output_slot_idx % decomposer == 0){
-          std::cout <<"\n";
+          //std::cout <<"\n";
         }
       }
       // Test temp subnet table print out
-      std::cout << "parse temp subnet table successfully, result: \n";
+      // std::cout << "parse temp subnet table successfully, result: \n";
       
       // Initialize the subnet table
       for (int op_idx = 0; op_idx < num_output_nodes; op_idx++){
@@ -304,7 +306,8 @@ public:
         }// end of output_slot
       }//end of output_port
 
-      // Test Print subnet table
+      // Debug : Test Print subnet table
+      /*
       for (int op_idx = 0; op_idx < num_output_nodes; op_idx++){
         for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
           for (int ip_idx = 0; ip_idx < num_input_nodes; ip_idx++){
@@ -317,10 +320,8 @@ public:
         }// end of output_slot
         std::cout << "\n";
       }//end of output_port
-      if(decomposer == 4){
-        std::cout << "parse subnet table successfully ! \n";
-      }
       // End of Parse subnet_table
+      */
     }
   }
 
