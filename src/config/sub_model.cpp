@@ -1018,7 +1018,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
         //For temporal region, lets add some extra outputs!
         if (i >= temp_x && i < temp_x + temp_width
-             && j >= temp_y && j < temp_y + temp_width) {
+             && j >= temp_y && j < temp_y + temp_height) {
           for (int k = 0; k < 3; ++k)
             _fus[i][j]->add_link(_switches[i + t_di[k]][j + t_dj[k]])->setdir(t_dir[k]);
         }

@@ -1092,9 +1092,15 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   string ncolor = "black";
   os << "N" << _ID << " [ label = \"" << name();
 
+  if(is_temporal()) {
+    os << "TMP";
+  }
+
   if(sched) {
     os << "\\n lat=" << sched->latOf(this)  << " ";
   }
+  
+
   //os << "min:" << _min_lat;
 
   if(sched) {

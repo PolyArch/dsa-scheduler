@@ -1787,16 +1787,15 @@ void Schedule::get_link_overprov(sslink* link,
       SSDfgEdge* edge = it.first;
       //std::cout << edge->name() << "\n";
       auto v = edge->def();
-      if (v->is_temporal()) {
+      auto d = edge->use();
+      if (v->is_temporal() || d->is_temporal()) {
         if (auto input = dynamic_cast<SSDfgVecInput *>(v)) {
           vecs.push_back(input);
           continue;
         }
-        for (auto use : v->uses()) {
-          if (auto *out = dynamic_cast<SSDfgVecOutput *>(use->use())) {
-            vecs.push_back(out);
-            continue;
-          }
+        if (auto *out = dynamic_cast<SSDfgVecOutput *>(d)) {
+          vecs.push_back(out);
+          continue;
         }
       } else {
         values.push_back(make_pair(edge->val(),edge->l()));
@@ -1807,6 +1806,12 @@ void Schedule::get_link_overprov(sslink* link,
     //  cout << link->name() << " " << slot 
     //    << " has " << lp.slots[slot].edges.size() << " edges and " 
     //    << count_unique(values) << " values " << "\n";
+    //}
+    //if(count_unique(vecs) > 1) {
+    //  cout << "slot:" << slot << " link:" << link->name() << "has " << count_unique(vecs) << "vecs \n";
+    //  for(auto & i : vecs) {
+    //    cout << i->name() << "\n";
+    //  }
     //}
     util = count_unique(values) + count_unique(vecs);
     int cur_ovr = util - link->max_util();
