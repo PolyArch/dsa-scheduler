@@ -140,7 +140,7 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched,
       auto source = make_pair(rand_link.first,sw);
       int inserted = route(sched,edge,source,source,&(++it),num+1);
       if(inserted) {
-        //cout << "inserted " << inserted << " links into edge " << edge->name() << "\n";
+
         for(auto& it : edge_list) {
           SSDfgEdge* alt_edge = it.first;
           sched->record_violation(alt_edge,sched->vioOf(alt_edge)-inserted);
@@ -716,11 +716,9 @@ SchedulerSimulatedAnnealing::route(Schedule *sched,
   //With path lengthening (which has cycles) the previous
   //code can't gaurantee that.
   if(alt_edge) {
-    //cout << alt_edge->name() << " is alt_edge ---------- ";
 
     auto& alt_links = sched->links_of(alt_edge);
     for(auto alt_link : alt_links) {
-      //cout << alt_link.second->name() << "\n";
       x = std::make_pair(alt_link.first, alt_link.second->orig());
       insert_edge(alt_link,sched,edge,it,dest,x);
 
