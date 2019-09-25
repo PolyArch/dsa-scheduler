@@ -180,10 +180,12 @@ SSModel::SSModel(const char* filename, bool multi_config) {
     _subModel->post_process();
 }
 
-//YAML Parser
+//TODO YAML Parser (broken for now - Sihao will fix it later)
 void SSModel::parse_yaml(const std::string& fn) {
+  // TODO: fix when yaml-cpp library is able to parse Seq[Seq[bool]]
   assert(0 && "Yaml Parser is currently not working due to UNDEFINED Node Type of yaml-cpp library, please switch to JSON");
   // Initialize SubModel
+  /*
   _subModel = new SubModel();
   std::map<std::string,ssnode*> all_modules;
 
@@ -425,7 +427,7 @@ void SSModel::parse_yaml(const std::string& fn) {
 
       left_module = all_modules[left_module_name];
       right_module = all_modules[right_module_name];
-
+      
       if(contains(connection,"<->")){
         left_module -> add_link(right_module,left_port_name,right_port_name);
         right_module -> add_link(left_module,right_port_name,left_port_name);
@@ -445,6 +447,7 @@ void SSModel::parse_yaml(const std::string& fn) {
   assert(num_outputs>0);
   
   cout << "YAML IR Parser finished\n";
+  */
   return;
 }
 
@@ -497,6 +500,7 @@ void SSModel::parse_json(std::istream& istream) {
     // Initialize based on Type
     if(type=="switch") {
       ssswitch* sw = _subModel->add_switch(x,y);
+      sw -> set_prop(node_def);
       sym_tab[id]=sw;
     } else if(type=="function unit") {
       // Set Possible x,y for visualization 
@@ -553,7 +557,7 @@ void SSModel::parse_json(std::istream& istream) {
   }
 
   //Connect everything up
-  for(auto& p : root.get_child("topology")) {
+  for(auto& p : root.get_child("links")) {
 
     std::string elem_name = p.first;
     auto& p_def = p.second;
@@ -572,10 +576,4 @@ void SSModel::parse_json(std::istream& istream) {
   assert(num_inputs > 0);
 }
 
-
-
-
-
-
 extern "C" void libssconfig_is_present() {}
-

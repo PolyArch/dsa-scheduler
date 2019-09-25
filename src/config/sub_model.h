@@ -3,7 +3,6 @@
 
 #include "fu_model.h"
 #include "direction.h"
-
 #include <string>
 #include <vector>
 #include <sstream>
@@ -13,6 +12,8 @@
 #include <algorithm>
 #include "./predict.h"
 #include <yaml-cpp/yaml.h>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/any.hpp>
 
 namespace SS_CONFIG {
 
@@ -76,11 +77,6 @@ public:
 
   std::string gams_name(int, int) const;
 
-  void set_port_names(std::string source_port, std::string sink_port) {
-    _source_port = source_port;
-    _sink_port = sink_port;
-  }
-
   int id() { return _ID; }
 
   void set_id(int id) { _ID = id; }
@@ -122,8 +118,6 @@ protected:
   ssnode *_orig;
   ssnode *_dest;
   SwitchDir::DIR _dir;
-  std::string _source_port; // Sihao Added 
-  std::string _sink_port;  // Sihao Added
 
 private:
   friend class SubModel;
@@ -144,11 +138,6 @@ public:
     _out_links.push_back(link);
 
     node->add_back_link(link);
-    return link;
-  }
-  sslink *add_link(ssnode *sink_n,std::string source_port, std::string sink_port){
-    sslink* link = add_link(sink_n);
-    link->set_port_names(source_port,sink_port);
     return link;
   }
 
@@ -210,47 +199,128 @@ public:
 
   int id() { return _ID; }
 
-  void set_ssnode_prop(YAML::Node prop){
-    int id;
-    std::string name;
-    std::string nodeType;
+  void set_ssnode_prop(boost::property_tree::ptree prop){
 
-    std::vector<std::vector<bool>> temp_subnet_table;
+    std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
 
-    if(prop["id"]){
-      id = prop["id"].as<int>();
+    // Count the number of input port and output port
+    // vector port can have 0 input_node or 0 output_node
+    auto input_nodes = prop.get_child_optional("input_nodes");int num_input_nodes = 0;
+    auto output_nodes = prop.get_child_optional("output_nodes");int num_output_nodes = 0;
+    if(input_nodes.is_initialized())
+      num_input_nodes = prop.get_child("input_nodes").size();
+    if(output_nodes.is_initialized())
+      num_output_nodes = prop.get_child("output_nodes").size();
+    
+    // Parse Decomposer
+    if (nodeType != "vector port"){
+      auto d_node = prop.get_child_optional("decomposer");
+      if(!d_node.is_initialized()){
+        decomposer = mf_decomposer;
+        std::cout << "Warning: non-vectorport-node need to have decomposer as properties,"<<
+         "use most fine grain decomposer instead\n";
+      }else{
+        decomposer = prop.get_child("decomposer").get_value<int>();
+      }
     }
-    if(prop["nodeType"]){
-      nodeType = prop["nodeType"].as<std::string>();
-    }
-    name = nodeType + "_" + std::to_string(id);
-    set_id(id);
-    set_name(name);
-
-    if(prop["inter_subnet_connection"]){
-      int output_link_size;
-      int output_slot_size;
-      std::cout << "hit inter subnet connection\n";
-      YAML::Node subnet_table_node = prop["subnet_inter_connection"];
-      output_link_size = subnet_table_node.size();
-      temp_subnet_table.resize(output_link_size);
-      std::cout << prop["subnet_inter_connection"].IsSequence() << "\n";
-      for (int output_idx = 0; output_idx < output_link_size; output_idx++){
-        output_slot_size = subnet_table_node[output_idx].size();
-        temp_subnet_table[output_idx].resize(output_slot_size);
-        for (int output_slot_idx = 0; output_slot_idx < output_slot_size; output_slot_idx++){
-          temp_subnet_table[output_idx][output_slot_idx] =
-          subnet_table_node[output_idx][output_slot_idx].as<bool>();
+    
+    // parser the subnet table
+    auto subnet_table_node = prop.get_child_optional("subnet_table");
+    if (subnet_table_node.is_initialized()){
+      std::cout<< "Parsing new subnet table : \n";
+      std::cout << "num_input_nodes = " << num_input_nodes <<
+              ", num_output_nodes = " << num_output_nodes<<
+              ", decomposer = "<< decomposer <<"\n";
+      // Convert to temp subnet_table
+      std::vector<std::vector<bool>> temp_subnet_table;
+      int output_slot_size, input_slot_size;
+      assert(num_input_nodes > 0 && num_output_nodes >0 &&
+       "why subnet routing without input/output node(s) connected?");
+      int output_slot_idx=0;
+      auto & output_slots = prop.get_child("subnet_table");
+      output_slot_size = output_slots.size();
+      assert(output_slot_size == (num_output_nodes * decomposer));
+      temp_subnet_table.resize(output_slot_size);
+      for(auto & output_slot : output_slots){
+        int input_slot_idx=0;
+        auto & input_slots = output_slot.second;
+        input_slot_size = input_slots.size();
+        assert(input_slot_size == (num_input_nodes * decomposer));
+        temp_subnet_table[output_slot_idx].resize(input_slot_size);
+        for (auto & input_slot : input_slots){
+          temp_subnet_table[output_slot_idx][input_slot_idx] =
+            input_slot.second.get_value<bool>();
+          std::cout << temp_subnet_table[output_slot_idx][input_slot_idx];
+          input_slot_idx++;
+          if(input_slot_idx % decomposer == 0){
+            std::cout <<" ";
+          }
+        }
+        std::cout << "\n";
+        output_slot_idx++;
+        if(output_slot_idx % decomposer == 0){
+          std::cout <<"\n";
         }
       }
-      // Print Subnet Table
-      for (int i = 0; i<output_link_size; i++){
-        for (int j = 0; j<output_slot_size; j++){
-          std::cout << temp_subnet_table[i][j] << " ";
-        }
-        std::cout <<"\n";
-      } 
-      std::cout << "inter subnet connection parsed successfully\n";
+      // Test temp subnet table print out
+      std::cout << "parse temp subnet table successfully, result: \n";
+      
+      // Initialize the subnet table
+      for (int op_idx = 0; op_idx < num_output_nodes; op_idx++){
+        _subnet_table.resize(num_output_nodes);
+        for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
+          _subnet_table[op_idx].resize(mf_decomposer);
+          for (int ip_idx = 0; ip_idx < num_input_nodes; ip_idx++){
+            _subnet_table[op_idx][os_idx].resize(num_input_nodes);
+            for (int is_idx = 0; is_idx < mf_decomposer; is_idx++){
+              _subnet_table[op_idx][os_idx][ip_idx].resize(mf_decomposer);
+            }// end of input_slot
+          }// end of input_port
+        }// end of output_slot
+      }//end of output_port
+
+      // Convert from temp subnet table
+      int decompose_ratio = mf_decomposer / decomposer;
+      for (int op_idx = 0; op_idx < num_output_nodes; op_idx++){
+        for (int os_idx = 0; os_idx < decomposer; os_idx++){
+          for (int ip_idx = 0; ip_idx < num_input_nodes; ip_idx++){
+            for (int is_idx = 0; is_idx < decomposer; is_idx++){
+              // Assign to subnet table
+              for (int os = os_idx*decompose_ratio;
+              os < (1+os_idx)*decompose_ratio; os++){
+                for (int is = is_idx*decompose_ratio;
+                is < (1+is_idx)*decompose_ratio; is++){
+                  if((os%decompose_ratio)==(is%decompose_ratio)){
+                    _subnet_table[op_idx][os][ip_idx][is] =
+                      temp_subnet_table [op_idx * decomposer + os_idx]
+                                        [ip_idx * decomposer + is_idx];
+                  }else{
+                    _subnet_table[op_idx][os][ip_idx][is] = false;
+                  }
+                }
+              }
+            }// end of input_slot
+          }// end of input_port
+        }// end of output_slot
+      }//end of output_port
+
+      // Test Print subnet table
+      for (int op_idx = 0; op_idx < num_output_nodes; op_idx++){
+        for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
+          for (int ip_idx = 0; ip_idx < num_input_nodes; ip_idx++){
+            for (int is_idx = 0; is_idx < mf_decomposer; is_idx++){
+              std::cout << _subnet_table[op_idx][os_idx][ip_idx][is_idx];
+            }// end of input_slot
+            std::cout << " ";
+          }// end of input_port
+          std::cout << "\n";
+        }// end of output_slot
+        std::cout << "\n";
+      }//end of output_port
+      if(decomposer == 4){
+        std::cout << "parse subnet table successfully ! \n";
+      }
+      // End of Parse subnet_table
     }
   }
 
@@ -301,10 +371,6 @@ public:
 
   bool is_shared(){ return _max_util > 1;} // TODO: max_util > 1
 
-  void set_name(std::string na){module_name = na;}
-
-  std::string get_name(){return module_name;}
-
   bool flow_control() {return _flow_control;}
 
   int  bitwidth() {return _bitwidth;}
@@ -327,12 +393,9 @@ protected:
   int _ID = -1;
   int _x=-1, _y=-1; //just for visualization
 
-  int _max_util = 1; 
-  bool _flow_control = true; // whether PE supports backpressure
-  int _bitwidth = 64;  // maximum bitwidth of PE
-
-  std::string module_name;
-  // module_type removed, use _flow_control and _max_util to refer it
+  int _max_util = 1; // Convert from "share_slot_size"
+  bool _flow_control = true; // whether PE supports backpressure, convert from "flow_control"
+  int _bitwidth = 64;  // maximum bitwidth of PE, convert from "bit_width"
 
   sslink *_cycle_link=nullptr; //to
 
@@ -341,7 +404,7 @@ protected:
 
   // This table stores the subnetwork routing
   // [output][slot][input][slot]
-  std::vector<std::vector<std::vector<std::vector<bool>>>> _subnet_table;
+  std::vector<std::vector<std::vector<std::vector<bool>>>> _subnet_table; //convert from subnet_table
 
   // Maps [input_link_id][slot_number][bitwidth] -> vector of legal links/slots
   std::vector<std::vector<std::pair<int,sslink*>>> _routing_memo;
@@ -350,16 +413,13 @@ protected:
   int _node_dist[8];
   int _done[8];
   std::pair<int, sslink*>_came_from[8];
-
-  // @Sihao: The following needs to be integrated with the above so that 
-  // the scheduler uses the correct variables, eg. "isShared" should
-  // become maxUtil, etc. -- Tony
-  // @Tony: fixed, now just decomposer to be integrated
   
-  // @Sihao 
   // Decomposability
-  int decomposer;
-
+  // TODO:Please replace 8 with mf_decomposer 
+  int decomposer; // convert from decomposer // to be integrate with subnet_table
+  int mf_decomposer = 8;
+  //TODO: most-fine-grain decomposer, to be removed or need to be defined by user
+  
 private:
   friend class SubModel;
 };
@@ -385,18 +445,8 @@ public:
     return ss.str();
   }
 
-  void set_prop(YAML::Node prop){
+  void set_prop(boost::property_tree::ptree prop){
     set_ssnode_prop(prop);
-    // Default
-    YAML::Node default_setting = prop["<<"];
-    // back_pressure_fifo_depth 
-    if(prop["max_fifo_depth "]){
-      max_fifo_depth = prop["max_fifo_depth"].as<int>();
-    }else{
-      if(_flow_control){
-        max_fifo_depth = 2;
-      }
-    }
   }
 
   void collect_features(){
@@ -435,8 +485,9 @@ public:
 
   void setFUDef(func_unit_def *fu_def) { _fu_def = fu_def; }
 
-  void set_prop(YAML::Node prop){
+  void set_prop(boost::property_tree::ptree prop){
     set_ssnode_prop(prop);
+    /*
     // Default
     YAML::Node default_setting = prop["<<"];
     // delay_fifo_depth 
@@ -460,6 +511,7 @@ public:
     }catch(...){
       register_file_size = default_setting["register_file_size"].as<int>();
     }
+    */
   }
 
   virtual std::string name() const {

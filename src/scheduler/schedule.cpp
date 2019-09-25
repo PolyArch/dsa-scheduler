@@ -579,9 +579,9 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
 }
 
 void Schedule::printConfigBits_Hw(std::string & hw_config_filename){
+  /*
   pt::ptree root;
   pt::read_xml(hw_config_filename, root);
-
 
   // ------ Encode for Switches ------
   vector<ssswitch *> switches = _ssModel -> subModel() -> switch_list();
@@ -602,6 +602,7 @@ void Schedule::printConfigBits_Hw(std::string & hw_config_filename){
     }// End of Switch in Config File
     assert(found&&"Not found the config of this switch");
   }// End of Switch In Model
+  */
 }
 
 void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
