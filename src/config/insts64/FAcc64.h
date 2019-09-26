@@ -14,5 +14,4 @@ if (ops[1] != 0 && ops[1] != 2) {
   accum = 0;
 }
 
-
 return res;

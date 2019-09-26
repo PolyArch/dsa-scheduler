@@ -12,7 +12,7 @@
 // between FIX_MIN and FIX_MAX (both inclusively)
 #define FIX_MAX ((1 << 15) - 1)
 #define FIX_MIN (-FIX_MAX)
-#define FIX_TRUNC(x)  (x > FIX_MAX ? FIX_MAX : (x < FIX_MIN ? FIX_MIN : x) )
+#define FIX_TRUNC(x) (x > FIX_MAX ? FIX_MAX : (x < FIX_MIN ? FIX_MIN : x))
 
 // FRAC_BITS is the number of bits reserved for fractional parts.
 // So the integer part has 15 - FRAC_BITS bits.
@@ -25,22 +25,21 @@
 // FLOAT_TRUNC is to keep numbers within the range
 // between FLOAT_MIN and FLOAT_MAX (both inclusively)
 #define FRAC_BITS 11  // 11 or 12 is recommended
-#define DELTA (((double)1.0)/(1 << FRAC_BITS))
+#define DELTA (((double)1.0) / (1 << FRAC_BITS))
 #define FLOAT_MAX (FIX_MAX * DELTA)
 #define FLOAT_MIN (FIX_MIN * DELTA)
-#define FLOAT_TRUNC(x)  (x > FLOAT_MAX ? FLOAT_MAX : (x < FLOAT_MIN ? FLOAT_MIN : x) )
+#define FLOAT_TRUNC(x) (x > FLOAT_MAX ? FLOAT_MAX : (x < FLOAT_MIN ? FLOAT_MIN : x))
 
 // DOUBLE_TO_FIX converts a double number to integer in our fixed representation.
 // FIX_TO_DOUBLE converts a integer number to double in our fixed representation.
-#define DOUBLE_TO_FIX(x)  ( (int)(FLOAT_TRUNC(x) / DELTA) )
+#define DOUBLE_TO_FIX(x) ((int)(FLOAT_TRUNC(x) / DELTA))
 #define FIX_TO_DOUBLE(x) (x * DELTA)
 
 // FIX_ADD fixed addition.
 // FIX_MINUS fixed subtraction.
 // FIX_MUL fixed multiplication.
 // FIX_TAN_H fixed tanh, but is right now using tanh from math.h
-#define FIX_ADD(a, b) ( FIX_TRUNC( (int)a + (int)b ) )
-#define FIX_MINUS(a, b) ( FIX_ADD(a, -b) )
-#define FIX_MUL(a, b) ( FIX_TRUNC( ((int)a * (int)b) * DELTA ) )
-#define FIX_TAN_H(x) ( DOUBLE_TO_FIX(tanh(FIX_TO_DOUBLE(x))) )
-
+#define FIX_ADD(a, b) (FIX_TRUNC((int)a + (int)b))
+#define FIX_MINUS(a, b) (FIX_ADD(a, -b))
+#define FIX_MUL(a, b) (FIX_TRUNC(((int)a * (int)b) * DELTA))
+#define FIX_TAN_H(x) (DOUBLE_TO_FIX(tanh(FIX_TO_DOUBLE(x))))

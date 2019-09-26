@@ -4,4 +4,3 @@ if (ops[1]) {
 }
 
 return ops[0];
-

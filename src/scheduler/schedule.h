@@ -1,23 +1,23 @@
 #ifndef __SS__SCHEDULE_H__
 #define __SS__SCHEDULE_H__
 
+#include <algorithm>
+#include <fstream>
+#include <iostream>
 #include <map>
 #include <unordered_set>
 #include "model.h"
-#include "sub_model.h"
 #include "ssdfg.h"
-#include <iostream>
-#include <fstream>
-#include <algorithm>
+#include "sub_model.h"
 
 #include "bitslice.h"
-#include "config_defs.h"
 #include "color_mapper.h"
+#include "config_defs.h"
 #include "limits.h"
 
-//Experimental Boost Stuffs
-#include <boost/archive/text_oarchive.hpp>
+// Experimental Boost Stuffs
 #include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
 #include <boost/functional/hash.hpp>
 
 using namespace SS_CONFIG;
@@ -25,54 +25,52 @@ using namespace SS_CONFIG;
 #define MAX_SCHED_LAT 1000000
 
 class Schedule {
-public:
+ public:
   Schedule() {}
 
-  //Read in schedule (both ssmodel, ssdfg, and schedule from file)
-  Schedule(SSModel *model, SSDfg *dfg) : _ssModel(model), _ssDFG(dfg) {
+  // Read in schedule (both ssmodel, ssdfg, and schedule from file)
+  Schedule(SSModel* model, SSDfg* dfg) : _ssModel(model), _ssDFG(dfg) {
     allocate_space();
   }
 
-  Schedule(SSModel *model) : _ssModel(model), _ssDFG(nullptr) {
-    allocate_space();
-  }
+  Schedule(SSModel* model) : _ssModel(model), _ssDFG(nullptr) { allocate_space(); }
 
   constexpr static const float gvsf = 4.0f;
 
-  void printGraphviz(const char *name);
+  void printGraphviz(const char* name);
 
-  void printNodeGraphviz(std::ofstream &ofs, ssnode *fu);
+  void printNodeGraphviz(std::ofstream& ofs, ssnode* fu);
 
-  void printMvnGraphviz(std::ofstream &ofs, ssnode *node);
+  void printMvnGraphviz(std::ofstream& ofs, ssnode* node);
 
-  void printMelGraphviz(std::ofstream &ofs, ssnode *node);
+  void printMelGraphviz(std::ofstream& ofs, ssnode* node);
 
-  void printSwitchGraphviz(std::ofstream &ofs, ssswitch *sw);
+  void printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw);
 
   void prepareForSaving();
 
-  void printConfigHeader(std::ostream &, std::string cfg_name, bool cheat = true);
+  void printConfigHeader(std::ostream&, std::string cfg_name, bool cheat = true);
 
-  //Old Interface:
-  void printConfigBits(std::ostream &os, std::string cfg_name);
+  // Old Interface:
+  void printConfigBits(std::ostream& os, std::string cfg_name);
 
-  void printConfigBits_Hw(std::string & hw_config_filename);
+  void printConfigBits_Hw(std::string& hw_config_filename);
 
-  void printConfigCheat(std::ostream &os, std::string cfg_name);
+  void printConfigCheat(std::ostream& os, std::string cfg_name);
 
-  void printConfigVerif(std::ostream &os);
+  void printConfigVerif(std::ostream& os);
 
-  void printCondensedVector(std::vector<int>& vec, std::ostream &os);
+  void printCondensedVector(std::vector<int>& vec, std::ostream& os);
 
-  //Rest of Stuff
-  SSDfg *ssdfg() const { return _ssDFG; }
+  // Rest of Stuff
+  SSDfg* ssdfg() const { return _ssDFG; }
 
-  std::map<SS_CONFIG::sslink *, SS_CONFIG::sslink *> &link_map_for_sw(ssswitch *sssw) {
+  std::map<SS_CONFIG::sslink*, SS_CONFIG::sslink*>& link_map_for_sw(ssswitch* sssw) {
     return _assignSwitch[sssw];
   }
 
-  //check if inlink
-  sslink *get_switch_in_link(ssswitch *sssw, sslink *out_link) {
+  // check if inlink
+  sslink* get_switch_in_link(ssswitch* sssw, sslink* out_link) {
     auto iter = _assignSwitch[sssw].find(out_link);
     if (iter == _assignSwitch[sssw].end()) {
       return nullptr;
@@ -81,34 +79,28 @@ public:
     }
   }
 
-  bool have_switch_links() {
-    return !_assignSwitch.empty();
-  }
+  bool have_switch_links() { return !_assignSwitch.empty(); }
 
-  //For a switch, assign the outlink to inlink
-  void assign_switch(ssswitch *sssw, sslink *slink, sslink *slink_out) {
+  // For a switch, assign the outlink to inlink
+  void assign_switch(ssswitch* sssw, sslink* slink, sslink* slink_out) {
     assert(sssw);
     assert(slink);
     assert(slink_out);
-    _assignSwitch[sssw][slink_out] = slink;     //out to in for a sw
+    _assignSwitch[sssw][slink_out] = slink;  // out to in for a sw
   }
 
-  void assign_lat(SSDfgNode *dfgnode, int lat) {
-    _vertexProp[dfgnode->id()].lat = lat;
-  }
+  void assign_lat(SSDfgNode* dfgnode, int lat) { _vertexProp[dfgnode->id()].lat = lat; }
 
-  int latOf(SSDfgNode *dfgnode) {
-    return _vertexProp[dfgnode->id()].lat;
-  }
+  int latOf(SSDfgNode* dfgnode) { return _vertexProp[dfgnode->id()].lat; }
 
-  void assign_lat_bounds(SSDfgNode *dfgnode, int min, int max) {
-    auto &vertex_prop = _vertexProp[dfgnode->id()];
+  void assign_lat_bounds(SSDfgNode* dfgnode, int min, int max) {
+    auto& vertex_prop = _vertexProp[dfgnode->id()];
     vertex_prop.min_lat = min;
     vertex_prop.max_lat = max;
   }
 
-  std::pair<int, int> lat_bounds(SSDfgNode *dfgnode) {
-    auto &vertex_prop = _vertexProp[dfgnode->id()];
+  std::pair<int, int> lat_bounds(SSDfgNode* dfgnode) {
+    auto& vertex_prop = _vertexProp[dfgnode->id()];
     return std::make_pair(vertex_prop.min_lat, vertex_prop.max_lat);
   }
 
@@ -116,17 +108,15 @@ public:
     return _nodeProp[node->id()].slots[slot].num_passthroughs > 0;
   }
 
-  void assign_edge_pt(SSDfgEdge *edge, std::pair<int, ssnode*> pt) {
-    if ((int) _edgeProp.size() <= edge->id()) {
+  void assign_edge_pt(SSDfgEdge* edge, std::pair<int, ssnode*> pt) {
+    if ((int)_edgeProp.size() <= edge->id()) {
       _edgeProp.resize(edge->id() + 1);
     }
-    add_passthrough_node(pt.first,pt.second);
+    add_passthrough_node(pt.first, pt.second);
     _edgeProp[edge->id()].passthroughs.push_back(pt);
   }
 
-  int groupMismatch(int g) {
-    return _groupMismatch[g];
-  }
+  int groupMismatch(int g) { return _groupMismatch[g]; }
 
   int violation() { return _totalViolation; }
 
@@ -135,69 +125,69 @@ public:
     _max_lat_mis = std::max(_max_lat_mis, violation);
   }
 
-  int vioOf(SSDfgNode *n) { return _vertexProp[n->id()].vio; }
+  int vioOf(SSDfgNode* n) { return _vertexProp[n->id()].vio; }
 
-  void record_violation(SSDfgNode *n, int violation) {
+  void record_violation(SSDfgNode* n, int violation) {
     _vertexProp[n->id()].vio = violation;
   }
 
-  int vioOf(SSDfgEdge* e) { return _edgeProp[e->id()].vio;}
+  int vioOf(SSDfgEdge* e) { return _edgeProp[e->id()].vio; }
   void record_violation(SSDfgEdge* e, int violation) {
-    _edgeProp[e->id()].vio=violation; 
+    _edgeProp[e->id()].vio = violation;
   }
 
   void check_all_links_consistency() {
-    for(SSDfgEdge* edge : _ssDFG->edges()) {
+    for (SSDfgEdge* edge : _ssDFG->edges()) {
       check_links_consistency(edge);
     }
   }
 
   void check_links_consistency(SSDfgEdge* edge) {
-    sslink* prev_link=nullptr;
-    bool fail=false;
-    int prev_num_edges=10000;
+    sslink* prev_link = nullptr;
+    bool fail = false;
+    int prev_num_edges = 10000;
 
-    for(auto link : links_of(edge)) {
-      if(prev_link!=NULL && prev_link->dest() != link.second->orig()) {
+    for (auto link : links_of(edge)) {
+      if (prev_link != NULL && prev_link->dest() != link.second->orig()) {
         std::cout << edge->name() << " has Failed Link Order Check\n";
-        fail=true;
+        fail = true;
       }
 
       std::unordered_set<SSDfgEdge*> edges;
-      for(auto& i : edge_list(link.first,link.second)) {
+      for (auto& i : edge_list(link.first, link.second)) {
         SSDfgEdge* alt_edge = i.first;
-        //Only relevant edges are 1. same value, 2. same slice, 3. same slot
-        if(alt_edge->val()==edge->val() && alt_edge->l() ==edge->l() && 
-            link.first==i.second) {
+        // Only relevant edges are 1. same value, 2. same slice, 3. same slot
+        if (alt_edge->val() == edge->val() && alt_edge->l() == edge->l() &&
+            link.first == i.second) {
           edges.insert(edge);
         }
       }
-      int new_num_edges=edges.size();
-     
-      if(new_num_edges>prev_num_edges) {
+      int new_num_edges = edges.size();
+
+      if (new_num_edges > prev_num_edges) {
         std::cout << "\n" << edge->name() << " has Failed Edge Consistency Check\n";
-        fail=true; //BAD!
+        fail = true;  // BAD!
         break;
       }
-      prev_num_edges=new_num_edges;
-      prev_link=link.second;
+      prev_num_edges = new_num_edges;
+      prev_link = link.second;
     }
-    if(fail) {
-      for(auto link : links_of(edge)) {
+    if (fail) {
+      for (auto link : links_of(edge)) {
         std::cout << link.second->name() << " #edges";
 
         std::unordered_set<SSDfgEdge*> edges;
-        for(auto& i : edge_list(link.first,link.second)) {
+        for (auto& i : edge_list(link.first, link.second)) {
           SSDfgEdge* alt_edge = i.first;
-          if(alt_edge->val()==edge->val() && alt_edge->l() ==edge->l() && 
-            link.first==i.second) {
+          if (alt_edge->val() == edge->val() && alt_edge->l() == edge->l() &&
+              link.first == i.second) {
             edges.insert(edge);
           }
         }
-        int new_num_edges=edges.size();
+        int new_num_edges = edges.size();
 
         std::cout << new_num_edges << " -- edges: ";
-        for(auto i : edges) {
+        for (auto i : edges) {
           std::cout << i->name() << " ";
         }
         std::cout << "\n";
@@ -209,16 +199,18 @@ public:
 
   int vecPortOf(SSDfgVec* vec) {
     ssnode* n = locationOf(vec);
-    if(n) return dynamic_cast<ssvport*>(n)->port();
-    else return -1;
+    if (n)
+      return dynamic_cast<ssvport*>(n)->port();
+    else
+      return -1;
   }
 
   // sslink* getNextLink(SSDfgEdge* dfgedge, sslink* link);
 
-  //Assign the ssnode to dfgnode and vice verse
-  void assign_node(SSDfgNode *dfgnode, std::pair<int, ssnode *> assigned) {
+  // Assign the ssnode to dfgnode and vice verse
+  void assign_node(SSDfgNode* dfgnode, std::pair<int, ssnode*> assigned) {
     int vid = dfgnode->id();
-    if (vid >= (int) _vertexProp.size()) {
+    if (vid >= (int)_vertexProp.size()) {
       _vertexProp.resize(vid + 1);
     }
     int orig_slot = assigned.first;
@@ -235,38 +227,38 @@ public:
     _num_mapped[dfgnode->type()]++;
     assert(_num_mapped[SSDfgNode::V_INST] <= _ssDFG->inst_vec().size());
 
-    //std::cout << "node " << dfgnode->name() << " assigned to "
+    // std::cout << "node " << dfgnode->name() << " assigned to "
     //          << snode->name() << "\n";
     assert(dfgnode);
 
-    assert(snode->id() < (int) _nodeProp.size());
+    assert(snode->id() < (int)_nodeProp.size());
 
-    int num_slots = dfgnode->bitwidth()/8;
-    for(int i = 0; i < num_slots; ++i) {
-      int slot=orig_slot +i;
-      _nodeProp[snode->id()].slots[slot].vertices.emplace_back(dfgnode,orig_slot);
+    int num_slots = dfgnode->bitwidth() / 8;
+    for (int i = 0; i < num_slots; ++i) {
+      int slot = orig_slot + i;
+      _nodeProp[snode->id()].slots[slot].vertices.emplace_back(dfgnode, orig_slot);
     }
   }
 
-  void unassign_edge(SSDfgEdge *edge) {
-    auto &ep = _edgeProp[edge->id()];
+  void unassign_edge(SSDfgEdge* edge) {
+    auto& ep = _edgeProp[edge->id()];
 
     _edge_links_mapped -= ep.links.size();
 
-    //Remove all the edges for each of links
-    for (auto &link : ep.links) {
-      auto &lp = _linkProp[link.second->id()];
+    // Remove all the edges for each of links
+    for (auto& link : ep.links) {
+      auto& lp = _linkProp[link.second->id()];
 
-
-      int last_slot = edge->bitwidth()/8;
-      for(int i = 0; i < last_slot; ++i) {
-        int slot_index = (link.first + i)%8;
+      int last_slot = edge->bitwidth() / 8;
+      for (int i = 0; i < last_slot; ++i) {
+        int slot_index = (link.first + i) % 8;
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
-        auto it = std::remove(edges.begin(),edges.end(),std::make_pair(edge,link.first));
-        assert(it!=edges.end());
-        edges.erase(it,edges.end());
+        auto it =
+            std::remove(edges.begin(), edges.end(), std::make_pair(edge, link.first));
+        assert(it != edges.end());
+        edges.erase(it, edges.end());
         if (slot.edges.empty()) {
           _links_mapped--;
           assert(_links_mapped >= 0);
@@ -274,20 +266,20 @@ public:
       }
     }
 
-    //Remove all passthroughs associated with this edge
-    for (auto &pt : ep.passthroughs) {
-      auto &np = _nodeProp[pt.second->id()];
-      np.slots[pt.first].num_passthroughs -= 1; //take one passthrough edge away
-      _num_passthroughs -=1;
+    // Remove all passthroughs associated with this edge
+    for (auto& pt : ep.passthroughs) {
+      auto& np = _nodeProp[pt.second->id()];
+      np.slots[pt.first].num_passthroughs -= 1;  // take one passthrough edge away
+      _num_passthroughs -= 1;
       assert(np.slots[pt.first].num_passthroughs >= 0);
     }
 
     _edgeProp[edge->id()].reset();
   }
 
-  //Delete all scheduling data associated with dfgnode, including its
-  //mapped locations, and mapping information and metadata for edges
-  void unassign_dfgnode(SSDfgNode *dfgnode) {
+  // Delete all scheduling data associated with dfgnode, including its
+  // mapped locations, and mapping information and metadata for edges
+  void unassign_dfgnode(SSDfgNode* dfgnode) {
     for (auto edge : dfgnode->in_edges()) {
       unassign_edge(edge);
     }
@@ -295,8 +287,8 @@ public:
       unassign_edge(edge);
     }
 
-    auto &vp = _vertexProp[dfgnode->id()];
-    ssnode *node = vp.node;
+    auto& vp = _vertexProp[dfgnode->id()];
+    ssnode* node = vp.node;
 
     if (node) {
       int orig_slot = vp.idx;
@@ -304,35 +296,35 @@ public:
       _num_mapped[dfgnode->type()]--;
       vp.node = nullptr;
 
-      int num_slots = dfgnode->bitwidth()/8;
-      for(int i = 0; i < num_slots; ++i) {
-        int slot=orig_slot +i;
-        auto &vertices = _nodeProp[node->id()].slots[slot].vertices;
+      int num_slots = dfgnode->bitwidth() / 8;
+      for (int i = 0; i < num_slots; ++i) {
+        int slot = orig_slot + i;
+        auto& vertices = _nodeProp[node->id()].slots[slot].vertices;
 
-        auto it = std::remove(vertices.begin(),vertices.end(),
-                              std::make_pair(dfgnode,orig_slot));
-        assert(it!=vertices.end());
-        vertices.erase(it,vertices.end());
+        auto it = std::remove(vertices.begin(), vertices.end(),
+                              std::make_pair(dfgnode, orig_slot));
+        assert(it != vertices.end());
+        vertices.erase(it, vertices.end());
       }
     }
   }
 
-  std::vector<std::pair<SSDfgEdge*,int>> &edge_list(int slot, sslink *link) {
+  std::vector<std::pair<SSDfgEdge*, int>>& edge_list(int slot, sslink* link) {
     return _linkProp[link->id()].slots[slot].edges;
   }
 
   void print_all_mapped() {
     std::cout << "Vertices: ";
-    //TODO: can't get vertex/edge from id, need to modify dfg to maintain
+    // TODO: can't get vertex/edge from id, need to modify dfg to maintain
     for (unsigned i = 0; i < _vertexProp.size(); ++i) {
-      auto &v = _vertexProp[i];
+      auto& v = _vertexProp[i];
       if (v.node) {
         std::cout << i << "->" << v.node->name() << " ";
       }
     }
     std::cout << "\nEdges: ";
     for (unsigned i = 0; i < _edgeProp.size(); ++i) {
-      auto &e = _edgeProp[i];
+      auto& e = _edgeProp[i];
       if (e.links.size()) {
         std::cout << i << " ";
       }
@@ -340,212 +332,195 @@ public:
     std::cout << "\n";
   }
 
-  void assign_link_to_edge(SSDfgEdge *dfgedge, int slot_index, sslink * slink) {
+  void assign_link_to_edge(SSDfgEdge* dfgedge, int slot_index, sslink* slink) {
     assert(slink);
     assert(dfgedge);
-    //assert(_assignLink[slink]==nullptr || _assignLink[slink] == dfgedge->def());
-    //std::cout << dfgedge->name() << " assigned to "
+    // assert(_assignLink[slink]==nullptr || _assignLink[slink] == dfgedge->def());
+    // std::cout << dfgedge->name() << " assigned to "
     //          << slink->name() << "\n";
 
     _edge_links_mapped++;
-    auto &lp = _linkProp[slink->id()];
-     
-    for(int i = 0; i < dfgedge->bitwidth()/8; ++i) {
-      int cur_slot_index = (slot_index+i)%8;
+    auto& lp = _linkProp[slink->id()];
+
+    for (int i = 0; i < dfgedge->bitwidth() / 8; ++i) {
+      int cur_slot_index = (slot_index + i) % 8;
 
       auto& slot = lp.slots[cur_slot_index];
-      if (slot.edges.empty())
-        _links_mapped++;
+      if (slot.edges.empty()) _links_mapped++;
 
-      slot.edges.emplace_back(dfgedge,slot_index);
+      slot.edges.emplace_back(dfgedge, slot_index);
     }
 
-    if ((int) _edgeProp.size() <= dfgedge->id()) {
-      _edgeProp.resize(dfgedge->id() + 1); 
+    if ((int)_edgeProp.size() <= dfgedge->id()) {
+      _edgeProp.resize(dfgedge->id() + 1);
     }
   }
 
-  //pdf edge to sslink
-  void assign_edgelink(SSDfgEdge *dfgedge, int slot, sslink * slink,
-                       std::list<std::pair<int,sslink*>>::iterator it) {
-    assign_link_to_edge(dfgedge,slot,slink);
-    _edgeProp[dfgedge->id()].links.insert(it,std::make_pair(slot, slink));
+  // pdf edge to sslink
+  void assign_edgelink(SSDfgEdge* dfgedge, int slot, sslink* slink,
+                       std::list<std::pair<int, sslink*>>::iterator it) {
+    assign_link_to_edge(dfgedge, slot, slink);
+    _edgeProp[dfgedge->id()].links.insert(it, std::make_pair(slot, slink));
   }
 
-
-  //pdf edge to sslink
-  void assign_edgelink(SSDfgEdge *dfgedge, int slot, sslink * slink) {
-    assign_link_to_edge(dfgedge,slot,slink);
+  // pdf edge to sslink
+  void assign_edgelink(SSDfgEdge* dfgedge, int slot, sslink* slink) {
+    assign_link_to_edge(dfgedge, slot, slink);
     _edgeProp[dfgedge->id()].links.push_back(std::make_pair(slot, slink));
   }
 
-  //void print_links(SSDfgEdge* dfgedge) {
+  // void print_links(SSDfgEdge* dfgedge) {
   //  for(auto& i : _assignLinkEdge[dfgedge]) {
   //    cout << i->name() << " ";
   //  }
   //  cout << "\n";
   //}
 
-  int link_count(SSDfgEdge *dfgedge) {
-    return _edgeProp[dfgedge->id()].links.size();
-  }
+  int link_count(SSDfgEdge* dfgedge) { return _edgeProp[dfgedge->id()].links.size(); }
 
   int edge_latency(SSDfgEdge* pdgedge) {
     auto& ep = _edgeProp[pdgedge->id()];
-    int total_lat=0;
-    for(auto& link : ep.links) {
-      total_lat+=link.second->lat();
+    int total_lat = 0;
+    for (auto& link : ep.links) {
+      total_lat += link.second->lat();
     }
     return total_lat;
   }
 
-  std::list<std::pair<int, sslink*>> &links_of(SSDfgEdge *edge) {
-    auto &ep = _edgeProp[edge->id()];
+  std::list<std::pair<int, sslink*>>& links_of(SSDfgEdge* edge) {
+    auto& ep = _edgeProp[edge->id()];
     return ep.links;
   }
 
-  std::list<std::pair<int, ssnode*>> &thrus_of(SSDfgEdge *edge) {
-    auto &ep = _edgeProp[edge->id()];
+  std::list<std::pair<int, ssnode*>>& thrus_of(SSDfgEdge* edge) {
+    auto& ep = _edgeProp[edge->id()];
     return ep.passthroughs;
   }
 
-  void setLatOfLink(std::pair<int, sslink*> link, int l) { _linkProp[link.second->id()].slots[link.first].lat = l; }
+  void setLatOfLink(std::pair<int, sslink*> link, int l) {
+    _linkProp[link.second->id()].slots[link.first].lat = l;
+  }
 
-  int latOfLink(std::pair<int, sslink*> link) { return _linkProp[link.second->id()].slots[link.first].lat; }
+  int latOfLink(std::pair<int, sslink*> link) {
+    return _linkProp[link.second->id()].slots[link.first].lat;
+  }
 
   bool linkAssigned(int slot, sslink* link) {
     return !_linkProp[link->id()].slots[slot].edges.empty();
   }
 
-
-  //Return an alternate link for an edge
-  SSDfgEdge* alt_edge_for_link(std::pair<int, sslink *> link, SSDfgEdge *e) {
+  // Return an alternate link for an edge
+  SSDfgEdge* alt_edge_for_link(std::pair<int, sslink*> link, SSDfgEdge* e) {
     auto& slots = _linkProp[link.second->id()].slots;
     for (auto it : slots[link.first].edges) {
       SSDfgEdge* alt_e = it.first;
-      //Only relevant edges are 1. same value, 2. same slice, 3. same slot
-      if (alt_e->val() == e->val() && e->l() == alt_e->l() &&
-          link.first == it.second) {
+      // Only relevant edges are 1. same value, 2. same slice, 3. same slot
+      if (alt_e->val() == e->val() && e->l() == alt_e->l() && link.first == it.second) {
         return alt_e;
       }
     }
     return nullptr;
   }
- 
-  //return cost_to_route
-  //0: free
-  //1: empty
+
+  // return cost_to_route
+  // 0: free
+  // 1: empty
   //>2: already there
-  int routing_cost(std::pair<int, sslink *> link, SSDfgEdge* edge) {
+  int routing_cost(std::pair<int, sslink*> link, SSDfgEdge* edge) {
     assert(link.second);
     auto& slots = _linkProp[link.second->id()].slots;
-    //Check all slots will be occupied empty.
+    // Check all slots will be occupied empty.
     bool empty = true;
-    int last_slot = link.first+edge->bitwidth();
-    for(int s = link.first; s < last_slot; ++s) {
-      if (!slots[s].edges.empty())
-        empty = false;
+    int last_slot = link.first + edge->bitwidth();
+    for (int s = link.first; s < last_slot; ++s) {
+      if (!slots[s].edges.empty()) empty = false;
     }
-    if (empty)
-      return 1;
-    if (alt_edge_for_link(link,edge)) 
-      return 0; 
-    return _linkProp[link.second->id()].slots[link.first].edges.size()+1;
+    if (empty) return 1;
+    if (alt_edge_for_link(link, edge)) return 0;
+    return _linkProp[link.second->id()].slots[link.first].edges.size() + 1;
   }
 
   // Routing cost for inputs, but based on nodes instead of values
-  int routing_cost_temporal_in(sslink *link, SSDfgVecInput *in_v) {
+  int routing_cost_temporal_in(sslink* link, SSDfgVecInput* in_v) {
     assert(link);
-    auto &vec = _linkProp[link->id()].slots[0].edges;
+    auto& vec = _linkProp[link->id()].slots[0].edges;
     if (vec.empty()) return 1;
     for (auto elem : vec) {
       SSDfgEdge* edge = elem.first;
-      if (edge->def() == in_v)
-        return 0;
+      if (edge->def() == in_v) return 0;
     }
     return 2;
   }
 
   // Routing cost for outputs, but based on nodes instead of values
-  int routing_cost_temporal_out(std::pair<int, sslink*> link, SSDfgNode *node, SSDfgVecOutput *out_v) {
+  int routing_cost_temporal_out(std::pair<int, sslink*> link, SSDfgNode* node,
+                                SSDfgVecOutput* out_v) {
     assert(link.second);
-    auto &vec = _linkProp[link.second->id()].slots[link.first].edges;
+    auto& vec = _linkProp[link.second->id()].slots[link.first].edges;
     if (vec.empty()) return 1;
-    //It's free if the node is the same, or one of the use vectors is the same.
+    // It's free if the node is the same, or one of the use vectors is the same.
     for (auto elem : vec) {
       SSDfgEdge* edge = elem.first;
-      if (edge->def() == node)
-        return 0;
-      if (edge->use() == out_v)
-        return 0;
+      if (edge->def() == node) return 0;
+      if (edge->use() == out_v) return 0;
     }
     return 2;
   }
 
-  //find first node for
-  SSDfgNode *dfgNodeOf(int slot, sslink* link) {
+  // find first node for
+  SSDfgNode* dfgNodeOf(int slot, sslink* link) {
     assert(link);
-    auto &vec = _linkProp[link->id()].slots[slot].edges;
+    auto& vec = _linkProp[link->id()].slots[slot].edges;
     return vec.empty() ? nullptr : (*vec.begin()).first->def();
   }
 
-  //find first node for
-  SSDfgNode *dfgNodeOf(sslink* link) {
-    return dfgNodeOf(0,link);
-  }
+  // find first node for
+  SSDfgNode* dfgNodeOf(sslink* link) { return dfgNodeOf(0, link); }
 
-  //find first node for
-  SSDfgNode *dfgNodeOf(int slot, ssnode* node) {
+  // find first node for
+  SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
     assert(link);
-    auto &vec = _nodeProp[node->id()].slots[slot].vertices;
-    if(!vec.empty()) {
+    auto& vec = _nodeProp[node->id()].slots[slot].vertices;
+    if (!vec.empty()) {
       return vec.front().first;
     }
     return nullptr;
   }
 
-  //find first node for
-  SSDfgNode *dfgNodeOf(ssnode* node) {
-    return dfgNodeOf(0,node);
-  }
+  // find first node for
+  SSDfgNode* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
 
-
-
-  std::vector<std::pair<SSDfgNode*,int>>& dfg_nodes_of(int slot, ssnode *node) {
+  std::vector<std::pair<SSDfgNode*, int>>& dfg_nodes_of(int slot, ssnode* node) {
     return _nodeProp[node->id()].slots[slot].vertices;
   }
 
+  // we should depricate this?
+  ssnode* locationOf(SSDfgNode* dfgnode) { return _vertexProp[dfgnode->id()].node; }
 
-  //we should depricate this?
-  ssnode *locationOf(SSDfgNode *dfgnode) {
-    return _vertexProp[dfgnode->id()].node;
+  std::pair<int, ssnode*> location_of(SSDfgNode* dfgnode) {
+    return std::make_pair(_vertexProp[dfgnode->id()].idx,
+                          _vertexProp[dfgnode->id()].node);
   }
 
-  std::pair<int, ssnode *> location_of(SSDfgNode *dfgnode) {
-    return std::make_pair(_vertexProp[dfgnode->id()].idx, _vertexProp[dfgnode->id()].node);
-  }
-
-  bool is_scheduled(SSDfgNode *dfgnode) {
+  bool is_scheduled(SSDfgNode* dfgnode) {
     return _vertexProp[dfgnode->id()].node != nullptr;
   }
 
-
   void stat_printOutputLatency();
 
-  SSModel *ssModel() { return _ssModel; }
+  SSModel* ssModel() { return _ssModel; }
 
   void iterativeFixLatency();
 
-  std::vector<SSDfgNode *> ordered_non_temporal();
+  std::vector<SSDfgNode*> ordered_non_temporal();
 
-  void calcLatency(int &lat, int &latmis, bool warnMismatch = false);
+  void calcLatency(int& lat, int& latmis, bool warnMismatch = false);
 
-  void cheapCalcLatency(int &lat, int &latmis, bool set_delay = false);
+  void cheapCalcLatency(int& lat, int& latmis, bool set_delay = false);
 
-  void calcNodeLatency(SSDfgNode *, int &lat, int &latmis, bool set_delay = false);
+  void calcNodeLatency(SSDfgNode*, int& lat, int& latmis, bool set_delay = false);
 
-
-  bool fixLatency(int &lat, int &latmis);
+  bool fixLatency(int& lat, int& latmis);
 
   void clearAll() {
     _totalViolation = 0;
@@ -558,96 +533,96 @@ public:
     allocate_space();
   }
 
-  //assign outlink to inlink for a switch
-  //if the dfgnode is associated with the switch
-  //whats is the outlink of the inlink from that node
+  // assign outlink to inlink for a switch
+  // if the dfgnode is associated with the switch
+  // whats is the outlink of the inlink from that node
   void xfer_link_to_switch() {
     using namespace SS_CONFIG;
     using namespace std;
 
-    if (_assignSwitch.size() != 0) { //switches already assigned!
+    if (_assignSwitch.size() != 0) {  // switches already assigned!
       return;
     }
 
-    vector<ssswitch*>  &switches = _ssModel->subModel() -> switch_list();  //1d switches
-    
-    for(auto sssw_it : switches){
-      ssswitch *sssw = sssw_it;
-      for (auto &inlink: sssw->in_links()) {
+    vector<ssswitch*>& switches = _ssModel->subModel()->switch_list();  // 1d switches
+
+    for (auto sssw_it : switches) {
+      ssswitch* sssw = sssw_it;
+      for (auto& inlink : sssw->in_links()) {
         for (int slot_in = 0; slot_in < 8; ++slot_in) {
           if (linkAssigned(slot_in, inlink)) {
-            //inlink to sw associated with a dfg node
-            SSDfgNode *innode = dfgNodeOf(slot_in, inlink);
+            // inlink to sw associated with a dfg node
+            SSDfgNode* innode = dfgNodeOf(slot_in, inlink);
 
-            for (auto outlink: sssw->out_links()) {
+            for (auto outlink : sssw->out_links()) {
               for (int slot_out = 0; slot_out < 8; ++slot_out) {
-                  //check if the dfgnode has same outlink and inlink
-                if (linkAssigned(slot_out, outlink) != 0 && innode == dfgNodeOf(slot_out, outlink)) {
-                 _assignSwitch[sssw][outlink] = inlink;
+                // check if the dfgnode has same outlink and inlink
+                if (linkAssigned(slot_out, outlink) != 0 &&
+                    innode == dfgNodeOf(slot_out, outlink)) {
+                  _assignSwitch[sssw][outlink] = inlink;
                 }
               }
-            }//end for out links
+            }  // end for out links
           }
         }
-      }//end for sin links
+      }  // end for sin links
     }
   }
 
-  //NOTE/WARN: interpretConfigBits creates a dfg object that should
-  //be cleaned up later by the schedule object
-  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBits(int size, uint64_t *bits);
+  // NOTE/WARN: interpretConfigBits creates a dfg object that should
+  // be cleaned up later by the schedule object
+  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBits(int size, uint64_t* bits);
 
-  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBitsCheat(char *s);
+  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBitsCheat(char* s);
 
-  //TODO: Implement it to support MGRA
-  //std::map<SS_CONFIG::ss_inst_t,int> interpretConfigBitsDedicated();
+  // TODO: Implement it to support MGRA
+  // std::map<SS_CONFIG::ss_inst_t,int> interpretConfigBitsDedicated();
 
   void clear_ssdfg();
 
   void reset_simulation_state();
 
-  bitslices<uint64_t> &slices() { return _bitslices; }
+  bitslices<uint64_t>& slices() { return _bitslices; }
 
-  void add_passthrough_node(int slot, ssnode *n) {
-    _nodeProp[n->id()].slots[slot].num_passthroughs += 1; 
-    _num_passthroughs+=1;
+  void add_passthrough_node(int slot, ssnode* n) {
+    _nodeProp[n->id()].slots[slot].num_passthroughs += 1;
+    _num_passthroughs += 1;
   }
 
   void print_bit_loc() {
     std::cout << "Primary Config\n";
-    std::cout << "Row: " << ROW_LOC
-              << ":" << ROW_LOC + ROW_BITS - 1 << "\n";
-    std::cout << "Switches: " << SWITCH_LOC << ":"
-              << SWITCH_LOC + SWITCH_BITS - 1 << "\n";
-    std::cout << "FU Dir: " << FU_DIR_LOC << ":"
-              << FU_DIR_LOC + FU_DIR_BITS - 1 << "\n";
+    std::cout << "Row: " << ROW_LOC << ":" << ROW_LOC + ROW_BITS - 1 << "\n";
+    std::cout << "Switches: " << SWITCH_LOC << ":" << SWITCH_LOC + SWITCH_BITS - 1
+              << "\n";
+    std::cout << "FU Dir: " << FU_DIR_LOC << ":" << FU_DIR_LOC + FU_DIR_BITS - 1 << "\n";
     std::cout << "FU Pred Inv: " << FU_PRED_INV_LOC << ":"
               << FU_PRED_INV_LOC + FU_PRED_INV_BITS - 1 << "\n";
-    std::cout << "Opcode: " << OPCODE_LOC << ":"
-              << OPCODE_LOC + OPCODE_BITS - 1 << "\n";
-    std::cout << "In Del.: " << IN_DELAY_LOC << ":"
-              << IN_DELAY_LOC + IN_DELAY_BITS - 1 << "\n";
+    std::cout << "Opcode: " << OPCODE_LOC << ":" << OPCODE_LOC + OPCODE_BITS - 1 << "\n";
+    std::cout << "In Del.: " << IN_DELAY_LOC << ":" << IN_DELAY_LOC + IN_DELAY_BITS - 1
+              << "\n";
   }
 
-  void set_edge_delay(int i, SSDfgEdge *e) { _edgeProp[e->id()].extra_lat = i; }
+  void set_edge_delay(int i, SSDfgEdge* e) { _edgeProp[e->id()].extra_lat = i; }
 
-  int edge_delay(SSDfgEdge *e) { return _edgeProp[e->id()].extra_lat; }
+  int edge_delay(SSDfgEdge* e) { return _edgeProp[e->id()].extra_lat; }
 
-  void set_link_order(int slot, sslink *l, int i) { _linkProp[l->id()].slots[slot].order = i; }
+  void set_link_order(int slot, sslink* l, int i) {
+    _linkProp[l->id()].slots[slot].order = i;
+  }
 
-  int link_order(std::pair<int, sslink *> l) { return _linkProp[l.second->id()].slots[l.first].order; }
+  int link_order(std::pair<int, sslink*> l) {
+    return _linkProp[l.second->id()].slots[l.first].order;
+  }
 
   struct LinkProp;
 
-  std::vector<LinkProp> &link_prop() { return _linkProp; }
+  std::vector<LinkProp>& link_prop() { return _linkProp; }
 
   struct EdgeProp;
 
-  std::vector<EdgeProp> &edge_prop() { return _edgeProp; }
+  std::vector<EdgeProp>& edge_prop() { return _edgeProp; }
 
-  size_t num_passthroughs(SSDfgEdge *e) {
-    return _edgeProp[e->id()].passthroughs.size();
-  }
+  size_t num_passthroughs(SSDfgEdge* e) { return _edgeProp[e->id()].passthroughs.size(); }
 
   int max_lat() {
     assert(_max_lat != -1);
@@ -662,17 +637,17 @@ public:
 
   void reset_lat_bounds() {
     for (auto elem : _ssDFG->nodes<SSDfgVecInput*>()) {
-      auto &vp = _vertexProp[elem->id()];
+      auto& vp = _vertexProp[elem->id()];
       vp.min_lat = 0;
       vp.max_lat = 0;
     }
     for (auto elem : _ssDFG->nodes<SSDfgInst*>()) {
-      auto &vp = _vertexProp[elem->id()];
+      auto& vp = _vertexProp[elem->id()];
       vp.min_lat = 0;
       vp.max_lat = INT_MAX - 1000;
     }
     for (auto elem : _ssDFG->nodes<SSDfgVecOutput*>()) {
-      auto &vecp = _vertexProp[elem->id()];
+      auto& vecp = _vertexProp[elem->id()];
       vecp.min_lat = 0;
       vecp.max_lat = INT_MAX - 1000;
     }
@@ -682,10 +657,9 @@ public:
 
   std::string name() { return _name; }
 
-private:
-
+ private:
   ////called by reconstructSchedule to trace link assignment
-  //void tracePath(ssnode *, SSDfgNode *,
+  // void tracePath(ssnode *, SSDfgNode *,
   //               std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &,
   //               std::map<ssnode *, SSDfgNode *> &,
   //               std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &);
@@ -694,16 +668,19 @@ private:
   ////routemap -- for each ssnode - inlink and outlinks
   ////dfgnode_for -- ssnode to dfgnode mapping
   ////posMap -- for each dfgnode, vector of incoming dirs
-  //void reconstructSchedule(
+  // void reconstructSchedule(
   //        std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &routemap,
   //        std::map<ssnode *, SSDfgNode *> &dfgnode_for,
   //        std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &posMap);
 
-public:
+ public:
+  template <typename T>
+  inline bool is_complete();
 
-  template<typename T> inline bool is_complete();
-
-  template<typename T> inline int num_mapped() { return _num_mapped[T::KindValue]; }
+  template <typename T>
+  inline int num_mapped() {
+    return _num_mapped[T::KindValue];
+  }
 
   unsigned num_links_mapped() { return _links_mapped; }
 
@@ -713,46 +690,46 @@ public:
 
   void allocate_space() {
     if (_ssDFG) {
-      _vertexProp.resize((size_t) _ssDFG->num_node_ids());
-      _edgeProp.resize((size_t) _ssDFG->num_edge_ids());
+      _vertexProp.resize((size_t)_ssDFG->num_node_ids());
+      _edgeProp.resize((size_t)_ssDFG->num_edge_ids());
     }
     if (_ssModel) {
-      _nodeProp.resize((size_t) _ssModel->subModel()->node_list().size());
-      _linkProp.resize((size_t) _ssModel->subModel()->link_list().size());
+      _nodeProp.resize((size_t)_ssModel->subModel()->node_list().size());
+      _linkProp.resize((size_t)_ssModel->subModel()->link_list().size());
     }
   }
 
-  int colorOf(SSDfgValue *v) { return _cm.colorOf(v); }
+  int colorOf(SSDfgValue* v) { return _cm.colorOf(v); }
 
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
   void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
 
-  int num_passthroughs() {return _num_passthroughs;}
+  int num_passthroughs() { return _num_passthroughs; }
 
   struct VertexProp {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
-    ssnode *node = nullptr;
+    ssnode* node = nullptr;
     int width = -1, idx = -1;
 
-  private:
+   private:
     friend class boost::serialization::access;
 
-    template<class Archive>
-    void serialize(Archive &ar, const unsigned version);
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned version);
   };
 
   struct EdgeProp {
     int num_links = 0;
     int extra_lat = 0;
-    int vio=0; //temporary variable
+    int vio = 0;  // temporary variable
     std::list<std::pair<int, sslink*>> links;
     std::list<std::pair<int, ssnode*>> passthroughs;
 
-    //For serialization only
+    // For serialization only
     std::list<std::pair<int, int>> links_ser;
     std::list<std::pair<int, int>> passthroughs_ser;
 
-    //std::vector<uint64_t> sched_index; //Temporary for debugging -- indicates the order
+    // std::vector<uint64_t> sched_index; //Temporary for debugging -- indicates the order
 
     void reset() {
       num_links = 0;
@@ -761,64 +738,61 @@ public:
       passthroughs.clear();
     }
 
-
-  private:
+   private:
     friend class boost::serialization::access;
 
-    template<class Archive>
-    void serialize(Archive &ar, const unsigned version);
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned version);
   };
-
 
   struct NodeProp {
     struct NodeSlot {
       int num_passthroughs = 0;
-      //Integer here indicates the position to which the node was assigned
-      std::vector<std::pair<SSDfgNode*,int>> vertices;
+      // Integer here indicates the position to which the node was assigned
+      std::vector<std::pair<SSDfgNode*, int>> vertices;
     };
 
-    NodeSlot slots[8]; 
+    NodeSlot slots[8];
 
-  private:
+   private:
     friend class boost::serialization::access;
 
-    template<class Archive>
-    void serialize(Archive &ar, const unsigned version);
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned version);
   };
 
   struct LinkProp {
     struct LinkSlot {
       int lat = 0, order = -1;
-      //Integer here indicates the position to which the edge was assigned
-      std::vector<std::pair<SSDfgEdge *,int>> edges;
+      // Integer here indicates the position to which the edge was assigned
+      std::vector<std::pair<SSDfgEdge*, int>> edges;
     };
 
     LinkSlot slots[8];
 
-  private:
+   private:
     friend class boost::serialization::access;
 
-    template<class Archive>
-    void serialize(Archive &ar, const unsigned version);
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned version);
   };
 
-private:
-
+ private:
   friend class boost::serialization::access;
 
-  template<class Archive>
-  void serialize(Archive &ar, const unsigned version);
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned version);
 
   std::string _name;
 
-  //Private Data
-  SSModel *_ssModel;
-  SSDfg *_ssDFG;
+  // Private Data
+  SSModel* _ssModel;
+  SSDfg* _ssDFG;
 
   int _totalViolation = 0;
-  int _max_lat = -1, _max_lat_mis = -1; 
+  int _max_lat = -1, _max_lat_mis = -1;
 
-  unsigned _num_mapped[SSDfgNode::V_NUM_TYPES] = {0}; //init all to zero
+  unsigned _num_mapped[SSDfgNode::V_NUM_TYPES] = {0};  // init all to zero
   int _links_mapped = 0, _edge_links_mapped = 0;
 
   std::map<int, int> _groupMismatch;
@@ -827,31 +801,32 @@ private:
   std::vector<NodeProp> _nodeProp;
   std::vector<LinkProp> _linkProp;
 
-  std::map<ssswitch *, std::map<sslink *, sslink *>> _assignSwitch; //out to in
+  std::map<ssswitch*, std::map<sslink*, sslink*>> _assignSwitch;  // out to in
 
   int _decode_lat_mis = 0;
 
-  //CGRA-parsable Config Data
+  // CGRA-parsable Config Data
   bitslices<uint64_t> _bitslices;
 
   // Can consider adjusting these as averages, or making edge-specific
-  int _min_expected_route_latency=2; 
-  int _max_expected_route_latency=6;
+  int _min_expected_route_latency = 2;
+  int _max_expected_route_latency = 6;
 
-  int _num_passthroughs=0;
+  int _num_passthroughs = 0;
 
   SwitchDir ssdir;
   ColorMapper _cm;
 };
 
-template<> inline int Schedule::num_mapped<SSDfgNode>() {
-    return _num_mapped[SSDfgNode::V_INST] +
-           _num_mapped[SSDfgNode::V_INPUT] +
-           _num_mapped[SSDfgNode::V_OUTPUT];
+template <>
+inline int Schedule::num_mapped<SSDfgNode>() {
+  return _num_mapped[SSDfgNode::V_INST] + _num_mapped[SSDfgNode::V_INPUT] +
+         _num_mapped[SSDfgNode::V_OUTPUT];
 }
 
-template<typename T> inline bool Schedule::is_complete() {
-  return (int) _ssDFG->nodes<T*>().size() == num_mapped<T>();
+template <typename T>
+inline bool Schedule::is_complete() {
+  return (int)_ssDFG->nodes<T*>().size() == num_mapped<T>();
 }
 
 inline unsigned Schedule::num_left() {
