@@ -300,7 +300,7 @@ class SSDfgNode {
 
   // retrieve the value of the def
   uint64_t retrieve(int operand_index) {
-    assert(_ops.size() > (unsigned)operand_index);
+    assert(_ops.size() > (unsigned) operand_index);
     return _ops[operand_index].get_value();
   }
 
@@ -317,10 +317,10 @@ class SSDfgNode {
   }
 
   // sets value at this cycle
-  void set_value(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail, int cycle);
+  void set_value(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail, int cycle, bool is_compute);
 
   // sets value with val index (this interface makes more sense?)
-  void set_value(int i, uint64_t v, bool valid, bool avail, int cycle);
+  void set_value(int i, uint64_t v, bool valid, bool avail, int cycle, bool is_compute);
 
   //--------------------------------------------
 
@@ -897,14 +897,19 @@ class SSDfg {
                          bool verif);
 
   void push_transient(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail,
-                      int cycle) {
+                      int cycle, bool is_computed) {
     struct cycle_result* temp = new cycle_result(dfg_val, v, valid, avail);
-    transient_values[(cycle + cur_node_ptr) % get_max_lat()].push_back(temp);
+    // If this is a newly computed value, append to the back.
+    // Otherwise, it is a value delayed from previous cycles, so it should be inserted before
+    // any element of this cycle.
+    auto &to_insert = transient_values[(cycle + cur_node_ptr) % get_max_lat()];
+    to_insert.insert(is_computed ? to_insert.end() : to_insert.begin(), temp);
   }
 
   void push_buf_transient(SSDfgEdge* e, bool is_dummy, int cycle) {
     struct buffer_pop_info* temp = new buffer_pop_info(e, is_dummy);
-    buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()].push_back(temp);
+    auto &to_insert = buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()];
+    to_insert.push_back(temp);
   }
 
   int cycle(bool print, bool verif);

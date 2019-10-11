@@ -568,6 +568,7 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
   int config_words =
       (_ssModel->subModel()->sizex() + 1) * (_ssModel->subModel()->sizey() + 1) + 16;
 
+  config_words = std::max((int) (file_name.size() + 16), config_words);
   // Negative size indicates funny thing
   os << "#define " << cfg_name << "_size " << config_words << "\n\n";
 

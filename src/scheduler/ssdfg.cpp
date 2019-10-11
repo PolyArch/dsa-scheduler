@@ -420,7 +420,7 @@ void SSDfgNode::set_node(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail
       }
       _avail = false;
     } else {
-      set_value(dfg_val, v, valid, avail, 1);  // after 1 cycle
+      set_value(dfg_val, v, valid, avail, 1, false);  // after 1 cycle
     }
   }
 }
@@ -892,6 +892,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   bool discard(false), reset(false), pred(true);
   uint64_t output = 0;
 
+  std::ostringstream reason;
   _invalid = false;
 
   for (unsigned i = 0; i < _ops.size(); ++i) {
@@ -903,6 +904,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _input_vals[i] = c_val;
       if (!_ops[i].get_buffer_valid()) {
         _invalid = true;
+        reason << "ctrl signal not ready!";
       } else {
         _ctrl_bits.test(c_val, _back_array, discard, pred, reset);
       }
@@ -910,6 +912,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
       _input_vals[i] = _ops[i].get_buffer_val();
       if (!_ops[i].get_buffer_valid()) {
         _invalid = true;
+        reason << "operand " << i << " not valid!";
       }
     }
   }
@@ -966,15 +969,13 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   _inputs_ready = 0;
 
   if (print) {
-    std::cout << (_invalid ? "instruction invalid " : "instruction valid ")
+    std::cout << (_invalid ? " invalid " : " valid ") << reason.str() << " "
               << (discard ? " and output discard!\n" : "\n");
   }
 
-  if (!discard) {
-    for (unsigned i = 0; i < values().size(); ++i) {
-      // cout << "set value called: " << getout(i) << "\n!";
-      set_value(_values[i], getout(i), !_invalid, true, inst_lat(inst()));
-    }
+  _invalid |= discard;
+  for (unsigned i = 0; i < values().size(); ++i) {
+    set_value(_values[i], getout(i), !_invalid, true, inst_lat(inst()), /*is compute=*/true);
   }
 
   // pop the inputs after inst_thr+back_press here
@@ -1024,12 +1025,12 @@ SSDfgVec::SSDfgVec(V_TYPE v, int num_values, int bitwidth, const std::string& na
 }
 
 void SSDfgNode::set_value(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail,
-                          int cycle) {
-  _ssdfg->push_transient(dfg_val, v, valid, avail, cycle);
+                          int cycle, bool is_compute) {
+  _ssdfg->push_transient(dfg_val, v, valid, avail, cycle, is_compute);
 }
 
-void SSDfgNode::set_value(int i, uint64_t v, bool valid, bool avail, int cycle) {
-  set_value(_values[i], v, valid, avail, cycle);
+void SSDfgNode::set_value(int i, uint64_t v, bool valid, bool avail, int cycle, bool is_compute) {
+  set_value(_values[i], v, valid, avail, cycle, is_compute);
 }
 
 //------------------------------------------------------------------
@@ -1420,9 +1421,6 @@ bool SSDfg::push_vector(SSDfgVecInput* vec_in, std::vector<uint64_t> data,
                 << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
       assert(false && "insufficient data available");
     }
-  } else {
-    // if((int) data.size() != vec_in->get_vp_len())
-    //  return false;
   }
 
   int npart = 64 / vec_in->get_port_width();
@@ -1442,7 +1440,8 @@ bool SSDfg::push_vector(SSDfgVecInput* vec_in, std::vector<uint64_t> data,
 }
 
 bool SSDfg::can_push_input(SSDfgVecInput* vec_in) {
-  if (vec_in->get_avail()) return false;
+  if (vec_in->get_avail())
+    return false;
   return true;
 }
 
@@ -1484,7 +1483,7 @@ void SSDfg::pop_vector_output(SSDfgVecOutput* vec_out, std::vector<uint64_t>& da
 }
 
 int SSDfg::cycle(bool print, bool verif) {
-  // int num_computed=0;
+  //FIXME(@were): Why 2?
   for (auto it = buf_transient_values[cur_buf_ptr].begin();
        it != buf_transient_values[cur_buf_ptr].end();) {
     // set the values
@@ -1499,7 +1498,6 @@ int SSDfg::cycle(bool print, bool verif) {
        it != transient_values[cur_node_ptr].end();) {
     struct cycle_result* temp = *it;
     SSDfgNode* ss_node = temp->dfg_val->node();
-    // cout << "set_node: " << temp->val << "\n";
     ss_node->set_node(temp->dfg_val, temp->val, temp->valid, temp->avail, print, verif);
     it = transient_values[cur_buf_ptr].erase(it);
   }
