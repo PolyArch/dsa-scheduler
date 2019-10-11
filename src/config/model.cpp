@@ -177,10 +177,9 @@ SSModel::SSModel(const char* filename, bool multi_config) {
 // TODO YAML Parser (broken for now - Sihao will fix it later)
 void SSModel::parse_yaml(const std::string& fn) {
   // TODO: fix when yaml-cpp library is able to parse Seq[Seq[bool]]
-  assert(0 &&
-         "Yaml Parser is currently not working due to UNDEFINED Node Type of yaml-cpp "
-         "library, "
-         "please switch to JSON");
+
+  assert(0 && "Yaml Parser is currently not working due to UNDEFINED Node Type");
+
   // Initialize SubModel
   /*
   _subModel = new SubModel();
@@ -510,10 +509,10 @@ void SSModel::parse_json(std::istream& istream) {
       auto link = fu->add_link(fu);  // For decomposability
       link->setdir(SwitchDir::IP0);
 
-      sym_tab[id] = fu;
-      auto& insts = node_def.get_child("Insts");
-
-      // TODO: FIXME: Memory leak
+      sym_tab[id]=fu;
+      auto& insts = node_def.get_child("instructions");
+    
+      //TODO: FIXME: Memory leak 
       func_unit_def* fudef = new func_unit_def("NA");
       fu->setFUDef(fudef);
 
