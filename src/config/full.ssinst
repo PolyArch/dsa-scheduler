@@ -144,6 +144,7 @@ ImplicitQR              64           3              1              20          2
                                                                                             
 #Instruction            Bitwidth     NumOperands    OutputValues     Latency     Throughput   
 IndexMatch32x2          64           2              1              1           1            
+IndexMatch64            64           2              1              1           1            
 BackSub32x2             64           3              1              1           1            
 BackNormRed32x2         64           2              1              1           1            
 RLEDecoder16x4          64           3              1              2           1            

@@ -1,4 +1,4 @@
-#define SENTINAL16 ( ((uint16_t)1)<<15)
+#define SENTINAL16 ((((uint16_t)1)<<15)-1)
 
 if(ops[0]==SENTINAL16 && ops[1]==SENTINAL16) {
     back_array[0]=0;

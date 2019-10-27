@@ -269,7 +269,7 @@ public:
   bool get_bp();
 
   // Check's all consumers for backpressure-freedom,
-  // If backpressure,
+  // If backpressure, delay the push to next cycle
   void set_node(SSDfgValue* dfg_val, 
       uint64_t v, bool valid, bool avail, bool print, bool verif);
 

@@ -1,9 +1,9 @@
-#define SENTINAL ( ((uint64_t)1)<<63)
+#define SENTINAL ((((uint64_t)1)<<63)-1)
 
 if(ops[0]==SENTINAL && ops[1]==SENTINAL) {
     back_array[0]=0;
     back_array[1]=0;
-    return 1; // should not generate any backpressure
+    return 3; // should not generate any backpressure
 } 
 else if(ops[0]==ops[1]){
     back_array[0]=0;
