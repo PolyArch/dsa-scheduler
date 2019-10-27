@@ -65,7 +65,6 @@ PORT_IN 7:  15 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_IN 8:  18 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_IN 9:  24 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_IN 10: 27 #1 2 3 4 5 6 7 #8-deep output Port
-PORT_IN 10: 32 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_IN 11: 4, 7,  #2-wide 
 PORT_IN 12: 10, 16,  #2-wide
 PORT_IN 13: 19, 22,  #2-wide 
@@ -91,10 +90,10 @@ PORT_OUT 5:  6 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_OUT 6:  8 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_OUT 7:  10 #1 2 3 4 5 6 7 #8-deep output Port
 PORT_OUT 8:  12 #1 2 3 4 5 6 7 #8-deep output Port
-PORT_OUT 8:  1, 3 
-PORT_OUT 9:  5, 7
-PORT_OUT 10: 9, 11
-PORT_OUT 11: 8, 11, 17, 19, 20, 22, 23, 26 #8-wide output Port
+PORT_OUT 9:  1, 3 
+PORT_OUT 10:  5, 7
+PORT_OUT 11: 9, 11
+PORT_OUT 12: 8, 11, 17, 19, 20, 22, 23, 26 #8-wide output Port
 
 
 #PORT_IN 0: 17 18 19 #any of these

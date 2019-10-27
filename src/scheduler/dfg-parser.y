@@ -89,7 +89,7 @@ statement
         if (auto ne = dynamic_cast<ValueEntry*>($3)) {
           SSDfgNode* node = ne->value->node();
           std::string name = (*$1)[0];
-          node->setName(name);
+          if(!node->has_name()) node->set_name(name);
           auto& values = node->values();
           
           if(values.size() < $1->size()) {
@@ -107,7 +107,8 @@ statement
           assert($1->size()==1);
           std::string name = (*$1)[0];
           for (auto elem : ce->entries) {
-            elem->value->node()->setName(name);
+            auto node = elem->value->node();
+            if(!node->has_name()) node->set_name(name);
           }
           p->symbols.set(name,$3);
         }

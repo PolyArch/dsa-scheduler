@@ -1,1 +1,1 @@
-return !ops[0]; 
+return !ops[0];

@@ -1,49 +1,45 @@
 #ifndef __SS_SCHEDULER_H__
 #define __SS_SCHEDULER_H__
 
-#include "ssdfg.h"
 #include "model.h"
 #include "schedule.h"
+#include "ssdfg.h"
 
-#include <map>
-#include <iostream>
+#include <stdlib.h>
+#include <boost/functional.hpp>
+#include <chrono>
 #include <fstream>
-#include <vector>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
-#include <map>
-#include <chrono>
-#include <random>
-#include <stdlib.h>
-#include <memory>
-#include <boost/functional.hpp>
+#include <vector>
 
 #define MAX_ROUTE 100000000
 
 using usec = std::chrono::microseconds;
 using get_time = std::chrono::steady_clock;
 
+template <typename T, typename U>
+std::pair<T, U> operator+(const std::pair<T, U>& l, const std::pair<T, U>& r) {
+  return {l.first + r.first, l.second + r.second};
+}
 
-template <typename T,typename U>
-std::pair<T,U> operator+(const std::pair<T,U> & l,
-                         const std::pair<T,U> & r) {   
-    return {l.first+r.first,l.second+r.second};
-}        
-
-template <typename T,typename U>                           
-std::pair<T,U> operator-(const std::pair<T,U> & l,
-                         const std::pair<T,U> & r) {   
-    return {l.first-r.first,l.second-r.second};
-}        
+template <typename T, typename U>
+std::pair<T, U> operator-(const std::pair<T, U>& l, const std::pair<T, U>& r) {
+  return {l.first - r.first, l.second - r.second};
+}
 
 class Scheduler {
-public:
-  Scheduler(SS_CONFIG::SSModel *ssModel) : _ssModel(ssModel),
-                                           _optcr(0.1f), _optca(0.0f), _reslim(100000.0f) {}
+ public:
+  Scheduler(SS_CONFIG::SSModel* ssModel)
+      : _ssModel(ssModel), _optcr(0.1f), _optca(0.0f), _reslim(100000.0f) {}
 
-  bool check_res(SSDfg *ssDFG, SSModel *ssmodel);
+  bool check_res(SSDfg* ssDFG, SSModel* ssmodel);
 
-  virtual bool schedule(SSDfg *ssDFG, Schedule *&schedule) = 0;
+  virtual bool schedule(SSDfg* ssDFG, Schedule*& schedule) = 0;
 
   bool verbose;
   bool suppress_timing_print = false;
@@ -52,17 +48,15 @@ public:
 
   std::string str_subalg;
 
-  std::string AUX(int x) {
-    return (x == -1 ? "-" : std::to_string(x));
-  }
+  std::string AUX(int x) { return (x == -1 ? "-" : std::to_string(x)); }
 
   double total_msec() {
     auto end = get_time::now();
     auto diff = end - _start;
-    return ((double) std::chrono::duration_cast<usec>(diff).count()) / 1000.0;
+    return ((double)std::chrono::duration_cast<usec>(diff).count()) / 1000.0;
   }
 
-  virtual bool schedule_timed(SSDfg *ssDFG, Schedule *&sched) {
+  virtual bool schedule_timed(SSDfg* ssDFG, Schedule*& sched) {
     _start = get_time::now();
 
     bool succeed_sched = schedule(ssDFG, sched);
@@ -81,22 +75,19 @@ public:
 
   void setTimeout(float timeout) { _reslim = timeout; }
 
-  //virtual void unroute(Schedule* sched, SSDfgEdge* dfgnode,
-  //                     SS_CONFIG::ssnode* source);
+  bool running() { return !_should_stop; }
+  void stop() { _should_stop = true; }
 
-  bool running() {return !_should_stop;}
-  void stop() {_should_stop=true;}
+  void set_srand(int i) { _srand = i; }
 
-  void set_srand(int i) {_srand=i;}
+ protected:
+  SS_CONFIG::SSModel* getSSModel() { return _ssModel; }
 
-protected:
-  SS_CONFIG::SSModel *getSSModel() { return _ssModel; }
-
-  SS_CONFIG::SSModel *_ssModel;
+  SS_CONFIG::SSModel* _ssModel;
 
   int _max_iters = 20000;
   bool _should_stop = false;
-  int _srand=0;
+  int _srand = 0;
 
   float _optcr, _optca, _reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;
@@ -104,35 +95,24 @@ protected:
   std::shared_ptr<Schedule*> best, current;
 };
 
-
-
-
 class HeuristicScheduler : public Scheduler {
-public:
+ public:
+  HeuristicScheduler(SS_CONFIG::SSModel* ssModel)
+      : Scheduler(ssModel), fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
 
-  HeuristicScheduler(SS_CONFIG::SSModel *ssModel) : Scheduler(ssModel),
-                                                    fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
-
-protected:
-
+ protected:
   const std::pair<int, int> fscore;
 
-  void random_order(int n, std::vector<int> &order);
+  void random_order(int n, std::vector<int>& order);
 
-  std::vector<bool> rand_node_choose_k(int k,
-                                       std::vector<ssnode *> &input_nodes,
-                                       std::vector<ssnode *> &output_nodes);
+  std::vector<bool> rand_node_choose_k(int k, std::vector<ssnode*>& input_nodes,
+                                       std::vector<ssnode*>& output_nodes);
 
-  void rand_n_choose_k(int n, int m, std::vector<int> &indices);
+  void rand_n_choose_k(int n, int m, std::vector<int>& indices);
 
-  int rand_bt(int s, int e) {
-    return rand() % (e - s) + s;
-  }
+  int rand_bt(int s, int e) { return rand() % (e - s) + s; }
 
-  int rand_bt_large(int s, int e) {
-    return (rand() * RAND_MAX + rand()) % (e - s) + s;
-  }
-
+  int rand_bt_large(int s, int e) { return (rand() * RAND_MAX + rand()) % (e - s) + s; }
 
   int _route_times = 0;
 };

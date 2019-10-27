@@ -20,5 +20,5 @@ else if(ops[1]<ops[0] || ops[0]==SENTINAL){
     back_array[1]=0;
     return 2;
 } else {
-    assert(0 && "not possible");
+  assert(0 && "not possible");
 }

@@ -2,9 +2,9 @@
 #define PREDICT_H
 
 // Include Files
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
-#include <cmath>
 
 // Function Declarations
 double pe_area_predict(const double x1[12]);
