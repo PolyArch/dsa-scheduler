@@ -113,6 +113,12 @@ std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBitsCheat(char* s) 
     }
   }
 
+  for (auto node : _ssDFG->nodes<SSDfgNode*>()) {
+    for (auto &op : node->ops()) {
+      op.fifos.resize(op.edges.size());
+    }
+  }
+
   for (auto dfg_inst : _ssDFG->nodes<SSDfgInst*>()) {
     auto inst = dfg_inst->inst();
     inst_histo[inst] += 1;

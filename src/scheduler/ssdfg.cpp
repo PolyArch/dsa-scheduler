@@ -129,9 +129,9 @@ void SSDfgEdge::reset_associated_buffer() {
 
 /// { SSDfgOperand
 
-SSDfgOperand::SSDfgOperand(SSDfgEdge* e) : edges{e} {}
+SSDfgOperand::SSDfgOperand(SSDfgEdge* e) : edges{e}, fifos(1) {}
 
-SSDfgOperand::SSDfgOperand(std::vector<SSDfgEdge*> es) : edges(es) {}
+SSDfgOperand::SSDfgOperand(std::vector<SSDfgEdge*> es) : edges(es), fifos(es.size()) {}
 
 SSDfgOperand::SSDfgOperand(uint64_t imm_) : imm(imm_) {}
 
@@ -409,7 +409,6 @@ bool SSDfgNode::get_bp() {
 
 void SSDfgNode::set_node(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail,
                          bool print, bool verif) {
-  _avail = avail;
 
   // no need to do anything for output node
   if (this->num_out() == 0) return;
@@ -418,7 +417,6 @@ void SSDfgNode::set_node(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail
       for (auto* use : dfg_val->edges()) {
         use->push_in_buffer(v, valid, print, verif);
       }
-      _avail = false;
     } else {
       set_value(dfg_val, v, valid, avail, 1, false);  // after 1 cycle
     }
@@ -750,43 +748,41 @@ void SSDfgInst::setImmSlot(int i) {
   _imm_slot = i;
 }
 
-uint64_t SSDfgInst::do_compute(bool& discard) {
+template<typename Tfrom, typename Tto>
+std::vector<Tto> cast_vector(const vector<Tfrom> &a) {
+  std::vector<Tto> res(a.size());
+  for (size_t i = 0; i < a.size(); ++i)
+    res[i] = a[i];
+  return res;
+}
+
+uint64_t SSDfgInst::do_compute(bool &discard) {
+  last_execution = _ssdfg->cur_cycle();
+
+#define EXECUTE(bw)                                                                            \
+  case bw: {                                                                                   \
+    std::vector<uint##bw##_t> input = cast_vector<uint64_t, uint##bw##_t>(_input_vals);        \
+    std::vector<uint##bw##_t> outputs(values().size());                                        \
+      output = SS_CONFIG::execute##bw(_ssinst, input,                                          \
+                                      outputs, (uint##bw##_t*)&_reg[0], discard, _back_array); \
+      outputs[0] = output;                                                                     \
+      _output_vals = cast_vector<uint##bw##_t, uint64_t>(outputs);                             \
+      return output;                                                                           \
+  }
+
   uint64_t output;
   switch (bitwidth()) {
-    case 64:
-      output = SS_CONFIG::execute64(_ssinst, _input_vals, _output_vals, &_reg[0], discard,
-                                    _back_array);
-      _output_vals[0] = output;  // out default output in slot 0 of outputs
-      break;
-    case 32:
-      for (int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_32[i] = _input_vals[i];
-      }
-      output = SS_CONFIG::execute32(_ssinst, _input_vals_32, _output_vals_32,
-                                    (uint32_t*)&_reg[0], discard, _back_array);
-      _output_vals_32[0] = output;
-      break;
-    case 16:
-      for (int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_16[i] = _input_vals[i];
-      }
-      output = SS_CONFIG::execute16(_ssinst, _input_vals_16, _output_vals_16,
-                                    (uint16_t*)&_reg[0], discard, _back_array);
-      _output_vals_16[0] = output;
-      break;
-    case 8:
-      for (int i = 0; i < (int)_input_vals.size(); ++i) {
-        _input_vals_8[i] = _input_vals[i];
-      }
-      output = SS_CONFIG::execute8(_ssinst, _input_vals_8, _output_vals_8,
-                                   (uint8_t*)&_reg[0], discard, _back_array);
-      _output_vals_8[0] = output;
-      break;
+    EXECUTE(64)
+    EXECUTE(32)
+    EXECUTE(16)
+    EXECUTE(8)
     default:
       cout << "Weird bitwidth: " << bitwidth() << "\n";
       assert(0 && "weird bitwidth");
   }
-  return output;
+
+#undef EXECUTE
+
 }
 
 // compute:actual compute called from SSDfg class (slightly modify this)
@@ -849,28 +845,14 @@ int SSDfgInst::compute(bool print, bool verif) {
 
 void SSDfgInst::resize_vals(int n) {
   _input_vals.resize(n);
-  _input_vals_32.resize(n);
-  _input_vals_16.resize(n);
-  _input_vals_8.resize(n);
-  _output_vals.resize(8);  // TODO: eliminate arbitrary constant?
-  _output_vals_32.resize(8);
-  _output_vals_16.resize(8);
-  _output_vals_8.resize(8);
 }
 
 void SSDfgInst::print_output(std::ostream& os) {
   os << " = ";
   for (int i = 0; i < (int)_values.size(); ++i) {
-    switch (bitwidth()) {
-      case 64: os << _output_vals[i]; break;
-      case 32: os << _output_vals_32[i]; break;
-      case 16: os << _output_vals_16[i]; break;
-      case 8: os << _output_vals_8[i]; break;
-      default: assert(0 && "odd bitwidth\n");
-    }
+      os << _output_vals[i];
     os << " ";
   }
-  // os << SS_CONFIG::num_values(_ssinst);
 }
 
 // new compute for back cgra-----------------------------
@@ -924,9 +906,10 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
   }
 
   if (!_invalid) {  // IF VALID
-    if (print)
+    if (print) {
       for (size_t i = 0; i < _ops.size(); ++i)
         _ssdfg->dbg_stream() << std::hex << _input_vals[i] << " ";
+    }
 
     _ssdfg->inc_total_dyn_insts();
 
@@ -935,8 +918,13 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
     _self_bits.test(output, _back_array, discard, pred, reset);
 
     if (print) {
-      print_output(_ssdfg->dbg_stream());
+      for (size_t i = 0; i < _output_vals.size(); ++i) {
+        std::cout << _output_vals[i] << " ";
+      }
+      std::cout << "\n";
     }
+  } else if (print) {
+    std::cout << "\n";
   }
 
   // TODO/FIXME: change to all registers
@@ -947,7 +935,7 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
 
   if (print) {
     for (size_t i = 0; i < _back_array.size(); ++i)
-      if (_back_array[i]) std::cout << "backpressure on " << i << " input\n";
+      if (_back_array[i]) std::cout << "backpressure on " << i << " input";
   }
 
   if (this->name() == ":Phi") {
@@ -1413,76 +1401,8 @@ double SSDfg::count_starving_nodes() {
   return count / num_unique_dfg_nodes;
 }
 
-bool SSDfg::push_vector(SSDfgVecInput* vec_in, std::vector<uint64_t> data,
-                        std::vector<bool> valid, bool print, bool verif) {
-  if (!vec_in->is_temporal()) {
-    if ((int)data.size() != vec_in->get_vp_len()) {
-      std::cout << "DATA FROM GEM5: " << data.size()
-                << " VEC VP SIZE: " << vec_in->get_vp_len() << "\n";
-      assert(false && "insufficient data available");
-    }
-  }
-
-  int npart = 64 / vec_in->get_port_width();
-  int x = static_cast<int>(vec_in->get_vp_len());
-
-  uint64_t val = 0;
-
-  for (int i = 0; i < (int)vec_in->values().size(); ++i) {
-    int n_times = std::min(npart, x - i * npart);
-    for (int j = n_times - 1 + i * npart; j >= i * npart; --j) {
-      val = data[j] | (val << vec_in->get_port_width());
-    }
-    vec_in->set_node(vec_in->values()[i], val, valid[i], true, print, verif);
-    val = 0;
-  }
-  return true;
-}
-
-bool SSDfg::can_push_input(SSDfgVecInput* vec_in) {
-  if (vec_in->get_avail())
-    return false;
-  return true;
-}
-
-bool SSDfg::can_pop_output(SSDfgVecOutput* vec_out, unsigned int len) {
-  assert(len > 0 && "Cannot pop 0 length output\n");
-  if (vec_out->length() != (int)len) {
-    std::cout << "DATA FROM GEM5: " << len << " VEC VP SIZE: " << vec_out->length()
-              << "\n";
-  }
-  assert(vec_out->length() == (int)len &&
-         "asked for different number of outputs than the supposed length\n");
-
-  size_t ready_outputs = 0;
-  for (auto operand : vec_out->ops()) {
-    if (!operand.is_buffer_empty()) {
-      ready_outputs++;
-    }
-  }
-  // std::cout << "ready outputs: " << ready_outputs << " len: " << len << "\n";
-  if (ready_outputs == len) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-void SSDfg::pop_vector_output(SSDfgVecOutput* vec_out, std::vector<uint64_t>& data,
-                              std::vector<bool>& data_valid, unsigned int len, bool print,
-                              bool verif) {
-  assert(vec_out->length() == (int)len && "insufficient output available\n");
-
-  // we don't need discard now!
-  for (auto operand : vec_out->ops()) {
-    data.push_back(operand.get_buffer_val());
-    data_valid.push_back(
-        operand.get_buffer_valid());  // I can read different validity here
-    operand.pop_buffer_val(print, verif);
-  }
-}
-
 int SSDfg::cycle(bool print, bool verif) {
+
   //FIXME(@were): Why 2?
   for (auto it = buf_transient_values[cur_buf_ptr].begin();
        it != buf_transient_values[cur_buf_ptr].end();) {
@@ -1528,7 +1448,7 @@ int SSDfg::cycle(bool print, bool verif) {
       }
     }
 
-    if (should_fire && n->get_avail() == 0) {
+    if (should_fire) {
       n->compute_backcgra(print, verif);
       I = _ready_nodes.erase(I);
       nodes_complete.insert(node_id);
@@ -1617,7 +1537,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
   return std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
 }
 
-// Sorry Jian, you can re-templitafy -- just trying to make it work for now
+// TODO: Marge these two functions.
 std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(Schedule* sched,
                                                                SSModel* model, int n) {
   auto& vports = model->subModel()->input_list();
@@ -1648,4 +1568,240 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecOutput::candidates(Schedule* sched,
   }
   assert(spots.size() > 0 && "Uh oh, no spots for outputs!\n");
   return spots;
+}
+
+void SSDfgValue::push(uint64_t val, bool valid, int delay) {
+  // TODO: Support FIFO length backpressure.
+  fifo.push(simulation::Data(_node->_ssdfg->cur_cycle() + delay, val, valid));
+}
+
+// new compute for back cgra-----------------------------
+void SSDfgInst::forward() {
+
+  static bool print = getenv("COMP") != nullptr;
+
+  // Check the instruction throughput
+  int inst_throughput = inst_thr(inst());
+  if (_ssdfg->cur_cycle() - last_execution < inst_throughput) {
+    return;
+  }
+
+  // Check the avaiability of output buffer
+  if (!values()[0]->fifo.empty()) {
+    for (auto elem : values()) {
+      assert(!elem->fifo.empty());
+      if (!elem->forward(true))
+        return;
+    }
+    for (auto elem : values()) {
+      assert(elem->forward(false));
+    }
+    return;
+  }
+
+  assert(_ops.size() <= 3);
+
+  _back_array.resize(_ops.size());
+  std::fill(_back_array.begin(), _back_array.end(), 0);
+
+  // Check all the operands ready to go!
+  for (size_t i = 0; i < _ops.size(); ++i) {
+    if (!_ops[i].ready()) {
+      return;
+    }
+  }
+
+  if (print) {
+    _ssdfg->dbg_stream() << name() << " (" << _ID << "): ";
+  }
+
+  bool discard(false), reset(false), pred(true);
+  uint64_t output = 0;
+
+  std::ostringstream reason;
+  _invalid = false;
+
+  _input_vals.resize(_ops.size(), 0);
+
+  for (unsigned i = 0; i < _ops.size(); ++i) {
+    if (_ops[i].is_imm()) {
+      _input_vals[i] = imm();
+    } else {
+      _input_vals[i] = _ops[i].poll();
+      if (!_ops[i].predicate()) {
+        _invalid = true;
+        reason << "operand " << i << " not valid!";
+      } else if (_ops[i].is_ctrl()) {
+        _ctrl_bits.test(_input_vals[i], _back_array, discard, pred, reset);
+      }
+    }
+  }
+
+  // we set this instruction to invalid
+  if (!pred) {
+    _invalid = true;
+  }
+
+  if (!_invalid) {  // IF VALID
+    if (print) {
+      for (size_t i = 0; i < _ops.size(); ++i)
+        _ssdfg->dbg_stream() << std::hex << _input_vals[i] << " ";
+    }
+
+    _ssdfg->inc_total_dyn_insts();
+
+    // Read in some temp value and set _val after inst_lat cycles
+    output = do_compute(discard);
+    _self_bits.test(output, _back_array, discard, pred, reset);
+
+    if (print) {
+      print_output(_ssdfg->dbg_stream());
+    }
+  } else {
+    _output_vals.resize(values().size());
+  }
+
+  // TODO/FIXME: change to all registers
+  if (reset) {
+    std::cout << "Reset the register file! " << _reg[0] << "\n";
+    for (size_t i = 0; i < _reg.size(); ++i)
+      _reg[i] = 0;
+  }
+
+  if (print) {
+    std::cout << (_invalid ? " invalid " : " valid ") << reason.str() << " "
+              << (discard ? " and output discard!" : "") << std::endl;
+  }
+
+  for (size_t i = 0; i < _back_array.size(); ++i) {
+    if (_back_array[i]) {
+      if (print) {
+        std::cout << "backpressure on " << i << " input\n";
+      }
+    } else {
+      _ops[i].pop();
+    }
+  }
+
+  _invalid |= discard;
+  for (size_t i = 0; i < values().size(); ++i) {
+    values()[i]->push(_output_vals[i], !_invalid, lat_of_inst());
+  }
+
+  for (auto elem : values()) {
+    if (!elem->forward(true))
+      return;
+  }
+
+  for (auto elem : values()) {
+    assert(elem->forward(false));
+  }
+
+}
+
+bool SSDfgOperand::ready() {
+  if (edges.empty()) {
+    return true;
+  }
+  for (size_t i = 0; i < fifos.size(); ++i) {
+    if (fifos[i].empty()) {
+      return false;
+    }
+    if (edges[i]->use()->_ssdfg->cur_cycle() < fifos[i].front().available_at) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SSDfgValue::forward(bool attempt) {
+  if (fifo.empty())
+    return false;
+  simulation::Data data(fifo.front());
+  for (auto user : _uses) {
+    int j = 0;
+    for (auto &operand : user->use()->ops()) {
+      ++j;
+      for (size_t i = 0; i < operand.edges.size(); ++i) {
+        auto edge = operand.edges[i];
+        if (edge == user) {
+          // TODO: delete this!
+          //std::cout << (attempt ? "[attempt] " : "[actual] ") << _node->name()
+          //          << " pushes " << data.value << "(" << data.valid << ")" << "to "
+          //          << user->use()->name() << "'s " << j << "th operand "
+          //          << operand.fifos[i].size() + 1 << "/" << edge->buffer_size()
+          //          << std::endl;
+          if (operand.fifos[i].size() < edge->buffer_size()/*FIXME: The buffer size should be something more rigorous*/) {
+            simulation::Data entry(data.available_at + edge->delay(), data.value, data.valid);
+            if (!attempt) {
+              operand.fifos[i].push(entry);
+            }
+          } else {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  if (!attempt) {
+    fifo.pop();
+  }
+  return true;
+}
+
+void SSDfgVecInput::forward() {
+  for (auto elem : values()) {
+    if (!elem->forward(true))
+      return;
+  }
+  for (auto elem : values()) {
+    assert(elem->forward(false));
+  }
+}
+
+int SSDfg::forward() {
+  for (auto elem : nodes<SSDfgNode*>()) {
+    elem->forward();
+  }
+  ++_cur_cycle;
+  int res = _total_dyn_insts;
+  _total_dyn_insts = 0;
+  return res;
+}
+
+bool SSDfgVecInput::can_push() {
+  for (auto elem : values()) {
+    if (!elem->fifo.empty()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void SSDfgVecOutput::pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid) {
+  for (auto &operand : _ops) {
+    data.push_back(operand.poll());
+    data_valid.push_back(operand.predicate());
+    operand.pop();
+  }
+}
+
+bool SSDfgVecOutput::can_pop() {
+  for (auto &elem : _ops) {
+    if (!elem.ready()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+uint64_t SSDfgOperand::poll() {
+  assert(ready());
+  uint64_t res = 0;
+  for (int i = fifos.size() - 1; i >= 0; --i) {
+    uint64_t full = ~0ull >> (64 - edges[i]->bitwidth());
+    uint64_t sliced = (fifos[i].front().value >> edges[i]->l()) & full;
+    res = res << edges[i]->bitwidth() | sliced;
+  }
+  return res;
 }

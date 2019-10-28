@@ -29,10 +29,25 @@ class Schedule;
 class SSDfgNode;
 class SSDfg;
 class SSDfgEdge;
+class SSDfgVecInput;
+
+namespace simulation {
+
+struct Data {
+  int64_t available_at;
+  uint64_t value;
+  bool valid;
+  Data(int64_t aa, uint64_t value, bool valid) : available_at(aa), value(value), valid(valid) {}
+};
+}
 
 // Datastructure describing a value created by an input vector or an instruction
 class SSDfgValue {
  public:
+  friend SSDfgNode;
+  friend SSDfgVecInput;
+  friend SSDfg;
+
   SSDfgValue() {}  // for serialization
   SSDfgValue(SSDfgNode* node, int index, int bitwidth)
       : _node(node), _index(index), _bitwidth(bitwidth) {}
@@ -57,9 +72,15 @@ class SSDfgValue {
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version);
 
+  // TODO: Deprecate these two
   // Dynamic Stuff
   void set_val(uint64_t v) { _val = v; }
   uint64_t get_val() { return _val; }
+
+  std::queue<simulation::Data> fifo;
+
+  void push(uint64_t value, bool valid, int delay);
+  bool forward(bool attempt);
 
  private:
   SSDfgNode* _node = nullptr;  // This is the node that it belongs to
@@ -89,6 +110,7 @@ class SSDfgEdge {
   SSDfgNode* get(int) const;
 
   int id();
+  int buffer_size() { return buf_len; }
   std::string gamsName();
   std::string name();
 
@@ -199,12 +221,38 @@ struct SSDfgOperand {
   // Edges concatenated in bit order from least to most significant
   std::vector<SSDfgEdge*> edges;
   uint64_t imm = 0;
+  // Simulation stuff.
+  std::vector<std::queue<simulation::Data>> fifos;
+
+  bool ready();
+
+  uint64_t poll();
+
+  bool predicate() {
+    assert(ready());
+    bool res = true;
+    for (int i = fifos.size() - 1; i >= 0; --i) {
+      res = res && fifos[i].front().valid;
+    }
+    return res;
+  }
+
+  void pop() {
+    assert(ready());
+    for (auto &elem : fifos) {
+      elem.pop();
+    }
+  }
+
 };
 
 // DFG Node -- abstract base class
 // DFG Nodes are intended to be the scheduling unit
 class SSDfgNode {
  public:
+  friend SSDfgOperand;
+  friend SSDfgValue;
+
   virtual ~SSDfgNode() {}
 
   SSDfgNode() {
@@ -286,7 +334,7 @@ class SSDfgNode {
 
   void set_name(std::string name) { _name = name; }
 
-  const std::vector<SSDfgOperand>& ops() { return _ops; }
+  std::vector<SSDfgOperand>& ops() { return _ops; }
 
   const std::vector<SSDfgEdge*>& in_edges() { return _inc_edge_list; }
 
@@ -295,6 +343,8 @@ class SSDfgNode {
   const std::vector<SSDfgEdge*>& uses() { return _uses; }
 
   int id() { return _ID; }
+
+  virtual void forward() = 0;
 
   bool get_bp();
 
@@ -323,8 +373,6 @@ class SSDfgNode {
   void set_value(int i, uint64_t v, bool valid, bool avail, int cycle, bool is_compute);
 
   //--------------------------------------------
-
-  bool get_avail() { return _avail; }
 
   int min_lat() { return _min_lat; }
 
@@ -376,7 +424,6 @@ class SSDfgNode {
   int _node_id = -1;  // hack for temporal simulator to remember _node_id
 
   // Dynamic stuff
-  bool _avail = false;  // if their is data in the output buffer
   bool _invalid = false;
   int _inputs_ready = 0;          // dynamic inputs ready
   std::vector<bool> _back_array;  // in edges
@@ -522,6 +569,10 @@ class SSDfgInst : public SSDfgNode {
         _subFunc(0),
         _reg(8, 0) {}
 
+  int last_execution{-1};
+
+  void forward() override;
+
   virtual int lat_of_inst() override { return inst_lat(inst()); }
 
   void setImm(uint64_t val) { _imm = val; }
@@ -581,15 +632,7 @@ class SSDfgInst : public SSDfgNode {
   virtual int bitwidth() override { return SS_CONFIG::bitwidth[_ssinst]; }
 
   uint64_t getout(int i) {
-    switch (bitwidth()) {
-      case 64: return _output_vals[i];
-      case 32: return _output_vals_32[i];
-      case 16: return _output_vals_16[i];
-      case 8: return _output_vals_8[i];
-      default:
-        std::cout << "Weird bitwidth: " << bitwidth() << "\n";
-        assert(0 && "weird bitwidth");
-    }
+    return _output_vals[i];
   }
 
  private:
@@ -602,15 +645,9 @@ class SSDfgInst : public SSDfgNode {
 
   std::ofstream _verif_stream;
   std::string _verif_id;
-  std::vector<uint64_t> _input_vals;
-  std::vector<uint32_t> _input_vals_32;
-  std::vector<uint16_t> _input_vals_16;
-  std::vector<uint8_t> _input_vals_8;
 
+  std::vector<uint64_t> _input_vals;
   std::vector<uint64_t> _output_vals;
-  std::vector<uint32_t> _output_vals_32;
-  std::vector<uint16_t> _output_vals_16;
-  std::vector<uint8_t> _output_vals_8;
 
   bool _predInv;
   bool _isDummy;
@@ -673,8 +710,7 @@ class SSDfgVecInput : public SSDfgVec {
 
   SSDfgVecInput() {}
 
-  SSDfgVecInput(V_TYPE v, int len, int width, const std::string& name, int id,
-                SSDfg* ssdfg)
+  SSDfgVecInput(V_TYPE v, int len, int width, const std::string& name, int id, SSDfg* ssdfg)
       : SSDfgVec(v, len, width, name, id, ssdfg) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule*,
@@ -682,6 +718,9 @@ class SSDfgVecInput : public SSDfgVec {
                                                              int n) override;
 
   friend class boost::serialization::access;
+
+  void forward() override;
+  bool can_push();
 
   template <class Archive>
   void serialize(Archive& ar, const unsigned version);
@@ -721,6 +760,10 @@ class SSDfgVecOutput : public SSDfgVec {
     assert(0 && "edge not present in any operands");
     return -1;
   }
+
+  void forward() override {}
+  bool can_pop();
+  void pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid);
 
   friend class boost::serialization::access;
 
@@ -883,19 +926,6 @@ class SSDfg {
   bool push_vector(SSDfgVecInput* vec_in, std::vector<uint64_t> data,
                    std::vector<bool> valid, bool print, bool verif);
 
-  // check if some value present at input node or if
-  // there is some backpressure or invalid value
-  bool can_push_input(SSDfgVecInput* vec_in);
-
-  // Simulator would like to pop size elements from vector port (vector_id)
-  bool can_pop_output(SSDfgVecOutput* vec_out, unsigned int len);
-
-  // Simulator grabs size elements from vector port (vector_id)
-  // assertion failure on insufficient size
-  void pop_vector_output(SSDfgVecOutput* vec_out, std::vector<uint64_t>& data,
-                         std::vector<bool>& data_valid, unsigned int len, bool print,
-                         bool verif);
-
   void push_transient(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail,
                       int cycle, bool is_computed) {
     struct cycle_result* temp = new cycle_result(dfg_val, v, valid, avail);
@@ -913,6 +943,8 @@ class SSDfg {
   }
 
   int cycle(bool print, bool verif);
+
+  int forward();
 
   // ---------------------------------------------------------------------------
 
@@ -943,6 +975,8 @@ class SSDfg {
   int inc_edge_id() { return _num_edge_ids++; }
 
   void push_ready_node(SSDfgNode* node) { _ready_nodes.push_back(node); }
+
+  int64_t cur_cycle() { return _cur_cycle; }
 
  private:
   // to keep track of number of cycles---------------------
