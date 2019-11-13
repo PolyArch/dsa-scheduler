@@ -44,7 +44,7 @@ install_config: config-program
 	cp -p ${build}/lib/* ${prefix}/lib
 	${MKDIR_P} ${prefix}/include/ss-config
 	cp -p src/config/*.h ${prefix}/include/ss-config/
-	cp -rfp configs ${prefix}/
+	ln -sf $(dir $(realpath $(firstword $(MAKEFILE_LIST))))/configs ${prefix}/
 	
 clean:
 	make -C src/scheduler clean
