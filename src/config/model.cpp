@@ -505,7 +505,7 @@ void SSModel::parse_json(std::istream& istream) {
     } else if (type == "function unit") {
       // Set Possible x,y for visualization
       ssfu* fu = _subModel->add_fu(x, y);
-
+      fu -> set_prop(node_def); 
       auto link = fu->add_link(fu);  // For decomposability
       link->setdir(SwitchDir::IP0);
 
@@ -521,10 +521,12 @@ void SSModel::parse_json(std::istream& istream) {
         ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
         int enc = inst_enc_map[ss_inst];
         cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id << "\n";
-
         fudef->add_cap(ss_inst);
         fudef->set_encoding(ss_inst, enc);
       }
+
+
+
     } else if (type == "vector port") {
       bool is_input;
       auto& nodes_in_grid = node_def.get_child("nodeType");  // Just for Initialization
@@ -587,6 +589,27 @@ void SSModel::parse_json(std::istream& istream) {
   }
 
   _subModel->post_process();
+
+  // Print out the Analytical Model for FU
+  int id = 0;
+  for (auto fu : _subModel -> fu_list()){
+      // Test for Analytical Model
+      std::cout << "fu " << id << "'s area = " << fu -> get_area() <<" um^2\n";
+      std::cout << "fu " << id << "'s power = " << fu -> get_power() <<" mW\n";
+      ++id;
+  }
+
+  // Print out the Switches Analytical Model Estimation
+  id = 0;
+  for (auto sw : _subModel -> switch_list()){
+      // Test for Analytical Model
+      std::cout << "switch " << id << "'s area = " << sw -> get_area() <<" um^2\n";
+      std::cout << "switch " << id << "'s power = " << sw -> get_power() <<" mW\n";
+      ++id;
+  }
+
+  std::cout << "Overall Area = " << _subModel -> get_overall_area() << " um^2\n";
+  std::cout << "Overall Power = " << _subModel -> get_overall_power() << " mW\n";
 
   assert(num_outputs > 0);
   assert(num_inputs > 0);

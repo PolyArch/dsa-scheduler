@@ -412,11 +412,19 @@ class ssswitch : public ssnode {
     return ss.str();
   }
 
-  void set_prop(boost::property_tree::ptree prop) { set_ssnode_prop(prop); }
+  void set_prop(boost::property_tree::ptree prop) {     
+    set_ssnode_prop(prop); 
+    // max output fifo depth
+    try{
+      max_fifo_depth = prop.get_child("max_fifo_depth").get_value<int>();
+    }catch(...){
+      max_fifo_depth = 2;
+    }
+  }
 
   void collect_features() {
-    features[0] = _max_util > 1 ? 0.0 : 1.0;
-    features[1] = _max_util > 1 ? 1.0 : 0.0;
+    features[0] = _max_util > 1 ? 1.0 : 0.0; // Weird negative estimation
+    features[1] = _max_util > 1 ? 0.0 : 1.0; // Weird Negative estimation change 1 -> 0
     assert(features[0] || features[1]);
     features[2] = !_flow_control ? 1.0 : 0.0;
     features[3] = _flow_control ? 1.0 : 0.0;
@@ -429,6 +437,19 @@ class ssswitch : public ssnode {
     features[6] = _in_links.size();
     features[7] = _out_links.size();
     features[8] = _max_util;
+    /*
+    std::cout << "\n ------ Features : >>>>>> \n";
+    std::cout << "Not Shared ? " << features[0] << "\n"
+              << "Shared ? " << features[1] << "\n"
+              << "Not Flow Control ? " << features[2] <<"\n"
+              << "Flow Control ? " << features[3] <<"\n"
+              << "decomposer = " << features[4] <<"\n"
+              << "max fifo depth = " << features[5] << "\n"
+              << "# input links = " << features[6] << "\n"
+              << "# output links = " << features[7] << "\n"
+              << "max util = " << features[8] << "\n";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+    */
   }
 
   double get_area() {
@@ -453,31 +474,29 @@ class ssfu : public ssnode {
 
   void set_prop(boost::property_tree::ptree prop) {
     set_ssnode_prop(prop);
-    /*
-    // Default
-    YAML::Node default_setting = prop["<<"];
+
+    std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
+
     // delay_fifo_depth
-    if(default_setting["delay_fifo_depth"] || prop["delay_fifo_depth"])
     try{
-      delay_fifo_depth = prop["delay_fifo_depth"].as<int>();
+      delay_fifo_depth = prop.get_child("delay_fifo_depth").get_value<int>();
     }catch(...){
-      delay_fifo_depth = default_setting["delay_fifo_depth"].as<int>();
+      delay_fifo_depth = 4; // The default depth for delay fifo
     }
+
     // output_select_mode
-    if(default_setting["output_select_mode"] || prop["output_select_mode"])
     try{
-      output_select_mode = prop["output_select_mode"].as<std::string>();
+      output_select_mode = prop.get_child("output_select_mode").get_value<std::string>();
     }catch(...){
-      output_select_mode = default_setting["output_select_mode"].as<std::string>();
+      output_select_mode = "Universal";
     }
+
     // register_file_size
-    if(default_setting["register_file_size"] || prop["register_file_size"])
     try{
-      register_file_size = prop["register_file_size"].as<int>();
+      register_file_size = prop.get_child("register_file_size").get_value<int>();
     }catch(...){
-      register_file_size = default_setting["register_file_size"].as<int>();
+      register_file_size = 8;
     }
-    */
   }
 
   virtual std::string name() const {
@@ -502,8 +521,7 @@ class ssfu : public ssnode {
     assert(features[0] || features[1]);
     features[2] = !_flow_control ? 1.0 : 0.0;
     features[3] = _flow_control ? 1.0 : 0.0;
-    assert((features[2] || features[3]) &&
-           "Either Data(Static) or DataValidReady(Dynamic)");
+    assert((features[2] || features[3]) && "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = output_select_mode == "Individual" ? 1.0 : 0.0;
     features[5] = output_select_mode == "Universal" ? 1.0 : 0.0;
     assert((features[4] || features[5]) && "Either Individual or Universal");
@@ -515,6 +533,22 @@ class ssfu : public ssnode {
     features[9] = _out_links.size();
     features[10] = register_file_size;
     features[11] = _max_util;
+    /*
+    std::cout << "\n ------ Features : >>>>>> \n";
+    std::cout << "Not Shared ? " << features[0] << "\n"
+              << "Shared ? " << features[1] << "\n"
+              << "Not Flow Control ? " << features[2] <<"\n"
+              << "Flow Control ? " << features[3] <<"\n"
+              << "Output Mode Individual ? " << features[4] <<"\n"
+              << "Output Mode Universal ? " << features[5] <<"\n"
+              << "decomposer = " << features[6] <<"\n"
+              << "max delay fifo depth = " << features[7] << "\n"
+              << "# input links = " << features[8] << "\n"
+              << "# output links = " << features[9] << "\n"
+              << "# register = " << features[10] << "\n"
+              << "max util = " << features[11] << "\n";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+    */
     return features;
   }
 
@@ -644,6 +678,46 @@ class SubModel {
   std::vector<T>& nodes();
 
   std::vector<ssfu*>& fu_list() { return _fu_list; }
+
+  double get_fu_total_area() {
+    double total_area = 0.0;
+    for (auto fu : fu_list()){
+      total_area += fu -> get_area();
+    }
+    return total_area;
+  }
+
+  double get_fu_total_power() {
+    double total_power = 0.0;
+    for (auto fu : fu_list()){
+      total_power += fu -> get_power();
+    }
+    return total_power;
+  }
+
+  double get_sw_total_area() {
+    double total_area = 0.0;
+    for (auto sw : switch_list()){
+      total_area += sw -> get_area();
+    }
+    return total_area;
+  }
+
+  double get_sw_total_power() {
+    double total_power = 0.0;
+    for (auto sw : switch_list()){
+      total_power += sw -> get_power();
+    }
+    return total_power;
+  }
+
+  double get_overall_power() {
+    return get_sw_total_power() + get_fu_total_power();
+  }
+
+  double get_overall_area() {
+    return get_sw_total_area() + get_fu_total_area();
+  }
 
   std::vector<ssswitch*>& switch_list() { return _switch_list; }
 
