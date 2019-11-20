@@ -454,11 +454,34 @@ class ssswitch : public ssnode {
 
   double get_area() {
     collect_features();
-    return router_area_predict(features);
+    if(_max_util > 1){
+      return router_area_predict(features);
+    }else{
+      // dedicated router
+      double dedi_router_features[5];
+      dedi_router_features[0] = _in_links.size();
+      dedi_router_features[1] = _out_links.size();
+      dedi_router_features[2] = decomposer;
+      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
+      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
+      return pred_dedi_router_area(dedi_router_features);
+    }
   }
   double get_power() {
     collect_features();
-    return router_power_predict(features);
+    if(_max_util > 1){
+      return router_power_predict(features);
+    }else{
+      // dedicated router
+      double dedi_router_features[5];
+      dedi_router_features[0] = _in_links.size();
+      dedi_router_features[1] = _out_links.size();
+      dedi_router_features[2] = decomposer;
+      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
+      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
+      return pred_dedi_router_power(dedi_router_features);
+    }
+    
   }
 
  protected:
@@ -631,6 +654,22 @@ class ssvport : public ssnode {
   virtual bool is_input() { return _in_links.size() == 0; }
   virtual bool is_output() { return _out_links.size() == 0; }
 
+  double get_area(){
+    double vport_features[3];
+    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
+    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[2] = channel_buffer;
+    return pred_vport_area(vport_features);
+  }
+
+  double get_power(){
+    double vport_features[3];
+    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
+    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[2] = channel_buffer;
+    return pred_vport_power(vport_features);
+  }
+
  private:
   int _port = -1;
   std::vector<int> _port_vec;
@@ -711,15 +750,33 @@ class SubModel {
     return total_power;
   }
 
+  double get_vport_area(){
+    double total_area = 0.0;
+    for (auto vp : vport_list()){
+      total_area += vp -> get_area();
+    }
+    return total_area;
+  }
+
+  double get_vport_power(){
+    double total_power = 0.0;
+    for (auto vp : vport_list()){
+      total_power += vp -> get_power();
+    }
+    return total_power;
+  }
+
   double get_overall_power() {
-    return get_sw_total_power() + get_fu_total_power();
+    return get_sw_total_power() + get_fu_total_power() + get_vport_power();
   }
 
   double get_overall_area() {
-    return get_sw_total_area() + get_fu_total_area();
+    return get_sw_total_area() + get_fu_total_area() + get_vport_area();
   }
 
   std::vector<ssswitch*>& switch_list() { return _switch_list; }
+
+  std::vector<ssvport*>& vport_list(){return _vport_list;}
 
   std::vector<std::vector<ssswitch*>>& switches() { return _switches; }
 
