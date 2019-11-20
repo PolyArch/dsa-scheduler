@@ -64,6 +64,7 @@ class FuModel {
   func_unit_def* GetFUDef(char*);
   func_unit_def* GetFUDef(std::string& fu_string);
 
+  std::vector<func_unit_def>& fu_defs() { return func_defs;}
  private:
   void AddCapabilities(func_unit_def& fu, std::string& cap_string);
 

@@ -54,19 +54,16 @@ void GamsScheduler::print_mipstart(ofstream& ofs, Schedule* sched, SSDfg* ssDFG,
     }
   }
 
-  vector<vector<ssswitch*> >& switches = _ssModel->subModel()->switches();
-  for (int i = 0; i < _ssModel->subModel()->sizex() + 1; ++i) {
-    for (int j = 0; j < _ssModel->subModel()->sizey() + 1; ++j) {
-      ssswitch* sssw = switches[i][j];
-      auto link_map = sched->link_map_for_sw(sssw);
-      for (auto I = link_map.begin(), E = link_map.end(); I != E; ++I) {
-        sslink* outlink = I->first;
-        sslink* inlink = I->second;
-        ofs << "Sll.l('" << inlink->gams_name(config) << "','"
-            << outlink->gams_name(config) << "')=1;\n";
-      }
-    }  // end for switch x
-  }    // end for switch y
+
+  for(ssswitch* sssw : _ssModel->subModel()->switch_list()) {
+    auto link_map = sched->link_map_for_sw(sssw);
+    for (auto I = link_map.begin(), E = link_map.end(); I != E; ++I) {
+      sslink* outlink = I->first;
+      sslink* inlink = I->second;
+      ofs << "Sll.l('" << inlink->gams_name(config) << "','"
+          << outlink->gams_name(config) << "')=1;\n";
+    }
+  }    
 
   // Ports
   for (int i = 0; i < ssDFG->num_vec_input(); ++i) {

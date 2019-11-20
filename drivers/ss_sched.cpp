@@ -39,6 +39,7 @@ static struct option long_options[] = {
     {"max-iters",      required_argument, nullptr, 'i',},
     {"max-edge-delay", required_argument, nullptr, 'd',},
     {"seed",           required_argument, nullptr, 'e',},
+    {"fake-incr",      required_argument, nullptr, 'f',},
     {0, 0, 0, 0,},
 };
 // clang-format on
@@ -90,14 +91,17 @@ int main(int argc, char* argv[]) {
   int max_edge_delay = 15;
   int max_iters = 20000;
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:md:e:", long_options, nullptr)) !=
-         -1) {
+  int fake_incr=0;
+
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mf:d:e:", 
+          long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
       case 'v': verbose = true; break;
       case 'G': show_gams = true; break;
       case 'm': mipstart = true; break;
+      case 'f': fake_incr = atoi(optarg); break;
       case 'S': sll = true; break;
       case 'b': print_bits = true; break;
 
@@ -109,6 +113,7 @@ int main(int argc, char* argv[]) {
       case 'd': max_edge_delay = atoi(optarg); break;
       case 'e': seed = atoi(optarg); break;
 
+
       default: exit(1);
     }
   }
@@ -117,7 +122,7 @@ int main(int argc, char* argv[]) {
   argv += optind;
 
   if (argc != 2) {
-    cerr << "Usage: ss_sched [FLAGS] config.ssmodel compute.sspdg \n";
+    cerr << "Usage: ss_sched [FLAGS] config.ssmodel compute.ssdfg \n";
     exit(1);
   }
 
@@ -152,12 +157,12 @@ int main(int argc, char* argv[]) {
   checked_system(("mkdir -p " + sched_dir).c_str());
   checked_system("mkdir -p gams/");  // gams will remain at top level
 
-  // sspdg object based on the dfg
-  SSDfg sspdg(pdg_filename);
+  // ssdfg object based on the dfg
+  SSDfg ssdfg(pdg_filename);
 
   ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
   assert(ofs.good());
-  sspdg.printGraphviz(ofs);
+  ssdfg.printGraphviz(ofs);
   ofs.close();
 
   Schedule* sched = nullptr;
@@ -184,7 +189,105 @@ int main(int argc, char* argv[]) {
 
   bool succeed_sched = false;
 
-  if (scheduler->check_res(&sspdg, &ssmodel)) {
+  if(fake_incr) {
+    scheduler->set_start_time();
+
+    for(auto& node : ssmodel.subModel()->node_list()) {
+      assert(node->subnet_table().size() == node->out_links().size());
+    }
+
+    CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
+    cur_ci->verify();
+    std::vector<WorkloadSchedules*> _incr_sched;
+    
+    cur_ci->workload_array.resize(fake_incr);
+
+    for(int w = 0; w < fake_incr; ++w) {
+      for(int i = 0; i < fake_incr; ++i) {
+        cur_ci->workload_array[w].sched_array.emplace_back(cur_ci->ss_model(),&ssdfg);
+      }
+    }
+
+
+    int max_iters_no_improvement = 100;
+
+    int improv_iter = 0;
+
+    for(int i = 0; i < 2000000; ++i) {
+      if( (i-improv_iter) > max_iters_no_improvement) {
+        break;
+      }
+      cout << " ### Begin DSE Iteration " << i << " ### \n";
+      CodesignInstance* cand_ci = new CodesignInstance(*cur_ci);
+      cand_ci->verify();
+      cand_ci->make_random_modification();
+      cand_ci->verify();
+
+      scheduler->incrementalSchedule(*cand_ci);
+
+      //stringstream name_ss;
+      //name_ss << "viz/hw" << i << ".dot";
+      //ofstream ofsb = ofstream(name_ss.str().c_str());
+      //cand_ci->ss_model()->subModel()->PrintGraphviz(ofsb);
+
+      cout << "DSE OBJ: " << cand_ci->dse_obj() << " -- ";
+      
+      auto* sub = cand_ci->ss_model()->subModel();
+      cout << "Area: " << sub->get_overall_area()
+           << " Nodes: " << sub->node_list().size() 
+           << " Switches: " << sub->switch_list().size() << "\n";
+
+
+      if(cand_ci->dse_obj() > cur_ci->dse_obj()) {
+         improv_iter = i;
+         delete cur_ci;
+         cur_ci = cand_ci;
+         cout << "----------------- IMPROVED OBJ! --------------------\n";
+
+         for(int w = 0; w < fake_incr; ++w) {
+           for(int o = 0; o < fake_incr; ++o) {
+             stringstream name_ss;
+             name_ss << "viz/dse-sched-" << i << "-" << w << "-" << o << ".gv";
+             cur_ci->workload_array[w].sched_array[o].printGraphviz(name_ss.str().c_str()); 
+           }
+         }
+
+        //cout << "### just reschedule the current cur_cit to be sure ###\n";
+        //scheduler->incrementalSchedule(*cur_ci);
+        //cout << "CUR DSE OBJ: " << cur_ci->dse_obj() << "\n"; 
+        //auto* sub = cur_ci->ss_model()->subModel();
+        //cout << "Area: " << sub->get_overall_area()
+        //     << " Nodes: " << sub->node_list().size() 
+        //     << " Switches: " << sub->switch_list().size() << "\n";
+
+      }
+    }
+
+    cout << "DSE Complete!\n";
+    cout << "Improv Iters: " << improv_iter << "\n";
+
+    scheduler->incrementalSchedule(*cur_ci);
+
+    cout << "FINAL DSE OBJ: " << cur_ci->dse_obj() << " -- ";
+        
+    auto* sub = cur_ci->ss_model()->subModel();
+    cout << "Area: " << sub->get_overall_area()
+         << " Nodes: " << sub->node_list().size() 
+         << " Switches: " << sub->switch_list().size() << "\n";
+
+    for(int w = 0; w < fake_incr; ++w) {
+      for(int i = 0; i < fake_incr; ++i) {
+        stringstream name_ss;
+        name_ss << "viz/dse-sched-final-" << w << "-" << i << ".gv";
+        cur_ci->workload_array[w].sched_array[i].printGraphviz(name_ss.str().c_str()); 
+      }
+    }
+
+
+    return 0;
+  }
+
+  if (scheduler->check_feasible(&ssdfg, &ssmodel,true/*verbose*/)) {
     // At least it's possible to schedule
 
     // Setup signal so we can stop if we need to
@@ -196,9 +299,9 @@ int main(int argc, char* argv[]) {
 
     // Debug
     // string hw_config_filename = model_rawname + ".xml";
-    // sched -> printConfigBits_Hw(hw_config_filename);
+    // sched->printConfigBits_Hw(hw_config_filename);
 
-    succeed_sched = scheduler->schedule_timed(&sspdg, sched);
+    succeed_sched = scheduler->schedule_timed(&ssdfg, sched);
 
     int lat = 0, latmis = 0;
     if (succeed_sched) {
@@ -241,7 +344,7 @@ int main(int argc, char* argv[]) {
         cout << "Scheduling Failed!\n";
       }
       sched->stat_printOutputLatency();
-      sspdg.printGraphviz("viz/final.dot", sched);
+      ssdfg.printGraphviz("viz/final.dot", sched);
     }
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
@@ -256,17 +359,17 @@ int main(int argc, char* argv[]) {
   if (!succeed_sched || sched == nullptr) {
     cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
     // This is just a fake schedule!
-    // sched = new Schedule(&ssmodel,&sspdg);
+    // sched = new Schedule(&ssmodel,&ssdfg);
     SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(&ssmodel);
     s->set_fake_it();
 
-    s->initialize(&sspdg, sched);
-    succeed_sched = s->schedule_internal(&sspdg, sched);
+    s->initialize(&ssdfg, sched);
+    succeed_sched = s->schedule_internal(&ssdfg, sched);
   }
 
   // TODO: Print Hardware Config Information @ Sihao
   // string hw_config_filename = model_rawname + ".xml";
-  // sched -> printConfigBits_Hw(hw_config_filename);
+  // sched->printConfigBits_Hw(hw_config_filename);
 
   sched->set_name(pdg_rawname);
   std::string config_header = pdg_rawname + ".dfg.h";

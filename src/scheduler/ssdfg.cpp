@@ -1477,8 +1477,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
                                                            SSModel* ssmodel, int n) {
   SubModel* model = ssmodel->subModel();
   std::vector<std::pair<int, ssnode*>> spots;
-
-  int possible_candidates = 0;
+  std::vector<std::pair<int, ssnode*>> not_chosen_spots;
 
   std::vector<ssfu*>& fus = model->nodes<SS_CONFIG::ssfu*>();
   // For Dedicated-required Instructions
@@ -1489,7 +1488,6 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
         (cand_fu->num_non_self_out_links() < (int)this->values().size())) {
       continue;
     }
-    possible_candidates++;
 
     if (!is_temporal()) {
       if (sched->isPassthrough(0, cand_fu))  // FIXME -- this can't be right
@@ -1501,12 +1499,16 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
       }
 
       for (int k = 0; k < 8; k += this->bitwidth() / 8) {
-        int cnt = 1;
+        int cnt=0;
         for (int sub_slot = k; sub_slot < k + this->bitwidth() / 8; ++sub_slot) {
           cnt += sched->dfg_nodes_of(sub_slot, cand_fu).size();
         }
+        cnt=cnt/8+1;
+         
         if (rand() % (cnt * cnt) == 0) {
           spots.emplace_back(k, fus[i]);
+        } else {
+          not_chosen_spots.emplace_back(k, fus[i]);
         }
       }
 
@@ -1516,23 +1518,20 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
       // this can be changed later if that's helpful.
       if ((int)sched->dfg_nodes_of(0, cand_fu).size() + 1 < cand_fu->max_util()) {
         spots.emplace_back(0, fus[i]);
+      } else {
+        not_chosen_spots.emplace_back(0,fus[i]);
       }
     }
   }
 
-  if (possible_candidates == 0) {
-    cout << "No spots for: " << name() << ", -- this may be a topology error\n";
-    assert(0);
+  // If we couldn't find any good spots, we can just pick a bad spot for now
+  if(spots.size() == 0) {
+    spots=not_chosen_spots;
   }
-  // if (this->is_temporal() && spots.empty()) {
-  //  cout << "Warning, no spots for" << this->name() << "\n";
-  //}
 
   std::random_shuffle(spots.begin(), spots.end());
 
   if (n > (int)spots.size() || n == 0) n = spots.size();
-
-  // cout << n << "\n";
 
   return std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
 }
@@ -1542,15 +1541,13 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecInput::candidates(Schedule* sched,
                                                                SSModel* model, int n) {
   auto& vports = model->subModel()->input_list();
   // Lets write size in units of bits
-  int phys_bitwidth = is_temporal() ? 64 : (_values.size() * bitwidth());
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
-    if ((int)cand->input_bitwidth() >= phys_bitwidth) {
+    if ((int)cand->input_bitwidth() >= phys_bitwidth()) {
       spots.push_back(make_pair(0, cand));
     }
   }
-  assert(spots.size() > 0 && "Uh oh, no spots for inputs!\n");
   return spots;
 }
 
@@ -1558,15 +1555,24 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecOutput::candidates(Schedule* sched,
                                                                 SSModel* model, int n) {
   auto& vports = model->subModel()->output_list();
   // Lets write size in units of bits
-  int phys_bitwidth = is_temporal() ? 64 : (_ops.size() * bitwidth());
   std::vector<std::pair<int, ssnode*>> spots;
   for (size_t i = 0; i < vports.size(); ++i) {
     auto cand = vports[i];
-    if ((int)cand->output_bitwidth() >= phys_bitwidth) {
+    if ((int)cand->output_bitwidth() >= phys_bitwidth()) {
       spots.push_back(make_pair(0, cand));
     }
   }
-  assert(spots.size() > 0 && "Uh oh, no spots for outputs!\n");
+
+  //if(spots.size() == 0) {
+  //  cout << "No Spots Left\n";
+  //  cout << "Phys Bitwidth: " << phys_bitwidth() << "\n";
+
+  //  for (size_t i = 0; i < vports.size(); ++i) {
+  //    auto cand = vports[i];
+  //    cout << cand->name() << "output bitwidth: " << cand->output_bitwidth() << "\n";
+  //  }
+  //}
+
   return spots;
 }
 

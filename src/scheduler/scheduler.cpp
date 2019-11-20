@@ -12,6 +12,17 @@ using namespace std;
 #include <unistd.h>
 #include <list>
 
+//Utility functions
+int rand_bt(int s, int e) { 
+  assert(e>s && "bad range for rand_bt");
+  return rand() % (e - s) + s; 
+}
+
+int rand_bt_large(int s, int e) { 
+  return (rand() * RAND_MAX + rand()) % (e - s) + s; 
+}
+
+
 // floyd's unique-number sampling algorithm (ordered)
 // CACM Programming Pearls, 1987
 void HeuristicScheduler::rand_n_choose_k(int n, int k, std::vector<int>& indices) {
@@ -66,7 +77,50 @@ vector<bool> HeuristicScheduler::rand_node_choose_k(int k,
   return mask;
 }
 
-bool Scheduler::check_res(SSDfg* ssDFG, SSModel* ssmodel) {
+bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
+  auto* sub = ssmodel->subModel();
+
+  //Fast algorithm for checking if there are enough vports
+  std::vector<int> vec_in_sizes;
+  std::vector<int> vec_out_sizes;
+  std::vector<int> dfg_in_sizes;
+  std::vector<int> dfg_out_sizes;
+  for(auto& p : sub->input_list()) vec_in_sizes.push_back(p->input_bitwidth());
+  for(auto& p : sub->output_list()) vec_out_sizes.push_back(p->output_bitwidth());
+  for(auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
+  for(auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
+
+  if(dfg_in_sizes.size() > vec_in_sizes.size()) return false;
+  if(dfg_out_sizes.size() > vec_out_sizes.size()) return false;
+
+  std::sort(vec_in_sizes.begin(),vec_in_sizes.end(),greater<int>());
+  std::sort(vec_out_sizes.begin(),vec_out_sizes.end(),greater<int>());
+  std::sort(dfg_in_sizes.begin(),dfg_in_sizes.end(),greater<int>());
+  std::sort(dfg_out_sizes.begin(),dfg_out_sizes.end(),greater<int>());
+
+  for(int i = 0; i < dfg_in_sizes.size(); ++i) {
+    if(dfg_in_sizes[i] > vec_in_sizes[i]) {
+      if(verbose) { 
+        std::cerr << "Vector Inputs Insufficient\n";
+      }
+      return false;
+    }
+  }
+  for(int i = 0; i < dfg_out_sizes.size(); ++i) {
+    if(dfg_out_sizes[i] > vec_out_sizes[i]) {
+      if(verbose) { 
+        std::cerr << "Vector Outputs Insufficient\n";
+      }
+      return false;
+    }
+  }
+  return true; 
+}
+
+bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
+  if(!vport_feasible(ssDFG,ssmodel,verbose)) {
+    return false;
+  }
   int dedicated_insts = 0;
   int temporal_insts = 0;
   for (auto i : ssDFG->inst_vec()) {
@@ -91,6 +145,7 @@ bool Scheduler::check_res(SSDfg* ssDFG, SSModel* ssmodel) {
   //       << nfus << " fus)\n\n";
   //  return false;
   //}
+  
   if (temporal_insts > temporal_inst_slots) {
     cerr << "\n\nError: Too many temporal instructions (" << temporal_insts
          << ") in SSDfg for given SSCONFIG (has " << temporal_inst_slots
@@ -132,12 +187,9 @@ bool Scheduler::check_res(SSDfg* ssDFG, SSModel* ssmodel) {
     int dfg_count = pair.second;
 
     int fu_count = 0;
-    for (int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
-      for (int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
-        ssfu* cand_fu = _ssModel->subModel()->fus()[i][j];
-        if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(ss_inst)) {
-          fu_count += cand_fu->max_util(ss_inst);
-        }
+    for(ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
+      if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(ss_inst)) {
+        fu_count += cand_fu->max_util(ss_inst);
       }
     }
     if (fu_count < dfg_count) {

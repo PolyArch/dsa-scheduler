@@ -34,6 +34,14 @@ class SSModel {
   void setMaxEdgeDelay(int d) { _maxEdgeDelay = d; }
   int maxEdgeDelay() { return _maxEdgeDelay; }
 
+  SSModel(const SSModel& m) {
+     _fuModel = m._fuModel;
+     _subModel = m._subModel->copy();
+     _dispatch_inorder = m._dispatch_inorder;
+     _dispatch_width = m._dispatch_width;
+     _maxEdgeDelay = m._maxEdgeDelay;
+  }
+
  private:
   // InstModel *instModel;
   FuModel* _fuModel;

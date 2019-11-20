@@ -688,6 +688,8 @@ class SSDfgVec : public SSDfgNode {
 
   virtual int bitwidth() override { return _bitwidth; }
 
+  int phys_bitwidth() { return is_temporal() ? 64 : (_values.size() * bitwidth()); }
+
  private:
   friend class boost::serialization::access;
 
@@ -897,6 +899,10 @@ class SSDfg {
     }
     _vecOutputGroups[group].push_back(out);
   }
+
+  std::vector<SSDfgVecInput*> vec_inputs() { return _vecInputs; }
+
+  std::vector<SSDfgVecOutput*> vec_outputs() { return _vecOutputs; }
 
   SSDfgVecInput* vec_in(int i) { return _vecInputs[i]; }
 

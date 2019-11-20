@@ -431,9 +431,10 @@ class Schedule {
     auto& slots = _linkProp[link.second->id()].slots;
     // Check all slots will be occupied empty.
     bool empty = true;
-    int last_slot = link.first + edge->bitwidth();
+    int last_slot = link.first + edge->bitwidth()/8;
     for (int s = link.first; s < last_slot; ++s) {
-      if (!slots[s].edges.empty()) empty = false;
+      int slot = s % 8;
+      if (!slots[slot].edges.empty()) empty = false;
     }
     if (empty) return 1;
     if (alt_edge_for_link(link, edge)) return 0;
@@ -494,6 +495,21 @@ class Schedule {
     return _nodeProp[node->id()].slots[slot].vertices;
   }
 
+  std::vector<std::pair<SSDfgEdge*, int>>& dfg_edges_of(int slot, sslink* link) {
+    return _linkProp[link->id()].slots[slot].edges;
+  }
+
+
+
+  //probably eventually we will need to change slots per node ...
+  int num_slots(ssnode* node) {
+    return 8;
+  }
+  int num_slots(sslink* link) {
+    return 8;
+  }
+
+
   // we should depricate this?
   ssnode* locationOf(SSDfgNode* dfgnode) { return _vertexProp[dfgnode->id()].node; }
 
@@ -508,6 +524,7 @@ class Schedule {
 
   void stat_printOutputLatency();
 
+  void set_model(SSModel* model) { _ssModel = model; }
   SSModel* ssModel() { return _ssModel; }
 
   void iterativeFixLatency();
@@ -706,6 +723,66 @@ class Schedule {
 
   int num_passthroughs() { return _num_passthroughs; }
 
+  // Swaps the nodes from one schedule to another
+  void swap_model(SubModel* copy_sub) {
+    for(auto& vp : _vertexProp) {
+      if(vp.node) {
+        vp.node = copy_sub->node_list()[vp.node->id()]; //bo ya
+      }
+    }
+    for(auto& ep : _edgeProp) {
+      for(auto& p : ep.links) {
+        if(p.second) {
+          p.second = copy_sub->link_list()[p.second->id()];
+        }
+      }
+      for(auto& p : ep.passthroughs) {
+        if(p.second) {
+          p.second = copy_sub->node_list()[p.second->id()];
+        }
+      }
+    }
+  }
+
+  //Shuffle node and link properties post-delete
+  void reorder_node_link(std::vector<ssnode*>& old_n, std::vector<sslink*>& old_l) {
+    //first bulk copy node and link properties, b/c we're about to blow
+    //everything away and shuffle
+    auto copy_nodeProp = _nodeProp;
+    auto copy_linkProp = _linkProp; 
+
+    _nodeProp.clear();
+    _linkProp.clear();
+
+    auto& new_node_list = _ssModel->subModel()->node_list();
+    auto& new_link_list = _ssModel->subModel()->link_list();
+
+    _nodeProp.resize(new_node_list.size());
+    _linkProp.resize(new_link_list.size());
+  
+    //std::cout << _nodeProp.size() << "just resized\n";
+
+    for(unsigned i = 0; i < copy_nodeProp.size(); ++i) {
+      ssnode* n = old_n[i];
+      // at this point, we don't know if this node has been deleted... 
+      // so to check, we are going to look up if its still there
+      if(n->id() < (int)new_node_list.size() && new_node_list[n->id()]==n) {
+        //ok, this node is still there, so perform the move
+        _nodeProp[n->id()] = copy_nodeProp[i];     
+      }
+    }
+    for(unsigned i = 0; i < copy_linkProp.size(); ++i) {
+      sslink* l = old_l[i];
+      // at this point, we don't know if this link has been deleted... 
+      // so to check, we are going to look up if its still there
+      if(l->id() < (int)new_link_list.size() && new_link_list[l->id()]==l) {
+        //ok, this link is still there, so perform the move
+        _linkProp[l->id()] = copy_linkProp[i];     
+      }
+    }
+    //std::cout << _nodeProp.size() << "just resized\n";
+  }
+
   struct VertexProp {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
     ssnode* node = nullptr;
@@ -776,6 +853,10 @@ class Schedule {
     template <class Archive>
     void serialize(Archive& ar, const unsigned version);
   };
+
+
+  std::vector<NodeProp>& node_prop() {return _nodeProp;}
+
 
  private:
   friend class boost::serialization::access;

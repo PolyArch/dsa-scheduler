@@ -683,10 +683,10 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
   xfer_link_to_switch();  // makes sure we have switch representation of routing
   int cur_slice = SWITCH_SLICE;
 
-  vector<vector<ssfu*>>& fus = _ssModel->subModel()->fus();
+  //vector<vector<ssfu*>>& fus = _ssModel->subModel()->fus();
 
   // In1, In2, In3, Opcode, S1, S2, ... S8, Row
-  vector<vector<ssswitch*>>& switches = _ssModel->subModel()->switches();
+  //vector<vector<ssswitch*>>& switches = _ssModel->subModel()->switches();
   for (int i = 0; i < _ssModel->subModel()->sizex() + 1; ++i) {
     bool left = (i == 0);                               // left edge switch
     bool right = (i == _ssModel->subModel()->sizex());  // right edge switch
@@ -700,6 +700,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
       // Write the [Row] -- corresponding row of the siwtch based on the j
       _bitslices.write(cur_slice, ROW_LOC, ROW_LOC + ROW_BITS - 1, j);
 
+#if 0
       //---------------------------------ENCODE SWITCHES -------------------------------
       ssswitch* sssw = switches[i][j];
 
@@ -758,6 +759,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
       }  // end if
 
+     
       //---------------------------------ENCODE FUNC UNITS ---------------------------
       //
       if (i < _ssModel->subModel()->sizex() && j < _ssModel->subModel()->sizey()) {
@@ -864,12 +866,14 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
 
       }  // end if for func encode
 
+#endif
     }  // end for switch x
   }    // end for switch y
 
   //--------------------------------------- ENCODE CONSTANTS ------------------------
   for (int i = 0; i < _ssModel->subModel()->sizex(); ++i) {
     for (int j = 0; j < _ssModel->subModel()->sizey(); ++j) {
+#if 0
       ssfu* ssfu_node = fus[i][j];
       if (dfg_nodes_of(0, ssfu_node).size() != 0) {
         SSDfgInst* dfg_node = dynamic_cast<SSDfgInst*>(dfgNodeOf(0, ssfu_node));
@@ -889,6 +893,7 @@ void Schedule::printConfigBits(ostream& os, std::string cfg_name) {
           ++cur_slice;
         }
       }
+#endif
     }
   }
   os << "#define " << cfg_name << "_size " << _bitslices.size() << "\n\n";
@@ -1050,13 +1055,13 @@ void Schedule::printGraphviz(const char* name) {
 
   ofs << "digraph sched {\n";
 
-  for (auto elem : sub->input_list()) printNodeGraphviz(ofs, elem);
+  for (auto* elem : sub->input_list()) printNodeGraphviz(ofs, elem);
 
-  for (auto elem : sub->output_list()) printNodeGraphviz(ofs, elem);
+  for (auto* elem : sub->output_list()) printNodeGraphviz(ofs, elem);
 
-  for (auto& elem : sub->switch_list()) printSwitchGraphviz(ofs, elem);
+  for (auto* elem : sub->switch_list()) printSwitchGraphviz(ofs, elem);
 
-  for (auto elem : sub->fu_list()) printNodeGraphviz(ofs, elem);
+  for (auto* elem : sub->fu_list()) printNodeGraphviz(ofs, elem);
 
   for (ssnode* node : sub->node_list()) printMelGraphviz(ofs, node);
 

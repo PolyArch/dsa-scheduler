@@ -53,18 +53,19 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
   SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel)
       : HeuristicScheduler(ssModel) {}
 
-  bool schedule(SSDfg*, Schedule*&) override;
+  virtual bool schedule(SSDfg*, Schedule*&) override;
+
+  virtual bool incrementalSchedule(CodesignInstance& incr_table) override;
 
   void set_fake_it() { _fake_it = true; }
 
   bool schedule_internal(SSDfg* ssDFG, Schedule*& sched);
 
  protected:
-  std::pair<int, int> obj(Schedule*& sched, int& lat, int& lat_mis, int& ovr,
-                          int& agg_ovr, int& max_util);
+  std::pair<int, int> obj(Schedule*& sched, SchedStats& s);
 
-  std::pair<int, int> obj_creep(Schedule*& sched, int& lat, int& lat_mis, int& ovr,
-                                int& agg_ovr, int& max_util, CandidateRoute& undo_path);
+  std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s, 
+      CandidateRoute& undo_path);
 
   bool length_creep(Schedule* sched, SSDfgEdge* edge, int& num, CandidateRoute& cand);
 
@@ -117,6 +118,11 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
       T* node = nodes[p];
       if (!sched->is_scheduled(node)) {
         auto candidates = node->candidates(sched, _ssModel, 50);
+        
+        if(candidates.size()==0) {
+          return false;
+        }
+
         int best_candidate = try_candidates<SSDfgNode>(candidates, sched, node);
         return best_candidate != -1;
       }
@@ -153,11 +159,9 @@ int SchedulerSimulatedAnnealing::try_candidates(
     if (scheduleHere(sched, node, candidates[i])) {
       ++candidates_succ;
 
-      int lat = INT_MAX, latmis = INT_MAX, ovr = INT_MAX, agg_ovr = INT_MAX,
-          max_util = INT_MAX;
+      SchedStats s; 
       CandidateRoute undo_path;
-      pair<int, int> candScore =
-          obj_creep(sched, lat, latmis, ovr, agg_ovr, max_util, undo_path);
+      pair<int, int> candScore = obj_creep(sched, s, undo_path);
 
       if (!find_best) {
         return i;

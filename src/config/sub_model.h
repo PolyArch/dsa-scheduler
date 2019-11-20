@@ -135,6 +135,10 @@ class ssnode {
     link->set_out_index(_out_links.size());
     _out_links.push_back(link);
 
+    //maybe just setup the routing table here?
+    _subnet_table.resize(_out_links.size());
+    create_blank_subnet_table(link);
+
     node->add_back_link(link);
     return link;
   }
@@ -142,6 +146,39 @@ class ssnode {
   void add_back_link(sslink* link) {
     link->set_in_index(_in_links.size());
     _in_links.push_back(link);
+
+    //maybe just setup routing table here?
+    create_blank_subnet_table_input(link);
+  }
+
+  // This function removes a link from its parent nodes
+  void unlink_outgoing(sslink* link) {
+    //delete this element of the subnet table -- bye bye!
+    _subnet_table.erase(_subnet_table.begin()+link->out_index());
+
+    for(int i = link->out_index()+1; i < _out_links.size(); ++i) {
+      _out_links[i]->set_out_index(i-1);
+    }
+
+    auto new_end = std::remove(_out_links.begin(),_out_links.end(),link);
+    _out_links.erase(new_end,_out_links.end());
+  }
+  void unlink_incomming(sslink* link) {
+    for(int i = link->in_index()+1; i < _in_links.size(); ++i) {
+      _in_links[i]->set_in_index(i-1);
+    }
+ 
+    // [output][slot][input][slot]
+    //delete this element of the subnet table -- bye bye!
+    for(int out_i = 0; out_i < _out_links.size(); ++out_i) {
+      for(int out_s = 0; out_s < MAX_SUBNETS; ++out_s) {
+        auto& table = _subnet_table[out_i][out_s];
+        table.erase(table.begin()+link->in_index());
+      }
+    }
+
+    auto new_end = std::remove(_in_links.begin(),_in_links.end(),link);
+    _in_links.erase(new_end,_in_links.end());
   }
 
   virtual std::string name() const = 0;
@@ -291,14 +328,10 @@ class ssnode {
 
   void set_id(int id) { _ID = id; }
 
-  void set_id(std::vector<ssnode*>& node_list, std::vector<sslink*>& link_list) {
-    _ID = (int)node_list.size();
-    node_list.push_back(this);
+  void agg_elem(std::vector<ssnode*>& node_list, std::vector<sslink*>& link_list) {
+    //node_list.push_back(this);
     for (unsigned i = 0; i < _out_links.size(); ++i) {
-      sslink* link = _out_links[i];
-      assert(link->id() == -1);
-      link->set_id((int)link_list.size());
-      link_list.push_back(link);
+      link_list.push_back(_out_links[i]);
     }
   }
 
@@ -336,9 +369,21 @@ class ssnode {
 
   int bitwidth() { return _bitwidth; }
 
+  std::vector<std::vector<std::vector<std::vector<bool>>>>& subnet_table () {
+    return _subnet_table;
+  }
+
   void setup_default_routing_table(sslink* inlink, sslink* outlink);
+
+  void create_blank_subnet_table_input(sslink* outlink);
+
+  void create_blank_subnet_table(sslink* outlink, int o_sub, sslink* inlink);
+  void create_blank_subnet_table(sslink* outlink, int o_sub);
+  void create_blank_subnet_table(sslink* outlink);
+
   void setup_routing_memo();
   void setup_routing_memo_node(int i, int slot, int bitwidth);
+
   std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p,
                                                       int bitwidth) {
     int slot = p.first;
@@ -347,9 +392,18 @@ class ssnode {
     if (l) l_ind = l->in_index();
     auto& ret = _routing_memo.at(l_ind * 4 * MAX_SUBNETS + slot * 4 +
                                  (31 - __builtin_clz(bitwidth)));
-    assert(is_output() || ret.size() != 0);
+
+    if(_out_links.size()!=0 && ret.size() == 0) {
+      std::cout << "ERROR: Link: " << l->name() 
+                << " has output links, but no routing table\n";
+      std::cout << "_routing_memo.size() : " << _routing_memo.size() << "\n";
+      std::cout << "num ins: " << _in_links.size() << "\n";
+      std::cout << "num outs: " << _out_links.size() << "\n";
+      assert(0 && "bad _routing_memo"); 
+    } 
     return ret;
   }
+  virtual ~ssnode() {};  
 
  protected:
   int _ID = -1;
@@ -370,7 +424,7 @@ class ssnode {
   std::vector<std::vector<std::vector<std::vector<bool>>>>
       _subnet_table;  // convert from subnet_table
 
-  // Maps [input_link_id][slot_number][bitwidth] -> vector of legal links/slots
+  // Maps [input_link_id][slot_number][bitwidth]->vector of legal links/slots
   std::vector<std::vector<std::pair<int, sslink*>>> _routing_memo;
 
   // Variables used for scheduling -- these should be moved out at some point (TODO)
@@ -383,9 +437,9 @@ class ssnode {
   int data_width = 64;
   int granularity = 8; // the most fine-grain # of bit, 8 means byte-decomposable
   int mf_decomposer = data_width / granularity;
-  int decomposer; // convert from decomposer // to be integrate with subnet_table
+  int decomposer = data_width / granularity; // convert from decomposer // to be integrate with subnet_table
   // TODO: most-fine-grain decomposer, to be removed or need to be defined by user
-  
+
 private:
 
   friend class SubModel;
@@ -397,8 +451,12 @@ class ssswitch : public ssnode {
 
   virtual std::string name() const {
     std::stringstream ss;
-    ss << "SW"
-       << "_" << _x << "_" << _y;
+    if(_x != -1 && _y != -1) {
+      ss << "SW"
+         << "_" << _x << "_" << _y;
+    } else {
+      ss << "SW" << _ID;
+    }
     return ss.str();
   }
 
@@ -423,47 +481,85 @@ class ssswitch : public ssnode {
   }
 
   void collect_features() {
-    features[0] = _max_util > 1 ? 1.0 : 0.0; // Weird negative estimation
-    features[1] = _max_util > 1 ? 0.0 : 1.0; // Weird Negative estimation change 1 -> 0
+    if(decomposer==0) decomposer=mf_decomposer;
+    features[0] = ! _max_util > 1 ? 1.0 : 0.0;
+    features[1] = _max_util > 1 ? 1.0 : 0.0;
+    
     assert(features[0] || features[1]);
     features[2] = !_flow_control ? 1.0 : 0.0;
     features[3] = _flow_control ? 1.0 : 0.0;
     assert((features[2] || features[3]) &&
            "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = decomposer;
-    assert(!(decomposer == 0) && !(decomposer & (decomposer - 1)) &&
-           "Decomposer need to be power of two");
-    features[5] = max_fifo_depth;
+    if(decomposer == 0 && (decomposer & (decomposer - 1))) {
+      std::cout << "Problem: Decomposer for node " 
+                << name() << " is: " << decomposer << "\n";
+      assert(0 && "Decomposer need to be power of two");
+    }    features[5] = max_fifo_depth;
     features[6] = _in_links.size();
     features[7] = _out_links.size();
     features[8] = _max_util;
-    /*
-    std::cout << "\n ------ Features : >>>>>> \n";
-    std::cout << "Not Shared ? " << features[0] << "\n"
-              << "Shared ? " << features[1] << "\n"
-              << "Not Flow Control ? " << features[2] <<"\n"
-              << "Flow Control ? " << features[3] <<"\n"
-              << "decomposer = " << features[4] <<"\n"
-              << "max fifo depth = " << features[5] << "\n"
-              << "# input links = " << features[6] << "\n"
-              << "# output links = " << features[7] << "\n"
-              << "max util = " << features[8] << "\n";
-    std::cout << " ------ Feature Ends <<<<<<\n";
-    */
+
+    //print_features();
   }
 
   double get_area() {
     collect_features();
-    return router_area_predict(features);
+    if(_max_util > 1){
+      return router_area_predict(features);
+    }else{
+      // dedicated router
+      double dedi_router_features[5];
+      dedi_router_features[0] = _in_links.size();
+      dedi_router_features[1] = _out_links.size();
+      dedi_router_features[2] = decomposer;
+      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
+      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
+      return pred_dedi_router_area(dedi_router_features);
+    }
   }
   double get_power() {
     collect_features();
-    return router_power_predict(features);
+    if(_max_util > 1){
+      return router_power_predict(features);
+    }else{
+      // dedicated router
+      double dedi_router_features[5];
+      dedi_router_features[0] = _in_links.size();
+      dedi_router_features[1] = _out_links.size();
+      dedi_router_features[2] = decomposer;
+      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
+      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
+      return pred_dedi_router_power(dedi_router_features);
+    }
+  }
+
+  virtual ~ssswitch() {};  
+
+  void print_features() {
+    std::cout << "------ Features : >>>>>> ";
+    std::cout << "Not Shared ? " << features[0] << ", "
+              << "Shared ? " << features[1] << ", "
+              << "Not Flow Control ? " << features[2] <<", "
+              << "Flow Control ? " << features[3] <<", "
+              << "decomposer = " << features[4] <<", "
+              << "max fifo depth = " << features[5] << ", "
+              << "# input links = " << features[6] << ", "
+              << "# output links = " << features[7] << ", "
+              << "max util = " << features[8] << ", ";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+  }
+
+  void dump_features() {
+    for(int i = 0; i < 9; ++i) {
+      std::cout << features[i] << " ";
+    }
+    std::cout << "\n";
   }
 
  protected:
   double features[9];
-  int max_fifo_depth;
+  int max_fifo_depth=2;
 };
 
 class ssfu : public ssnode {
@@ -501,7 +597,11 @@ class ssfu : public ssnode {
 
   virtual std::string name() const {
     std::stringstream ss;
-    ss << "FU" << _x << "_" << _y;
+    if(_x != -1 && _y != -1) {
+      ss << "FU" << _x << "_" << _y;
+    } else {
+      ss << "FU" << _ID;
+    }
     return ss.str();
   }
 
@@ -516,8 +616,11 @@ class ssfu : public ssnode {
   }
 
   double* collect_features() {
+    if(decomposer == 0)     decomposer = mf_decomposer;
+
     features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
+    
     assert(features[0] || features[1]);
     features[2] = !_flow_control ? 1.0 : 0.0;
     features[3] = _flow_control ? 1.0 : 0.0;
@@ -526,29 +629,19 @@ class ssfu : public ssnode {
     features[5] = output_select_mode == "Universal" ? 1.0 : 0.0;
     assert((features[4] || features[5]) && "Either Individual or Universal");
     features[6] = decomposer;
-    assert(!(decomposer == 0) && !(decomposer & (decomposer - 1)) &&
-           "Decomposer need to be power of two");
+    if(decomposer == 0 && (decomposer & (decomposer - 1))) {
+      std::cout << "Problem: Decomposer for node " 
+                << name() << " is: " << decomposer << "\n";
+      assert(0 && "Decomposer need to be power of two");
+    }
     features[7] = delay_fifo_depth;
     features[8] = _in_links.size();
     features[9] = _out_links.size();
     features[10] = register_file_size;
     features[11] = _max_util;
-    /*
-    std::cout << "\n ------ Features : >>>>>> \n";
-    std::cout << "Not Shared ? " << features[0] << "\n"
-              << "Shared ? " << features[1] << "\n"
-              << "Not Flow Control ? " << features[2] <<"\n"
-              << "Flow Control ? " << features[3] <<"\n"
-              << "Output Mode Individual ? " << features[4] <<"\n"
-              << "Output Mode Universal ? " << features[5] <<"\n"
-              << "decomposer = " << features[6] <<"\n"
-              << "max delay fifo depth = " << features[7] << "\n"
-              << "# input links = " << features[8] << "\n"
-              << "# output links = " << features[9] << "\n"
-              << "# register = " << features[10] << "\n"
-              << "max util = " << features[11] << "\n";
-    std::cout << " ------ Feature Ends <<<<<<\n";
-    */
+
+    //print_features();
+
     return features;
   }
 
@@ -564,12 +657,38 @@ class ssfu : public ssnode {
 
   func_unit_def* fu_def() { return _fu_def; }
 
+  virtual ~ssfu() {};  
+
+  void print_features() {
+    std::cout << " ------ Features : >>>>>> ";
+    std::cout << "Not Shared ? " << features[0] << ", "
+              << "Shared ? " << features[1] << ", "
+              << "Not Flow Control ? " << features[2] <<", "
+              << "Flow Control ? " << features[3] <<", "
+              << "Output Mode Individual ? " << features[4] <<", "
+              << "Output Mode Universal ? " << features[5] <<", "
+              << "decomposer = " << features[6] <<", "
+              << "max delay fifo depth = " << features[7] << ", "
+              << "# input links = " << features[8] << ", "
+              << "# output links = " << features[9] << ", "
+              << "# register = " << features[10] << ", "
+              << "max util = " << features[11] << ", ";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+  }
+
+  void dump_features() {
+    for(int i = 0; i < 12; ++i) {
+      std::cout << features[i] << " ";
+    }
+    std::cout << "\n";
+  }
+
  protected:
   func_unit_def* _fu_def;
   double features[12];
-  std::string output_select_mode;
-  int delay_fifo_depth;
-  int register_file_size;
+  std::string output_select_mode = std::string("Universal");
+  int delay_fifo_depth=8;
+  int register_file_size=4;
   std::vector<int> max_delay_depth;
 
  private:
@@ -579,8 +698,6 @@ class ssfu : public ssnode {
 // This should be improved later
 class ssvport : public ssnode {
  public:
-  ssvport(int port_num) : _port(port_num) {}
-
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
@@ -603,7 +720,11 @@ class ssvport : public ssnode {
       ss << "I";
     else
       ss << "O";
-    ss << _port;
+    if(_port != -1) {
+      ss << "P" << _port;
+    } else {
+      ss << _ID;
+    }
     return ss.str();
   }
 
@@ -630,6 +751,25 @@ class ssvport : public ssnode {
   int port() { return _port; }
   virtual bool is_input() { return _in_links.size() == 0; }
   virtual bool is_output() { return _out_links.size() == 0; }
+
+  double get_area(){
+    double vport_features[3];
+    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
+    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[2] = channel_buffer;
+    return pred_vport_area(vport_features);
+  }
+
+  double get_power(){
+    double vport_features[3];
+    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
+    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[2] = channel_buffer;
+    return pred_vport_power(vport_features);
+  }
+
+  virtual ~ssvport() {};  
+  void set_port(int port) {_port=port;}
 
  private:
   int _port = -1;
@@ -670,10 +810,6 @@ class SubModel {
 
   int sizey() { return _sizey; }
 
-  ssswitch* switchAt(int x, int y) { return _switches[x][y]; }
-
-  std::vector<std::vector<ssfu*>>& fus() { return _fus; }
-
   template <typename T>
   std::vector<T>& nodes();
 
@@ -682,7 +818,21 @@ class SubModel {
   double get_fu_total_area() {
     double total_area = 0.0;
     for (auto fu : fu_list()){
-      total_area += fu -> get_area();
+      double area_to_add = fu->get_area();
+
+      static bool printed_bad_fu=false;
+      if(fu->get_area() < 0 && printed_bad_fu==false) {
+        printed_bad_fu=true;
+        std::cout << "SW Area: " << fu->get_area() << "\n";
+        std::cout << "ins/outs:" <<
+            fu->in_links().size() << "/" << fu->out_links().size() << "\n";
+        std::cout << "decomposer:" << fu->decomposer  
+                  <<  " gran: "    << fu->granularity << "\n";
+        fu->print_features();
+        std::cout << "\n";
+        area_to_add = abs(area_to_add) + 200;
+      }
+      total_area += area_to_add;
     }
     return total_area;
   }
@@ -690,7 +840,7 @@ class SubModel {
   double get_fu_total_power() {
     double total_power = 0.0;
     for (auto fu : fu_list()){
-      total_power += fu -> get_power();
+      total_power += fu->get_power();
     }
     return total_power;
   }
@@ -698,7 +848,21 @@ class SubModel {
   double get_sw_total_area() {
     double total_area = 0.0;
     for (auto sw : switch_list()){
-      total_area += sw -> get_area();
+      double area_to_add = sw->get_area();
+
+      static bool printed_bad_sw=false;
+      if(sw->get_area() < 0 && printed_bad_sw==false) {
+        printed_bad_sw=true;
+        std::cout << "SW Area: " << sw->get_area() << "\n";
+        std::cout << "ins/outs:" <<
+            sw->in_links().size() << "/" << sw->out_links().size() << "\n";
+        std::cout << "decomposer:" << sw->decomposer << " " << sw->mf_decomposer 
+                  <<  " gran: "    << sw->granularity << "\n";
+        sw->print_features();
+        std::cout << "\n";
+        area_to_add = abs(area_to_add) + 200;
+      }
+      total_area += area_to_add;
     }
     return total_area;
   }
@@ -706,26 +870,40 @@ class SubModel {
   double get_sw_total_power() {
     double total_power = 0.0;
     for (auto sw : switch_list()){
-      total_power += sw -> get_power();
+      total_power += sw->get_power();
+    }
+    return total_power;
+  }
+
+  double get_vport_area(){
+    double total_area = 0.0;
+    for (auto vp : vport_list()){
+      total_area += vp -> get_area();
+    }
+    return total_area;
+  }
+
+  double get_vport_power(){
+    double total_power = 0.0;
+    for (auto vp : vport_list()){
+      total_power += vp -> get_power();
     }
     return total_power;
   }
 
   double get_overall_power() {
-    return get_sw_total_power() + get_fu_total_power();
+    return get_sw_total_power() + get_fu_total_power() + get_vport_power();
   }
 
   double get_overall_area() {
-    return get_sw_total_area() + get_fu_total_area();
+    return get_sw_total_area() + get_fu_total_area() + get_vport_area();
   }
 
   std::vector<ssswitch*>& switch_list() { return _switch_list; }
 
-  std::vector<std::vector<ssswitch*>>& switches() { return _switches; }
-
   bool multi_config() { return _multi_config; }
 
-  size_t num_fu() { return _fus.size(); }
+  size_t num_fu() { return _fu_list.size(); }
 
   void parse_io(std::istream& istream);
 
@@ -741,6 +919,8 @@ class SubModel {
 
   const std::vector<ssvport*>& output_list() { return _output_list; }
 
+  std::vector<ssvport*>& vport_list(){return _vport_list;}
+
   void add_input(int i, ssnode* n) { _io_map[true][i] = n; }
   void add_output(int i, ssnode* n) { _io_map[false][i] = n; }
 
@@ -748,55 +928,260 @@ class SubModel {
     auto* fu = new ssfu();
     _fu_list.push_back(fu);
     fu->setFUDef(nullptr);
+    add_node(fu); //id and stuff
     return fu;
   }
 
   ssfu* add_fu(int x, int y) {
-    auto* fu = new ssfu();
+    auto* fu = add_fu();
     if (x >= (int)_fus.size()) _fus.resize(x + 1);
     if (y >= (int)_fus[x].size()) _fus[x].resize(y + 1);
     _fus[x][y] = fu;
-    _fu_list.push_back(fu);
     fu->setXY(x, y);
-    fu->setFUDef(nullptr);
     return fu;
   }
 
   ssswitch* add_switch() {
     auto* sw = new ssswitch();
     _switch_list.push_back(sw);
+    add_node(sw); //id and stuff
     return sw;
   }
 
   ssswitch* add_switch(int x, int y) {
-    auto* sw = new ssswitch();
+    auto* sw = add_switch();
     if (x >= (int)_switches.size()) _switches.resize(x + 1);
     if (y >= (int)_switches[x].size()) _switches[x].resize(y + 1);
     _switches[x][y] = sw;
-    _switch_list.push_back(sw);
     sw->setXY(x, y);
     return sw;
   }
 
+  ssvport* add_vport(bool is_input) {
+    auto vport = new ssvport();
+    _vport_list.push_back(vport);
+    if (is_input)
+      _input_list.push_back(vport);
+    else
+      _output_list.push_back(vport);
+    add_node(vport);
+    return vport;
+  }
+
   ssvport* add_vport(bool is_input, int port_num) {
-    auto vport = new ssvport(port_num);
+    ssvport* vport = add_vport(is_input);
     if (_ssio_interf.vports_map[is_input].count(port_num)) {
       std::cout << "Error: Multiple " << (is_input ? "input" : "output")
                 << " ports with port number " << port_num << "created\n\n";
       assert(0 && "port duplication error");
     }
     _ssio_interf.vports_map[is_input][port_num] = vport;
-    _node_list.push_back(vport);
-    _vport_list.push_back(vport);
-    if (is_input)
-      _input_list.push_back(vport);
-    else
-      _output_list.push_back(vport);
+    vport->set_port(port_num);
     return vport;
   }
-
-  // This function should be called when the entire topology complete
+  
   void post_process();
+
+  //Creates a copy of the datastructre which gaurantees ordering
+  //within the *_list datastructures (so they can be used for matching) 
+  SubModel* copy() {
+    SubModel* copy_sub = new SubModel();
+
+    copy_sub->_sizex=_sizex;
+    copy_sub->_sizey=_sizey;
+    copy_sub->_ssio_interf = _ssio_interf;
+    copy_sub->_multi_config = _multi_config;
+
+    copy_sub->_switch_list.resize(_switch_list.size());
+    copy_sub->_fu_list.resize(_fu_list.size());
+    copy_sub->_vport_list.resize(_vport_list.size());
+    copy_sub->_node_list.resize(_node_list.size());
+    copy_sub->_link_list.resize(_link_list.size());
+    copy_sub->_input_list.resize(_input_list.size());
+    copy_sub->_output_list.resize(_output_list.size());
+
+    for(unsigned i = 0; i < _switch_list.size(); ++i) {
+      auto* sw = _switch_list[i];
+      auto* copy_sw = new ssswitch();
+      *copy_sw = *sw; //get the non-pointer-y things
+      copy_sub->_switch_list[i]=copy_sw;
+      assert(copy_sub->_node_list[sw->id()]==NULL);
+      copy_sub->_node_list[sw->id()]=copy_sw;
+    }
+
+    for(unsigned i = 0; i < _fu_list.size(); ++i) {
+      auto* fu = _fu_list[i];
+      auto* copy_fu = new ssfu();
+      *copy_fu = *fu; //get the non-pointer-y things
+      copy_sub->_fu_list[i]=copy_fu;
+      assert(copy_sub->_node_list[fu->id()]==NULL);
+      copy_sub->_node_list[fu->id()]=copy_fu;
+    }
+
+    for(unsigned i = 0; i < _vport_list.size(); ++i) {
+      auto* vport = _vport_list[i];
+      auto* copy_vport = new ssvport();
+      *copy_vport = *vport;
+      copy_sub->_vport_list[i] = copy_vport;
+      assert(copy_sub->_node_list[vport->id()]==NULL);
+      copy_sub->_node_list[vport->id()]=copy_vport;
+    }
+
+    for(unsigned i = 0; i < _input_list.size(); ++i) {
+      auto* vport = _input_list[i];
+      ssvport* copy_vport = (ssvport*) copy_sub->_node_list[vport->id()];
+      copy_sub->_input_list[i] = copy_vport;
+    }
+
+    for(unsigned i = 0; i < _output_list.size(); ++i) {
+      auto* vport = _output_list[i];
+      ssvport* copy_vport = (ssvport*) copy_sub->_node_list[vport->id()];
+      copy_sub->_output_list[i] = copy_vport;
+    }
+
+    for(unsigned I = 0; I < _node_list.size(); ++I) {
+      if(copy_sub->_node_list[I]==0) {
+        std::cout << _node_list[I]->name() << " is null in copy\n";
+      }
+    }
+
+
+    for(unsigned i = 0; i < _link_list.size(); ++i) {
+      auto* link = _link_list[i];
+      auto* copy_link = new sslink();
+      *copy_link = *link;
+      copy_sub->_link_list[i] = copy_link;
+
+      // make the links point to the new nodes
+      copy_link->_orig = copy_sub->_node_list[link->orig()->id()];
+      copy_link->_dest = copy_sub->_node_list[link->dest()->id()];
+    }
+
+    // make the nodes point to the new links
+    for(unsigned I = 0; I < _node_list.size(); ++I) {
+      auto* node = _node_list[I];
+      auto* copy_node = copy_sub->_node_list[I];
+
+      for(unsigned i = 0; i < node->_in_links.size(); ++i) {
+        sslink* link = node->_in_links[i];
+        copy_node->_in_links[i] = copy_sub->_link_list[link->id()]; 
+      }
+
+      for(unsigned i = 0; i < node->_out_links.size(); ++i) {
+        sslink* link = node->_out_links[i];
+        copy_node->_out_links[i] = copy_sub->_link_list[link->id()]; 
+      }
+
+      copy_node->setup_routing_memo();
+    }
+
+    for(auto& node : copy_sub->node_list()) {
+      assert(node->subnet_table().size() == node->out_links().size());
+    }
+
+
+    return copy_sub;
+  }
+
+  // Efficient bulk delete from vector based on indices (O(n))
+  template<typename T> 
+  void bulk_vec_delete(std::vector<T>& vec, std::vector<int>& indices) {
+    indices.push_back(INT_MAX);
+    std::sort(indices.begin(), indices.end(), [](int x, int y) { return x<y; });
+
+    //for(auto i : indices) {
+    //  std::cout << i << "\n";
+    //}
+  
+    int ind = 0;
+    unsigned nindex = indices[ind];
+    int diff=0;
+ 
+    for(unsigned i = 0; i < vec.size(); ++i) {
+      //std::cout << i << ": diff:" << diff 
+      //           << " nindex: " << nindex << " ind:" << ind <<"\n";
+
+      if(diff>0) {
+        vec[i-diff] = vec[i];
+      } 
+      if(i > nindex) {
+        nindex=indices[++ind];
+        diff++;
+      }     
+    }
+  
+    vec.resize(vec.size()-diff);
+  }
+
+  //These we can use the faster bulk vec delete
+  void delete_nodes(std::vector<int> v)  {
+    vec_delete_by_id(_node_list,v);
+    fix_node_id();
+  }
+  void delete_links(std::vector<int> v)  {
+    //std::cout << "\n" << "linkcount before : " << v.size() << " " << _link_list.size();
+    vec_delete_by_id(_link_list,v);
+    //std::cout << "linkcount after : " << v.size() << " " << _link_list.size();
+    fix_link_id();
+  }
+
+  // These functions just make the nodes and links aware of their own position
+  // in the array which holds them
+  void fix_node_id() {
+    for(unsigned i = 0; i < _node_list.size(); ++i) {
+      _node_list[i]->set_id(i);
+    }
+  }
+  void fix_link_id() {
+    for(unsigned i = 0; i < _link_list.size(); ++i) {
+      _link_list[i]->set_id(i);
+    }
+  }
+
+ // Slightly less efficient delete from vector by matching on id() function
+ // O(n * #indices)
+ template<typename T> 
+ void vec_delete_by_id(std::vector<T>& vec, std::vector<int>& indices) {
+    auto new_end = std::remove_if(vec.begin(),vec.end(),[&](T fu){
+     for(int index : indices) {
+       if(fu->id() == index) return true;
+     }
+     return false;
+   });
+   vec.erase(new_end,vec.end());
+ }
+
+ void delete_fus(std::vector<int> v)      {vec_delete_by_id(_fu_list,v);}
+ void delete_switches(std::vector<int> v) {vec_delete_by_id(_switch_list,v);}
+ void delete_vports(std::vector<int> v)   {
+   vec_delete_by_id(_vport_list,v);
+   vec_delete_by_id(_input_list,v);
+   vec_delete_by_id(_output_list,v);
+ }
+
+ //External add link -- used by arch. search
+ sslink* add_link(ssnode* src, ssnode* dst) {
+   sslink* link = src->add_link(dst);
+   link->set_id(_link_list.size());
+   _link_list.push_back(link);
+   return link;
+ }
+
+ //add node 
+ void add_node(ssnode* n) {
+   n->set_id(_node_list.size());
+   //if(ssswitch* sw = dynamic_cast<ssswitch*>(n)) {
+   //  _switch_list.push_back(sw);
+   //} else if(ssfu* fu = dynamic_cast<ssfu*>(n)) {
+   //  _fu_list.push_back(fu);
+   //} else if(ssvport* vport = dynamic_cast<ssvport*>(n)) {
+   //  if(vport->is_input()) _input_list.push_back(vport);
+   //  else _output_list.push_back(vport);
+   //  _vport_list.push_back(vport);
+   //}
+   _node_list.push_back(n);
+ }
+
 
  private:
   void build_substrate(int x, int y);
@@ -804,14 +1189,6 @@ class SubModel {
   void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config,
                          int temp_x, int temp_y, int temp_width, int temp_height,
                          int skip_hv_dist, int skip_diag_dist, int skip_delay);
-
-  // temporary datastructure to help construct mapping
-  std::map<int, ssnode*> _io_map[2];
-
-  int _sizex, _sizey;  // size of SS cgra
-  bool _multi_config;
-  std::vector<std::vector<ssfu*>> _fus;
-  std::vector<std::vector<ssswitch*>> _switches;
 
   // These are only valid after regroup_vecs()
   std::vector<ssnode*> _node_list;
@@ -822,6 +1199,15 @@ class SubModel {
 
   std::vector<ssfu*> _fu_list;
   std::vector<ssswitch*> _switch_list;
+
+  // Temporary Datastructures, only for constructing the mapping
+  int _sizex, _sizey;  // size of SS cgra
+  std::vector<std::vector<ssfu*>> _fus;
+  std::vector<std::vector<ssswitch*>> _switches;
+  std::map<int, ssnode*> _io_map[2];
+
+  //Property that should be deprecated...
+  bool _multi_config;
 
   ssio_interface _ssio_interf;
 };

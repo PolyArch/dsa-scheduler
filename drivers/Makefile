@@ -18,7 +18,7 @@ LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig -lyaml-cpp $(LIBS)
 
 all: ss_sched 
 
-ss_sched : ss_sched.cpp $(INC_SSMODEL_PATH)/*.h
+ss_sched : ss_sched.cpp $(INC_SSMODEL_PATH)/*.h $(INC_SSSCHED_PATH)/*.h
 	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
 
 
