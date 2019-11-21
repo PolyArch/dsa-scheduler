@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <climits>
 #include "./predict.h"
 #include "direction.h"
 #include "fu_model.h"
@@ -482,11 +483,11 @@ class ssswitch : public ssnode {
 
   void collect_features() {
     if(decomposer==0) decomposer=mf_decomposer;
-    features[0] = ! _max_util > 1 ? 1.0 : 0.0;
+    features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
     
     assert(features[0] || features[1]);
-    features[2] = !_flow_control ? 1.0 : 0.0;
+    features[2] = _flow_control ? 0.0 : 1.0;
     features[3] = _flow_control ? 1.0 : 0.0;
     assert((features[2] || features[3]) &&
            "Either Data(Static) or DataValidReady(Dynamic)");
@@ -505,33 +506,11 @@ class ssswitch : public ssnode {
 
   double get_area() {
     collect_features();
-    if(_max_util > 1){
-      return router_area_predict(features);
-    }else{
-      // dedicated router
-      double dedi_router_features[5];
-      dedi_router_features[0] = _in_links.size();
-      dedi_router_features[1] = _out_links.size();
-      dedi_router_features[2] = decomposer;
-      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
-      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
-      return pred_dedi_router_area(dedi_router_features);
-    }
+    return router_area_predict(features);
   }
   double get_power() {
     collect_features();
-    if(_max_util > 1){
-      return router_power_predict(features);
-    }else{
-      // dedicated router
-      double dedi_router_features[5];
-      dedi_router_features[0] = _in_links.size();
-      dedi_router_features[1] = _out_links.size();
-      dedi_router_features[2] = decomposer;
-      dedi_router_features[3] = _flow_control ? 1.0 : 0.0;
-      dedi_router_features[4] = !_flow_control ? 1.0 : 0.0;
-      return pred_dedi_router_power(dedi_router_features);
-    }
+    return router_power_predict(features);
   }
 
   virtual ~ssswitch() {};  
