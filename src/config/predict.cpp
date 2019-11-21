@@ -437,14 +437,20 @@ double router_area_predict(const double temp_x1[9]) {
     dedi_router_features[3] = x1[3]; // flow control
     dedi_router_features[4] = x1[2]; // not flow control
     std::cout << "using dedicated model\n";
+
     double num_in = x1[6]; double num_out = x1[7];
-    if(num_in == 1.0 || num_out == 1.0){
+    double decomposer = x1[4];
+    if(num_in == 1.0 || num_out == 1.0 || decomposer == 8.0){
       dedi_router_features[0] = 2.0;
       dedi_router_features[1] = 2.0;
-      double x4area = pred_dedi_router_area(dedi_router_features) / ( (2.0 / num_in) * (2.0 / num_out) );
+      dedi_router_features[2] = 4.0;
+      double x4area = pred_dedi_router_area(dedi_router_features) / 
+      ( (2.0 / num_in) * (2.0 / num_out) * (4.0 / decomposer) );
       dedi_router_features[0] = 2.5;
       dedi_router_features[1] = 2.5;
-      double x6area = pred_dedi_router_area(dedi_router_features) / ( (2.5 / num_in) * (2.5 / num_out) );
+      dedi_router_features[2] = 2.0;
+      double x6area = pred_dedi_router_area(dedi_router_features) / 
+      ( (2.5 / num_in) * (2.5 / num_out) * (2.0 / decomposer));
       return (x4area + x6area) / 2;
     }
     return pred_dedi_router_area(dedi_router_features);
