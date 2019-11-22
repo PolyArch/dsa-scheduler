@@ -62,6 +62,7 @@ class func_unit_def {
 
 class FuModel {
  public:
+  FuModel(){}
   FuModel(std::istream& istream);
   func_unit_def* GetFUDef(char*);
   func_unit_def* GetFUDef(std::string& fu_string);

@@ -180,272 +180,6 @@ void SSModel::parse_yaml(const std::string& fn) {
 
   assert(0 && "Yaml Parser is currently not working due to UNDEFINED Node Type");
 
-  // Initialize SubModel
-  /*
-  _subModel = new SubModel();
-  std::map<std::string,ssnode*> all_modules;
-
-  // Read YAML File
-  YAML::Node ssfabric = YAML::LoadFile(fn);
-
-  // Set System Variables
-  _fuModel = NULL;
-
-  // TODO: Yaml is not working when parsing subnet_table
-  //   inter_subnet_connection:
-  //   - [true, true, false, false]
-  //   - [false, false, true, true]
-  // Cannot be Extracted
-  YAML::Node ssnodes;
-  if(ssfabric["nodes"]){
-    ssnodes = ssfabric["nodes"];
-    for (unsigned i = 0; i < ssnodes.size();i++){
-      YAML::Node node = ssnodes[i];
-      string nodeType= node["nodeType"].as<std::string>();
-      cout << "Initialize " << nodeType << "\n" ;
-      if(nodeType == "switch"){
-        ssswitch* sw = _subModel -> add_switch();
-        int id = node["id"].as<int>();
-        sw -> set_prop(node);
-      }
-      if(nodeType == "function unit"){
-
-      }
-      if(nodeType == "vector port"){
-
-      }
-    }
-  }
-
-  // Instantiate Routers
-  YAML::Node routers;
-  if (ssfabric["routers"]) {
-    routers = ssfabric["routers"];
-    for(YAML::const_iterator it=routers.begin();it!=routers.end();++it) {
-      // Get the name of router
-      const std::string router_name = it->first.as<std::string>();
-      // Skip the default
-      if (router_name.rfind("default", 0) == 0) continue;
-      // Extract the router properties
-      YAML::Node router_properties = routers[router_name];
-      ssswitch* sw = _subModel -> add_switch();
-      sw -> set_name(router_name);
-      sw -> set_prop(router_properties);
-      all_modules[router_name] = sw;
-      // Output for debug
-      std::cout << "Initiatie " << router_name << "\n";
-    }
-  }
-
-  // Inistantiate Processing Elements
-  YAML::Node processing_elements;
-  YAML::Node default_node;
-  if(ssfabric["dedicated_pes"]) {
-    processing_elements = ssfabric["dedicated_pes"];
-    for (YAML::const_iterator it = processing_elements.begin();it !=
-  processing_elements.end();++it){
-      // Get the name of Processing Elements
-      const std::string pe_name = it->first.as<std::string>();
-      // Skip default
-      if (pe_name.rfind("default",0) == 0) {
-        default_node = processing_elements[pe_name];
-        continue;
-      }
-      // Extract the Processing Properties
-      YAML::Node pe_properties = processing_elements[pe_name];
-      ssfu * fu = _subModel -> add_fu();
-      fu -> set_name(pe_name);
-      fu -> set_prop(pe_properties);
-      // We can have a traditional shared processing element
-      if(fu -> is_shared() ){
-        fu -> set_max_util(64);
-        fu -> add_link(fu);
-      }
-      // Get Instructions
-      std::vector<std::string> insts;
-      YAML::Node default_setting = pe_properties["<<"];
-
-    if(default_setting["instructions"] || pe_properties["instructions"])
-    try{
-      insts = pe_properties["instructions"].as<std::vector<std::string>>();
-    }catch(...){
-      insts = default_setting["instructions"].as<std::vector<std::string>>();
-    }
-
-      // Set Function Unit Definition
-      func_unit_def * fudef = new func_unit_def(pe_name);
-      fu -> setFUDef(fudef);
-      int encoding = 2; // 0 is taken by blank, 1 is taken by copy
-      for (auto & inst_name : insts){
-        ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
-        fudef -> add_cap(ss_inst);
-        fudef -> set_encoding(ss_inst,encoding++);
-      }
-      // Store in Name Lookup table
-      all_modules[pe_name] = fu;
-      // Test for Analytical Model
-      fu -> collect_features();
-      double area = fu -> get_area();
-      std::cout << pe_name << "'s area = " << area <<" um^2\n";
-      // Output for Debug
-      std::cout << "Initiate " << pe_name << "\n";
-    }
-  }
-
-  // Instantiate Triggered Processing Elements
-  YAML::Node trig_processing_elements;
-  if(ssfabric["shared_pes"]) {
-    trig_processing_elements = ssfabric["shared_pes"];
-    for(YAML::const_iterator it = trig_processing_elements.begin();it !=
-  trig_processing_elements.end();++it){
-      // Get the name of Triggered Processing Elements
-      const std::string trig_pe_name = it->first.as<std::string>();
-      // Skip Default
-      if (trig_pe_name.rfind("default",0)==0) {
-        default_node = trig_processing_elements[trig_pe_name];
-        continue;
-      }
-      // Get Properties
-      YAML::Node trig_pe_prop = trig_processing_elements[trig_pe_name];
-      ssfu * fu = _subModel -> add_fu();
-      fu -> set_name(trig_pe_name);
-      fu -> set_prop(trig_pe_prop);
-      // Triggered-Inst Processing Element is naturally Shared
-      fu -> set_max_util(64);
-      fu -> add_link(fu);
-      // Get Instructions
-      std::vector<std::string> insts;
-      try{
-        insts = trig_pe_prop["instructions"].as<vector<std::string>>();
-      }catch(...){
-        insts = default_node["instructions"].as<vector<std::string>>();
-      }
-      // Set Function Unit Definition
-      func_unit_def * fudef = new func_unit_def(trig_pe_name);
-      fu -> setFUDef(fudef);
-      int encoding = 2; // 0 is taken by blank, 1 is taken by copy
-      for (auto & inst_name : insts){
-        ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
-        fudef -> add_cap(ss_inst);
-        fudef -> set_encoding(ss_inst,encoding++);
-      }
-
-      // Store in Name-Lookup Table
-      all_modules[trig_pe_name] = fu;
-      // Output for Debug
-      std::cout << "Initiate " << trig_pe_name << "\n";
-    }
-  }
-
-  // Instatiate VectorPort
-  YAML::Node vector_ports;
-  auto & io = _subModel -> io_interf();
-  // Num of I/O to the fabric net
-  int num_inputs=0;
-  int num_outputs=0;
-  // Num of vector port
-  int num_ivp=0;
-  int num_ovp=0;
-  if(ssfabric["vector_ports"]) {
-    vector_ports = ssfabric["vector_ports"];
-    for (YAML::const_iterator it = vector_ports.begin();it!=vector_ports.end();++it){
-      // Get Name
-      const std::string vp_name = it->first.as<std::string>();
-      // Get default
-      if (vp_name.rfind("default",0)==0){
-        default_node = vector_ports[vp_name];
-        continue;
-      }
-      // Get Properties
-      YAML::Node vp_prop = vector_ports[vp_name];
-      std::string io_type = vp_prop["io_type"].as<std::string>();
-      bool is_input = io_type == "in";
-      ssvport * vp;
-      if(io_type == "in"){
-        cout << "init in vport " << num_ivp <<"\n";
-        vp = _subModel->add_vport(is_input,num_ivp++);
-      }
-      else if(io_type == "out"){
-        cout << "init out vport " << num_ovp <<"\n";
-        vp = _subModel->add_vport(is_input,num_ovp++);
-      }
-      vp -> set_prop(vp_prop); // Set Vector Port Specific Prop
-      all_modules[vp_name] = vp;
-
-      if (io_type == "in"){
-        int port_idx = num_ivp;
-        for(auto & output_port : vp -> out_links()){
-          int input_node_idx = num_inputs ++;
-          vp -> port_vec().push_back(input_node_idx);
-        }
-      }else if(io_type == "out"){
-        int port_idx = num_ovp;
-        for (auto & input_port : vp -> in_links()){
-          int output_node_index = num_outputs ++;
-          vp -> port_vec().push_back(output_node_index);
-        }
-      }else{
-        assert(0 && "unknown vector port type");
-      }
-    }
-  }else{
-    assert(0 && "No Vector Port?");
-  }
-
-  // Connect Everything Up
-  std::vector<std::string> topology;
-  if(ssfabric["topology"]){
-    topology = ssfabric["topology"].as<vector<std::string>>();
-    for (auto & connection : topology){
-      // Skip "this"
-      ssnode * left_module;
-      ssnode * right_module;
-      if(contains(connection, "this")) continue;
-
-      std::string sleft ; std::string sright;
-      std::string left_module_name; std::string left_port_name;
-      std::string right_module_name; std::string right_port_name;
-      if(contains(connection,"->")){
-        sleft = split(connection,"->")[0];
-        sright = split(connection,"->")[1];
-      }else if(contains(connection, "<-")){
-        sleft = split(connection,"<-")[0];
-        sright = split(connection,"<-")[1];
-      }else if(contains(connection, "<->")){
-        sleft = split(connection,"<->")[0];
-        sright = split(connection,"<->")[1];
-      }else{
-        assert(0 && "No Such Connect Symbol");
-      }
-
-      left_module_name = split(sleft,".")[0];
-      left_port_name = split(sleft,".")[1];
-      right_module_name = split(sright,".")[0];
-      right_port_name = split(sright,".")[1];
-
-      left_module = all_modules[left_module_name];
-      right_module = all_modules[right_module_name];
-
-      if(contains(connection,"<->")){
-        left_module -> add_link(right_module,left_port_name,right_port_name);
-        right_module -> add_link(left_module,right_port_name,left_port_name);
-      }else if(contains(connection, "<-")){
-        right_module -> add_link(left_module,right_port_name,left_port_name);
-      }else if(contains(connection, "->")){
-        left_module -> add_link(right_module,left_port_name,right_port_name);
-      }else{
-        assert(0 && "No Such Connect Symbol");
-      }
-    }
-  }else{
-    assert(0 && "No Connection ?");
-  }
-  _subModel->post_process();
-   assert(num_inputs>0);
-  assert(num_outputs>0);
-
-  cout << "YAML IR Parser finished\n";
-  */
   return;
 }
 
@@ -457,7 +191,7 @@ void SSModel::parse_json(std::istream& istream) {
   std::map<int, ssnode*> sym_tab;
 
   // Null Fu Model
-  _fuModel = NULL;
+  _fuModel = new FuModel();
 
   // Now create the submodel
   _subModel = new SubModel();
@@ -511,10 +245,14 @@ void SSModel::parse_json(std::istream& istream) {
 
       sym_tab[id]=fu;
       auto& insts = node_def.get_child("instructions");
-    
-      //TODO: FIXME: Memory leak 
-      func_unit_def* fudef = new func_unit_def("NA");
+
+      stringstream fudef_name;
+      fudef_name << "function unit_" << id;
+      func_unit_def * fudef = new func_unit_def(fudef_name.str().c_str());
       fu->setFUDef(fudef);
+
+      std:vector<func_unit_def> fudefs = _fuModel->fu_defs();
+      fudefs.push_back(* fudef);
 
       for (auto& inst : insts) {
         std::string inst_name = inst.second.get_value<std::string>();
