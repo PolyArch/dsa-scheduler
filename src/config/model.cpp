@@ -524,41 +524,30 @@ void SSModel::parse_json(std::istream& istream) {
         fudef->add_cap(ss_inst);
         fudef->set_encoding(ss_inst, enc);
       }
-
-
-
     } else if (type == "vector port") {
       bool is_input;
-      auto& nodes_in_grid = node_def.get_child("nodeType");  // Just for Initialization
-      try {
-        nodes_in_grid = node_def.get_child("input_nodes");
-        is_input = false;
-        num_ovp++;
-      } catch (...) {
-        try {
-          nodes_in_grid = node_def.get_child("output_nodes");
-          is_input = true;
-          num_ivp++;
-        } catch (...) {
-          assert(0 && "vector port without connection?");
-        }
+      // the number of input port of this vector port, input vector port has zero input port
+      int in_vec_width = node_def.get_child("num_input").get_value<int>();
+      // the number of output port of this vector port, output vector port has zero output port
+      int out_vec_width = node_def.get_child("num_output").get_value<int>();
+
+      // whether is a input/output vector port
+      if(in_vec_width > 0){
+        is_input = false; num_ovp++; num_outputs += in_vec_width;
+      }else if(out_vec_width > 0){
+        is_input = true; num_ivp++; num_inputs += out_vec_width;
+      }else{
+        assert(0 && "vector port without connection?");
       }
+
       int port_num = is_input ? num_ivp : num_ovp;
-      auto* vp = _subModel->add_vport(is_input, port_num);
-      sym_tab[id] = vp;
+
       cout << "new " << (is_input ? "input" : "output") << " port: \"" << id << "\" \n";
-      io.vports_map[is_input][port_num] = vp;
-      for (auto& node : nodes_in_grid) {
-        int node_id;
-        if (is_input) {
-          node_id = num_inputs++;
-        } else {
-          node_id = num_outputs++;
-        }
-        cout << "add connect to " << (is_input ? "input" : "output")
-             << " vec: " << node_id << "\n";
-        vp->port_vec().push_back(node_id);
-      }
+
+      ssvport * vp = _subModel->add_vport(is_input, port_num);
+      vp -> set_ssnode_prop(node_def);
+      sym_tab[id] = vp;
+
     } else {
       std::cerr << id << "has unknown type" << type << "\n";
       assert(0 && "unknown type");
@@ -586,6 +575,8 @@ void SSModel::parse_json(std::istream& istream) {
     ssnode* to_module = sym_tab[sink_id];
     assert(from_module && to_module);
     from_module->add_link(to_module);
+    std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() << " --> ";
+    std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
   }
 
   _subModel->post_process();

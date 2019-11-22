@@ -252,6 +252,11 @@ int main(int argc, char* argv[]) {
            }
          }
 
+        // dump the new hw json
+        stringstream hw_ss;
+        hw_ss << "viz/dse-sched-" << i <<".json";
+        cur_ci -> ss_model()->subModel()->DumpHwInJSON(hw_ss.str().c_str());
+
         //cout << "### just reschedule the current cur_cit to be sure ###\n";
         //scheduler->incrementalSchedule(*cur_ci);
         //cout << "CUR DSE OBJ: " << cur_ci->dse_obj() << "\n"; 
@@ -259,9 +264,13 @@ int main(int argc, char* argv[]) {
         //cout << "Area: " << sub->get_overall_area()
         //     << " Nodes: " << sub->node_list().size() 
         //     << " Switches: " << sub->switch_list().size() << "\n";
-
       }
     }
+    /*
+    std::string name_hw = "viz/dse-sched-final.json";
+    auto* sub = cur_ci->ss_model()->subModel();
+    sub -> DumpHwInJSON(name_hw.c_str());
+    */
 
     cout << "DSE Complete!\n";
     cout << "Improv Iters: " << improv_iter << "\n";

@@ -48,6 +48,8 @@ class func_unit_def {
     assert(_encoding2cap.count(i));
     return _encoding2cap[i];
   }
+  std::set<ss_inst_t> cap(){return _cap;}
+  int num_inst(){return _cap.size();}
 
  private:
   std::string _name;

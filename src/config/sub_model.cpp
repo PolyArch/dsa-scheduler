@@ -265,19 +265,21 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
                     skip_delay);
 }
 
+// Dump the Hardware Description in JSON -- void SubModel::DumpHwInJSON(const char* name)
+
 // Graph of the configuration or substrate
-void SubModel::PrintGraphviz(ostream& ofs) {
-  ofs << "Digraph G { \n";
+void SubModel::PrintGraphviz(ostream& os) {
+  os << "Digraph G { \n";
 
   // switchesnew_sched
   for(auto* sw : _switch_list) {
-    // ofs << switches[i][j]->name() <<"[ label = \"Switch[" << i << "][" << j << "]\"
+    // os << switches[i][j]->name() <<"[ label = \"Switch[" << i << "][" << j << "]\"
     // ];\n";
 
     // output links
     for (auto& elem : sw->out_links()) {
       const ssnode* dest_node = elem->dest();  // FUs and output nodes
-      ofs << sw->name() << " -> " << dest_node->name() << ";\n";
+      os << sw->name() << " -> " << dest_node->name() << ";\n";
     }
   }
 
@@ -285,31 +287,31 @@ void SubModel::PrintGraphviz(ostream& ofs) {
   for(auto* fu : _fu_list) {
     for (auto& elem : fu->out_links()) {
       const ssnode* dest_node = elem->dest();  // Output link of each FU
-      ofs << fu->name() << " -> " << dest_node->name() << ";\n";
+      os << fu->name() << " -> " << dest_node->name() << ";\n";
     }
   }
 
   // Input nodes
   // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  //ofs << _inputs[i]->name() <<"[ label = \"IPort[" << i << "]\" ];\n";
+  //  //os << _inputs[i]->name() <<"[ label = \"IPort[" << i << "]\" ];\n";
   //  for(auto &elem : _inputs[i]->out_links()) {
   //    const ssnode* dest_node = elem->dest();       //Dest nodes for input ndoes are
-  //    switches ofs << _inputs[i]->name() << " -> " << dest_node->name() << ";\n";
+  //    switches os << _inputs[i]->name() << " -> " << dest_node->name() << ";\n";
   //  }
   //
   //}
 
   /*
   for (unsigned i = 0; i < outputs.size(); ++i) {
-    ofs << outputs[i]->name() <<"[ label = \"OPort[" << i << "]\" ];\n";
+    os << outputs[i]->name() <<"[ label = \"OPort[" << i << "]\" ];\n";
     ssnode::const_iterator I = outputs[i]->ibegin(), E = outputs[i]->iend();
     for(;I!=E;++I) {
       const ssnode* orig_node = (*I)->orig();
-      ofs << orig_node->name() << " -> " << outputs[i]->name() << ";\n";
+      os << orig_node->name() << " -> " << outputs[i]->name() << ";\n";
     }
   }*/
 
-  ofs << "}\n";
+  os << "}\n";
 }
 
 void SubModel::clear_all_runtime_vals() {
@@ -366,7 +368,7 @@ int dist_switch(int x, int y) {
   return dist;
 }
 
-void SubModel::PrintGamsModel(ostream& ofs,
+void SubModel::PrintGamsModel(ostream& os,
                               unordered_map<string, pair<ssnode*, int>>& node_map,
                               unordered_map<string, pair<sslink*, int>>& link_map,
                               unordered_map<string, pair<ssswitch*, int>>& switch_map,
@@ -376,88 +378,88 @@ void SubModel::PrintGamsModel(ostream& ofs,
   // string -- name of node and position
 
   // --------------------------- First, print the node sets ------------------------
-  ofs << "$onempty\n";
-  ofs << "Sets\n";
-  ofs << "n \"Hardware Nodes\"\n /";
+  os << "$onempty\n";
+  os << "Sets\n";
+  os << "n \"Hardware Nodes\"\n /";
   bool first = true;
 
   for (int config = 0; config < n_configs; ++config) {
     // fus
     for(auto* fu : _fu_list) {
-      CINF(ofs, first);
-      ofs << fu->gams_name(config);
+      CINF(os, first);
+      os << fu->gams_name(config);
       node_map[fu->gams_name(config)] = make_pair(fu, config);
     }
     // inputs
     // TODO: Fix me or eliminate == no more inputs
-    // ofs << "\n";
+    // os << "\n";
     // for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //  ofs << ", " << _inputs[i]->gams_name(config);
+    //  os << ", " << _inputs[i]->gams_name(config);
     //  node_map[_inputs[i]->gams_name(config)] = make_pair(_inputs[i], config);
     //}
 
     // outputs
     // TODO: Fix me or eliminate == no more inputs
 
-    // ofs << "\n";
+    // os << "\n";
     // for (unsigned i = 0; i < _outputs.size(); ++i) {
-    //  ofs << ", " << _outputs[i]->gams_name(config);
+    //  os << ", " << _outputs[i]->gams_name(config);
     //  node_map[_outputs[i]->gams_name(config)] = make_pair(_outputs[i], config);
     //}
   }
-  ofs << "/\n";
+  os << "/\n";
 
   // --------------------------- next, print the capabilility sets
   // ------------------------ input nodes
   /// TODO: Fix me or eliminate == no more inputs
 
   // first = true;
-  // ofs << "inN(n) \"Input Nodes\"\n /";
+  // os << "inN(n) \"Input Nodes\"\n /";
 
   // for (int config = 0; config < n_configs; ++config) {
   //  for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //    CINF(ofs, first);
-  //    ofs << _inputs[i]->gams_name(config);
+  //    CINF(os, first);
+  //    os << _inputs[i]->gams_name(config);
   //  }
   //}
-  // ofs << "/\n";
+  // os << "/\n";
 
   ////output nodes
   // first = true;
-  // ofs << "outN(n) \"Output Nodes\"\n /";
+  // os << "outN(n) \"Output Nodes\"\n /";
 
   // for (int config = 0; config < n_configs; ++config) {
   //  for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //    CINF(ofs, first);
-  //    ofs << _outputs[i]->gams_name(config);
+  //    CINF(os, first);
+  //    os << _outputs[i]->gams_name(config);
   //  }
   //}
-  // ofs << "/\n";
+  // os << "/\n";
 
   // total capabilities
   for (int i = 2; i < SS_NUM_TYPES; ++i) {
     ss_inst_t ss_inst = (ss_inst_t)i;
 
-    ofs << name_of_inst(ss_inst) << "N(n) /";
+    os << name_of_inst(ss_inst) << "N(n) /";
 
     first = true;
     for (int config = 0; config < n_configs; ++config) {
       for(auto* fu : _fu_list) {
         if (fu->fu_def() == nullptr || fu->fu_def()->is_cap(ss_inst)) {
-          CINF(ofs, first);
-          ofs << fu->gams_name(config);  // Each FU in the grid
+          CINF(os, first);
+          os << fu->gams_name(config);  // Each FU in the grid
         }
       }
     }
 
-    ofs << "/\n";
+    os << "/\n";
   }
 
   // create the kindN Set
-  ofs << "kindN(K,n) \"Capabilities of a Node\" \n";
+  os << "kindN(K,n) \"Capabilities of a Node\" \n";
 
   // -------------------------- print the ports ----------------------------
-  ofs << "pn \"Port Interface Declarations\"\n /";
+  os << "pn \"Port Interface Declarations\"\n /";
 
   //  int num_port_interfaces=_ssio_interf.in_vports.size() + _ssio_interf.out_
 
@@ -467,55 +469,55 @@ void SubModel::PrintGamsModel(ostream& ofs,
   for (int io = 0; io < 2; ++io) {
     std::string prfx[2] = {"op", "ip"};
     for (auto& elem : _ssio_interf.vports_map[io]) {
-      CINF(ofs, first);
-      ofs << "ip" << elem.first;
+      CINF(os, first);
+      os << "ip" << elem.first;
       port_map[prfx[io] + std::to_string(elem.first)] = make_pair(true, elem.first);
     }
   }
 
   if (first == true) {
-    ofs << "pnXXX";
+    os << "pnXXX";
   }
-  ofs << "/\n";
+  os << "/\n";
 
   // --------------------------- print the switches  ------------------------
-  ofs << "r \"Routers (switches)\"\n /";
+  os << "r \"Routers (switches)\"\n /";
   first = true;
 
   for (int config = 0; config < n_configs; ++config) {
     for(auto* sw : _switch_list) {
-      CINF(ofs, first);
-      ofs << sw->gams_name(config);
+      CINF(os, first);
+      os << sw->gams_name(config);
     }
 
     /*
     //Inputs and outputs are also switches
     //inputs
     //TODO: FIXME or eleiminate, no more inputs
-    ofs << "\n";
+    os << "\n";
     for (unsigned i = 0; i < _inputs.size(); ++i) {
-        ofs << ", " << _inputs[i]->gams_name(config);
+        os << ", " << _inputs[i]->gams_name(config);
         node_map[_inputs[i]->gams_name(config)]=make_pair(&_inputs[i],config);
     }
     //outputs
-    ofs << "\n";
+    os << "\n";
     for (unsigned i = 0; i < _outputs.size(); ++i) {
-        ofs << ", " << _outputs[i]->gams_name(config);
+        os << ", " << _outputs[i]->gams_name(config);
         node_map[_outputs[i]->gams_name(config)]=make_pair(&_outputs[i],config);
     }
     */
   }
 
-  ofs << "/\n";
+  os << "/\n";
 
-  ofs << "l \"Links\"\n /";
+  os << "l \"Links\"\n /";
   first = true;
   //_switches
   for (int config = 0; config < n_configs; ++config) {
     for(auto* sw : _switch_list) {
       for (auto& elem : sw->out_links()) {
-        CINF(ofs, first);
-        ofs << elem->gams_name(config);
+        CINF(os, first);
+        os << elem->gams_name(config);
         link_map[elem->gams_name(config)] = make_pair(elem, config);
       }
       switch_map[sw->gams_name(config)] =
@@ -525,7 +527,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
     // fus
     for(auto* fu : _fu_list) {
       for (auto& elem : fu->out_links()) {
-        ofs << ", " << elem->gams_name(config);
+        os << ", " << elem->gams_name(config);
         link_map[elem->gams_name(config)] = make_pair(elem, config);
       }
     }
@@ -534,42 +536,42 @@ void SubModel::PrintGamsModel(ostream& ofs,
     // TODO: FIxme or eliminate, no more inputs
     // for (unsigned i = 0; i < _inputs.size(); ++i) {
     //  for (auto &elem : _inputs[i]->out_links()) {
-    //    ofs << ", " << elem->gams_name(config);
+    //    os << ", " << elem->gams_name(config);
     //    link_map[elem->gams_name(config)] = make_pair(elem, config);
     //  }
     //}
   }
-  ofs << "/;\n";
+  os << "/;\n";
 
   // --------------------------- Enable the Sets ------------------------
-  ofs << "kindN('Input', inN(n))=YES;\n";
-  ofs << "kindN('Output', outN(n))=YES;\n";
+  os << "kindN('Input', inN(n))=YES;\n";
+  os << "kindN('Output', outN(n))=YES;\n";
 
   for (int i = 2; i < SS_NUM_TYPES; ++i) {
     ss_inst_t ss_inst = (ss_inst_t)i;
-    ofs << "kindN(\'" << name_of_inst(ss_inst) << "\', " << name_of_inst(ss_inst)
+    os << "kindN(\'" << name_of_inst(ss_inst) << "\', " << name_of_inst(ss_inst)
         << "N(n))=YES;\n";
   }
 
   // Print Parameters
-  ofs << "parameter\n";
+  os << "parameter\n";
   // Node Distances
   int config = 0;
 
   // ----------------------- Node Distances -----------------------------------
   first = true;
-  ofs << "DIST(n,n) \"Node Distances\"\n /";
+  os << "DIST(n,n) \"Node Distances\"\n /";
   for (int x1 = 0; x1 < _sizex; ++x1) {
     for (int y1 = 0; y1 < _sizey; ++y1) {
       // me to all func units
       for (int x2 = 0; x2 < _sizex; ++x2) {
         for (int y2 = 0; y2 < _sizey; ++y2) {
           if (x1 == x2 && y1 == y2) continue;
-          CINF(ofs, first);
+          CINF(os, first);
 
           //int d = dist_grid(x2 - x1, y2 - y1);
           //TODO: fixme or eliminate
-          //ofs << _fus[x1][y1]->gams_name(config) << "." << _fus[x2][y2]->gams_name(config)
+          //os << _fus[x1][y1]->gams_name(config) << "." << _fus[x2][y2]->gams_name(config)
           //    << " " << d;
         }
       }
@@ -577,88 +579,88 @@ void SubModel::PrintGamsModel(ostream& ofs,
       //    //TODO: FIXME or eleiminate, no more inputs
 
       // for (unsigned i = 0; i < _inputs.size(); ++i) {
-      //  CINF(ofs, first);
+      //  CINF(os, first);
       //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
       //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-      //  ofs << _inputs[i]->gams_name(config) << "."
+      //  os << _inputs[i]->gams_name(config) << "."
       //      << _fus[x1][y1]->gams_name(config) << " " << d;
       //}
 
       ////all outputs to me
       // for (unsigned i = 0; i < _outputs.size(); ++i) {
-      //  CINF(ofs, first);
+      //  CINF(os, first);
       //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
       //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-      //  ofs << _fus[x1][y1]->gams_name(config) << "."
+      //  os << _fus[x1][y1]->gams_name(config) << "."
       //      << _outputs[i]->gams_name(config) << " " << d;
       //}
-      // ofs << "\n";
+      // os << "\n";
     }
   }
-  ofs << "/\n";
+  os << "/\n";
 
   // ----------------------- Node Loc -------------------------------------
-  ofs << "PXn(n) \" Position X \"\n /";
+  os << "PXn(n) \" Position X \"\n /";
   first = true;
   for(auto* fu : _fu_list) {
-    CINF(ofs, first);
-    ofs << fu->gams_name(config) << " " << fu->x() * 2 + 1;
+    CINF(os, first);
+    os << fu->gams_name(config) << " " << fu->x() * 2 + 1;
   }
   // TODO: Fixme or eliminate, no more inputs
   // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  CINF(ofs, first);
+  //  CINF(os, first);
   //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-  //  ofs << _inputs[i]->gams_name(config) << " " << sw->x() * 2;
+  //  os << _inputs[i]->gams_name(config) << " " << sw->x() * 2;
   //}
   // for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //  CINF(ofs, first);
+  //  CINF(os, first);
   //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-  //  ofs << _outputs[i]->gams_name(config) << " " << sw->x() * 2;
+  //  os << _outputs[i]->gams_name(config) << " " << sw->x() * 2;
   //}
-  // ofs << "/\n";
+  // os << "/\n";
 
-  ofs << "PYn(n) \" Position X \"\n /";
+  os << "PYn(n) \" Position X \"\n /";
   first = true;
   for(auto* fu : _fu_list) {
-    CINF(ofs, first);
-    ofs << fu->gams_name(config) << " " << fu->y() * 2 + 1;
+    CINF(os, first);
+    os << fu->gams_name(config) << " " << fu->y() * 2 + 1;
   }
 
   // TODO: Fixme or eliminate, no more inputs
   // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  CINF(ofs, first);
+  //  CINF(os, first);
   //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-  //  ofs << _inputs[i]->gams_name(config) << " " << sw->y() * 2;
+  //  os << _inputs[i]->gams_name(config) << " " << sw->y() * 2;
   //}
   // for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //  CINF(ofs, first);
+  //  CINF(os, first);
   //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-  //  ofs << _outputs[i]->gams_name(config) << " " << sw->y() * 2;
+  //  os << _outputs[i]->gams_name(config) << " " << sw->y() * 2;
   //}
-  // ofs << "/\n";
+  // os << "/\n";
 
   // --------------------------- Print Port Interfaces --------------------
-  ofs << "PI(pn,n) \"Port Interfaces\" /\n";
+  os << "PI(pn,n) \"Port Interfaces\" /\n";
   // Declare Port to Node Mapping
   first = true;
 
   // TODO: fixme or eliminate
-  // PrintGamsIO<1, ssinput>(ofs);
-  // PrintGamsIO<0, ssoutput>(ofs);
+  // PrintGamsIO<1, ssinput>(os);
+  // PrintGamsIO<0, ssoutput>(os);
 
-  ofs << "/\n";
+  os << "/\n";
 
   // --------------------------- Now Print the Linkage ------------------------
 
-  ofs << "Hnl(n,l) \"Node Outputs\" \n/";
+  os << "Hnl(n,l) \"Node Outputs\" \n/";
   // fus
   first = true;
 
   for (int config = 0; config < n_configs; ++config) {
     for(auto* fu : _fu_list) {
       for (auto& elem : fu->out_links()) {
-        CINF(ofs, first);
-        ofs << fu->gams_name(config) << "." << elem->gams_name(config) << " 1";
+        CINF(os, first);
+        os << fu->gams_name(config) << "." << elem->gams_name(config) << " 1";
       }
     }
 
@@ -666,7 +668,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
     // TODO: fixme or eliminate, no more inputs
     // for (unsigned i = 0; i < _inputs.size(); ++i) {
     //  for (auto &elem: _inputs[i]->out_links()) {
-    //    ofs << ", " << _inputs[i]->gams_name(config) << "." << elem->gams_name(config)
+    //    os << ", " << _inputs[i]->gams_name(config) << "." << elem->gams_name(config)
     //    << " 1";
     //  }
     //}
@@ -677,7 +679,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
     //    //outputs
     //    for (unsigned i = 0; i < _outputs.size(); ++i) {
     //      for (auto &elem : _outputs[i]->out_links()) {
-    //        ofs << ", " << _outputs[i]->gams_name(config) << "." <<
+    //        os << ", " << _outputs[i]->gams_name(config) << "." <<
     //        elem->gams_name(config) << " 1";
     //      }
     //    }
@@ -687,43 +689,43 @@ void SubModel::PrintGamsModel(ostream& ofs,
     //  //if (config == n_configs - 1) {
     //  //  for (auto &elem : _load_slice.in_links()) {
     //  //    ssnode *output = elem->orig();
-    //  //    ofs << ", " << output->gams_name(config) << "." << elem->gams_name(config)
+    //  //    os << ", " << output->gams_name(config) << "." << elem->gams_name(config)
     //  << " 1";
     //  //  }
     //  //}
     //}
   }
-  ofs << "/\n";
+  os << "/\n";
 
-  ofs << "Hrl(r,l) \"Router Outputs\" \n/";
+  os << "Hrl(r,l) \"Router Outputs\" \n/";
   first = true;
 
   for (int config = 0; config < n_configs; ++config) {
     for(auto* sw : _switch_list) {
       for (auto& elem : sw->out_links()) {
-        CINF(ofs, first);
-        ofs << sw->gams_name(config) << "." << elem->gams_name(config)
+        CINF(os, first);
+        os << sw->gams_name(config) << "." << elem->gams_name(config)
             << " 1";
       }
     }
   }
-  ofs << "/\n";
+  os << "/\n";
 
-  ofs << "Hln(l,n) \"Node Inputs\" \n/";
+  os << "Hln(l,n) \"Node Inputs\" \n/";
   // fus
   first = true;
   for (int config = 0; config < n_configs; ++config) {
     for(auto* fu : _fu_list) {
       for (auto& elem : fu->in_links()) {
-        CINF(ofs, first);
-        ofs << elem->gams_name(config) << "." << fu->gams_name(config) << " 1";
+        CINF(os, first);
+        os << elem->gams_name(config) << "." << fu->gams_name(config) << " 1";
       }
     }
     // outputs
     // TODO: fixme or eliminate
     // for (unsigned i = 0; i < _outputs.size(); ++i) {
     //  for (auto &elem : _outputs[i]->in_links()) {
-    //    ofs << ", " << elem->gams_name(config)
+    //    os << ", " << elem->gams_name(config)
     //        << "." << _outputs[i]->gams_name(config) << " 1";
     //  }
     //}
@@ -732,7 +734,7 @@ void SubModel::PrintGamsModel(ostream& ofs,
     //    //outputs
     //    for (unsigned i = 0; i < _inputs.size(); ++i) {
     //      for (auto &elem: _inputs[i]->in_links()) {
-    //        ofs << ", " << elem->gams_name(config - 1, config)
+    //        os << ", " << elem->gams_name(config - 1, config)
     //            << "." << _inputs[i]->gams_name(config) << " 1";
     //      }
     //    }
@@ -740,26 +742,26 @@ void SubModel::PrintGamsModel(ostream& ofs,
     //  if (config == 0) {
     //    for (auto &elem : _load_slice.out_links()) {
     //      ssnode *input = elem->dest();
-    //      ofs << ", " << elem->gams_name(config) << "." << input->gams_name(config) << "
+    //      os << ", " << elem->gams_name(config) << "." << input->gams_name(config) << "
     //      1";
     //    }
     //  }
     //}
   }
 
-  ofs << "/\n";
+  os << "/\n";
 
-  ofs << "Hlr(l,r) \"Router Inputs\" \n/";
+  os << "Hlr(l,r) \"Router Inputs\" \n/";
   first = true;
   for (int config = 0; config < n_configs; ++config) {
     for(auto* sw : _switch_list) {
       for (auto& elem : sw->in_links()) {
-        CINF(ofs, first);
-        ofs << elem->gams_name(config) << "." << sw->gams_name(config) << " 1";
+        CINF(os, first);
+        os << elem->gams_name(config) << "." << sw->gams_name(config) << " 1";
       }
     }
   }
-  ofs << "/;\n";
+  os << "/;\n";
 }
 
 SubModel::SubModel(int x, int y, PortType pt, int ips, int ops, bool multi_config) {

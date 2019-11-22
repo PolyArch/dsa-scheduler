@@ -15,8 +15,13 @@
 #include "./predict.h"
 #include "direction.h"
 #include "fu_model.h"
+#include <fstream>
 
 namespace SS_CONFIG {
+
+using std::ostream;
+using std::to_string;
+using std::ofstream;
 
 const int MAX_SUBNETS = 8;
 
@@ -130,7 +135,14 @@ class ssnode {
   sslink* add_link(ssnode* node) {
     sslink* link = new sslink(this, node);
     if (this == node) {
-      if (_cycle_link) assert(0 && "two cycle links, why?");
+      if (_cycle_link) {
+        std::cout << "two cycle link :\n";
+        std::cout << "source : " << link->orig()->nodeType() <<"_"<< link -> orig() -> id()<<", ";
+        std::cout << "sink : " << link->dest()->nodeType() <<"_"<< link -> dest() -> id()<<"\n";
+        assert(true && "two cycle links, why?");
+        // Be Attention: When we read the sbmodel, the cycle link is added automatically (implictly),
+        // but when we read the json, every link is added explictly, which cause two cyclic link.
+        };
       _cycle_link = link;
     }
     link->set_out_index(_out_links.size());
@@ -227,10 +239,11 @@ class ssnode {
 
   sslink* get_cycle_link() { return _cycle_link; }
 
+  std::string nodeType(){return node_type;}
   int id() { return _ID; }
 
   void set_ssnode_prop(boost::property_tree::ptree prop) {
-    std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
+    node_type = prop.get_child("nodeType").get_value<std::string>();
     data_width = prop.get_child("data_width").get_value<int>();
   
     // Count the number of input port and output port
@@ -243,7 +256,7 @@ class ssnode {
       num_output = prop.get_child("output_nodes").size();
     
     // Parse Decomposer
-    if (nodeType != "vector port"){
+    if (node_type != "vector port"){
       auto d_node = prop.get_child_optional("granularity");
       if(!d_node.is_initialized()){
         decomposer = mf_decomposer;
@@ -329,6 +342,9 @@ class ssnode {
 
   void set_id(int id) { _ID = id; }
 
+  virtual void dumpIdentifier(ostream& os) {assert(false);}
+  virtual void dumpFeatures(ostream& os) {assert(false);}
+
   void agg_elem(std::vector<ssnode*>& node_list, std::vector<sslink*>& link_list) {
     //node_list.push_back(this);
     for (unsigned i = 0; i < _out_links.size(); ++i) {
@@ -407,6 +423,7 @@ class ssnode {
   virtual ~ssnode() {};  
 
  protected:
+  std::string node_type = "empty";
   int _ID = -1;
   int _x = -1, _y = -1;  // just for visualization
 
@@ -459,6 +476,50 @@ class ssswitch : public ssnode {
       ss << "SW" << _ID;
     }
     return ss.str();
+  }
+  void dumpIdentifier(ostream& os) override {
+    os<< "[" + to_string(_ID) +",\"switch\""+ "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "<<"\"switch\""<<",\n";
+    // data width
+    os << "\"data_width\" : " << data_width << ",\n";
+    // granularity
+    os << "\"granularity\" : " <<granularity<< ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()){
+      in_link->orig()->dumpIdentifier(os);
+      if (idx_link < num_input - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()){
+      out_link->dest()->dumpIdentifier(os);
+      if (idx_link < num_output - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "]";
+
+    os << "}\n";
   }
 
   virtual std::string gams_name(int config) const {
@@ -572,6 +633,65 @@ class ssfu : public ssnode {
     }catch(...){
       register_file_size = 8;
     }
+  }
+
+  void dumpIdentifier(ostream &os) override {
+    os << "[" + to_string(_ID) +",\"function unit\""+ "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : " << "\"function unit\""<<",\n";
+    // data width
+    os << "\"data_width\" : " << data_width << ",\n";
+    // granularity
+    os << "\"granularity\" : " <<granularity<< ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // max delay fifo depth
+    os << "\"max_delay_fifo_depth\" : " << delay_fifo_depth << ",\n";
+    // number of register
+    os << "\"num_register\" : " << register_file_size << ",\n";
+    // Instructions
+    os << "\"instructions\" : [";
+    int idx_inst = 0;
+    int num_inst = fu_def()->num_inst();
+    for (ss_inst_t inst : fu_def()->cap()){
+      os << "\"" << SS_CONFIG::name_of_inst(inst) << "\"";
+      if (idx_inst < num_inst-1){
+        os <<", ";
+        idx_inst ++ ;
+      }
+    }os << "],\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()){
+      in_link->orig()->dumpIdentifier(os);
+      if (idx_link < num_input - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()){
+      out_link->dest()->dumpIdentifier(os);
+      if (idx_link < num_output - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "]";
+    os << "}\n";
   }
 
   virtual std::string name() const {
@@ -707,6 +827,51 @@ class ssvport : public ssnode {
     return ss.str();
   }
 
+  void dumpIdentifier(ostream& os) override {
+    os<< "[" + std::to_string(_ID) +",\"vector port\""+ "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "<<"\"vector port\""<<",\n";
+    // data width
+    os << "\"data_width\" : " << data_width << ",\n";
+    // granularity
+    os << "\"granularity\" : " <<granularity<< ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()){
+      in_link->orig()->dumpIdentifier(os);
+      if (idx_link < num_input - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()){
+      out_link->dest()->dumpIdentifier(os);
+      if (idx_link < num_output - 1){
+        idx_link ++ ;os << ", ";
+      }
+    }os << "]";
+    os << "}\n";
+  }
+
+
   virtual std::string gams_name(int i) const { return name(); }
 
   int output_bitwidth() {
@@ -773,13 +938,73 @@ class SubModel {
   SubModel(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2,
            bool multi_config = true);
 
-  void PrintGraphviz(std::ostream& ofs);
+  void PrintGraphviz(std::ostream& os);
+
+  void DumpHwInJSON(const char* name) {
+  ofstream os(name);
+  assert(os.good());
+
+  os << "{\n"; // Start of the JSON file
+  // Instruction Set
+  int start_enc = 3;
+  std::set<ss_inst_t> ss_inst_set;
+  os << "\"Instruction Set\" : {\n";
+  for (ssnode * node : node_list()){
+    ssfu * fu_node = dynamic_cast<ssfu *>(node);
+    if (fu_node != nullptr){
+      std::set<ss_inst_t> curr_inst_set = fu_node -> fu_def() ->cap();
+      for (ss_inst_t each_inst : curr_inst_set){
+        if(ss_inst_set.count(each_inst) == 0){
+          ss_inst_set.insert(each_inst);
+        }
+      }
+    }
+  }
+  int num_total_inst = ss_inst_set.size();
+  int idx_inst = 0;
+  for (ss_inst_t inst : ss_inst_set){
+    os << "\"" << SS_CONFIG::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
+    if(idx_inst < num_total_inst){
+      os << ",";
+    }os<<"\n";
+  }
+  os << "},\n";
+  
+  // Links
+  os << "\"links\" : [\n"; // The Start of Links
+  int idx_link = 0; int size_links = link_list().size();
+  for (auto link : link_list()){
+    os << "{\n";
+    os << "\"source\":";
+    link->orig()->dumpIdentifier(os);os << ",\n";
+    os << "\"sink\":";
+    link->dest()->dumpIdentifier(os);
+    os << "}";
+    if(idx_link < size_links - 1){
+      idx_link ++;os << ",\n"; // Seperate the links
+    }
+  }
+  os << "],\n"; // The End of Links
+
+  // Nodes
+  os << "\"nodes\" : [\n"; // The Start of Nodes
+  int idx_node = 0; int size_nodes = node_list().size();
+  for (auto node : node_list()){
+    node -> dumpFeatures(os);
+    if (idx_node < size_nodes - 1){
+      idx_node++;os << ",\n";
+    }
+  }
+  os << "]\n"; // The End of Nodes
+
+  os << "}\n"; // End of the JSON file
+  }
 
   template <int is_input, typename T>
   void PrintGamsIO(std::ostream& os);
 
   void PrintGamsModel(
-      std::ostream& ofs, std::unordered_map<std::string, std::pair<ssnode*, int>>&,
+      std::ostream& os, std::unordered_map<std::string, std::pair<ssnode*, int>>&,
       std::unordered_map<std::string, std::pair<sslink*, int>>&,
       std::unordered_map<std::string, std::pair<ssswitch*, int>>&,
       std::unordered_map<std::string, std::pair<bool, int>>&, /*isInput, port*/
@@ -877,6 +1102,8 @@ class SubModel {
   double get_overall_area() {
     return get_sw_total_area() + get_fu_total_area() + get_vport_area();
   }
+
+
 
   std::vector<ssswitch*>& switch_list() { return _switch_list; }
 
