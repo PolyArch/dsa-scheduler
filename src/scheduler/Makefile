@@ -17,7 +17,7 @@ GAMS_DIR=gams_models
 GAMS_FILES=$(wildcard gams_models/*.gms)
 GAMS_INC=$(GAMS_FILES:.gms=.h)
 
-INCLUDE_CONFIG=$(level)/src/config/
+INCLUDE_CONFIG=$(level)/src/
 LIB_DEST=${build}/lib
 OBJ_DEST=${build}/obj
 
@@ -52,7 +52,7 @@ $(GAMS_DIR)/%.h: $(GAMS_DIR)/%.gms
 include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SOURCES))))
 
 #-------- stuff to do with dfg-parser/lexer -----------
-dfg-parser.tab.o: dfg-parser.tab.c ssdfg.h
+dfg-parser.tab.o: dfg-parser.tab.c ssdfg.h metadata.h
 	$(CXX) $(filter-out -Wall, $(CXXFLAGS)) -g -c -o $@ $<
 	@$(POSTCOMPILE)
 

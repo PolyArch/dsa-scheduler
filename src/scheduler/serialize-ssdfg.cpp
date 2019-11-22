@@ -93,6 +93,8 @@ void SSDfgVecOutput::serialize(Archive& ar, const unsigned version) {
 template <class Archive>
 void GroupProp::serialize(Archive& ar, const unsigned version) {
   ar& BOOST_SERIALIZATION_NVP(is_temporal);
+  ar& BOOST_SERIALIZATION_NVP(frequency);
+  ar& BOOST_SERIALIZATION_NVP(unroll);
 }
 
 template <class Archive>

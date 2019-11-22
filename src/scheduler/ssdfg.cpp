@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include "dfg-parser.tab.h"
-#include "model_parsing.h"
+#include "ss-config/model_parsing.h"
 #include "schedule.h"
 
 using namespace std;
@@ -570,7 +570,7 @@ void SSDfg::printGraphviz(const char* fname, Schedule* sched) {
 }
 
 void SSDfg::check_for_errors() {
-  printGraphviz("viz/error_check_dfg.dot");
+  //printGraphviz("viz/error_check_dfg.dot");
 
   bool error = false;
   for (auto elem : _vecInputs) {
@@ -705,7 +705,7 @@ ParseResult* SSDfg::create_inst(std::string opcode, std::vector<ParseResult*>& a
   return res;
 }
 
-void SSDfg::set_pragma(std::string& c, std::string& s) {
+void SSDfg::set_pragma(const std::string &c, const std::string &s) {
   if (c == string("dfg")) {
     cout << "No pragmas yet for dfg\n";
   } else if (c == string("group")) {
@@ -713,6 +713,10 @@ void SSDfg::set_pragma(std::string& c, std::string& s) {
       assert(!_groupProps.empty());
       _groupProps[_groupProps.size() - 1].is_temporal = true;
     }
+  } else if (c == "frequency" || c == "unroll") {
+    std::istringstream iss(s);
+    auto &ref = c == "frequency" ? _groupProps.back().frequency : _groupProps.back().unroll;
+    iss >> ref;
   } else {
     cout << "Context \"" << c << "\" not recognized.";
   }
@@ -724,10 +728,10 @@ void SSDfg::start_new_dfg_group() {
   _groupProps.emplace_back(GroupProp());
 }
 
-SSDfg::SSDfg(string filename) : SSDfg() {
+SSDfg::SSDfg(string filename_) : filename(filename_) {
   string line;
   start_new_dfg_group();
-  parse_dfg(filename.c_str(), this);
+  parse_dfg(filename_.c_str(), this);
   preprocess_graph();
   calc_minLats();
   check_for_errors();
@@ -1003,8 +1007,8 @@ int SSDfgInst::compute_backcgra(bool print, bool verif) {
 int SSDfgInst::update_next_nodes(bool print, bool verif) { return 0; }
 
 SSDfgVec::SSDfgVec(V_TYPE v, int num_values, int bitwidth, const std::string& name,
-                   int id, SSDfg* ssdfg)
-    : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth) {
+                   int id, SSDfg* ssdfg, const ssdfg::MetaPort &meta_)
+    : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), meta(meta_, this) {
   _values.push_back(new SSDfgValue(this, 0, bitwidth));
   for (int i = 1; i < num_values; ++i) {
     _values.push_back(new SSDfgValue(this, i, bitwidth));
@@ -1373,12 +1377,14 @@ void SSDfg::printGams(std::ostream& os, std::unordered_map<string, SSDfgNode*>& 
   os << "/;\n";
 }
 
-void SSDfg::addVecOutput(const std::string& name, int len, EntryTable& syms, int width) {
-  add_parsed_vec<SSDfgVecOutput>(name, len, syms, width);
+void SSDfg::addVecOutput(const std::string& name, int len, EntryTable& syms, int width,
+                         const ssdfg::MetaPort &meta) {
+  add_parsed_vec<SSDfgVecOutput>(name, len, syms, width, meta);
 }
 
-void SSDfg::addVecInput(const std::string& name, int len, EntryTable& syms, int width) {
-  add_parsed_vec<SSDfgVecInput>(name, len, syms, width);
+void SSDfg::addVecInput(const std::string& name, int len, EntryTable& syms, int width,
+                        const ssdfg::MetaPort &meta) {
+  add_parsed_vec<SSDfgVecInput>(name, len, syms, width, meta);
 }
 
 double SSDfg::count_starving_nodes() {
@@ -1765,9 +1771,40 @@ void SSDfgVecInput::forward() {
   }
 }
 
-int SSDfg::forward() {
+int SSDfg::forward(bool asap) {
+  std::vector<int> to_forward;
+  if (!asap) {
+    for (size_t i = 0; i < num_groups(); ++i) {
+      auto group_ready = [] (std::vector<SSDfgVecInput *> &ins) {
+        for (auto &elem : ins) {
+          for (auto &value : elem->values()) {
+            if (!value->forward(true)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      };
+      if (group_ready(vec_in_group(i))) {
+        to_forward.push_back(i);
+      }
+    }
+  }
   for (auto elem : nodes<SSDfgNode*>()) {
-    elem->forward();
+    auto in_ready_group = [to_forward] (int x) {
+      for (auto elem : to_forward) {
+        if (elem == x) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (asap || in_ready_group(elem->group_id())) {
+      //std::cout << elem->name() << " forward" << std::endl;
+      elem->forward();
+    } else {
+      std::cout << "cannot forward " << elem->name() << std::endl;
+    }
   }
   ++_cur_cycle;
   int res = _total_dyn_insts;
@@ -1810,4 +1847,97 @@ uint64_t SSDfgOperand::poll() {
     res = res << edges[i]->bitwidth() | sliced;
   }
   return res;
+}
+
+double SSDfg::esitimated_performance(Schedule *sched) {
+  std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
+  for (auto &elem : nodes<SSDfgVecInput*>()) {
+    if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read) {
+      bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] += 
+        elem->get_vp_len() * elem->get_port_width() / 8;
+    }
+  }
+
+  std::vector<int> inst_cnt(num_groups(), 0);
+  for (auto &elem : nodes<SSDfgInst*>()) {
+    ++inst_cnt[elem->group_id()];
+  }
+
+  std::vector<double> bw_coef(num_groups(), 1.0);
+  for (int i = 0; i < num_groups(); ++i) {
+    for (int j = 0; j < 2; ++j) {
+      if (bw[i][j] > 64) {
+        bw_coef[i] = std::min(bw_coef[i], 64. / bw[i][j]);
+      }
+    }
+  }
+
+  std::vector<double> nmlz_freq;
+  for (int i = 0; i < num_groups(); ++i) {
+    nmlz_freq.push_back(group_prop(i).frequency);
+  }
+  double nmlz = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
+  for (int i = 0; i < num_groups(); ++i) {
+    nmlz_freq[i] /= nmlz;
+  }
+
+  std::vector<double> rec_lat(num_groups(), 0.0);
+  std::vector<double> rec_bubble(num_groups(), 0.0);
+  for (auto &elem : nodes<SSDfgVecOutput*>()) {
+    if (elem->meta.dest == ssdfg::MetaPort::Data::LocalPort) {
+      double lat = sched->latOf(elem);
+      double hide = elem->meta.conc / group_prop(elem->group_id()).unroll;
+      if (lat > hide) {
+        rec_lat[elem->group_id()] = lat;
+        rec_bubble[elem->group_id()] = lat - hide;
+      }
+    }
+  }
+
+  double overall = 0.0;
+
+  for (int i = 0; i < num_groups(); ++i) {
+    double v = std::min(bw_coef[i], rec_bubble[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
+    std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
+              << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
+              << ", SPad: " << bw[i][1] << ", Rec: " << rec_bubble[i] << "/" << rec_lat[i]
+              << ", Overall: " << v << std::endl;
+    overall += v;
+  }
+  return overall;
+}
+
+namespace ssdfg {
+
+const char *MetaPort::DataText[] = {
+  "memory",
+  "spad",
+  "localport",
+  "remoteport",
+};
+
+const char *MetaPort::OperationText[] = {
+  "read",
+  "write",
+  "indread",
+  "indwrite",
+  "atomic",
+};
+
+CompileMeta::CompileMeta(const MetaPort &meta, SSDfgVec *parent) : MetaPort(meta), parent(parent) {
+  assert(parent);
+  if (dest == Data::LocalPort && !dest_port.empty()) {
+    bool found = false;
+    for (auto iv : parent->ssdfg()->nodes<SSDfgVecInput*>()) {
+      if (iv->name() == dest_port) {
+        destination = iv;
+        found = true;
+      }
+    }
+    assert(found && "No destination found!");
+  } else {
+    destination = nullptr;
+  }
+}
+
 }

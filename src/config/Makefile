@@ -32,7 +32,7 @@ ssinst.h: inst_model.cpp inst_model.h model_parsing.cpp $(INST_HEADERS) $(INST_M
 	$(CXX) $(CXXFLAGS) -MD inst_model.cpp model_parsing.cpp -o inst_model
 	@$(POSTCOMPILE)
 	./inst_model $(INST_MODEL_FILE) ssinst.h ssinst.cpp
-    
+
 $(OBJ_DEST)/%.o: %.cpp %.h ssinst.h $(DEPDIR)/%.d
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<
 	@$(POSTCOMPILE)

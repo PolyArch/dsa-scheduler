@@ -9,18 +9,16 @@ CXX = g++
 CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
 LIB_PATH=../build/lib 
-INC_SSMODEL_PATH=$(SS_TOOLS)/include/ss-config
-INC_SSSCHED_PATH=$(SS_TOOLS)/include/ss-scheduler
+INC_PATH=$(SS_TOOLS)/include/
 
-CXXFLAGS += -I$(INC_SSMODEL_PATH) -I$(INC_SSSCHED_PATH) -Wl,-rpath,$(LIB_PATH) 
+CXXFLAGS += -I$(INC_PATH) -Wl,-rpath,$(LIB_PATH) 
 
-LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig -lyaml-cpp $(LIBS)
+LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig $(LIBS)
 
 all: ss_sched 
 
-ss_sched : ss_sched.cpp $(INC_SSMODEL_PATH)/*.h $(INC_SSSCHED_PATH)/*.h
+ss_sched : ss_sched.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< -L$(LIB_PATH) $(LOCAL_LIBS)  -Wl,-rpath,${SS_TOOLS}/lib
-
 
 clean:
 	rm -rf *.o ss_sched *.d

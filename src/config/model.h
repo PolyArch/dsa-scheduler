@@ -41,6 +41,7 @@ class SSModel {
      _dispatch_width = m._dispatch_width;
      _maxEdgeDelay = m._maxEdgeDelay;
   }
+  const std::string filename;
 
  private:
   // InstModel *instModel;
@@ -52,7 +53,6 @@ class SSModel {
   int _maxEdgeDelay = 15;
 
   void parse_exec(std::istream& istream);
-  void parse_yaml(const std::string& fn);
   void parse_json(std::istream& istream);
 };
 

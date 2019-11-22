@@ -20,7 +20,7 @@ scheduler-program: src/config/ssinst.h
 config-program: src/config/ssinst.h
 	+make -C src/config
 
-make_drivers:  program install_headers
+make_drivers: program install_headers
 	+make -C drivers
 
 install: directories install_headers install_config install_scheduler install_drivers

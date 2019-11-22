@@ -6,19 +6,18 @@
 #include <iostream>
 #include <map>
 #include <unordered_set>
-#include "model.h"
-#include "ssdfg.h"
-#include "sub_model.h"
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/functional/hash.hpp>
 
+#include "ss-config/model.h"
+#include "ss-config/sub_model.h"
+
+#include "ssdfg.h"
 #include "bitslice.h"
 #include "color_mapper.h"
 #include "config_defs.h"
 #include "limits.h"
-
-// Experimental Boost Stuffs
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/functional/hash.hpp>
 
 using namespace SS_CONFIG;
 
@@ -199,10 +198,16 @@ class Schedule {
 
   int vecPortOf(SSDfgVec* vec) {
     ssnode* n = locationOf(vec);
-    if (n)
-      return dynamic_cast<ssvport*>(n)->port();
-    else
+    if (n) {
+      auto vport = dynamic_cast<ssvport*>(n);
+      if (!vport) {
+        std::cerr << vec->name() << " " << n->name() << std::endl;
+        assert(false);
+      }
+      return vport->port();
+    } else {
       return -1;
+    }
   }
 
   // sslink* getNextLink(SSDfgEdge* dfgedge, sslink* link);

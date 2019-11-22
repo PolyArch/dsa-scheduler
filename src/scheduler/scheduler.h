@@ -1,12 +1,7 @@
 #ifndef __SS_SCHEDULER_H__
 #define __SS_SCHEDULER_H__
 
-#include "model.h"
-#include "schedule.h"
-#include "ssdfg.h"
-
 #include <stdlib.h>
-#include <boost/functional.hpp>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -17,6 +12,12 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
+
+#include <boost/functional.hpp>
+
+#include "ss-config/model.h"
+#include "schedule.h"
+#include "ssdfg.h"
 
 #define MAX_ROUTE 100000000
 
@@ -242,7 +243,7 @@ class CodesignInstance {
         ssnode* dst = sub->node_list()[dst_node_index];
         if(src->is_output() || dst->is_input() || src == dst) continue;
 
-        sslink* link = sub->add_link(src,dst);
+        //sslink* link = sub->add_link(src,dst);
         //std::cout << "adding link: " << link->name() << "\n"; 
       } else if(item_class < 80) {
         // Add a random switch
@@ -441,7 +442,7 @@ class CodesignInstance {
     std::pair<int, int> total_score = std::make_pair(0,0);
 
     for(auto& ws : workload_array) {
-      SchedStats s;
+
       std::pair<int, int> score = std::make_pair(INT_MIN,INT_MIN);
       for(Schedule& sched : ws.sched_array) {
         std::pair<int,int> new_score = dse_sched_obj(&sched);
@@ -557,6 +558,8 @@ class Scheduler {
   void stop() { _should_stop = true; }
 
   void set_srand(int i) { _srand = i; }
+
+  Schedule *invoke(SSModel *model, SSDfg *dfg, bool);
 
  protected:
   SS_CONFIG::SSModel* getSSModel() { return _ssModel; }

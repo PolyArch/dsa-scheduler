@@ -12,7 +12,6 @@ using namespace std;
 #include <string.h>
 #include <unistd.h>
 #include <algorithm>
-#include "model_parsing.h"
 
 #include "gams_models/hw_model.h"
 #include "gams_models/multi_model.h"
@@ -24,6 +23,7 @@ using namespace std;
 #include "gams_models/timing_model.h"
 
 #include "scheduler_sa.h"
+#include "ss-config/model_parsing.h"
 
 void GamsScheduler::print_mipstart(ofstream& ofs, Schedule* sched, SSDfg* ssDFG,
                                    bool fix) {

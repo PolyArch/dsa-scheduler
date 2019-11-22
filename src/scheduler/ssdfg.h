@@ -1,7 +1,6 @@
+
 #ifndef __SSDFG_H__
 #define __SSDFG_H__
-
-#include "ssinst.h"
 
 #include <assert.h>
 #include <math.h>
@@ -16,10 +15,14 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include "model.h"
 
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/archive/text_oarchive.hpp>
+
+#include "ss-scheduler/metadata.h"
+#include "ss-config/model.h"
+#include "ss-config/ssinst.h"
+
 
 using SS_CONFIG::SubModel;
 
@@ -39,6 +42,19 @@ struct Data {
   bool valid;
   Data(int64_t aa, uint64_t value, bool valid) : available_at(aa), value(value), valid(valid) {}
 };
+
+}
+
+class SSDfgVec;
+
+namespace ssdfg {
+
+struct CompileMeta : MetaPort {
+  SSDfgVec *parent, *destination;
+  CompileMeta(const MetaPort &, SSDfgVec *);
+  CompileMeta() {};
+};
+
 }
 
 // Datastructure describing a value created by an input vector or an instruction
@@ -665,10 +681,13 @@ class SSDfgInst : public SSDfgNode {
 // vector class
 class SSDfgVec : public SSDfgNode {
  public:
+
+  friend class SSDfg;
+
   SSDfgVec() {}
 
-  SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, int id,
-           SSDfg* ssdfg);
+  SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, int id, SSDfg* ssdfg,
+           const ssdfg::MetaPort &meta);
 
   void set_port_width(int n) { _port_width = n; }
 
@@ -700,6 +719,7 @@ class SSDfgVec : public SSDfgNode {
   int _bitwidth;  // element bitwidth
   int _port_width;
   int _vp_len;
+  ssdfg::CompileMeta meta;
 };
 
 class SSDfgVecInput : public SSDfgVec {
@@ -712,8 +732,9 @@ class SSDfgVecInput : public SSDfgVec {
 
   SSDfgVecInput() {}
 
-  SSDfgVecInput(V_TYPE v, int len, int width, const std::string& name, int id, SSDfg* ssdfg)
-      : SSDfgVec(v, len, width, name, id, ssdfg) {}
+  SSDfgVecInput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
+                const ssdfg::MetaPort &meta)
+      : SSDfgVec(V_INPUT, len, width, name, id, ssdfg, meta) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule*,
                                                              SS_CONFIG::SSModel*,
@@ -738,9 +759,9 @@ class SSDfgVecOutput : public SSDfgVec {
 
   SSDfgVecOutput() {}
 
-  SSDfgVecOutput(V_TYPE v, int len, int width, const std::string& name, int id,
-                 SSDfg* ssdfg)
-      : SSDfgVec(v, len, width, name, id, ssdfg) {}
+  SSDfgVecOutput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
+                 const ssdfg::MetaPort &meta)
+      : SSDfgVec(V_OUTPUT, len, width, name, id, ssdfg, meta) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule*,
                                                              SS_CONFIG::SSModel*,
@@ -799,7 +820,9 @@ class EntryTable {
 };
 
 struct GroupProp {
-  bool is_temporal = false;
+  bool is_temporal{false};
+  int64_t frequency{-1};
+  int64_t unroll{1};
 
  private:
   friend class boost::serialization::access;
@@ -810,6 +833,8 @@ struct GroupProp {
 
 class SSDfg {
  public:
+  const std::string filename;
+
   SSDfg();
 
   SSDfg(std::string filename);
@@ -829,7 +854,7 @@ class SSDfg {
 
   void start_new_dfg_group();
 
-  void set_pragma(std::string& c, std::string& s);
+  void set_pragma(const std::string& c, const std::string& s);
 
   void printGams(std::ostream& os, std::unordered_map<std::string, SSDfgNode*>&,
                  std::unordered_map<std::string, SSDfgEdge*>&,
@@ -850,12 +875,14 @@ class SSDfg {
   inline void insert_vec(T*);
 
   template <typename T>
-  inline void add_parsed_vec(const std::string& name, int len, EntryTable& syms,
-                             int width);
+  inline void add_parsed_vec(const std::string& name, int len, EntryTable& syms, int width,
+                             const ssdfg::MetaPort &meta);
 
-  void addVecOutput(const std::string& name, int len, EntryTable& syms, int width);
+  void addVecOutput(const std::string& name, int len, EntryTable& syms, int width,
+                    const ssdfg::MetaPort &meta);
 
-  void addVecInput(const std::string& name, int len, EntryTable& syms, int width);
+  void addVecInput(const std::string& name, int len, EntryTable& syms, int width,
+                   const ssdfg::MetaPort &meta);
 
   SSDfgEdge* connect(SSDfgValue* orig, SSDfgNode* dest, int slot,
                      SSDfgEdge::EdgeType etype, int l = 0, int r = 63,
@@ -950,7 +977,9 @@ class SSDfg {
 
   int cycle(bool print, bool verif);
 
-  int forward();
+  int forward(bool);
+
+  double esitimated_performance(Schedule *);
 
   // ---------------------------------------------------------------------------
 
@@ -1093,14 +1122,12 @@ inline void SSDfg::insert_vec(T* node) {
 
 template <typename T>
 inline void SSDfg::add_parsed_vec(const std::string& name, int len, EntryTable& syms,
-                                  int width) {
+                                  int width, const ssdfg::MetaPort &meta) {
   int n = std::max(1, len);
   int slice = 64 / width;
   // int t = ceil(n / float(slice)); -- FIXME: do we need this?
   // I think it's somewhat likely i am breaking decomposability
-  auto v = std::is_same<T, SSDfgVecInput>::value ? SSDfgVec::V_TYPE::V_INPUT
-                                                 : SSDfgVec::V_TYPE::V_OUTPUT;
-  T* vec = new T(v, len, width, name, (int)nodes<T*>().size(), this);
+  T* vec = new T(len, width, name, (int)nodes<T*>().size(), this, meta);
   add(vec);
   vec->set_port_width(width);
   vec->set_vp_len(n);
@@ -1133,6 +1160,12 @@ inline void SSDfg::add_parsed_vec(const std::string& name, int len, EntryTable& 
       }
     }
   }
+  //{
+  //  std::ostringstream oss;
+  //  meta.to_pragma(oss);
+  //  std::cout << "Parse pragmas:\n";
+  //  std::cout << oss.str() << std::endl;
+  //}
 }
 
 template <int is_io, typename VecType>

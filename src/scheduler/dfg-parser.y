@@ -22,6 +22,7 @@ void yyrestart(FILE *);
 struct parse_param {
   EntryTable symbols;
   SSDfg* dfg;
+  ssdfg::MetaPort meta;
 };
 
 int yylex();     
@@ -77,11 +78,13 @@ statement
           printf("Symbol \"%s\" already exists\n", $3->first.c_str());
           assert(0);
         }
-        p->dfg->addVecInput($3->first, $3->second, p->symbols, $1);
+        p->dfg->addVecInput($3->first, $3->second, p->symbols, $1, p->meta);
+        p->meta.clear();
         delete $3;
       }
     | OUTPUT ':' io_def eol {
-        p->dfg->addVecOutput($3->first.c_str(), $3->second, p->symbols, $1);
+        p->dfg->addVecOutput($3->first.c_str(), $3->second, p->symbols, $1, p->meta);
+        p->meta.clear();
         delete $3;
       }
     | value_list '=' rhs eol {
@@ -118,7 +121,30 @@ statement
         p->dfg->start_new_dfg_group();
       }
     | PRAGMA IDENT IDENT eol {
-        p->dfg->set_pragma(*$2,*$3); delete $2; delete $3;
+        p->dfg->set_pragma(*$2,*$3);
+        delete $2;
+        delete $3;
+      }
+    | PRAGMA IDENT IDENT I_CONST eol {
+        assert(*$2 == "group");
+        std::ostringstream oss;
+        oss << $4;
+        p->dfg->set_pragma(*$3, oss.str());
+        delete($2);
+        delete($3);
+      }
+    | PRAGMA IDENT '=' IDENT eol {
+        p->meta.set(*$2, *$4);
+      }
+    | PRAGMA IDENT '=' I_CONST eol {
+        std::ostringstream oss;
+        oss << $4;
+        p->meta.set(*$2, oss.str());
+      }
+    | PRAGMA IDENT '=' F_CONST eol {
+        std::ostringstream oss;
+        oss << $4;
+        p->meta.set(*$2, oss.str());
       }
     | eol
     ;

@@ -133,7 +133,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   }
 
   ofs << "\n"
-         "};\n\n"
+         "}\n\n"
          "#endif\n";
 
   ofs.close();

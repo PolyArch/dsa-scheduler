@@ -184,9 +184,9 @@ int SchedulerSimulatedAnnealing::try_candidates(
     best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
   } else {
-    std::cout << "Fail to schedule " << node->name() << std::endl;
+    std::cerr << "Fail to schedule " << node->name() << std::endl;
     for (int i = 0, n_ = candidates.size(); i < n_; ++i) {
-      std::cout << "Cand " << candidates[i].first << ", " << candidates[i].second->name()
+      std::cerr << "Cand " << candidates[i].first << ", " << candidates[i].second->name()
                 << std::endl;
     }
   }

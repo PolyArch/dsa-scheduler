@@ -1,8 +1,8 @@
 #ifndef __SS_SUB_MODEL_H__
 #define __SS_SUB_MODEL_H__
 
-#include <yaml-cpp/yaml.h>
 #include <algorithm>
+#include <climits>
 #include <boost/any.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <map>
@@ -27,6 +27,14 @@ const int MAX_SUBNETS = 8;
 
 class ssnode;
 class ssvport;
+
+template<typename T>
+T get_prop_attr(const boost::property_tree::ptree &prop, const std::string &name, T dft) {
+  if (auto entry = prop.get_child_optional(name)) {
+    return entry->get_value<T>();
+  }
+  return dft;
+}
 
 // TODO: Should we delete this class?
 class ssio_interface {
@@ -535,11 +543,7 @@ class ssswitch : public ssnode {
   void set_prop(boost::property_tree::ptree prop) {     
     set_ssnode_prop(prop); 
     // max output fifo depth
-    try{
-      max_fifo_depth = prop.get_child("max_fifo_depth").get_value<int>();
-    }catch(...){
-      max_fifo_depth = 2;
-    }
+    max_fifo_depth = get_prop_attr(prop, "max_fifo_depth", 4);
   }
 
   void collect_features() {
@@ -614,25 +618,14 @@ class ssfu : public ssnode {
     std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
 
     // delay_fifo_depth
-    try{
-      delay_fifo_depth = prop.get_child("delay_fifo_depth").get_value<int>();
-    }catch(...){
-      delay_fifo_depth = 4; // The default depth for delay fifo
-    }
+    delay_fifo_depth = get_prop_attr(prop, "delay_fifo_depth", 4);
 
     // output_select_mode
-    try{
-      output_select_mode = prop.get_child("output_select_mode").get_value<std::string>();
-    }catch(...){
-      output_select_mode = "Universal";
-    }
+    output_select_mode = get_prop_attr<std::string>(prop, "output_select_mode", "Universal");
 
     // register_file_size
-    try{
-      register_file_size = prop.get_child("register_file_size").get_value<int>();
-    }catch(...){
-      register_file_size = 8;
-    }
+    register_file_size = get_prop_attr(prop, "register_file_size", 8);
+
   }
 
   void dumpIdentifier(ostream &os) override {
@@ -800,19 +793,6 @@ class ssvport : public ssnode {
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
-  void set_prop(YAML::Node prop) {
-    YAML::Node default_set = prop["<<"];
-    if (default_set["channel_buffer"] || prop["channel_buffer"]) try {
-        channel_buffer = prop["channel_buffer"].as<int>();
-      } catch (...) {
-        channel_buffer = default_set["channel_buffer"].as<int>();
-      }
-    if (default_set["io_type"] || prop["io_type"]) try {
-        io_type = prop["io_type"].as<std::string>();
-      } catch (...) {
-        io_type = default_set["io_type"].as<std::string>();
-      }
-  }
   virtual std::string name() const {
     std::stringstream ss;
     if (_out_links.size() > 0)

@@ -1,7 +1,6 @@
 #include "model.h"
 #include <assert.h>
 #include <math.h>
-#include <yaml-cpp/yaml.h>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <cstdlib>
@@ -115,7 +114,7 @@ ssnode* if_isVector(ssnode* n, std::string portname) {
 }
 
 // File constructor
-SSModel::SSModel(const char* filename, bool multi_config) {
+SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
   bool failed_read = ifs.fail();
@@ -127,16 +126,8 @@ SSModel::SSModel(const char* filename, bool multi_config) {
   // Parse the JSON-format IR
   string fn = string(filename);
   bool isJSON = ends_with(fn, string(".json"));
-  bool isYAML = ends_with(fn, string(".yaml"));
   if (isJSON) {
     parse_json(ifs);
-    return;
-  }
-
-  // Parse the YAML-format IR
-  if (isYAML) {
-    std::cout << "Start the YAML Parser\n";
-    parse_yaml(fn);
     return;
   }
 
@@ -172,15 +163,6 @@ SSModel::SSModel(const char* filename, bool multi_config) {
     }
   }
   _subModel->post_process();
-}
-
-// TODO YAML Parser (broken for now - Sihao will fix it later)
-void SSModel::parse_yaml(const std::string& fn) {
-  // TODO: fix when yaml-cpp library is able to parse Seq[Seq[bool]]
-
-  assert(0 && "Yaml Parser is currently not working due to UNDEFINED Node Type");
-
-  return;
 }
 
 // JSON Format is flat format with all objects defined

@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "scheduler_sa.h"
 
 using namespace SS_CONFIG;
 using namespace std;
@@ -11,6 +12,7 @@ using namespace std;
 #include <string.h>
 #include <unistd.h>
 #include <list>
+#include <signal.h>
 
 //Utility functions
 int rand_bt(int s, int e) { 
@@ -207,4 +209,151 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   // TODO: add code from printPortcompatibility here
 
   return true;
+}
+
+std::string basename(const std::string& filename) {
+  size_t lastindex = filename.find_last_of(".");
+  string res = filename.substr(0, lastindex);
+
+  lastindex = filename.find_last_of("\\/");
+  if (lastindex != string::npos) {
+    res = res.substr(lastindex + 1);
+  }
+  return res;
+}
+
+std::string basedir(const std::string& filename) {
+  size_t lastindex = filename.find_last_of("\\/");
+  if (lastindex == string::npos) {
+    return std::string("./");
+  }
+  return filename.substr(0, lastindex);
+}
+
+
+Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
+  bool succeed_sched = false;
+  Schedule *sched = nullptr;
+
+  string dfg_base = basename(dfg->filename);  // the name without preceeding dirs or file extension
+  string pdg_dir = basedir(dfg->filename);  // preceeding directories only
+  if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
+    pdg_dir += "/";
+  }
+  string viz_dir = pdg_dir + "viz/";
+  string iter_dir = pdg_dir + "viz/iter/";
+  string verif_dir = pdg_dir + "verif/";
+  string sched_dir = pdg_dir + "sched/";  // Directory for cheating on the scheduler
+
+  checked_system(("mkdir -p " + viz_dir).c_str());
+  checked_system(("mkdir -p " + iter_dir).c_str());
+  checked_system(("mkdir -p " + verif_dir).c_str());
+  checked_system(("mkdir -p " + sched_dir).c_str());
+  checked_system("mkdir -p gams/");  // gams will remain at top level
+
+  std::string model_filename = model->filename;
+  int lastindex = model_filename.find_last_of(".");
+  string model_rawname = model_filename.substr(0, lastindex);
+  string model_base =
+        model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
+
+  if (check_feasible(dfg, model, verbose)) {
+
+    auto sigint_handler = [] (int) {
+      exit(1);
+    };
+
+    // Setup signal so we can stop if we need to
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = sigint_handler;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL);
+
+    // Debug
+    // string hw_config_filename = model_rawname + ".xml";
+    // sched -> printConfigBits_Hw(hw_config_filename);
+
+    succeed_sched = schedule_timed(dfg, sched);
+
+    int lat = 0, latmis = 0;
+    if (succeed_sched) {
+      sched->cheapCalcLatency(lat, latmis);
+      sched->set_decode_lat_mis(latmis);
+
+      // ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
+      // sched->printConfigText(ctxs); // text form of config fed to gui
+    }
+
+    if (verbose) {
+      sched->cheapCalcLatency(lat, latmis);
+      int ovr = 0, agg_ovr = 0, max_util = 0;
+      sched->get_overprov(ovr, agg_ovr, max_util);
+      int violation = sched->violation();
+
+      // sched->checkOutputMatch(latmis);
+      if (succeed_sched) {
+        // Also check final latency
+
+        cout << "latency: " << lat << "\n";
+        cout << "lat-mismatch-max: " << latmis << "\n";
+        cout << "lat-mismatch-sum: " << violation << "\n";
+        cout << "overprov-max: " << ovr << "\n";
+        cout << "overprov-sum: " << agg_ovr << "\n";
+      } else {
+        cout << "latency: " << -1 << "\n";
+        cout << "latency mismatch: " << -1 << "\n";
+        cout << "Scheduling Failed!\n";
+      }
+      sched->stat_printOutputLatency();
+      dfg->printGraphviz("viz/final.dot", sched);
+    }
+
+    ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
+    assert(ofs.good());
+    dfg->printGraphviz(ofs);
+    ofs.close();
+
+    std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
+    sched->printGraphviz(sched_viz.c_str());
+
+    std::string verif_header = verif_dir + dfg_base + ".configbits";
+    std::ofstream vsh(verif_header);
+    assert(vsh.good());
+    sched->printConfigVerif(vsh);
+  }
+
+  lastindex = dfg->filename.find_last_of(".");
+  string pdg_rawname = dfg->filename.substr(0, lastindex);
+
+  if (!succeed_sched || sched == nullptr) {
+    cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
+    // This is just a fake schedule!
+    // sched = new Schedule(&ssmodel,&sspdg);
+    SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(model);
+    s->set_fake_it();
+
+    s->initialize(dfg, sched);
+    succeed_sched = s->schedule_internal(dfg, sched);
+  }
+
+  // TODO: Print Hardware Config Information @ Sihao
+  // string hw_config_filename = model_rawname + ".xml";
+  // sched -> printConfigBits_Hw(hw_config_filename);
+
+  sched->set_name(pdg_rawname);
+  std::string config_header = pdg_rawname + ".dfg.h";
+  std::ofstream osh(config_header);
+  assert(osh.good());
+  sched->printConfigHeader(osh, dfg_base);
+  std::cout << "Performance: " << dfg->esitimated_performance(sched) << std::endl;
+
+  if (print_bits) {
+    std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
+    std::ofstream oshb(config_header_bits);
+    assert(oshb.good());
+    sched->printConfigHeader(oshb, dfg_base, true);
+  }
+
+  return sched;  // just to calm HEAPCHECK
 }
