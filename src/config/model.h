@@ -31,8 +31,7 @@ class SSModel {
   void set_dispatch_width(int w) { _dispatch_width = w; }
   int dispatch_width() { return _dispatch_width; }
 
-  void setMaxEdgeDelay(int d) { _maxEdgeDelay = d; }
-  int maxEdgeDelay() { return _maxEdgeDelay; }
+  void setMaxEdgeDelay(int d);
 
   SSModel(const SSModel& m) {
      _fuModel = m._fuModel;
@@ -42,6 +41,11 @@ class SSModel {
      _maxEdgeDelay = m._maxEdgeDelay;
   }
   const std::string filename;
+
+  ~SSModel() {
+    //Don't delete _fuModel, just let it leak
+    delete _subModel;
+  }
 
  private:
   // InstModel *instModel;

@@ -98,7 +98,9 @@ class sslink {
 
   int set_max_util(int m) { return _max_util = m; }
 
-  bool flow_control() { return _flow_control; }
+  // Right I ignore this because area model doesn't use it anyways
+  void set_flow_control(bool v) { _flow_control=v; assert(0); }
+  bool flow_control();
 
   int bitwidth() { return _bitwidth; }
 
@@ -177,7 +179,7 @@ class ssnode {
     //delete this element of the subnet table -- bye bye!
     _subnet_table.erase(_subnet_table.begin()+link->out_index());
 
-    for(int i = link->out_index()+1; i < _out_links.size(); ++i) {
+    for(unsigned i = link->out_index()+1; i < _out_links.size(); ++i) {
       _out_links[i]->set_out_index(i-1);
     }
 
@@ -185,14 +187,14 @@ class ssnode {
     _out_links.erase(new_end,_out_links.end());
   }
   void unlink_incomming(sslink* link) {
-    for(int i = link->in_index()+1; i < _in_links.size(); ++i) {
+    for(unsigned i = link->in_index()+1; i < _in_links.size(); ++i) {
       _in_links[i]->set_in_index(i-1);
     }
  
     // [output][slot][input][slot]
     //delete this element of the subnet table -- bye bye!
-    for(int out_i = 0; out_i < _out_links.size(); ++out_i) {
-      for(int out_s = 0; out_s < MAX_SUBNETS; ++out_s) {
+    for(unsigned out_i = 0; out_i < _out_links.size(); ++out_i) {
+      for(unsigned out_s = 0; out_s < MAX_SUBNETS; ++out_s) {
         auto& table = _subnet_table[out_i][out_s];
         table.erase(table.begin()+link->in_index());
       }
@@ -208,6 +210,8 @@ class ssnode {
 
   virtual bool is_input() { return false; }
   virtual bool is_output() { return false; }
+
+  virtual int delay_fifo_depth() {return 0;}
 
   // just for visualization
   void setXY(int x, int y) {
@@ -390,6 +394,7 @@ class ssnode {
 
   bool is_shared() { return _max_util > 1; }  // TODO: max_util > 1
 
+  void set_flow_control(bool v) { _flow_control=v; }
   bool flow_control() { return _flow_control; }
 
   int bitwidth() { return _bitwidth; }
@@ -436,8 +441,7 @@ class ssnode {
   int _x = -1, _y = -1;  // just for visualization
 
   int _max_util = 1;  // Convert from "share_slot_size"
-  bool _flow_control =
-      true;            // whether PE supports backpressure, convert from "flow_control"
+  bool _flow_control = true; // convert from "flow_control"
   int _bitwidth = 64;  // maximum bitwidth of PE, convert from "bit_width"
 
   sslink* _cycle_link = nullptr;  // to
@@ -475,7 +479,7 @@ class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
 
-  virtual std::string name() const {
+  virtual std::string name() const override {
     std::stringstream ss;
     if(_x != -1 && _y != -1) {
       ss << "SW"
@@ -530,7 +534,7 @@ class ssswitch : public ssnode {
     os << "}\n";
   }
 
-  virtual std::string gams_name(int config) const {
+  virtual std::string gams_name(int config) const override {
     std::stringstream ss;
     if (config != 0) {
       ss << "Sw" << _x << _y << "c" << config;
@@ -561,7 +565,8 @@ class ssswitch : public ssnode {
       std::cout << "Problem: Decomposer for node " 
                 << name() << " is: " << decomposer << "\n";
       assert(0 && "Decomposer need to be power of two");
-    }    features[5] = max_fifo_depth;
+    }    
+    features[5] = max_fifo_depth;
     features[6] = _in_links.size();
     features[7] = _out_links.size();
     features[8] = _max_util;
@@ -618,7 +623,7 @@ class ssfu : public ssnode {
     std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
 
     // delay_fifo_depth
-    delay_fifo_depth = get_prop_attr(prop, "delay_fifo_depth", 4);
+    _delay_fifo_depth = get_prop_attr(prop, "delay_fifo_depth", 4);
 
     // output_select_mode
     output_select_mode = get_prop_attr<std::string>(prop, "output_select_mode", "Universal");
@@ -652,7 +657,7 @@ class ssfu : public ssnode {
     // max util
     os << "\"max_util\" : " << max_util() << ",\n";
     // max delay fifo depth
-    os << "\"max_delay_fifo_depth\" : " << delay_fifo_depth << ",\n";
+    os << "\"max_delay_fifo_depth\" : " << _delay_fifo_depth << ",\n";
     // number of register
     os << "\"num_register\" : " << register_file_size << ",\n";
     // Instructions
@@ -687,7 +692,7 @@ class ssfu : public ssnode {
     os << "}\n";
   }
 
-  virtual std::string name() const {
+  std::string name() const override {
     std::stringstream ss;
     if(_x != -1 && _y != -1) {
       ss << "FU" << _x << "_" << _y;
@@ -697,7 +702,7 @@ class ssfu : public ssnode {
     return ss.str();
   }
 
-  virtual std::string gams_name(int config) const {
+  std::string gams_name(int config) const override {
     std::stringstream ss;
     if (config != 0) {
       ss << "Fu" << _x << _y << "c" << config;
@@ -726,7 +731,7 @@ class ssfu : public ssnode {
                 << name() << " is: " << decomposer << "\n";
       assert(0 && "Decomposer need to be power of two");
     }
-    features[7] = delay_fifo_depth;
+    features[7] = _delay_fifo_depth;
     features[8] = _in_links.size();
     features[9] = _out_links.size();
     features[10] = register_file_size;
@@ -775,13 +780,16 @@ class ssfu : public ssnode {
     std::cout << "\n";
   }
 
+  void set_delay_fifo_depth(int d) {_delay_fifo_depth=d;}
+
+  virtual int delay_fifo_depth() override {return _delay_fifo_depth;}
+
  protected:
   func_unit_def* _fu_def;
   double features[12];
   std::string output_select_mode = std::string("Universal");
-  int delay_fifo_depth=8;
+  int _delay_fifo_depth=8;
   int register_file_size=4;
-  std::vector<int> max_delay_depth;
 
  private:
   friend class SubModel;
@@ -793,7 +801,7 @@ class ssvport : public ssnode {
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
-  virtual std::string name() const {
+  std::string name() const override {
     std::stringstream ss;
     if (_out_links.size() > 0)
       ss << "I";
@@ -852,7 +860,9 @@ class ssvport : public ssnode {
   }
 
 
-  virtual std::string gams_name(int i) const { return name(); }
+  std::string gams_name(int i) const override {
+    return name();
+  }
 
   int output_bitwidth() {
     int bitwidth = 0;
@@ -873,8 +883,8 @@ class ssvport : public ssnode {
   void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
   ssnode* convert_port2node(std::string portname) { return port2node[portname]; }
   int port() { return _port; }
-  virtual bool is_input() { return _in_links.size() == 0; }
-  virtual bool is_output() { return _out_links.size() == 0; }
+  bool is_input() override { return _in_links.size() == 0; }
+  bool is_output() override { return _out_links.size() == 0; }
 
   double get_area(){
     double vport_features[3];
@@ -1007,7 +1017,7 @@ class SubModel {
       static bool printed_bad_fu=false;
       if(fu->get_area() < 0 && printed_bad_fu==false) {
         printed_bad_fu=true;
-        std::cout << "SW Area: " << fu->get_area() << "\n";
+        std::cout << "FU Area: " << fu->get_area() << "\n";
         std::cout << "ins/outs:" <<
             fu->in_links().size() << "/" << fu->out_links().size() << "\n";
         std::cout << "decomposer:" << fu->decomposer  
@@ -1015,6 +1025,7 @@ class SubModel {
         fu->print_features();
         std::cout << "\n";
         area_to_add = abs(area_to_add) + 200;
+        //assert(0 && "neg area");
       }
       total_area += area_to_add;
     }
@@ -1045,6 +1056,7 @@ class SubModel {
         sw->print_features();
         std::cout << "\n";
         area_to_add = abs(area_to_add) + 200;
+        //assert(0 && "neg area");
       }
       total_area += area_to_add;
     }
@@ -1368,6 +1380,15 @@ class SubModel {
    _node_list.push_back(n);
  }
 
+  virtual ~SubModel() {
+    for(ssnode* n : _node_list) {
+      delete n;
+    }
+    for(sslink* l : _link_list) {
+      delete l;
+    }
+
+  }; 
 
  private:
   void build_substrate(int x, int y);

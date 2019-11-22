@@ -46,6 +46,7 @@ void SSDfgNode::serialize(Archive& ar, const unsigned version) {
   ar& BOOST_SERIALIZATION_NVP(_inc_edge_list);
   ar& BOOST_SERIALIZATION_NVP(_values);
   ar& BOOST_SERIALIZATION_NVP(_uses);
+  ar& BOOST_SERIALIZATION_NVP(_needs_ctrl_dep);
   ar& BOOST_SERIALIZATION_NVP(_min_lat);
   ar& BOOST_SERIALIZATION_NVP(_sched_lat);
   ar& BOOST_SERIALIZATION_NVP(_max_thr);

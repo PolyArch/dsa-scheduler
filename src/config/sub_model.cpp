@@ -42,6 +42,10 @@ void ssio_interface::sort(std::vector<std::pair<int, int>>& portID2size,
 
 // ----------------------- sslink ---------------------------------------------
 
+bool sslink::flow_control() {
+  return _dest->flow_control(); 
+}
+
 std::string sslink::name() const {
   std::stringstream ss;
   ss << _orig->name() << "_to_" << _dest->name();

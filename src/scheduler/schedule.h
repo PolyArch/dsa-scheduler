@@ -392,6 +392,16 @@ class Schedule {
     return total_lat;
   }
 
+  // Calculate the total possible delay through delay fifos
+  int max_edge_delay(SSDfgEdge* pdgedge) {
+    auto& ep = _edgeProp[pdgedge->id()];
+    int total_delay = 0;
+    for (auto& link : ep.links) {
+      total_delay += link.second->dest()->delay_fifo_depth();
+    }
+    return total_delay;
+  }
+
   std::list<std::pair<int, sslink*>>& links_of(SSDfgEdge* edge) {
     auto& ep = _edgeProp[edge->id()];
     return ep.links;
@@ -433,17 +443,23 @@ class Schedule {
   //>2: already there
   int routing_cost(std::pair<int, sslink*> link, SSDfgEdge* edge) {
     assert(link.second);
+   
+    if(edge->use()->needs_ctrl_dep() && !link.second->flow_control()) {
+      return -1;
+    }
+
     auto& slots = _linkProp[link.second->id()].slots;
     // Check all slots will be occupied empty.
-    bool empty = true;
+    bool num_edges = 0;
     int last_slot = link.first + edge->bitwidth()/8;
     for (int s = link.first; s < last_slot; ++s) {
       int slot = s % 8;
-      if (!slots[slot].edges.empty()) empty = false;
+      num_edges = slots[slot].edges.size();
+      if (num_edges!=0) break;
     }
-    if (empty) return 1;
+    if (num_edges==0) return 1;
     if (alt_edge_for_link(link, edge)) return 0;
-    return _linkProp[link.second->id()].slots[link.first].edges.size() + 1;
+    return num_edges + 1;
   }
 
   // Routing cost for inputs, but based on nodes instead of values
@@ -535,6 +551,9 @@ class Schedule {
   void iterativeFixLatency();
 
   std::vector<SSDfgNode*> ordered_non_temporal();
+
+  // Assert error if problem with consistency of schedule
+  void validate();
 
   void calcLatency(int& lat, int& latmis, bool warnMismatch = false);
 

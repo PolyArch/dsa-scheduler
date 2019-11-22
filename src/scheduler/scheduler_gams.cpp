@@ -244,7 +244,7 @@ bool GamsScheduler::schedule_internal(SSDfg* ssDFG, Schedule*& schedule) {
     ofs_constraints << "set stages(stages_opt);\n";
 
     ofs_constraints << "stages('passthrough')=1;\n";
-    ofs_constraints << "scalar max_edge_delay /" << _ssModel->maxEdgeDelay() << "/;\n";
+    ofs_constraints << "scalar max_edge_delay /" << /*_ssModel->maxEdgeDelay()*/ 8 << "/;\n";
 
     if (_mipstart || heur_fix) {
       ofs_constraints << "stages('mipstart')=1;\n";

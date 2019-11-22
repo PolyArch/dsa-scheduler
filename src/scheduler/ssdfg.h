@@ -291,6 +291,10 @@ class SSDfgNode {
   }
   virtual int slot_for_op(SSDfgEdge* edge, int node_slot) { return node_slot; }
 
+  // This is a preprocessing function that backwards marks nodes as requiring
+  // dynanmic scheduling
+  virtual void backprop_ctrl_dep();
+
   // some issue with this function
   virtual uint64_t invalid();
 
@@ -428,6 +432,8 @@ class SSDfgNode {
 
   SSDfg* ssdfg() { return _ssdfg; }
 
+  bool needs_ctrl_dep() { return _needs_ctrl_dep;}
+
  private:
   friend class boost::serialization::access;
 
@@ -452,6 +458,8 @@ class SSDfgNode {
 
   std::vector<SSDfgValue*> _values;  // out edges by index
   std::vector<SSDfgEdge*> _uses;     // out edges in flat form
+
+  bool _needs_ctrl_dep =false;
 
   int _min_lat = 0;
   int _sched_lat = 0;
@@ -520,8 +528,11 @@ struct CtrlBits {
   template <class Archive>
   void serialize(Archive& ar, const unsigned version);
 
+  bool needs_ctrl_dep() {return _needs_ctrl_dep;}
+
  private:
   uint64_t mask{0};
+  bool _needs_ctrl_dep = false;
 
   static Control str_to_enum(const std::string& s) {
     if (s == "b1") return B1;
@@ -637,11 +648,17 @@ class SSDfgInst : public SSDfgNode {
 
   /// Control signal, either controlled by an dependent inst or itself
   /// {
-  void set_ctrl_bits(const CtrlBits& c) { _ctrl_bits = c; }
+  void set_ctrl_bits(const CtrlBits& c) { 
+    _ctrl_bits = c; 
+    if(_ctrl_bits.needs_ctrl_dep()) backprop_ctrl_dep(); 
+  }
   uint64_t ctrl_bits() { return _ctrl_bits.bits(); }
   CtrlBits ctrlBits() { return _ctrl_bits; }
 
-  void set_self_ctrl(const CtrlBits& c) { _self_bits = c; }
+  void set_self_ctrl(const CtrlBits& c) { 
+    _self_bits = c; 
+    if(_self_bits.needs_ctrl_dep()) backprop_ctrl_dep(); 
+  }
   uint64_t self_bits() { return _self_bits.bits(); }
   /// }
 

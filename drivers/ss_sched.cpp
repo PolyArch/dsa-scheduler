@@ -102,8 +102,6 @@ int main(int argc, char* argv[]) {
 
   SSModel ssmodel(model_filename.c_str());
   ssmodel.setMaxEdgeDelay(max_edge_delay);
-  ssmodel.maxEdgeDelay();
-  // sspdg object based on the dfg
   SSDfg ssdfg(pdg_filename);
 
 
@@ -147,7 +145,7 @@ int main(int argc, char* argv[]) {
     }
 
 
-    int max_iters_no_improvement = 100;
+    int max_iters_no_improvement = 300;
 
     int improv_iter = 0;
 
@@ -156,12 +154,15 @@ int main(int argc, char* argv[]) {
         break;
       }
       cout << " ### Begin DSE Iteration " << i << " ### \n";
+      cur_ci->verify();
       CodesignInstance* cand_ci = new CodesignInstance(*cur_ci);
+      cur_ci->verify();
       cand_ci->verify();
       cand_ci->make_random_modification();
       cand_ci->verify();
 
       scheduler->incrementalSchedule(*cand_ci);
+      cand_ci->verify();
 
       //stringstream name_ss;
       //name_ss << "viz/hw" << i << ".dot";
@@ -202,6 +203,9 @@ int main(int argc, char* argv[]) {
         //cout << "Area: " << sub->get_overall_area()
         //     << " Nodes: " << sub->node_list().size() 
         //     << " Switches: " << sub->switch_list().size() << "\n";
+
+      } else {
+        delete cand_ci;
       }
     }
     /*
@@ -214,6 +218,7 @@ int main(int argc, char* argv[]) {
     cout << "Improv Iters: " << improv_iter << "\n";
 
     scheduler->incrementalSchedule(*cur_ci);
+    cur_ci->verify();
 
     cout << "FINAL DSE OBJ: " << cur_ci->dse_obj() << " -- ";
         

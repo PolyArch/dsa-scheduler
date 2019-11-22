@@ -36,6 +36,12 @@ SSModel::SSModel(bool multi_config) {
   _subModel = new SubModel(5, 5, SubModel::PortType::everysw, multi_config);
 }
 
+void SSModel::setMaxEdgeDelay(int d) {
+  for(auto* fu : _subModel->fu_list()) {
+    fu->set_delay_fifo_depth(d);
+  }
+}
+
 void SSModel::parse_exec(std::istream& istream) {
   string param, value;
   while (istream.good()) {

@@ -100,7 +100,7 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   std::sort(dfg_in_sizes.begin(),dfg_in_sizes.end(),greater<int>());
   std::sort(dfg_out_sizes.begin(),dfg_out_sizes.end(),greater<int>());
 
-  for(int i = 0; i < dfg_in_sizes.size(); ++i) {
+  for(unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
     if(dfg_in_sizes[i] > vec_in_sizes[i]) {
       if(verbose) { 
         std::cerr << "Vector Inputs Insufficient\n";
@@ -108,7 +108,7 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
       return false;
     }
   }
-  for(int i = 0; i < dfg_out_sizes.size(); ++i) {
+  for(unsigned i = 0; i < dfg_out_sizes.size(); ++i) {
     if(dfg_out_sizes[i] > vec_out_sizes[i]) {
       if(verbose) { 
         std::cerr << "Vector Outputs Insufficient\n";

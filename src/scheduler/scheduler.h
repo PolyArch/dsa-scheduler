@@ -73,14 +73,16 @@ class CodesignInstance {
   // Check that everything is okay
   void verify() {
     for_each_sched([&](Schedule& sched) { 
+      sched.validate();
+
       assert(&_ssModel == sched.ssModel());
       assert(_ssModel.subModel()->node_list().size() >= sched.node_prop().size());
       assert(_ssModel.subModel()->link_list().size() >= sched.link_prop().size());
 
       for(auto& ep : sched.edge_prop()) {
         for(auto& p : ep.links) {
-          assert(p.second->id() < _ssModel.subModel()->link_list().size());
-          assert(p.second->id() < sched.link_prop().size());
+          assert(p.second->id() < (int)_ssModel.subModel()->link_list().size());
+          assert(p.second->id() < (int)sched.link_prop().size());
           assert(_ssModel.subModel()->link_list()[p.second->id()] == p.second);
         }
       }
@@ -90,8 +92,8 @@ class CodesignInstance {
     for(auto& node : _ssModel.subModel()->node_list()) {
       assert(node->subnet_table().size() == node->out_links().size());
     }
-    for(int i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
-      assert(_ssModel.subModel()->link_list()[i]->id() == i);
+    for(unsigned i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
+      assert(_ssModel.subModel()->link_list()[i]->id() == (int)i);
     }
   }
 
@@ -142,12 +144,15 @@ class CodesignInstance {
   }
 
   //Delete FUs, Switches, and Vports that can't possible be useful
-  void delete_hangers() {
+  bool delete_hangers() {
+    bool deleted_something = false;
+
     auto* sub = _ssModel.subModel();
 
     for(ssfu* fu : sub->fu_list()) {
       if(fu->in_links().size() <=1 || fu->out_links().size() < 1) {
         delete_hw(fu);
+        deleted_something=true;
       }
     }
     /*for(ssswitch* sw : sub->switch_list()) {
@@ -163,14 +168,17 @@ class CodesignInstance {
     for(ssvport* ivport : sub->input_list()) {
       if(ivport->out_links().size() < 1) {
         delete_hw(ivport);
+        deleted_something=true;
       }
     }
     for(ssvport* ovport : sub->output_list()) {
       if(ovport->in_links().size() < 1) {
         delete_hw(ovport);
+        deleted_something=true;
       }
     }
 
+    return deleted_something;
   }
 
   void make_random_modification() {
@@ -225,11 +233,112 @@ class CodesignInstance {
     // again when we are adding things -- simpler
     finalize_delete();
 
-    delete_hangers();
-
-    finalize_delete(); // TODO part of finalize delete isredundant now
+    while(delete_hangers()) { 
+      finalize_delete(); // TODO part of finalize delete isredundant now
+    }
 
     verify_strong();
+
+
+    //Modifiers
+    n_items = rand_bt(0,8);
+    for(int i = 0; i < n_items; ++i) {
+      int item_class = rand_bt(0,100);      
+      if(item_class < 40) {
+        /*
+        // This was for link flow-control, which I don't want any more
+        int link_index  = rand_bt(0,sub->link_list().size());
+        sslink* link = sub->link_list()[link_index];
+        link->set_flow_control(!link->flow_control());
+
+        // If we de-flow-controlled this edge, unassign any edges
+        // which need control dependence (transitively)
+        if(!link->flow_control()) {
+          for_each_sched([&](Schedule& sched){ 
+            for(int slot = 0; slot < sched.num_slots(link); ++slot) {
+              for(auto& p : sched.dfg_edges_of(slot,link)) {
+                if(p.first->use()->needs_ctrl_dep()) {
+                  sched.unassign_dfgnode(p.first->def());
+                  sched.unassign_dfgnode(p.first->use());
+                }
+              }
+            }
+          });
+        }*/
+
+        int node_index  = rand_bt(0,sub->node_list().size());
+        ssnode* node = sub->node_list()[node_index];
+        if(node->is_input() || node->is_output()) continue;
+ 
+        node->set_flow_control(!node->flow_control());
+        if(!node->flow_control()) {
+          for_each_sched([&](Schedule& sched){ 
+            for(int slot = 0; slot < sched.num_slots(node); ++slot) {
+              for(auto& p : sched.dfg_nodes_of(slot,node)) {
+                if(p.first->needs_ctrl_dep()) {
+                  sched.unassign_dfgnode(p.first);
+                }
+              }
+            }
+          });
+        }
+
+      } else if(item_class < 65) {
+
+        // Modify FU delay-fifo depth
+        int diff = rand_bt(-8,8);
+        if(diff==0) continue;
+        int fu_index  = rand_bt(0,sub->fu_list().size());
+        ssfu* fu = sub->fu_list()[fu_index];
+  
+        int old_util = fu->max_util();
+
+        int new_util = std::max(1,old_util+diff);
+        if(diff < -4) new_util=1;
+
+        if(old_util == 1 && new_util > 1) {
+          fu->set_flow_control(true);
+        }
+
+        fu->set_max_util(new_util);
+
+        // if we are constraining the problem, then lets re-assign anything
+        // mapped to this FU
+        if(new_util < old_util) {
+          for_each_sched([&](Schedule& sched){ 
+            for(int slot = 0; slot < sched.num_slots(fu); ++slot) {
+              for(auto& p : sched.dfg_nodes_of(slot,fu)) {
+                sched.unassign_dfgnode(p.first);
+              }
+            }
+          });
+        }
+
+      } else if(item_class < 75) {
+
+        // Modify FU delay-fifo depth
+        int diff = rand_bt(-2,1);
+        int fu_index  = rand_bt(0,sub->fu_list().size());
+        ssfu* fu = sub->fu_list()[fu_index];
+        int new_delay_fifo_depth = std::max(0,fu->delay_fifo_depth()+diff);
+        fu->set_delay_fifo_depth(new_delay_fifo_depth);
+
+        // if we are constraining the problem, then lets re-assign anything
+        // mapped to this FU
+        if(diff < 0) {
+          for_each_sched([&](Schedule& sched){ 
+            for(int slot = 0; slot < sched.num_slots(fu); ++slot) {
+              for(auto& p : sched.dfg_nodes_of(slot,fu)) {
+                sched.unassign_dfgnode(p.first);
+              }
+            }
+          });
+        }
+
+      } else if(item_class < 100) {
+      
+      }
+    }
 
     //Items to add
     n_items = rand_bt(0,8);
@@ -243,7 +352,8 @@ class CodesignInstance {
         ssnode* dst = sub->node_list()[dst_node_index];
         if(src->is_output() || dst->is_input() || src == dst) continue;
 
-        //sslink* link = sub->add_link(src,dst);
+        //sslink* link = 
+        sub->add_link(src,dst);
         //std::cout << "adding link: " << link->name() << "\n"; 
       } else if(item_class < 80) {
         // Add a random switch
@@ -457,8 +567,6 @@ class CodesignInstance {
       total_score.first += (score.first ==1);
 
     }
-
-    std::cout << "obj first: " << total_score.first << "\n";
 
     float obj = total_score.first / _ssModel.subModel()->get_overall_area();
     return obj;

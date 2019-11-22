@@ -216,6 +216,15 @@ bool SSDfgOperand::valid() {
 
 /// { SSDfgNode
 
+void SSDfgNode::backprop_ctrl_dep() {
+  if(!_needs_ctrl_dep) {
+    _needs_ctrl_dep=true;
+    for(auto* e : _inc_edge_list) {
+      e->def()->backprop_ctrl_dep();
+    }
+  }
+}
+
 uint64_t SSDfgNode::invalid() { return _invalid; }
 
 // Add edge to operand in least to most significant bit order
@@ -437,6 +446,10 @@ int SSDfgNode::inc_inputs_ready(bool print, bool verif) {
 /// { Parsing data structure
 
 void CtrlBits::set(uint64_t val, Control b) {
+  if(b == CtrlBits::B1 || b == CtrlBits::B2) {
+    _needs_ctrl_dep=true;
+  } 
+
   int loc = val * Total + b;
   assert(loc >= 0 && loc < 64);
   mask |= (1 << loc);
@@ -1032,8 +1045,12 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
   os << "N" << _ID << " [ label = \"" << name();
 
   if (is_temporal()) {
-    os << "TMP";
+    os << ":TMP";
   }
+
+  if (_needs_ctrl_dep) {
+    os << ":C";
+  } 
 
   if (sched) {
     os << "\\n lat=" << sched->latOf(this) << " ";
