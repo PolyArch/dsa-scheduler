@@ -32,13 +32,13 @@ static struct option long_options[] = {
     {"mipstart",       no_argument,       nullptr, 'm',},
     {"sll",            no_argument,       nullptr, 'S',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
+    {"design-space",   no_argument,       nullptr, 'f',},
     {"relative-gap",   required_argument, nullptr, 'r',},
     {"absolute-gap",   required_argument, nullptr, 'g',},
     {"timeout",        required_argument, nullptr, 't',},
     {"max-iters",      required_argument, nullptr, 'i',},
     {"max-edge-delay", required_argument, nullptr, 'd',},
     {"seed",           required_argument, nullptr, 'e',},
-    {"fake-incr",      required_argument, nullptr, 'f',},
     {0, 0, 0, 0,},
 };
 // clang-format on
@@ -61,17 +61,16 @@ int main(int argc, char* argv[]) {
   int max_edge_delay = 15;
   int max_iters = 20000;
 
-  int fake_incr=0;
+  bool is_dse = false;
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mf:d:e:", 
-          long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
       case 'v': verbose = true; break;
       case 'G': show_gams = true; break;
       case 'm': mipstart = true; break;
-      case 'f': fake_incr = atoi(optarg); break;
+      case 'f': is_dse = true; break;
       case 'S': sll = true; break;
       case 'b': print_bits = true; break;
 
@@ -102,7 +101,6 @@ int main(int argc, char* argv[]) {
 
   SSModel ssmodel(model_filename.c_str());
   ssmodel.setMaxEdgeDelay(max_edge_delay);
-  SSDfg ssdfg(pdg_filename);
 
 
   if (str_schedType == "gams") {
@@ -125,7 +123,7 @@ int main(int argc, char* argv[]) {
   scheduler->setTimeout(timeout);
   scheduler->set_max_iters(max_iters);
 
-  if(fake_incr) {
+  if(is_dse) {
     scheduler->set_start_time();
 
     for(auto& node : ssmodel.subModel()->node_list()) {
@@ -135,14 +133,25 @@ int main(int argc, char* argv[]) {
     CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
     cur_ci->verify();
     std::vector<WorkloadSchedules*> _incr_sched;
-    
-    cur_ci->workload_array.resize(fake_incr);
 
-    for(int w = 0; w < fake_incr; ++w) {
-      for(int i = 0; i < fake_incr; ++i) {
-        cur_ci->workload_array[w].sched_array.emplace_back(cur_ci->ss_model(), &ssdfg);
+    {
+      std::string curline;
+      ifstream dfg_names(pdg_filename);
+      while (std::getline(dfg_names, curline)) {
+        if (curline == "%%") {
+          cur_ci->workload_array.emplace_back();
+        } else {
+          cur_ci->workload_array.back().sched_array.emplace_back(cur_ci->ss_model(), new SSDfg(curline));
+        }
       }
     }
+
+    //cur_ci->workload_array.resize(fake_incr);
+    //for(int w = 0; w < fake_incr; ++w) {
+    //  for(int i = 0; i < fake_incr; ++i) {
+    //    cur_ci->workload_array[w].sched_array.emplace_back(cur_ci->ss_model(), &ssdfg);
+    //  }
+    //}
 
 
     int max_iters_no_improvement = 300;
@@ -169,7 +178,7 @@ int main(int argc, char* argv[]) {
       //ofstream ofsb = ofstream(name_ss.str().c_str());
       //cand_ci->ss_model()->subModel()->PrintGraphviz(ofsb);
 
-      cout << "DSE OBJ: " << cand_ci->dse_obj() << " -- ";
+      cout << "DSE OBJ: " << cand_ci->dse_obj() << "(" << cur_ci->dse_obj() << ") -- ";
       
       auto* sub = cand_ci->ss_model()->subModel();
       cout << "Area: " << sub->get_overall_area()
@@ -183,12 +192,16 @@ int main(int argc, char* argv[]) {
          cur_ci = cand_ci;
          cout << "----------------- IMPROVED OBJ! --------------------\n";
 
-         for(int w = 0; w < fake_incr; ++w) {
-           for(int o = 0; o < fake_incr; ++o) {
+         for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
+           for (int j = 0, es = cur_ci->workload_array[i].sched_array.size(); j < es; ++j) {
              stringstream name_ss;
-             name_ss << "viz/dse-sched-" << i << "-" << w << "-" << o << ".gv";
-             cur_ci->workload_array[w].sched_array[o].printGraphviz(name_ss.str().c_str()); 
+             name_ss << "viz/dse-sched-" << i << "-" << i << "-" << j << ".gv";
+             cur_ci->workload_array[i].sched_array[j].printGraphviz(name_ss.str().c_str()); 
            }
+         }
+         for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
+           Schedule *sched = cur_ci->res[i];
+           std::cout << i << ": " << sched->ssdfg()->filename << std::endl;
          }
 
         // dump the new hw json
@@ -208,11 +221,6 @@ int main(int argc, char* argv[]) {
         delete cand_ci;
       }
     }
-    /*
-    std::string name_hw = "viz/dse-sched-final.json";
-    auto* sub = cur_ci->ss_model()->subModel();
-    sub -> DumpHwInJSON(name_hw.c_str());
-    */
 
     cout << "DSE Complete!\n";
     cout << "Improv Iters: " << improv_iter << "\n";
@@ -227,11 +235,11 @@ int main(int argc, char* argv[]) {
          << " Nodes: " << sub->node_list().size() 
          << " Switches: " << sub->switch_list().size() << "\n";
 
-    for(int w = 0; w < fake_incr; ++w) {
-      for(int i = 0; i < fake_incr; ++i) {
+    for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
+      for (int j = 0, es = cur_ci->workload_array[i].sched_array.size(); j < es; ++j) {
         stringstream name_ss;
-        name_ss << "viz/dse-sched-final-" << w << "-" << i << ".gv";
-        cur_ci->workload_array[w].sched_array[i].printGraphviz(name_ss.str().c_str()); 
+        name_ss << "viz/dse-sched-final-" << i << "-" << j << ".gv";
+        cur_ci->workload_array[i].sched_array[j].printGraphviz(name_ss.str().c_str()); 
       }
     }
 
@@ -239,5 +247,6 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  SSDfg ssdfg(pdg_filename);
   scheduler->invoke(&ssmodel, &ssdfg, print_bits);
 }

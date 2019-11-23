@@ -75,7 +75,7 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, SSDfgEdge* edge,
   while (chances_left-- && num > 0) {
     auto& links = sched->links_of(edge);
 
-    if(links.size()==0) continue;
+    if(links.empty()) continue;
 
     int rand_link_no = rand_bt(0, links.size());
     auto it = links.begin();
@@ -240,9 +240,9 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
       Schedule* sched = &sr;
 
       schedule(sched->ssdfg(),sched);
-      SchedStats s;
-      auto p = obj(sched,s);
-      cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
+      // SchedStats s;
+      // auto p = obj(sched,s);
+      // cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
       ++j;
     }
     ++i;

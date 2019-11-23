@@ -16,7 +16,7 @@ using namespace std;
 
 //Utility functions
 int rand_bt(int s, int e) { 
-  assert(e>s && "bad range for rand_bt");
+  assert(e > s && "bad range for rand_bt");
   return rand() % (e - s) + s; 
 }
 
@@ -346,7 +346,9 @@ Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
   std::ofstream osh(config_header);
   assert(osh.good());
   sched->printConfigHeader(osh, dfg_base);
-  std::cout << "Performance: " << dfg->esitimated_performance(sched) << std::endl;
+  if (verbose) {
+    std::cout << "Performance: " << dfg->esitimated_performance(sched) << std::endl;
+  }
 
   if (print_bits) {
     std::string config_header_bits = pdg_rawname + ".dfg.bits.h";

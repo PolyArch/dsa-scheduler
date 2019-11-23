@@ -1869,7 +1869,8 @@ uint64_t SSDfgOperand::poll() {
 double SSDfg::esitimated_performance(Schedule *sched) {
   std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
   for (auto &elem : nodes<SSDfgVecInput*>()) {
-    if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read) {
+    if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read &&
+        elem->meta.source != ssdfg::MetaPort::Data::Unknown) {
       bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] += 
         elem->get_vp_len() * elem->get_port_width() / 8;
     }
@@ -1913,14 +1914,16 @@ double SSDfg::esitimated_performance(Schedule *sched) {
 
   double overall = 0.0;
 
-  for (int i = 0; i < num_groups(); ++i) {
-    double v = std::min(bw_coef[i], rec_bubble[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
-    std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
-              << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
-              << ", SPad: " << bw[i][1] << ", Rec: " << rec_bubble[i] << "/" << rec_lat[i]
-              << ", Overall: " << v << std::endl;
-    overall += v;
-  }
+    for (int i = 0; i < num_groups(); ++i) {
+      double v = std::min(bw_coef[i], rec_bubble[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
+      if (false) {
+        std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
+                  << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
+                  << ", SPad: " << bw[i][1] << ", Rec: " << rec_bubble[i] << "/" << rec_lat[i]
+                  << ", Overall: " << v << std::endl;
+      }
+      overall += v;
+    }
   return overall;
 }
 

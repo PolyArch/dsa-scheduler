@@ -65,6 +65,7 @@ class CodesignInstance {
   public:
   SSModel* ss_model() {return &_ssModel;}
   std::vector<WorkloadSchedules> workload_array;
+  std::vector<Schedule*> res;
 
   CodesignInstance(SSModel* model) : _ssModel(*model) {
     verify();
@@ -120,6 +121,9 @@ class CodesignInstance {
   void add_random_edges_to_node(ssnode* n, int min_in, int max_in, 
                                            int min_out, int max_out) {
     auto* sub = _ssModel.subModel();
+
+    if (sub->node_list().empty())
+      return;
 
     int n_ins = rand_bt(min_in,max_in);
     int n_outs = rand_bt(min_out,max_out);
@@ -191,21 +195,21 @@ class CodesignInstance {
       int item_class = rand_bt(0,100);
       if(item_class < 65) {
         //delete a link
-        if(sub->link_list().size()==0) continue;
+        if(sub->link_list().empty()) continue;
         int index = rand_bt(0,sub->link_list().size());
         sslink* l = sub->link_list()[index];
         if(delete_linkp_list.count(l)) continue; //don't double delete
         delete_link(l);
       } else if(item_class < 80) {
         //delete a switch
-        if(sub->switch_list().size()==0) continue;
+        if(sub->switch_list().empty()) continue;
         int index = rand_bt(0,sub->switch_list().size());
         ssswitch* sw = sub->switch_list()[index];
         if(delete_nodep_list.count(sw)) continue; //don't double delete
         delete_hw(sw);
       } else if (item_class < 90) {
         //delete an FU
-        if(sub->fu_list().size()==0) continue;
+        if(sub->fu_list().empty()) continue;
         int index = rand_bt(0,sub->fu_list().size());
         ssfu* fu = sub->fu_list()[index];
         if(delete_nodep_list.count(fu)) continue; //don't double delete
@@ -265,8 +269,8 @@ class CodesignInstance {
             }
           });
         }*/
-
-        int node_index  = rand_bt(0,sub->node_list().size());
+        if (sub->node_list().empty()) continue;
+        int node_index  = rand_bt(0, sub->node_list().size());
         ssnode* node = sub->node_list()[node_index];
         if(node->is_input() || node->is_output()) continue;
  
@@ -285,10 +289,11 @@ class CodesignInstance {
 
       } else if(item_class < 65) {
 
+        if (sub->fu_list().empty()) continue;
         // Modify FU delay-fifo depth
         int diff = rand_bt(-8,8);
         if(diff==0) continue;
-        int fu_index  = rand_bt(0,sub->fu_list().size());
+        int fu_index  = rand_bt(0, sub->fu_list().size());
         ssfu* fu = sub->fu_list()[fu_index];
   
         int old_util = fu->max_util();
@@ -316,11 +321,12 @@ class CodesignInstance {
 
       } else if(item_class < 75) {
 
+        if (sub->fu_list().empty()) continue;
         // Modify FU delay-fifo depth
         int diff = rand_bt(-2,1);
-        int fu_index  = rand_bt(0,sub->fu_list().size());
+        int fu_index  = rand_bt(0, sub->fu_list().size());
         ssfu* fu = sub->fu_list()[fu_index];
-        int new_delay_fifo_depth = std::max(0,fu->delay_fifo_depth()+diff);
+        int new_delay_fifo_depth = std::max(0,fu->delay_fifo_depth() + diff);
         fu->set_delay_fifo_depth(new_delay_fifo_depth);
 
         // if we are constraining the problem, then lets re-assign anything
@@ -346,6 +352,7 @@ class CodesignInstance {
       int item_class = rand_bt(0,100);      
       if(item_class < 65) {
         // Add a random link -- really? really
+        if(sub->node_list().empty()) continue;
         int src_node_index = rand_bt(0,sub->node_list().size());
         int dst_node_index = rand_bt(0,sub->node_list().size());
         ssnode* src = sub->node_list()[src_node_index];
@@ -368,6 +375,7 @@ class CodesignInstance {
 
          //Randomly pick an FU type from the set
          auto& fu_defs = _ssModel.fuModel()->fu_defs();
+         if (fu_defs.empty()) continue;
          int fu_def_index = rand_bt(0,fu_defs.size());
          func_unit_def* def = &fu_defs[fu_def_index];
          fu->setFUDef(def);
@@ -528,7 +536,7 @@ class CodesignInstance {
 
   }
 
-  std::pair<int,int> dse_sched_obj(Schedule* sched) {
+  std::pair<double, int> dse_sched_obj(Schedule* sched) {
     //YES, I KNOW THIS IS A COPY OF SCHED< JUST A TEST FOR NOW
     SchedStats s;
     int num_left = sched->num_left();
@@ -542,33 +550,43 @@ class CodesignInstance {
     int obj = s.agg_ovr * 1000 + violation * 200 + s.latmis * 200 + s.lat +
               (s.max_util - 1) * 3000 + sched->num_passthroughs();
     obj = obj * 100 + sched->num_links_mapped();
+
  
-    int succeed_timing = succeed_sched && (s.latmis == 0) && (s.ovr == 0);
-  
-    return std::make_pair(succeed_timing - num_left, -obj);
+    int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
+    double performance = sched->ssdfg()->esitimated_performance(sched);
+    if (succeed_sched) {
+      double eval = performance * ((double)s.latmis / (max_delay + s.latmis));
+      eval /= (1.0 + s.ovr);
+      //std::cout << sched->ssdfg()->filename << "-> " << sched->ssModel()->filename << ": " << eval << std::endl;
+      return {eval, -obj};
+    }
+
+    //std::cout << sched->ssdfg()->filename << "-> " << sched->ssModel()->filename << ": failed" << std::endl;
+    return {-num_left, -obj};
   }
 
   float dse_obj() {
-    std::pair<int, int> total_score = std::make_pair(0,0);
+    std::pair<double, int> total_score = std::make_pair((double) 0, 0);
+    res.resize(workload_array.size());
 
     for(auto& ws : workload_array) {
 
-      std::pair<int, int> score = std::make_pair(INT_MIN,INT_MIN);
+      std::pair<double, int> score = std::make_pair((double) INT_MIN,INT_MIN);
       for(Schedule& sched : ws.sched_array) {
-        std::pair<int,int> new_score = dse_sched_obj(&sched);
+        std::pair<double, int> new_score = dse_sched_obj(&sched);
         if(new_score > score) {
           score=new_score;
+          res[&ws - &workload_array[0]] = &sched;
         }
       }
 
       //total_score.first += score.first;
       //total_score.second += score.second;
-      //
-      total_score.first += (score.first ==1);
+      total_score.first += score.first;
 
     }
 
-    float obj = total_score.first / _ssModel.subModel()->get_overall_area();
+    float obj = total_score.first * 1e6 / _ssModel.subModel()->get_overall_area();
     return obj;
   }
 
