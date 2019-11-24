@@ -185,8 +185,9 @@ int main(int argc, char* argv[]) {
       
       auto* sub = cand_ci->ss_model()->subModel();
       cout << "Area: " << sub->get_overall_area()
-           << " Nodes: " << sub->node_list().size() 
-           << " Switches: " << sub->switch_list().size() << "\n";
+           << " FUs: " << sub->fu_list().size() 
+           << " Switches: " << sub->switch_list().size()
+           << " VPorts: " << sub->vport_list().size() << "\n";
 
 
       if(cand_ci->dse_obj() > cur_ci->dse_obj()) {
@@ -235,8 +236,9 @@ int main(int argc, char* argv[]) {
         
     auto* sub = cur_ci->ss_model()->subModel();
     cout << "Area: " << sub->get_overall_area()
-         << " Nodes: " << sub->node_list().size() 
-         << " Switches: " << sub->switch_list().size() << "\n";
+         << " FUs: " << sub->fu_list().size() 
+         << " Switches: " << sub->switch_list().size()
+         << " VPorts: " << sub->vport_list().size() << "\n";
 
     for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
       for (int j = 0, es = cur_ci->workload_array[i].sched_array.size(); j < es; ++j) {
