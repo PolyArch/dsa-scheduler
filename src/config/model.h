@@ -39,6 +39,10 @@ class SSModel {
     return ind_memory;
   }
 
+  double host_area() {
+    return (indirect() * 88800) + 5200 + 41000;
+  }
+
   SSModel(const SSModel& m) {
      _fuModel = m._fuModel;
      _subModel = m._subModel->copy();

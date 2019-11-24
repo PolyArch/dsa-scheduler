@@ -34,6 +34,7 @@ static struct option long_options[] = {
     {"no-int-time",    no_argument,       nullptr, 'n',},
     {"design-space",   no_argument,       nullptr, 'f',},
     {"estmt-perf",     no_argument,       nullptr, 'p',},
+    {"indir-mem",      no_argument,       nullptr, 'c',},
     {"relative-gap",   required_argument, nullptr, 'r',},
     {"absolute-gap",   required_argument, nullptr, 'g',},
     {"timeout",        required_argument, nullptr, 't',},
@@ -64,8 +65,9 @@ int main(int argc, char* argv[]) {
 
   bool is_dse = false;
   bool est_perf = false;
+  bool indirect = false;
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfpd:e:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfpcd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
@@ -76,6 +78,7 @@ int main(int argc, char* argv[]) {
       case 'p': est_perf = true; break;
       case 'S': sll = true; break;
       case 'b': print_bits = true; break;
+      case 'c': indirect = true; break;
 
       case 'r': relative_gap = atof(optarg); break;
       case 'g': absolute_gap = atof(optarg); break;
@@ -104,6 +107,7 @@ int main(int argc, char* argv[]) {
 
   SSModel ssmodel(model_filename.c_str());
   ssmodel.setMaxEdgeDelay(max_edge_delay);
+  ssmodel.indirect(indirect);
 
 
   if (str_schedType == "gams") {
@@ -184,10 +188,10 @@ int main(int argc, char* argv[]) {
       cout << "DSE OBJ: " << cand_ci->dse_obj() << "(" << cur_ci->dse_obj() << ") -- ";
       
       auto* sub = cand_ci->ss_model()->subModel();
-      cout << "Area: " << sub->get_overall_area()
-           << " FUs: " << sub->fu_list().size() 
-           << " Switches: " << sub->switch_list().size()
-           << " VPorts: " << sub->vport_list().size() << "\n";
+      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2 "
+           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2 "
+           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2"
+           << "Ctrl: " << cur_ci->ss_model()->host_area() << std::endl;
 
 
       if(cand_ci->dse_obj() > cur_ci->dse_obj()) {
@@ -235,10 +239,10 @@ int main(int argc, char* argv[]) {
     cout << "FINAL DSE OBJ: " << cur_ci->dse_obj() << " -- ";
         
     auto* sub = cur_ci->ss_model()->subModel();
-    cout << "Area: " << sub->get_overall_area()
-         << " FUs: " << sub->fu_list().size() 
-         << " Switches: " << sub->switch_list().size()
-         << " VPorts: " << sub->vport_list().size() << "\n";
+      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
+           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
+           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
+           << "Ctrl: " << cur_ci->ss_model()->host_area() << std::endl;
 
     for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
       for (int j = 0, es = cur_ci->workload_array[i].sched_array.size(); j < es; ++j) {

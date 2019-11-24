@@ -592,7 +592,7 @@ class CodesignInstance {
 
     }
 
-    float obj = total_score.first * 1e6 / (_ssModel.subModel()->get_overall_area() + _ssModel.indirect() * 90000);
+    float obj = total_score.first * 1e6 / (_ssModel.subModel()->get_overall_area() + _ssModel.host_area());
     return obj;
   }
 
