@@ -1925,7 +1925,7 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   for (int i = 0; i < num_groups(); ++i) {
     double v = std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
     if (verbose) {
-      std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
+      std::cout << "[Group " << i << "] Freq: " << group_prop(i).frequency
                 << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
                 << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/" << rec_lat[i]
                 << ", Overall: " << v << std::endl;

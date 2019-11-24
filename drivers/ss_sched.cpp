@@ -188,9 +188,9 @@ int main(int argc, char* argv[]) {
       cout << "DSE OBJ: " << cand_ci->dse_obj() << "(" << cur_ci->dse_obj() << ") -- ";
       
       auto* sub = cand_ci->ss_model()->subModel();
-      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2 "
-           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2 "
-           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2"
+      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
+           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
+           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
            << "Ctrl: " << cur_ci->ss_model()->host_area() << std::endl;
 
 
@@ -207,9 +207,11 @@ int main(int argc, char* argv[]) {
              cur_ci->workload_array[i].sched_array[j].printGraphviz(name_ss.str().c_str()); 
            }
          }
+
          for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
            Schedule *sched = cur_ci->res[i];
-           std::cout << i << ": " << sched->ssdfg()->filename << std::endl;
+           double performance = sched->ssdfg()->estimated_performance(sched, true);
+           std::cout << i << ": " << sched->ssdfg()->filename <<  " " << performance << std::endl;
          }
 
         // dump the new hw json
@@ -239,10 +241,10 @@ int main(int argc, char* argv[]) {
     cout << "FINAL DSE OBJ: " << cur_ci->dse_obj() << " -- ";
         
     auto* sub = cur_ci->ss_model()->subModel();
-      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
-           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
-           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
-           << "Ctrl: " << cur_ci->ss_model()->host_area() << std::endl;
+    cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
+         << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
+         << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
+         << "Ctrl: " << cur_ci->ss_model()->host_area() << std::endl;
 
     for (int i = 0, ew = cur_ci->workload_array.size(); i < ew; ++i) {
       for (int j = 0, es = cur_ci->workload_array[i].sched_array.size(); j < es; ++j) {
