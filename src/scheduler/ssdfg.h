@@ -996,7 +996,7 @@ class SSDfg {
 
   int forward(bool);
 
-  double esitimated_performance(Schedule *);
+  double estimated_performance(Schedule *, bool);
 
   // ---------------------------------------------------------------------------
 

@@ -188,6 +188,12 @@ class CodesignInstance {
   void make_random_modification() {
     auto* sub = _ssModel.subModel();
 
+    if (rand() % 8 == 1) {
+      int v = _ssModel.indirect();
+      _ssModel.indirect(v ^ 1);
+      std::cout << "flip the indirect to" << _ssModel.indirect() << std::endl;
+    }
+
     verify_strong();
     //Choose a set of Items to remove
     int n_items = rand_bt(1,8);
@@ -553,7 +559,7 @@ class CodesignInstance {
 
  
     int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
-    double performance = sched->ssdfg()->esitimated_performance(sched);
+    double performance = sched->ssdfg()->estimated_performance(sched, false);
     if (succeed_sched) {
       double eval = performance * ((double)s.latmis / (max_delay + s.latmis));
       eval /= (1.0 + s.ovr);
@@ -586,7 +592,7 @@ class CodesignInstance {
 
     }
 
-    float obj = total_score.first * 1e6 / _ssModel.subModel()->get_overall_area();
+    float obj = total_score.first * 1e6 / (_ssModel.subModel()->get_overall_area() + _ssModel.indirect() * 90000);
     return obj;
   }
 

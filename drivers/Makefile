@@ -9,9 +9,8 @@ CXX = g++
 CXXFLAGS := $(OPT) -Wall -g -std=c++11
 
 LIB_PATH=../build/lib 
-INC_PATH=$(SS_TOOLS)/include/
 
-CXXFLAGS += -I$(INC_PATH) -Wl,-rpath,$(LIB_PATH) 
+CXXFLAGS += -I../src/ -Wl,-rpath,$(LIB_PATH) 
 
 LOCAL_LIBS = -ly -lfl -lssscheduler -lssconfig $(LIBS)
 

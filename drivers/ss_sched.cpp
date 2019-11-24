@@ -33,6 +33,7 @@ static struct option long_options[] = {
     {"sll",            no_argument,       nullptr, 'S',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
     {"design-space",   no_argument,       nullptr, 'f',},
+    {"estmt-perf",     no_argument,       nullptr, 'p',},
     {"relative-gap",   required_argument, nullptr, 'r',},
     {"absolute-gap",   required_argument, nullptr, 'g',},
     {"timeout",        required_argument, nullptr, 't',},
@@ -62,8 +63,9 @@ int main(int argc, char* argv[]) {
   int max_iters = 20000;
 
   bool is_dse = false;
+  bool est_perf = false;
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfd:e:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfpd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
@@ -71,6 +73,7 @@ int main(int argc, char* argv[]) {
       case 'G': show_gams = true; break;
       case 'm': mipstart = true; break;
       case 'f': is_dse = true; break;
+      case 'p': est_perf = true; break;
       case 'S': sll = true; break;
       case 'b': print_bits = true; break;
 
@@ -248,5 +251,10 @@ int main(int argc, char* argv[]) {
   }
 
   SSDfg ssdfg(pdg_filename);
-  scheduler->invoke(&ssmodel, &ssdfg, print_bits);
+  Schedule *sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
+  if (est_perf) {
+    double est = ssdfg.estimated_performance(sched, true);
+    std::cout << "Estimated overall performance: " << est << std::endl;
+  }
+  return 0;
 }

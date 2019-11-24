@@ -1760,7 +1760,8 @@ bool SSDfgValue::forward(bool attempt) {
           //          << user->use()->name() << "'s " << j << "th operand "
           //          << operand.fifos[i].size() + 1 << "/" << edge->buffer_size()
           //          << std::endl;
-          if (operand.fifos[i].size() < edge->buffer_size()/*FIXME: The buffer size should be something more rigorous*/) {
+          if (operand.fifos[i].size() < edge->buffer_size()
+              /*FIXME: The buffer size should be something more rigorous*/) {
             simulation::Data entry(data.available_at + edge->delay(), data.value, data.valid);
             if (!attempt) {
               operand.fifos[i].push(entry);
@@ -1866,14 +1867,21 @@ uint64_t SSDfgOperand::poll() {
   return res;
 }
 
-double SSDfg::esitimated_performance(Schedule *sched) {
+double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
+  double coef = 1.0;
+  
   for (auto &elem : nodes<SSDfgVecInput*>()) {
     if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read &&
         elem->meta.source != ssdfg::MetaPort::Data::Unknown) {
       bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] += 
         elem->get_vp_len() * elem->get_port_width() / 8;
+    } else if (elem->meta.op == (int) ssdfg::MetaPort::Operation::IndRead ||
+               elem->meta.op == (int) ssdfg::MetaPort::Operation::Atomic) {
+      if (!sched->ssModel()->indirect())
+        coef = 0.0;
     }
+    coef *= elem->meta.cmd;
   }
 
   std::vector<int> inst_cnt(num_groups(), 0);
@@ -1900,31 +1908,32 @@ double SSDfg::esitimated_performance(Schedule *sched) {
   }
 
   std::vector<double> rec_lat(num_groups(), 0.0);
-  std::vector<double> rec_bubble(num_groups(), 0.0);
+  std::vector<double> rec_hide(num_groups(), 0.0);
   for (auto &elem : nodes<SSDfgVecOutput*>()) {
     if (elem->meta.dest == ssdfg::MetaPort::Data::LocalPort) {
       double lat = sched->latOf(elem);
       double hide = elem->meta.conc / group_prop(elem->group_id()).unroll;
       if (lat > hide) {
         rec_lat[elem->group_id()] = lat;
-        rec_bubble[elem->group_id()] = lat - hide;
+        rec_hide[elem->group_id()] = hide;
       }
     }
   }
 
   double overall = 0.0;
 
-    for (int i = 0; i < num_groups(); ++i) {
-      double v = std::min(bw_coef[i], rec_bubble[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
-      if (false) {
-        std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
-                  << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
-                  << ", SPad: " << bw[i][1] << ", Rec: " << rec_bubble[i] << "/" << rec_lat[i]
-                  << ", Overall: " << v << std::endl;
-      }
-      overall += v;
+  for (int i = 0; i < num_groups(); ++i) {
+    double v = std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
+    if (verbose) {
+      std::cerr << "[Group " << i << "] Freq: " << group_prop(i).frequency
+                << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
+                << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/" << rec_lat[i]
+                << ", Overall: " << v << std::endl;
     }
-  return overall;
+    overall += v;
+  }
+
+  return overall * coef;
 }
 
 namespace ssdfg {

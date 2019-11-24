@@ -38,7 +38,7 @@ struct MetaPort {
 
   // The coef of memory command penalty,
   // and the coef of memory reuse reward.
-  double cmd, repeat;
+  double cmd{1.0}, repeat;
 
   std::string dest_port;
 
@@ -49,7 +49,8 @@ struct MetaPort {
     dest = Data::Unknown;
     op = 0;
     conc = 0;
-    repeat = 0;
+    cmd = 1.0;
+    repeat = 0.0;
     dest_port = "";
   }
 

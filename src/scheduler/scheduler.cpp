@@ -347,7 +347,7 @@ Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
   assert(osh.good());
   sched->printConfigHeader(osh, dfg_base);
   if (verbose) {
-    std::cout << "Performance: " << dfg->esitimated_performance(sched) << std::endl;
+    std::cout << "Performance: " << dfg->estimated_performance(sched, false) << std::endl;
   }
 
   if (print_bits) {

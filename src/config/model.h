@@ -33,6 +33,12 @@ class SSModel {
 
   void setMaxEdgeDelay(int d);
 
+  int indirect(int v = -1) {
+    if (v != -1)
+      ind_memory = v;
+    return ind_memory;
+  }
+
   SSModel(const SSModel& m) {
      _fuModel = m._fuModel;
      _subModel = m._subModel->copy();
@@ -55,6 +61,7 @@ class SSModel {
   bool _dispatch_inorder = false;
   int _dispatch_width = 2;
   int _maxEdgeDelay = 15;
+  int ind_memory{1};
 
   void parse_exec(std::istream& istream);
   void parse_json(std::istream& istream);
