@@ -4,6 +4,8 @@ include ${level}/make.config
 SOURCES= model.cpp model_parsing.cpp fu_model.cpp sub_model.cpp direction.cpp ssinst.cpp predict.cpp
 PRE_OBJECTS=$(SOURCES:.cpp=.o)
 INST_MODEL_FILE=full.ssinst
+POWER_AREA_MODEL_FILE=full.ssinst.power_area.csv
+
 
 LIB_DEST=${build}/lib
 OBJ_DEST=${build}/obj
@@ -31,7 +33,7 @@ ssinst.cpp: ssinst.h $(INST_HEADERS)
 ssinst.h: inst_model.cpp inst_model.h model_parsing.cpp $(INST_HEADERS) $(INST_MODEL_FILE)
 	$(CXX) $(CXXFLAGS) -MD inst_model.cpp model_parsing.cpp -o inst_model
 	@$(POSTCOMPILE)
-	./inst_model $(INST_MODEL_FILE) ssinst.h ssinst.cpp
+	./inst_model $(INST_MODEL_FILE) $(POWER_AREA_MODEL_FILE) ssinst.h ssinst.cpp
 
 $(OBJ_DEST)/%.o: %.cpp %.h ssinst.h $(DEPDIR)/%.d
 	$(CXX) $(CXXFLAGS) -MD -c -o $@ $<

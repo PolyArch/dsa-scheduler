@@ -744,12 +744,16 @@ class ssfu : public ssnode {
 
   double get_area() {
     collect_features();
-    return pe_area_predict(features);
+    double inst_dep_area = fu_def() -> area();
+    double inst_indep_area = pe_area_predict(features);
+    return inst_dep_area + inst_indep_area;
   }
 
   double get_power() {
     collect_features();
-    return pe_power_predict(features);
+    double inst_dep_power = fu_def() -> power();
+    double inst_indep_power = pe_power_predict(features);
+    return inst_dep_power + inst_indep_power;
   }
 
   func_unit_def* fu_def() { return _fu_def; }

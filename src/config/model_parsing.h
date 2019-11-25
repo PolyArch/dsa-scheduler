@@ -13,7 +13,7 @@ class ModelParsing {
   static bool ReadPair(std::istream& ifs, std::string& param, std::string& value);
   static void split(const std::string& s, const char delim,
                     std::vector<std::string>& elems);
-
+  static bool is_number(const std::string& s);
   static void ltrim(std::string& s);
   static void rtrim(std::string& s);
   static void trim(std::string& s);

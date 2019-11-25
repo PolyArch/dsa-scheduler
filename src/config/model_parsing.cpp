@@ -84,3 +84,10 @@ void ModelParsing::split(const std::string& s, const char delim,
     elems.push_back(item);
   }
 }
+
+bool ModelParsing::is_number(const std::string& s)
+{
+    char* end = 0;
+    double val = strtod(s.c_str(), &end);
+    return end != s.c_str() && *end == '\0' && val != HUGE_VAL;
+}
