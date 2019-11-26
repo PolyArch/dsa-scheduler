@@ -95,7 +95,7 @@ void InstModel::PowerAreaModel(char* filename){
     std::vector<std::string> tokens;
     ModelParsing::split(line, ',', tokens);
 
-    if(ModelParsing::is_number(tokens[5]) && ModelParsing::is_number(tokens[5])){
+    if(ModelParsing::is_number(tokens[5]) && ModelParsing::is_number(tokens[6])){
       char* end = 0;
       std::string inst_name = tokens[4];
       double power = strtod(tokens[5].c_str(), &end);
