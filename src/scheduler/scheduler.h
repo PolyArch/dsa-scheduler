@@ -92,6 +92,9 @@ class CodesignInstance {
     });
     for(auto& node : _ssModel.subModel()->node_list()) {
       assert(node->subnet_table().size() == node->out_links().size());
+      if (auto fu = dynamic_cast<ssfu*>(node)) {
+        assert(fu->fu_def());
+      }
     }
     for(unsigned i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
       assert(_ssModel.subModel()->link_list()[i]->id() == (int)i);
@@ -191,7 +194,6 @@ class CodesignInstance {
     if (rand() % 8 == 1) {
       int v = _ssModel.indirect();
       _ssModel.indirect(v ^ 1);
-      std::cout << "flip the indirect to" << _ssModel.indirect() << std::endl;
     }
 
     verify_strong();
@@ -376,12 +378,12 @@ class CodesignInstance {
         //std::cout << "adding switch" << sw->name() << " ins/outs:" 
         //          << sw->in_links().size() << "/" << sw->out_links().size() << "\n";
       } else if (item_class < 90) {
-         ssfu* fu = sub->add_fu();
-         //std::cout << "adding fu" << fu->id() << " ----------------------------\n";
 
          //Randomly pick an FU type from the set
          auto& fu_defs = _ssModel.fuModel()->fu_defs();
          if (fu_defs.empty()) continue;
+         ssfu* fu = sub->add_fu();
+         std::cout << "adding fu" << fu->id() << " ----------------------------\n";
          int fu_def_index = rand_bt(0,fu_defs.size());
          func_unit_def* def = &fu_defs[fu_def_index];
          fu->setFUDef(def);
@@ -543,6 +545,8 @@ class CodesignInstance {
   }
 
   std::pair<double, int> dse_sched_obj(Schedule* sched) {
+    if (!sched)
+      return {0.1, INT_MIN};
     //YES, I KNOW THIS IS A COPY OF SCHED< JUST A TEST FOR NOW
     SchedStats s;
     int num_left = sched->num_left();
@@ -561,36 +565,43 @@ class CodesignInstance {
     int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
     double performance = sched->ssdfg()->estimated_performance(sched, false);
     if (succeed_sched) {
-      double eval = performance * ((double)s.latmis / (max_delay + s.latmis));
+      double eval = performance * (max_delay / (max_delay + s.latmis));
       eval /= (1.0 + s.ovr);
-      //std::cout << sched->ssdfg()->filename << "-> " << sched->ssModel()->filename << ": " << eval << std::endl;
       return {eval, -obj};
     }
 
-    //std::cout << sched->ssdfg()->filename << "-> " << sched->ssModel()->filename << ": failed" << std::endl;
     return {-num_left, -obj};
   }
 
   float dse_obj() {
-    std::pair<double, int> total_score = std::make_pair((double) 0, 0);
+    std::pair<double, int> total_score = std::make_pair((double) 1.0, 0);
     res.resize(workload_array.size());
 
+    bool meaningful = true;
     for(auto& ws : workload_array) {
-
-      std::pair<double, int> score = std::make_pair((double) INT_MIN,INT_MIN);
+      res[&ws - &workload_array[0]] = nullptr;
+      std::pair<double, int> score = std::make_pair((double) 1e-3, INT_MIN);
+      bool yes = false;
       for(Schedule& sched : ws.sched_array) {
         std::pair<double, int> new_score = dse_sched_obj(&sched);
         if(new_score > score) {
           score=new_score;
           res[&ws - &workload_array[0]] = &sched;
+          yes = true;
         }
       }
 
-      //total_score.first += score.first;
-      //total_score.second += score.second;
-      total_score.first += score.first;
-
+      if (!yes)
+        meaningful = false;
+      //std::cout << "!!!: " << total_score.first << " * " << score.first << std::endl;
+      total_score.first *= score.first;
     }
+
+    if (!meaningful)
+      return 0.0;
+    //std::cout << "Before: " << total_score.first << std::endl;
+    total_score.first = pow(total_score.first, (1.0 / (int) workload_array.size()));
+    //std::cout << "After: " << total_score.first << std::endl;
 
     float obj = total_score.first * 1e6 / (_ssModel.subModel()->get_overall_area() + _ssModel.host_area());
     return obj;
@@ -725,5 +736,7 @@ class HeuristicScheduler : public Scheduler {
 
   int _route_times = 0;
 };
+
+void make_directories(const std::string &s);
 
 #endif

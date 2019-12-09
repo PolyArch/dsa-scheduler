@@ -59,7 +59,7 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 
   void set_fake_it() { _fake_it = true; }
 
-  bool schedule_internal(SSDfg* ssDFG, Schedule*& sched);
+  int schedule_internal(SSDfg* ssDFG, Schedule*& sched);
 
  protected:
   std::pair<int, int> obj(Schedule*& sched, SchedStats& s);
@@ -96,7 +96,10 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 
   bool timingIsStillGood(Schedule* sched);
 
-  bool map_to_completion(SSDfg* ssDFG, Schedule* sched);
+  // 0: Lack of candidates
+  // -1: Cannot route
+  // 1: Success
+  int map_to_completion(SSDfg* ssDFG, Schedule* sched);
 
   bool map_io_to_completion(SSDfg* ssDFG, Schedule* sched);
 
@@ -108,8 +111,11 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
   static bool schedule_vec_impl(SchedulerSimulatedAnnealing* engine, T* vec, SSDfg* dfg,
                                 Schedule* sched);
 
+  // 0: No candidates
+  // -1: Failed to route
+  // other: Successfully mapped one
   template <typename T>
-  inline bool map_one(SSDfg* ssDFG, Schedule* sched) {
+  inline int map_one(SSDfg* ssDFG, Schedule* sched) {
     auto& nodes = ssDFG->nodes<T*>();
     int n = nodes.size();
     int p = rand() % n;
@@ -118,16 +124,16 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
       T* node = nodes[p];
       if (!sched->is_scheduled(node)) {
         auto candidates = node->candidates(sched, _ssModel, 50);
-        
-        if(candidates.size()==0) {
-          return false;
-        }
 
+        if (candidates.empty()) {
+          return 0;
+        }
+        
         int best_candidate = try_candidates<SSDfgNode>(candidates, sched, node);
-        return best_candidate != -1;
+        return best_candidate == -1 ? -1 : 1;
       }
     }
-    return false;
+    assert(false);
   }
 
   template <typename T>
@@ -152,6 +158,9 @@ int SchedulerSimulatedAnnealing::try_candidates(
   pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
   int best_candidate = -1;
   bool find_best = rand() % 128;
+
+  if (candidates.empty())
+    return 0;
 
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
@@ -183,12 +192,6 @@ int SchedulerSimulatedAnnealing::try_candidates(
   if (best_candidate != -1) {
     best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
-  } else {
-    std::cerr << "Fail to schedule " << node->name() << std::endl;
-    for (int i = 0, n_ = candidates.size(); i < n_; ++i) {
-      std::cerr << "Cand " << candidates[i].first << ", " << candidates[i].second->name()
-                << std::endl;
-    }
   }
 
   return best_candidate;

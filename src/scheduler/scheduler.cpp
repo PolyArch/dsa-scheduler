@@ -327,7 +327,7 @@ Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
   string pdg_rawname = dfg->filename.substr(0, lastindex);
 
   if (!succeed_sched || sched == nullptr) {
-    cout << "We're going to print the DFG for simulation purposes...  have fun!\n\n";
+    cout << "Cannot be scheduled, try a smaller DFG!\n\n";
     // This is just a fake schedule!
     // sched = new Schedule(&ssmodel,&sspdg);
     SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(model);
@@ -335,6 +335,7 @@ Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
 
     s->initialize(dfg, sched);
     succeed_sched = s->schedule_internal(dfg, sched);
+    return nullptr;
   }
 
   // TODO: Print Hardware Config Information @ Sihao

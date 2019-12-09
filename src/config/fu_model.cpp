@@ -64,7 +64,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
   std::set<ss_inst_t> covered_inst;
   // parse the current instruction
   std::string inst_name = SS_CONFIG::name_of_inst(source_inst);
-  std::cout << "parsing " << inst_name << "\n";
+  //std::cout << "parsing " << inst_name << "\n";
   // the properties that required to be parsed
   bool is_fixed_point = true; // assuming it is fixed point instruction
   int bitwidth = 64; // assuming it is 64-bit
@@ -99,7 +99,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
           case '2': bitwidth = 32;break;
           case '4': bitwidth = 64;break;
           default: std::cout<<"cannot parse "<<inst_name<<"\n";
-          assert(0 && 'why?what else?');break;
+          assert(0 && "why?what else?");break;
         }
       }else{
         // circumstance 1
@@ -116,7 +116,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
           case '2': decomposer = 2;break;
           case '4': decomposer = 4;break;
           default: std::cout<<"cannot parse "<<inst_name<<"\n";
-          assert(0 && 'why?what else?');break;
+          assert(0 && "why?what else?");break;
         }
         switch(last_3_char){
           case '8': bitwidth = 8;break;
@@ -124,7 +124,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
           case '2': bitwidth = 32;break;
           case '4': bitwidth = 64;break;
           default: std::cout<<"cannot parse "<<inst_name<<"\n";
-          assert(0 && 'why?what else?');break;
+          assert(0 && "why?what else?");break;
         }
       }else{
         // circumstance 1
@@ -134,7 +134,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
           case '2': bitwidth = 32;break;
           case '4': bitwidth = 64;break;
           default: std::cout<<"cannot parse "<<inst_name<<"\n";
-          assert(0 && 'why?what else?');break;
+          assert(0 && "why?what else?");break;
         }
       }
     }
@@ -171,8 +171,8 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
   }
 
   // Print out the current instruction properties
-  std::cout << (is_fixed_point ? "fixed-point " : "floating-point ")
-            << bitwidth <<"-bit " << func_name << " x " << decomposer << "\n";
+  //std::cout << (is_fixed_point ? "fixed-point " : "floating-point ")
+  //          << bitwidth <<"-bit " << func_name << " x " << decomposer << "\n";
   
   // Generate the covering instruction
   int bitwidth_range[4] = {8,16,32,64};
@@ -298,8 +298,8 @@ void func_unit_def::determine_inst_accountability(){
           if(other_inst_acc.first == inst){continue;}
           // check whether cover other insts
           if(all_insts_covered_by_this.count(other_inst_acc.first)>0){
-            std::cout << SS_CONFIG::name_of_inst(other_inst_acc.first) 
-                      << " covered by " << SS_CONFIG::name_of_inst(inst) << "\n";
+            //std::cout << SS_CONFIG::name_of_inst(other_inst_acc.first) 
+            //          << " covered by " << SS_CONFIG::name_of_inst(inst) << "\n";
             // or covered by this instruction
             other_inst_acc.second = false;
           }else{
@@ -314,10 +314,10 @@ void func_unit_def::determine_inst_accountability(){
   }
 
   // print out accountabiliy
-  for(const auto & inst_acc : _account_for_hw){
-    std::cout << SS_CONFIG::name_of_inst(inst_acc.first) << ": " << (inst_acc.second ? "used ":"not ") << " | ";
-  }
-  std::cout << "\n";
+  //for(const auto & inst_acc : _account_for_hw){
+  //  std::cout << SS_CONFIG::name_of_inst(inst_acc.first) << ": " << (inst_acc.second ? "used ":"not ") << " | ";
+  //}
+  //std::cout << "\n";
 
   _accountability_dirty_bit = false;
 }
@@ -336,10 +336,10 @@ double func_unit_def::get_area_from_inst_set(){
     }
     double curr_area = SS_CONFIG::inst_area(inst);
     if(curr_area < 0.0){
-      std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for area estimation" << "\n";
+      //std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for area estimation"
+      //          << std::endl;
       // to turn off this assertion you can assign a default area to it and change false to true
-      area += 1000.0; // accum 1000.0 um^2 if area is not found for this inst
-      assert(false && "this instruction is not support for area estimation");
+      // assert(false && "this instruction is not support for area estimation");
     }else{
       area += curr_area;
     }
@@ -361,10 +361,11 @@ double func_unit_def::get_power_from_inst_set(){
     }
     double curr_power = SS_CONFIG::inst_power(inst);
     if(curr_power < 0.0){
-      std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for power estimation" << "\n";
+      //std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for power estimation"
+      //          << std::endl;
       // to turn off this assertion you can assign a default power to it and change false to true
       power += 1.0; // accum 1mW if area is not found for this inst
-      assert(false && 'this instruction is not support for power estimation');
+      // assert(false && "this instruction is not support for power estimation");
     }else{
       power += curr_power;
     }
@@ -376,9 +377,9 @@ double func_unit_def::get_power_from_inst_set(){
 double func_unit_def::power(){
   // if no new cap is added, just return the old power
   if(!_power_dirty_bit) {
-    std::cout << "use the old power, no need to recalculate\n";
+    //std::cout << "use the old power, no need to recalculate\n";
     return _power;
-    };
+  }
   
   // recalculate the power
   double _power = 0.0;
@@ -429,9 +430,9 @@ double func_unit_def::power(){
 double func_unit_def::area(){
   // if no new cap is added, just return the old area
   if(!_area_dirty_bit) {
-    std::cout << "use the old area, no need to recalculate\n";
+    //std::cout << "use the old area, no need to recalculate\n";
     return _area;
-    };
+  }
   
   // recalculate the area
   double _area = 0.0;
@@ -507,9 +508,7 @@ void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
     ss_inst_t ss_inst = inst_from_string(cap.c_str());
 
     if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
-      cerr << "ERROR IN PARSING INSTRUCTION: \"" << cap << "\"\n";
-      assert(0);
-      return;
+      continue;
     }
 
     fu.add_cap(ss_inst);

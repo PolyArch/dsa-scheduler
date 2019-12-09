@@ -1869,19 +1869,19 @@ uint64_t SSDfgOperand::poll() {
 
 double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
-  double coef = 1.0;
+  std::vector<double> coef(num_groups(), (double) 1.0);
   
   for (auto &elem : nodes<SSDfgVecInput*>()) {
     if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read &&
         elem->meta.source != ssdfg::MetaPort::Data::Unknown) {
       bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] += 
         elem->get_vp_len() * elem->get_port_width() / 8;
-    } else if (elem->meta.op == (int) ssdfg::MetaPort::Operation::IndRead ||
-               elem->meta.op == (int) ssdfg::MetaPort::Operation::Atomic) {
+    } else if ((elem->meta.op & (int) ssdfg::MetaPort::Operation::IndRead) || 
+               (elem->meta.op & (int) ssdfg::MetaPort::Operation::Atomic)) {
       if (!sched->ssModel()->indirect())
-        coef = 0.0;
+        coef[elem->group_id()] = 0.1;
     }
-    coef *= elem->meta.cmd;
+    coef[elem->group_id()] *= elem->meta.cmd;
   }
 
   std::vector<int> inst_cnt(num_groups(), 0);
@@ -1930,10 +1930,10 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
                 << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/" << rec_lat[i]
                 << ", Overall: " << v << std::endl;
     }
-    overall += v;
+    overall += v * coef[i];
   }
 
-  return overall * coef;
+  return overall;
 }
 
 namespace ssdfg {

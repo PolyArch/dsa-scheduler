@@ -111,9 +111,8 @@ struct MetaPort {
     if (conc) {
       os << "#pragma conc=" << conc << "\n";
     }
-    if (repeat) {
-      os << "#pragma repeat=" << repeat << "\n";
-    }
+    os << "#pragma cmd=" << cmd << "\n";
+    os << "#pragma repeat=" << repeat << "\n";
   }
 
 };

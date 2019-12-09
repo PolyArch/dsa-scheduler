@@ -239,11 +239,12 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
     for(Schedule& sr : ws.sched_array) {
       Schedule* sched = &sr;
 
-      schedule(sched->ssdfg(),sched);
-      // SchedStats s;
-      // auto p = obj(sched,s);
-      // cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
+      SchedStats s;
+      auto p = obj(sched,s);
+      cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
       ++j;
+
+      schedule(sched->ssdfg(),sched);
     }
     ++i;
   } 
@@ -274,6 +275,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   int postsize = presize;
 
   int iter = 0;
+  int fail_to_route = 0;
   for (iter = 0; iter < _max_iters; ++iter) {
     if ((total_msec() > _reslim * 1000) || _should_stop) {
       break;
@@ -292,15 +294,20 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       *cur_sched = *sched;
     }
 
-    if(iter != 0)  {
-
-      bool topology_is_okay = schedule_internal(ssDFG, cur_sched);
-      if(!topology_is_okay) {
-        sched=cur_sched;
-        cout << "Problem with Topology -- Mapping Impossible\n";
+    int status = schedule_internal(ssDFG, cur_sched);
+    if (status == 0) {
+      std::cout << "Insufficient candidates!" << std::endl;
+      return false;
+    }
+    if (status == -1) {
+      if (++fail_to_route > 32) {
         return false;
       }
+      cout << "Problem with Topology -- Mapping Impossible\n";
+      continue;
     }
+
+    fail_to_route = 0;
 
     bool succeed_sched = cur_sched->is_complete<SSDfgNode>();
 
@@ -368,15 +375,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       break;
     }
 
-    if (iter==1) {
-      //After the first iteration is complete, this is where we should check for
-      //feasibility.
-      //Why here? Because we want the scheduler to have a chance to get some initial
-      //work done
-      if(check_feasible(sched->ssdfg(),sched->ssModel(),false/*silent*/) == false) {
-        cout << "INFEASABLE AFTER ONE ITER \n";
-        return false;
-      }
+    if(check_feasible(sched->ssdfg(),sched->ssModel(),false/*silent*/) == false) {
+      cout << "INFEASABLE AFTER ONE ITER \n";
+      return false;
     }
   }
 
@@ -417,40 +418,41 @@ bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* s
   return true;
 }
 
-bool SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
+int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
   if (DEBUG_SCHED)
     cout << "Map to completion! " << sched->num_mapped<SSDfgNode>() << "\n";
-  while (!sched->is_complete<SSDfgNode>()) {
+
+  for (int i = 0; i < 100 && !sched->is_complete<SSDfgNode>(); ++i) {
+
     int r = rand() % 16;  // upper limit defines ratio of input/output scheduling
-    switch (r) {
-      case 0: {
-        if (sched->is_complete<SSDfgVecInput>()) break;
-        bool success = map_one<SSDfgVecInput>(ssDFG, sched);
-        if (!success) {
-          return false;
-        }
-        break;
-      }
-      case 1: {
-        if (sched->is_complete<SSDfgVecOutput>()) break;
-        bool success = map_one<SSDfgVecOutput>(ssDFG, sched);
-        if (!success) {
-          return false;
-        }
-        break;
-      }
-      default: {
-        if (sched->is_complete<SSDfgInst>()) break;
-        bool success = map_one<SSDfgInst>(ssDFG, sched);
-        if (!success) {
-          return false;
-        }
-        break;
-      }
+
+#define CASE(TAG, TYPE)                          \
+    TAG: {                                       \
+      if (sched->is_complete<TYPE>())            \
+        continue;                                \
+      int success = map_one<TYPE>(ssDFG, sched); \
+      if (success == 0) {                        \
+        return 0;                                \
+      }                                          \
+      if (success == -1) {                       \
+        unmap_some(ssDFG, sched);                \
+        continue;                                \
+      }                                          \
+      continue;                                  \
     }
+
+    switch (r) {
+      CASE(case 0, SSDfgVecInput)
+      CASE(case 1, SSDfgVecOutput)
+      CASE(default, SSDfgInst)
+    }
+
+#undef CASE
+
+    break;
   }
 
-  return true;
+  return sched->is_complete<SSDfgNode>() ? 1 : -1;
 }
 
 void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
@@ -477,25 +479,20 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
   }
 }
 
-bool SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
-  int max_retries = 100;
+int SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
 
-  for (int t = 0; t < max_retries; ++t) {
-    unmap_some(ssDFG, sched);
+  unmap_some(ssDFG, sched);
 
-    if (_fake_it) {
-      // Just map the i/o ports
-      map_io_to_completion(ssDFG, sched);
-      if (sched->is_complete<SSDfgVecInput>() && sched->is_complete<SSDfgVecOutput>()) {
-        return true;
-      }
-    } else {
-      // THE REAL THING
-      return map_to_completion(ssDFG, sched);
+  if (_fake_it) {
+    // Just map the i/o ports
+    map_io_to_completion(ssDFG, sched);
+    if (sched->is_complete<SSDfgVecInput>() && sched->is_complete<SSDfgVecOutput>()) {
+      return true;
     }
+    // THE REAL THING
   }
-  // cout << "failed to remap\n";
-  return false;
+
+  return map_to_completion(ssDFG, sched);
 }
 
 int SchedulerSimulatedAnnealing::routing_cost(SSDfgEdge* edge, int from_slot,
@@ -577,6 +574,11 @@ int SchedulerSimulatedAnnealing::route(
     Schedule* sched, SSDfgEdge* edge, std::pair<int, SS_CONFIG::ssnode*> source,
     std::pair<int, SS_CONFIG::ssnode*> dest,
     std::list<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen) {
+
+  //if (!sched->ssModel()->subModel()->connected[source.second->id()][dest.second->id()]) {
+  //  return 0;
+  //}
+
   bool path_lengthen = ins_it != nullptr;
 
   _ssModel->subModel()->clear_all_runtime_vals();

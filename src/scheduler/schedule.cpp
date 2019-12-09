@@ -572,17 +572,16 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
      << "// corresponding dfg is in: " << full_file_name << "\n\n";
 
   // Approximate number of config words, good enough for now
-  int config_words =
-      (_ssModel->subModel()->sizex() + 1) * (_ssModel->subModel()->sizey() + 1) + 16;
+  int config_words = _ssModel->subModel()->node_list().size();
 
-  config_words = std::max((int) (file_name.size() + 16), config_words);
+  config_words = std::max((int) file_name.size(), config_words);
   // Negative size indicates funny thing
   os << "#define " << cfg_name << "_size " << config_words << "\n\n";
 
   // NOTE: Filename is necessary here! it is the indicator that we
   // are cheating and not giving the real config bits
   os << "char " << cfg_name << "_config[" << config_words << "] = \"";
-  os << "filename:" << file_name.c_str() << "\";\n\n";
+  os << "filename:" << file_name << "\";\n\n";
 }
 
 void Schedule::printConfigBits_Hw(std::string& hw_config_filename) {

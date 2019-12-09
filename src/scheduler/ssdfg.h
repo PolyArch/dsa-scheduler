@@ -886,6 +886,14 @@ class SSDfg {
     _nodes.erase(std::remove(_nodes.begin(), _nodes.end(), inst), _nodes.end());
   }
 
+  std::set<SS_CONFIG::ss_inst_t> insts_used() {
+    std::set<SS_CONFIG::ss_inst_t> res;
+    for (auto elem : _insts) {
+      res.insert(elem->inst());
+    }
+    return res;
+  }
+
   template <typename T>
   inline void add(T*);
   template <typename T>

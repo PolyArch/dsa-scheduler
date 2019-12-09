@@ -4,6 +4,14 @@ import random
 # set sbmodel file that contains all ssinst
 ssinst_file = 'full.ssinst.sbmodel'
 
+# Set the amount of combined function unit
+max_combined_fu = 1000
+
+# Set Min / Max number of Instruction of new fucntion unit
+max_random_fu = 1000
+min_num_inst = 2
+max_num_inst = 10
+
 # set the start encoding of instruction
 start_enc = 2 # 0 is for NONE, 1 is for COPY
 
@@ -76,14 +84,6 @@ enc_ssinst_file.close()
 
 # Generate sbmodel file for DSE
 dse_ssinst_sbmodel_file = 'dse.' + encoded_ssinst_sbmodel
-
-# Set the amount of combined function unit
-max_combined_fu = 1000
-
-# Set Min / Max number of Instruction of new fucntion unit
-max_random_fu = 1000
-min_num_inst = 2
-max_num_inst = 10
 
 with open(dse_ssinst_sbmodel_file,'w') as dse_sbmodel:
     # Copy Encoded Sbmodel to DSE sbmodel

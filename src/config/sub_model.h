@@ -826,6 +826,8 @@ class ssvport : public ssnode {
     os << "{\n";
     // ID
     os << "\"id\" : " << id() << ",\n";
+    // # Port
+    os << "\"port\" : " << port() << ",\n";
     // NodeType
     os << "\"nodeType\" : "<<"\"vector port\""<<",\n";
     // data width
@@ -935,63 +937,63 @@ class SubModel {
   void PrintGraphviz(std::ostream& os);
 
   void DumpHwInJSON(const char* name) {
-  ofstream os(name);
-  assert(os.good());
+    ofstream os(name);
+    assert(os.good());
 
-  os << "{\n"; // Start of the JSON file
-  // Instruction Set
-  int start_enc = 3;
-  std::set<ss_inst_t> ss_inst_set;
-  os << "\"Instruction Set\" : {\n";
-  for (ssnode * node : node_list()){
-    ssfu * fu_node = dynamic_cast<ssfu *>(node);
-    if (fu_node != nullptr){
-      std::set<ss_inst_t> curr_inst_set = fu_node -> fu_def() ->cap();
-      for (ss_inst_t each_inst : curr_inst_set){
-        if(ss_inst_set.count(each_inst) == 0){
-          ss_inst_set.insert(each_inst);
+    os << "{\n"; // Start of the JSON file
+    // Instruction Set
+    int start_enc = 3;
+    std::set<ss_inst_t> ss_inst_set;
+    os << "\"Instruction Set\" : {\n";
+    for (ssnode * node : node_list()){
+      ssfu * fu_node = dynamic_cast<ssfu *>(node);
+      if (fu_node != nullptr){
+        std::set<ss_inst_t> curr_inst_set = fu_node -> fu_def() ->cap();
+        for (ss_inst_t each_inst : curr_inst_set){
+          if(ss_inst_set.count(each_inst) == 0){
+            ss_inst_set.insert(each_inst);
+          }
         }
       }
     }
-  }
-  int num_total_inst = ss_inst_set.size();
-  int idx_inst = 0;
-  for (ss_inst_t inst : ss_inst_set){
-    os << "\"" << SS_CONFIG::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
-    if(idx_inst < num_total_inst){
-      os << ",";
-    }os<<"\n";
-  }
-  os << "},\n";
-  
-  // Links
-  os << "\"links\" : [\n"; // The Start of Links
-  int idx_link = 0; int size_links = link_list().size();
-  for (auto link : link_list()){
-    os << "{\n";
-    os << "\"source\":";
-    link->orig()->dumpIdentifier(os);os << ",\n";
-    os << "\"sink\":";
-    link->dest()->dumpIdentifier(os);
-    os << "}";
-    if(idx_link < size_links - 1){
-      idx_link ++;os << ",\n"; // Seperate the links
+    int num_total_inst = ss_inst_set.size();
+    int idx_inst = 0;
+    for (ss_inst_t inst : ss_inst_set){
+      os << "\"" << SS_CONFIG::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
+      if(idx_inst < num_total_inst){
+        os << ",";
+      }os<<"\n";
     }
-  }
-  os << "],\n"; // The End of Links
+    os << "},\n";
 
-  // Nodes
-  os << "\"nodes\" : [\n"; // The Start of Nodes
-  int idx_node = 0; int size_nodes = node_list().size();
-  for (auto node : node_list()){
-    node -> dumpFeatures(os);
-    if (idx_node < size_nodes - 1){
-      idx_node++;os << ",\n";
+    // Links
+    os << "\"links\" : [\n"; // The Start of Links
+    int idx_link = 0; int size_links = link_list().size();
+    for (auto link : link_list()){
+      os << "{\n";
+      os << "\"source\":";
+      link->orig()->dumpIdentifier(os);os << ",\n";
+      os << "\"sink\":";
+      link->dest()->dumpIdentifier(os);
+      os << "}";
+      if(idx_link < size_links - 1){
+        idx_link ++;os << ",\n"; // Seperate the links
+      }
     }
-  }
-  os << "]\n"; // The End of Nodes
+    os << "],\n"; // The End of Links
 
-  os << "}\n"; // End of the JSON file
+    // Nodes
+    os << "\"nodes\" : [\n"; // The Start of Nodes
+    int idx_node = 0; int size_nodes = node_list().size();
+    for (auto node : node_list()){
+      node -> dumpFeatures(os);
+      if (idx_node < size_nodes - 1){
+        idx_node++;os << ",\n";
+      }
+    }
+    os << "]\n"; // The End of Nodes
+
+    os << "}\n"; // End of the JSON file
   }
 
   template <int is_input, typename T>

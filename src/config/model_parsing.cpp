@@ -85,9 +85,7 @@ void ModelParsing::split(const std::string& s, const char delim,
   }
 }
 
-bool ModelParsing::is_number(const std::string& s)
-{
-    char* end = 0;
-    double val = strtod(s.c_str(), &end);
-    return end != s.c_str() && *end == '\0' && val != HUGE_VAL;
+bool ModelParsing::is_number(const std::string& s) {
+  double val;
+  return sscanf(s.c_str(), "%lf", &val) == 1;
 }
