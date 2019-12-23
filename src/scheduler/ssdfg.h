@@ -88,13 +88,8 @@ class SSDfgValue {
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version);
 
-  // TODO: Deprecate these two
-  // Dynamic Stuff
-  void set_val(uint64_t v) { _val = v; }
-  uint64_t get_val() { return _val; }
-
+  // For simulation
   std::queue<simulation::Data> fifo;
-
   void push(uint64_t value, bool valid, int delay);
   bool forward(bool attempt);
 
@@ -103,9 +98,6 @@ class SSDfgValue {
   int _index = 0;              // within the node, what index is it in its value list
   int _bitwidth = 64;
   std::vector<SSDfgEdge*> _uses;  // storage for all outgoing edges
-
-  // Dynamic Stuff
-  uint64_t _val = 0;  // dynamic var (setting the default value)
 };
 
 class SSDfgEdge {
@@ -127,33 +119,11 @@ class SSDfgEdge {
 
   int id();
   int buffer_size() { return buf_len; }
-  std::string gamsName();
   std::string name();
 
   void set_delay(int d) { _delay = d; }
 
   int delay() { return _delay; }
-
-  // void compute_next();
-  void compute_after_push(bool print, bool verif);
-
-  void compute_after_pop(bool print, bool verif);
-
-  void push_in_buffer(uint64_t v, bool valid, bool print, bool verif);
-
-  bool is_buffer_full();
-
-  bool is_buffer_empty();
-
-  // Calculate the value based on the origin's value, and the edge's
-  // index and bitwidth fields
-  uint64_t extract_value(uint64_t v_in);
-
-  uint64_t get_buffer_val();
-
-  bool get_buffer_valid();
-
-  void pop_buffer_val(bool print, bool verif);
 
   // Return true if this edges is a subset of the other edge at the given position
   bool is_subset_at_pos(SSDfgEdge* alt_edge, int pos);
@@ -169,8 +139,6 @@ class SSDfgEdge {
 
   uint64_t get_value();
 
-  void reset_associated_buffer();
-
   friend class boost::serialization::access;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version);
@@ -184,8 +152,6 @@ class SSDfgEdge {
   int _l = -1, _r = -1;
   int _op_slot = -1;
 
-  // Runtime Types
-  std::queue<std::pair<uint64_t, bool>> _data_buffer;
   // using 2 since 1st entry is used for bp
   unsigned int buf_len = 9;
 
@@ -215,16 +181,7 @@ struct SSDfgOperand {
 
   bool is_composed();
 
-  // Functions which manipulate dynamic state
-  uint64_t get_value();
-
-  uint64_t get_buffer_val();
-
-  uint64_t get_buffer_valid();
-
   uint64_t is_buffer_empty();
-
-  void pop_buffer_val(bool print, bool verif);
 
   // An Operand is valid as long as ALL of its edges are valid
   bool valid();
@@ -314,16 +271,6 @@ class SSDfgNode {
 
   void validate();
 
-  virtual int compute(bool print, bool verif) { return 0; }
-
-  //-----------------------------------------
-  virtual int update_next_nodes(bool print, bool verif) { return 0; }
-  virtual int compute_backcgra(bool print, bool verif) {
-    _inputs_ready = 0;
-    return 0;
-  }
-  //-------------------------------------------------------
-
   virtual int maxThroughput();
 
   virtual int lat_of_inst() { return 0; }
@@ -331,8 +278,6 @@ class SSDfgNode {
   virtual void depInsts(std::vector<SSDfgInst*>& insts);
 
   virtual std::string name() = 0;  // pure func
-
-  virtual std::string gamsName() = 0;
 
   SSDfgEdge* getLinkTowards(SSDfgNode* to);
 
@@ -365,32 +310,6 @@ class SSDfgNode {
   int id() { return _ID; }
 
   virtual void forward() = 0;
-
-  bool get_bp();
-
-  // retrieve the value of the def
-  uint64_t retrieve(int operand_index) {
-    assert(_ops.size() > (unsigned) operand_index);
-    return _ops[operand_index].get_value();
-  }
-
-  // Check's all consumers for backpressure-freedom,
-  // If backpressure, delay the push to next cycle
-  void set_node(SSDfgValue* dfg_val, 
-      uint64_t v, bool valid, bool avail, bool print, bool verif);
-
-  // sets value in non-backcgra
-  void set_value(int value_id, uint64_t v, bool valid) {
-    assert(value_id < (int)_values.size() && "Array access out of bound!");
-    _values[value_id]->set_val(v);
-    _invalid = !valid;
-  }
-
-  // sets value at this cycle
-  void set_value(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail, int cycle, bool is_compute);
-
-  // sets value with val index (this interface makes more sense?)
-  void set_value(int i, uint64_t v, bool valid, bool avail, int cycle, bool is_compute);
 
   //--------------------------------------------
 
@@ -434,6 +353,10 @@ class SSDfgNode {
 
   bool needs_ctrl_dep() { return _needs_ctrl_dep;}
 
+  int candidates_cnt() {
+    return candidates_cnt_;
+  }
+
  private:
   friend class boost::serialization::access;
 
@@ -467,6 +390,8 @@ class SSDfgNode {
   int _group_id = 0;  // which group do I belong to
 
   V_TYPE _vtype;
+
+  int candidates_cnt_{-1};
 };
 
 typedef std::vector<std::string> string_vec_t;
@@ -614,16 +539,11 @@ class SSDfgInst : public SSDfgNode {
 
   SS_CONFIG::ss_inst_t inst() { return _ssinst; }
 
-  // Adding new function in the header file
-  int update_next_nodes(bool print, bool verif) override;
-
   virtual int maxThroughput() override;
 
   virtual void depInsts(std::vector<SSDfgInst*>& insts) override;
 
   virtual std::string name() override;
-
-  std::string gamsName() override;
 
   void setImmSlot(int i);
 
@@ -635,12 +555,7 @@ class SSDfgInst : public SSDfgNode {
 
   uint64_t do_compute(bool& discard);
 
-  virtual int compute(bool print, bool verif) override;
-
   void print_output(std::ostream& os);
-
-  // new line added
-  virtual int compute_backcgra(bool print, bool verif) override;
 
   void set_verif_id(std::string s) { _verif_id = s; }
 
@@ -718,8 +633,6 @@ class SSDfgVec : public SSDfgNode {
 
   int length() { return _ops.size(); }
 
-  virtual std::string gamsName() override { return _name; }
-
   virtual std::string name() override { return _name; }
 
   virtual int bitwidth() override { return _bitwidth; }
@@ -742,7 +655,6 @@ class SSDfgVec : public SSDfgNode {
 class SSDfgVecInput : public SSDfgVec {
  public:
   static std::string Suffix() { return ""; }
-  static std::string GamsPort() { return "IN PORT "; }
   static bool IsInput() { return true; }
 
   static const int KindValue = V_INPUT;
@@ -770,7 +682,6 @@ class SSDfgVecOutput : public SSDfgVec {
  public:
   static std::string Suffix() { return "_out"; }
   static bool IsInput() { return false; }
-  static std::string GamsPort() { return "OUT PORT "; }
 
   static const int KindValue = V_OUTPUT;
 
@@ -873,13 +784,6 @@ class SSDfg {
 
   void set_pragma(const std::string& c, const std::string& s);
 
-  void printGams(std::ostream& os, std::unordered_map<std::string, SSDfgNode*>&,
-                 std::unordered_map<std::string, SSDfgEdge*>&,
-                 std::unordered_map<std::string, SSDfgVec*>&);
-
-  template <int is_io, typename VecType>
-  void printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssModel);
-
   // remove instruction from nodes and insts
   void removeInst(SSDfgInst* inst) {
     _insts.erase(std::remove(_insts.begin(), _insts.end(), inst), _insts.end());
@@ -928,28 +832,18 @@ class SSDfg {
 
   void insert_vec_in(SSDfgVecInput* in) {
     _vecInputs.push_back(in);
-    _vecInputGroups.back().push_back(in);
   }
 
   void insert_vec_out(SSDfgVecOutput* out) {
     _vecOutputs.push_back(out);
-    _vecOutputGroups.back().push_back(out);
   }
 
   void insert_vec_in_group(SSDfgVecInput* in, unsigned group) {
     _vecInputs.push_back(in);
-    if (_vecInputGroups.size() <= group) {
-      _vecInputGroups.resize(group + 1);
-    }
-    _vecInputGroups[group].push_back(in);
   }
 
   void insert_vec_out_group(SSDfgVecOutput* out, unsigned group) {
     _vecOutputs.push_back(out);
-    if (_vecOutputGroups.size() <= group) {
-      _vecOutputGroups.resize(group + 1);
-    }
-    _vecOutputGroups[group].push_back(out);
   }
 
   std::vector<SSDfgVecInput*> vec_inputs() { return _vecInputs; }
@@ -960,21 +854,15 @@ class SSDfg {
 
   SSDfgVecOutput* vec_out(int i) { return _vecOutputs[i]; }
 
-  std::vector<SSDfgVecInput*>& vec_in_group(int i) { return _vecInputGroups[i]; }
-
-  std::vector<SSDfgVecOutput*>& vec_out_group(int i) { return _vecOutputGroups[i]; }
-
   GroupProp& group_prop(int i) { return _groupProps[i]; }
 
-  int num_groups() { return _vecInputGroups.size(); }
+  int num_groups() { return _groupProps.size(); }
 
   template <typename T>
   inline void sort();
 
   int compute(bool print, bool verif, int group);  // atomically compute
   int maxGroupThroughput(int group);
-
-  void instsForGroup(int g, std::vector<SSDfgInst*>& insts);
 
   // --- New Cycle-by-cycle interface for more advanced CGRA -----------------
 
@@ -1086,18 +974,16 @@ class SSDfg {
 
   std::vector<SSDfgNode*> _nodes;
 
-  // redundant storage:
-  std::vector<SSDfgInst*> _insts;
 
   std::vector<SSDfgNode*> _orderedNodes;
 
+  // redundant storage:
+  std::vector<SSDfgInst*> _insts;
   std::vector<SSDfgVecInput*> _vecInputs;
   std::vector<SSDfgVecOutput*> _vecOutputs;
 
   std::vector<SSDfgEdge*> _edges;
 
-  std::vector<std::vector<SSDfgVecInput*>> _vecInputGroups;
-  std::vector<std::vector<SSDfgVecOutput*>> _vecOutputGroups;
   std::vector<GroupProp> _groupProps;
 
   int _num_node_ids = 0;
@@ -1122,14 +1008,6 @@ inline std::vector<SSDfgVecInput*>& SSDfg::nodes() {
 template <>
 inline std::vector<SSDfgVecOutput*>& SSDfg::nodes() {
   return _vecOutputs;
-}
-template <>
-inline std::vector<std::vector<SSDfgVecInput*>>& SSDfg::nodes() {
-  return _vecInputGroups;
-}
-template <>
-inline std::vector<std::vector<SSDfgVecOutput*>>& SSDfg::nodes() {
-  return _vecOutputGroups;
 }
 
 // TODO(@were): add enable_if!
@@ -1183,40 +1061,6 @@ inline void SSDfg::add_parsed_vec(const std::string& name, int len, EntryTable& 
         SSDfgValue* value = vec->values()[i];
         syms.set(ss.str(), new ValueEntry(value, j, j + width - 1));
       }
-    }
-  }
-  //{
-  //  std::ostringstream oss;
-  //  meta.to_pragma(oss);
-  //  std::cout << "Parse pragmas:\n";
-  //  std::cout << oss.str() << std::endl;
-  //}
-}
-
-template <int is_io, typename VecType>
-void SSDfg::printPortCompatibilityWith(std::ostream& os, SS_CONFIG::SSModel* ssModel) {
-  bool first = true;
-
-  for (auto& vec : nodes<VecType*>()) {
-    std::vector<int> matching_ports;
-
-    for (auto& port_interf : ssModel->subModel()->io_interf().vports_map[is_io]) {
-      const std::vector<int>& port_m = port_interf.second->port_vec();
-
-      if (port_m.size() >= (unsigned)vec->length()) {
-        matching_ports.push_back(port_interf.first);
-        if (!first)
-          os << ", ";
-        else
-          first = false;
-        os << vec->gamsName() << ".ip" << port_interf.first << " ";
-      }
-    }
-
-    if (matching_ports.size() == 0) {
-      std::cout << VecType::GamsPort() << vec->gamsName()
-                << "\" DID NOT MATCH ANY HARDWARE PORT INTERFACE\n";
-      assert(0);
     }
   }
 }

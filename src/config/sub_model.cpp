@@ -11,34 +11,13 @@
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+
+#include "../utils/debug.h"
+
 namespace pt = boost::property_tree;
 
 using namespace SS_CONFIG;
 using namespace std;
-
-// COMMA IF NOT FIRST
-static void CINF(std::ostream& os, bool& first) {
-  if (first) {
-    first = false;
-  } else {
-    os << ", ";
-  }
-}
-
-void ssio_interface::sort(std::vector<std::pair<int, int>>& portID2size,
-                          std::map<int, ssvport*>& vports) {
-  int index = 0;
-  portID2size.resize(vports.size());
-  for (auto i : vports) {
-    int id = i.first;
-    int size = i.second->size();
-    portID2size[index++] = std::make_pair(id, size);
-  }
-  std::sort(portID2size.begin(), portID2size.end(),
-            [](std::pair<int, int>& left, std::pair<int, int>& right) {
-              return left.second < right.second;
-            });
-}
 
 // ----------------------- sslink ---------------------------------------------
 
@@ -52,12 +31,6 @@ std::string sslink::name() const {
   return ss.str();
 }
 
-std::string sslink::gams_name(int config) const {
-  std::stringstream ss;
-  ss << _orig->gams_name(config) << "_" << _dest->gams_name(config);
-  return ss.str();
-}
-
 sslink* sslink::getCycleLink() {
   ssnode* n = this->dest();
   for (auto I = n->out_links().begin(), E = n->out_links().end(); I != E; ++I) {
@@ -67,12 +40,6 @@ sslink* sslink::getCycleLink() {
     }
   }
   return NULL;
-}
-
-std::string sslink::gams_name(int st, int end) const {
-  std::stringstream ss;
-  ss << _orig->gams_name(st) << "_" << _dest->gams_name(end);
-  return ss.str();
 }
 
 // ---------------------- ssswitch --------------------------------------------
@@ -152,7 +119,7 @@ void SubModel::parse_io(std::istream& istream) {
       bool changed = true;
       while (changed) {
         changed = false;
-        for (auto alt_port : _vport_list) {
+        for (auto alt_port : vport_list()) {
           if (avgx == alt_port->x() && avgy == alt_port->y()) {
             avgx += 1;
             changed = true;
@@ -250,11 +217,14 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
               continue;
             }
 
-            for(auto* fu : _fu_list) {
-              if(fu->x()==i && fu->y()==j) {
-                fu->setFUDef(fuModel->GetFUDef(fustring));
+            for (auto elem : _node_list) {
+              if (auto fu = dynamic_cast<ssfu*>(elem)) {
+                if (fu->x() == i && fu->y() == j) {
+                  fu->setFUDef(fuModel->GetFUDef(fustring));
+                }
               }
             }
+
           }
         }
 
@@ -276,7 +246,7 @@ void SubModel::PrintGraphviz(ostream& os) {
   os << "Digraph G { \n";
 
   // switchesnew_sched
-  for(auto* sw : _switch_list) {
+  for(auto* sw : switch_list()) {
     // os << switches[i][j]->name() <<"[ label = \"Switch[" << i << "][" << j << "]\"
     // ];\n";
 
@@ -288,32 +258,12 @@ void SubModel::PrintGraphviz(ostream& os) {
   }
 
   // fus
-  for(auto* fu : _fu_list) {
+  for(auto* fu : fu_list()) {
     for (auto& elem : fu->out_links()) {
       const ssnode* dest_node = elem->dest();  // Output link of each FU
       os << fu->name() << " -> " << dest_node->name() << ";\n";
     }
   }
-
-  // Input nodes
-  // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  //os << _inputs[i]->name() <<"[ label = \"IPort[" << i << "]\" ];\n";
-  //  for(auto &elem : _inputs[i]->out_links()) {
-  //    const ssnode* dest_node = elem->dest();       //Dest nodes for input ndoes are
-  //    switches os << _inputs[i]->name() << " -> " << dest_node->name() << ";\n";
-  //  }
-  //
-  //}
-
-  /*
-  for (unsigned i = 0; i < outputs.size(); ++i) {
-    os << outputs[i]->name() <<"[ label = \"OPort[" << i << "]\" ];\n";
-    ssnode::const_iterator I = outputs[i]->ibegin(), E = outputs[i]->iend();
-    for(;I!=E;++I) {
-      const ssnode* orig_node = (*I)->orig();
-      os << orig_node->name() << " -> " << outputs[i]->name() << ";\n";
-    }
-  }*/
 
   os << "}\n";
 }
@@ -323,39 +273,6 @@ void SubModel::clear_all_runtime_vals() {
     n->reset_runtime_vals();
   }
 }
-
-namespace SS_CONFIG {
-
-template <>
-std::vector<ssfu*>& SubModel::nodes() {
-  return _fu_list;
-}
-template <>
-std::vector<ssvport*>& SubModel::nodes() {
-  return _vport_list;
-}
-
-template <int is_input, typename T>
-void SubModel::PrintGamsIO(std::ostream& os) {
-  bool first = true;
-  auto& _ssio_interf = this->_ssio_interf;
-  std::vector<T*>& nodes_ = this->nodes<T*>();
-  for (auto& elem : _ssio_interf.vports_map[is_input]) {
-    int i = 0;
-    // for each elem in the vector
-    for (auto port : elem.second->port_vec()) {
-      assert((unsigned)port >= nodes_.size() && "TOO HIGH OP INDEX");
-      if (first)
-        first = false;
-      else
-        os << ", ";
-      // os << "ip" << elem.first << "." << nodes_[port]->gams_name(0) << " " << i + 1;
-      // //no config supp.
-    }
-  }
-}
-
-}  // namespace SS_CONFIG
 
 int dist_grid(int x, int y) {
   int dist = abs(x) + abs(y) + 1;
@@ -372,402 +289,6 @@ int dist_switch(int x, int y) {
   return dist;
 }
 
-void SubModel::PrintGamsModel(ostream& os,
-                              unordered_map<string, pair<ssnode*, int>>& node_map,
-                              unordered_map<string, pair<sslink*, int>>& link_map,
-                              unordered_map<string, pair<ssswitch*, int>>& switch_map,
-                              unordered_map<string, pair<bool, int>>& port_map,
-                              int n_configs) {
-  // int in each maps is the configuration num
-  // string -- name of node and position
-
-  // --------------------------- First, print the node sets ------------------------
-  os << "$onempty\n";
-  os << "Sets\n";
-  os << "n \"Hardware Nodes\"\n /";
-  bool first = true;
-
-  for (int config = 0; config < n_configs; ++config) {
-    // fus
-    for(auto* fu : _fu_list) {
-      CINF(os, first);
-      os << fu->gams_name(config);
-      node_map[fu->gams_name(config)] = make_pair(fu, config);
-    }
-    // inputs
-    // TODO: Fix me or eliminate == no more inputs
-    // os << "\n";
-    // for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //  os << ", " << _inputs[i]->gams_name(config);
-    //  node_map[_inputs[i]->gams_name(config)] = make_pair(_inputs[i], config);
-    //}
-
-    // outputs
-    // TODO: Fix me or eliminate == no more inputs
-
-    // os << "\n";
-    // for (unsigned i = 0; i < _outputs.size(); ++i) {
-    //  os << ", " << _outputs[i]->gams_name(config);
-    //  node_map[_outputs[i]->gams_name(config)] = make_pair(_outputs[i], config);
-    //}
-  }
-  os << "/\n";
-
-  // --------------------------- next, print the capabilility sets
-  // ------------------------ input nodes
-  /// TODO: Fix me or eliminate == no more inputs
-
-  // first = true;
-  // os << "inN(n) \"Input Nodes\"\n /";
-
-  // for (int config = 0; config < n_configs; ++config) {
-  //  for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //    CINF(os, first);
-  //    os << _inputs[i]->gams_name(config);
-  //  }
-  //}
-  // os << "/\n";
-
-  ////output nodes
-  // first = true;
-  // os << "outN(n) \"Output Nodes\"\n /";
-
-  // for (int config = 0; config < n_configs; ++config) {
-  //  for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //    CINF(os, first);
-  //    os << _outputs[i]->gams_name(config);
-  //  }
-  //}
-  // os << "/\n";
-
-  // total capabilities
-  for (int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
-
-    os << name_of_inst(ss_inst) << "N(n) /";
-
-    first = true;
-    for (int config = 0; config < n_configs; ++config) {
-      for(auto* fu : _fu_list) {
-        if (fu->fu_def() == nullptr || fu->fu_def()->is_cap(ss_inst)) {
-          CINF(os, first);
-          os << fu->gams_name(config);  // Each FU in the grid
-        }
-      }
-    }
-
-    os << "/\n";
-  }
-
-  // create the kindN Set
-  os << "kindN(K,n) \"Capabilities of a Node\" \n";
-
-  // -------------------------- print the ports ----------------------------
-  os << "pn \"Port Interface Declarations\"\n /";
-
-  //  int num_port_interfaces=_ssio_interf.in_vports.size() + _ssio_interf.out_
-
-  // Declare Vector Ports
-  first = true;
-
-  for (int io = 0; io < 2; ++io) {
-    std::string prfx[2] = {"op", "ip"};
-    for (auto& elem : _ssio_interf.vports_map[io]) {
-      CINF(os, first);
-      os << "ip" << elem.first;
-      port_map[prfx[io] + std::to_string(elem.first)] = make_pair(true, elem.first);
-    }
-  }
-
-  if (first == true) {
-    os << "pnXXX";
-  }
-  os << "/\n";
-
-  // --------------------------- print the switches  ------------------------
-  os << "r \"Routers (switches)\"\n /";
-  first = true;
-
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* sw : _switch_list) {
-      CINF(os, first);
-      os << sw->gams_name(config);
-    }
-
-    /*
-    //Inputs and outputs are also switches
-    //inputs
-    //TODO: FIXME or eleiminate, no more inputs
-    os << "\n";
-    for (unsigned i = 0; i < _inputs.size(); ++i) {
-        os << ", " << _inputs[i]->gams_name(config);
-        node_map[_inputs[i]->gams_name(config)]=make_pair(&_inputs[i],config);
-    }
-    //outputs
-    os << "\n";
-    for (unsigned i = 0; i < _outputs.size(); ++i) {
-        os << ", " << _outputs[i]->gams_name(config);
-        node_map[_outputs[i]->gams_name(config)]=make_pair(&_outputs[i],config);
-    }
-    */
-  }
-
-  os << "/\n";
-
-  os << "l \"Links\"\n /";
-  first = true;
-  //_switches
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* sw : _switch_list) {
-      for (auto& elem : sw->out_links()) {
-        CINF(os, first);
-        os << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-      switch_map[sw->gams_name(config)] =
-          make_pair(sw, config);
-    }
-
-    // fus
-    for(auto* fu : _fu_list) {
-      for (auto& elem : fu->out_links()) {
-        os << ", " << elem->gams_name(config);
-        link_map[elem->gams_name(config)] = make_pair(elem, config);
-      }
-    }
-
-    // inputs
-    // TODO: FIxme or eliminate, no more inputs
-    // for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //  for (auto &elem : _inputs[i]->out_links()) {
-    //    os << ", " << elem->gams_name(config);
-    //    link_map[elem->gams_name(config)] = make_pair(elem, config);
-    //  }
-    //}
-  }
-  os << "/;\n";
-
-  // --------------------------- Enable the Sets ------------------------
-  os << "kindN('Input', inN(n))=YES;\n";
-  os << "kindN('Output', outN(n))=YES;\n";
-
-  for (int i = 2; i < SS_NUM_TYPES; ++i) {
-    ss_inst_t ss_inst = (ss_inst_t)i;
-    os << "kindN(\'" << name_of_inst(ss_inst) << "\', " << name_of_inst(ss_inst)
-        << "N(n))=YES;\n";
-  }
-
-  // Print Parameters
-  os << "parameter\n";
-  // Node Distances
-  int config = 0;
-
-  // ----------------------- Node Distances -----------------------------------
-  first = true;
-  os << "DIST(n,n) \"Node Distances\"\n /";
-  for (int x1 = 0; x1 < _sizex; ++x1) {
-    for (int y1 = 0; y1 < _sizey; ++y1) {
-      // me to all func units
-      for (int x2 = 0; x2 < _sizex; ++x2) {
-        for (int y2 = 0; y2 < _sizey; ++y2) {
-          if (x1 == x2 && y1 == y2) continue;
-          CINF(os, first);
-
-          //int d = dist_grid(x2 - x1, y2 - y1);
-          //TODO: fixme or eliminate
-          //os << _fus[x1][y1]->gams_name(config) << "." << _fus[x2][y2]->gams_name(config)
-          //    << " " << d;
-        }
-      }
-      // all inputs to me
-      //    //TODO: FIXME or eleiminate, no more inputs
-
-      // for (unsigned i = 0; i < _inputs.size(); ++i) {
-      //  CINF(os, first);
-      //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-      //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-      //  os << _inputs[i]->gams_name(config) << "."
-      //      << _fus[x1][y1]->gams_name(config) << " " << d;
-      //}
-
-      ////all outputs to me
-      // for (unsigned i = 0; i < _outputs.size(); ++i) {
-      //  CINF(os, first);
-      //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-      //  int d = dist_switch(x1 - sw->x(), y1 - sw->y());
-      //  os << _fus[x1][y1]->gams_name(config) << "."
-      //      << _outputs[i]->gams_name(config) << " " << d;
-      //}
-      // os << "\n";
-    }
-  }
-  os << "/\n";
-
-  // ----------------------- Node Loc -------------------------------------
-  os << "PXn(n) \" Position X \"\n /";
-  first = true;
-  for(auto* fu : _fu_list) {
-    CINF(os, first);
-    os << fu->gams_name(config) << " " << fu->x() * 2 + 1;
-  }
-  // TODO: Fixme or eliminate, no more inputs
-  // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  CINF(os, first);
-  //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-  //  os << _inputs[i]->gams_name(config) << " " << sw->x() * 2;
-  //}
-  // for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //  CINF(os, first);
-  //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-  //  os << _outputs[i]->gams_name(config) << " " << sw->x() * 2;
-  //}
-  // os << "/\n";
-
-  os << "PYn(n) \" Position X \"\n /";
-  first = true;
-  for(auto* fu : _fu_list) {
-    CINF(os, first);
-    os << fu->gams_name(config) << " " << fu->y() * 2 + 1;
-  }
-
-  // TODO: Fixme or eliminate, no more inputs
-  // for (unsigned i = 0; i < _inputs.size(); ++i) {
-  //  CINF(os, first);
-  //  ssswitch *sw = static_cast<ssswitch *>(_inputs[i]->getFirstOutLink()->dest());
-  //  os << _inputs[i]->gams_name(config) << " " << sw->y() * 2;
-  //}
-  // for (unsigned i = 0; i < _outputs.size(); ++i) {
-  //  CINF(os, first);
-  //  ssswitch *sw = static_cast<ssswitch *>(_outputs[i]->getFirstInLink()->orig());
-  //  os << _outputs[i]->gams_name(config) << " " << sw->y() * 2;
-  //}
-  // os << "/\n";
-
-  // --------------------------- Print Port Interfaces --------------------
-  os << "PI(pn,n) \"Port Interfaces\" /\n";
-  // Declare Port to Node Mapping
-  first = true;
-
-  // TODO: fixme or eliminate
-  // PrintGamsIO<1, ssinput>(os);
-  // PrintGamsIO<0, ssoutput>(os);
-
-  os << "/\n";
-
-  // --------------------------- Now Print the Linkage ------------------------
-
-  os << "Hnl(n,l) \"Node Outputs\" \n/";
-  // fus
-  first = true;
-
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* fu : _fu_list) {
-      for (auto& elem : fu->out_links()) {
-        CINF(os, first);
-        os << fu->gams_name(config) << "." << elem->gams_name(config) << " 1";
-      }
-    }
-
-    // inputs
-    // TODO: fixme or eliminate, no more inputs
-    // for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //  for (auto &elem: _inputs[i]->out_links()) {
-    //    os << ", " << _inputs[i]->gams_name(config) << "." << elem->gams_name(config)
-    //    << " 1";
-    //  }
-    //}
-
-    // if (_multi_config) {
-    //  //print loadslice and crosswitch links
-    //  if (config != n_configs - 1) {
-    //    //outputs
-    //    for (unsigned i = 0; i < _outputs.size(); ++i) {
-    //      for (auto &elem : _outputs[i]->out_links()) {
-    //        os << ", " << _outputs[i]->gams_name(config) << "." <<
-    //        elem->gams_name(config) << " 1";
-    //      }
-    //    }
-    //  }
-
-    //  //print final loadslice links
-    //  //if (config == n_configs - 1) {
-    //  //  for (auto &elem : _load_slice.in_links()) {
-    //  //    ssnode *output = elem->orig();
-    //  //    os << ", " << output->gams_name(config) << "." << elem->gams_name(config)
-    //  << " 1";
-    //  //  }
-    //  //}
-    //}
-  }
-  os << "/\n";
-
-  os << "Hrl(r,l) \"Router Outputs\" \n/";
-  first = true;
-
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* sw : _switch_list) {
-      for (auto& elem : sw->out_links()) {
-        CINF(os, first);
-        os << sw->gams_name(config) << "." << elem->gams_name(config)
-            << " 1";
-      }
-    }
-  }
-  os << "/\n";
-
-  os << "Hln(l,n) \"Node Inputs\" \n/";
-  // fus
-  first = true;
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* fu : _fu_list) {
-      for (auto& elem : fu->in_links()) {
-        CINF(os, first);
-        os << elem->gams_name(config) << "." << fu->gams_name(config) << " 1";
-      }
-    }
-    // outputs
-    // TODO: fixme or eliminate
-    // for (unsigned i = 0; i < _outputs.size(); ++i) {
-    //  for (auto &elem : _outputs[i]->in_links()) {
-    //    os << ", " << elem->gams_name(config)
-    //        << "." << _outputs[i]->gams_name(config) << " 1";
-    //  }
-    //}
-    // if (_multi_config) {
-    //  if (config != 0) {
-    //    //outputs
-    //    for (unsigned i = 0; i < _inputs.size(); ++i) {
-    //      for (auto &elem: _inputs[i]->in_links()) {
-    //        os << ", " << elem->gams_name(config - 1, config)
-    //            << "." << _inputs[i]->gams_name(config) << " 1";
-    //      }
-    //    }
-    //  }
-    //  if (config == 0) {
-    //    for (auto &elem : _load_slice.out_links()) {
-    //      ssnode *input = elem->dest();
-    //      os << ", " << elem->gams_name(config) << "." << input->gams_name(config) << "
-    //      1";
-    //    }
-    //  }
-    //}
-  }
-
-  os << "/\n";
-
-  os << "Hlr(l,r) \"Router Inputs\" \n/";
-  first = true;
-  for (int config = 0; config < n_configs; ++config) {
-    for(auto* sw : _switch_list) {
-      for (auto& elem : sw->in_links()) {
-        CINF(os, first);
-        os << elem->gams_name(config) << "." << sw->gams_name(config) << " 1";
-      }
-    }
-  }
-  os << "/;\n";
-}
-
 SubModel::SubModel(int x, int y, PortType pt, int ips, int ops, bool multi_config) {
   build_substrate(x, y);
   connect_substrate(x, y, pt, ips, ops, multi_config, 0, 0, 0, 0, 0, 0, 1);
@@ -777,39 +298,57 @@ void SubModel::build_substrate(int sizex, int sizey) {
   _sizex = sizex;
   _sizey = sizey;
 
-  // Create FU array
-  _fus.resize(_sizex);
-
   // Iterate each x vector -- vector of ssfu objects
-  for (unsigned x = 0; x < _fus.size(); x++) {
-    _fus[x].resize(_sizey);
-    for (unsigned y = 0; y < (unsigned)_sizey; ++y) {
-      add_fu(x, y);
+  for (int x = 0; x < sizex; x++) {
+    for (int y = 0; y < _sizey; ++y) {
+      auto fu = add_fu();
+      fu->setXY(x, y);
     }
   }
 
   // Create Switch array
-  _switches.resize(_sizex + 1);
-  for (unsigned x = 0; x < _switches.size(); x++) {
-    _switches[x].resize(_sizey + 1);
-    for (unsigned y = 0; y < (unsigned)_sizey + 1; ++y) {
+  for (int x = 0; x < sizex + 1; x++) {
+    for (int y = 0; y < sizey + 1; ++y) {
       add_switch(x, y);
     }
   }
 }
 
-void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
-  if(_in_links.size()==0 && !is_input()) return;
+sslink* ssnode::add_link(ssnode *node) {
+  sslink* link = new sslink(this, node);
+  if (this == node) {
+    if (_cycle_link) {
+      DEBUG(CYCLELINK) << "two cycle links :\n" << "source : " << link->orig()->nodeType()
+                       <<"_"<< link -> orig() -> id() <<", " << "sink : "
+                       << link->dest()->nodeType() <<"_"<< link -> dest() -> id()<< "\n"
+                       << "[Warning] two cycle links, why?" << "\n";
+    }
+    _cycle_link = link;
+  }
+  auto &olinks = links[0];
+  link->set_out_index(olinks.size());
+  olinks.push_back(link);
 
-  std::vector<std::pair<int, sslink*>>& links =
+  //maybe just setup the routing table here?
+  _subnet_table.resize(olinks.size());
+  create_blank_subnet_table(link);
+
+  node->add_back_link(link);
+  return link;
+}
+
+void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
+  if(links[1].size()==0 && !is_input()) return;
+
+  std::vector<std::pair<int, sslink*>>& memo_links =
       _routing_memo.at(i * 4 * MAX_SUBNETS + in_off * 4 + bitwidth_log);
   int slots = 1;
   for (int b = 0; b < bitwidth_log; ++b) slots *= 2;
 
   int in_slots;
   int in_index;
-  if (_in_links.size() > 0) {
-    sslink* inlink = _in_links[i];
+  if (links[1].size() > 0) {
+    sslink* inlink = links[1][i];
     in_slots = inlink->bitwidth() / 8;
     in_index = inlink->in_index();
     // cout << inlink->name() << ":" << in_off << ", size:" << slots << " -- ";
@@ -820,12 +359,7 @@ void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
     // cout << "any for " << name() << ":" << in_off << ", size:" << slots << "--";
   }
 
-  // if(_out_links.size()==0) {
-  //  cout << "  NO B/C OUTLINKS IS 0 \n";
-  //  return;
-  //}
-
-  for (sslink* outlink : _out_links) {
+  for (sslink* outlink : links[0]) {
     // start at each output offset
     for (int out_off = 0; out_off < outlink->bitwidth() / 8; ++out_off) {
       bool failed = false;
@@ -842,7 +376,7 @@ void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
       if (!failed) {
         // cout << outlink->name() << ":" << out_off << " ";
 
-        links.push_back(make_pair(out_off, outlink));
+        memo_links.push_back(make_pair(out_off, outlink));
       }
     }
   }
@@ -900,10 +434,10 @@ void ssnode::setup_default_routing_table(sslink* inlink, sslink* outlink) {
 
 // Add blank space for a given link input
 void ssnode::create_blank_subnet_table_input(sslink* inlink) {
-  for (sslink* outlink : _out_links) {
+  for (sslink* outlink : links[0]) {
     for (int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
       _subnet_table[outlink->out_index()][o_sub].resize(
-          std::max(1, (int)_in_links.size()));
+          std::max(1, (int)links[1].size()));
 
       create_blank_subnet_table(outlink,o_sub,inlink);    
     }
@@ -920,11 +454,11 @@ void ssnode::create_blank_subnet_table(sslink* outlink, int o_sub, sslink* inlin
 
 void ssnode::create_blank_subnet_table(sslink* outlink, int o_sub) {
   _subnet_table[outlink->out_index()][o_sub].resize(
-      std::max(1, (int)_in_links.size()));
-  for (sslink* inlink : _in_links) {
+      std::max(1, (int)in_links().size()));
+  for (sslink* inlink : in_links()) {
     create_blank_subnet_table(outlink,o_sub,inlink);
   }
-  if (_in_links.size() == 0) {
+  if (in_links().size() == 0) {
     _subnet_table[outlink->out_index()][o_sub][0].resize(MAX_SUBNETS);
   }
 }
@@ -936,10 +470,10 @@ void ssnode::create_blank_subnet_table(sslink* outlink) {
     create_blank_subnet_table(outlink,o_sub);
   }
 
-  for (sslink* inlink : _in_links) {
+  for (sslink* inlink : in_links()) {
     setup_default_routing_table(inlink, outlink);
   }
-  if (_in_links.size() == 0) {
+  if (in_links().empty()) {
     setup_default_routing_table(nullptr, outlink);
   }
 
@@ -947,45 +481,11 @@ void ssnode::create_blank_subnet_table(sslink* outlink) {
 
 void ssnode::setup_routing_memo() {
 
-  //if (_subnet_table.size() == 0) {
-  //  assert(0 && "depricated block");
-  //  // Allocate the space for the table
-  //  _subnet_table.resize(_out_links.size());
-  //  for (sslink* outlink : _out_links) {
-  //    create_blank_subnet_table(outlink);
-  //  }
-
-  //  for (sslink* outlink : _out_links) {
-  //    for (sslink* inlink : _in_links) {
-  //      setup_default_routing_table(inlink, outlink);
-  //    }
-  //    if (_in_links.size() == 0) {
-  //      setup_default_routing_table(nullptr, outlink);
-  //    }
-  //  }
-  //}
-
-  // for(sslink* outlink : _out_links) {
-  //  for(sslink* inlink : _in_links) {
-  //    cout << inlink->name() << " -> " << outlink->name() << "\n";
-  //    for(int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
-  //      for(int i_sub = 0; i_sub < MAX_SUBNETS; ++i_sub) {
-  //        cout << _subnet_table[outlink->out_index()][o_sub][inlink->in_index()][i_sub]
-  //        << " ";
-  //      }
-  //      cout << "\n";
-  //    }
-  //  }
-  //}
-
-  // Now, no matter what _subnet table will be filled
-  // Now lets memo-ize it so that the scheduler isn't dog slow
-  // allocate space for the memo table
   _routing_memo.clear();
-  _routing_memo.resize(std::max(1, (int)_in_links.size()) * _bitwidth / 8 * 4);
+  _routing_memo.resize(std::max(1, (int)in_links().size()) * _bitwidth / 8 * 4);
   
 
-  for (int i = 0; i < std::max(1, (int)_in_links.size()); ++i) {
+  for (int i = 0; i < std::max(1, (int)in_links().size()); ++i) {
     for (int slot = 0; slot < 8; ++slot) {
       for (int bitwidth = 0; bitwidth <= 3; ++bitwidth) {
         setup_routing_memo_node(i, slot, bitwidth);
@@ -997,16 +497,10 @@ void ssnode::setup_routing_memo() {
 // Group Nodes/Links and Set IDs
 // This should be done after all the links are added
 void SubModel::post_process() {
-  //_node_list.clear();
   _link_list.clear();
 
-  for (auto elem : _vport_list)  elem->agg_elem(_node_list, _link_list);
-  for (auto elem : _fu_list)     elem->agg_elem(_node_list, _link_list);
-  for (auto elem : _switch_list) elem->agg_elem(_node_list, _link_list);
-
-  // fix the ids since we reordered the nodes/links
-  //fix_node_id(); 
-  fix_link_id(); 
+  for (auto elem : _node_list) elem->agg_elem(_link_list);
+  fix_id(_link_list); 
 
   // Setup the subnetwork topology lookup tables for each node if it has not been
   // setup already during configuration.
@@ -1021,7 +515,11 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
                                  int ops, bool multi_config, int temp_x, int temp_y,
                                  int temp_width, int temp_height, int skip_hv_dist,
                                  int skip_diag_dist, int skip_delay) {
+  auto fus = fu_list();
+  auto sws = switch_list();
+
   {
+
     const int di[] = {0, 1, 1, 0};
     const int dj[] = {0, 0, 1, 1};
     const SwitchDir::DIR dir[] = {SwitchDir::SE, SwitchDir::SW, SwitchDir::NW,
@@ -1033,17 +531,20 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     // first connect switches to FUs
     for (int i = 0; i < _sizex; i++) {
       for (int j = 0; j < _sizey; j++) {
-        for (int k = 0; k < 4; ++k)
-          _switches[i + di[k]][j + dj[k]]->add_link(_fus[i][j])->setdir(dir[k]);
+        for (int k = 0; k < 4; ++k) {
+          int x = i + di[k], y = j + dj[k];
+          sws[x * (_sizey + 1) + y]->add_link(fus[i * _sizey + j])->setdir(dir[k]);
+        }
 
         // output from FU -- SE
-        _fus[i][j]->add_link(_switches[i + 1][j + 1])->setdir(SwitchDir::SE);
+        fus[i * _sizey + j]->add_link(sws[(i + 1) * (_sizey + 1) + (j + 1)])->setdir(SwitchDir::SE);
 
         // For temporal region, lets add some extra outputs!
-        if (i >= temp_x && i < temp_x + temp_width && j >= temp_y &&
-            j < temp_y + temp_height) {
-          for (int k = 0; k < 3; ++k)
-            _fus[i][j]->add_link(_switches[i + t_di[k]][j + t_dj[k]])->setdir(t_dir[k]);
+        if (i >= temp_x && i < temp_x + temp_width && j >= temp_y && j < temp_y + temp_height) {
+          for (int k = 0; k < 3; ++k) {
+            int x = i + t_di[k], y = j + t_dj[k];
+            fus[i * _sizey + j]->add_link(sws[x * (_sizey + 1) + y])->setdir(t_dir[k]);
+          }
         }
       }
     }
@@ -1053,42 +554,33 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   {
     const int di[] = {-1, 0, 1, 0};
     const int dj[] = {0, -1, 0, 1};
+    const int cx[] = {-1, 1, 1, 1};
+    const int cy[] = {-1, 1, -1, 1};
     const SwitchDir::DIR dir[] = {SwitchDir::W, SwitchDir::N, SwitchDir::E, SwitchDir::S};
+    const SwitchDir::DIR dir2[] = {SwitchDir::NW2, SwitchDir::SW2, SwitchDir::NE2, SwitchDir::SE2};
+    const SwitchDir::DIR dir3[] = {SwitchDir::W2, SwitchDir::S2, SwitchDir::N2, SwitchDir::E2};
     for (int i = 0; i < _sizex + 1; i++) {
       for (int j = 0; j < _sizey + 1; j++) {
         for (int k = 0; k < 4; ++k) {
           int _i = i + di[k];
           int _j = j + dj[k];
           if (_i >= 0 && _i <= _sizex && _j >= 0 && _j <= _sizey)
-            _switches[i][j]->add_link(_switches[_i][_j])->setdir(dir[k]);
+            sws[i * (_sizey + 1) + j]->add_link(sws[_i * (_sizey + 1) + _j])->setdir(dir[k]);
         }
 
         // crazy diagonals
         //@Jian, feel free to condense if you want : )
-        ssswitch* startItem = _switches[i][j];
+        ssswitch* startItem = sws[i * (_sizey + 1) + j];
 
         if (skip_diag_dist > 0) {
           int d = skip_diag_dist;
           int l = skip_delay;
-          if (i - d >= 0 && j - d >= 0) {
-            startItem->add_link(_switches[i - d][j - d])
-                ->setdir(SwitchDir::NW2)
-                ->set_lat(l);
-          }
-          if (i - d >= 0 && j + d < _sizey) {
-            startItem->add_link(_switches[i - d][j + d])
-                ->setdir(SwitchDir::SW2)
-                ->set_lat(l);
-          }
-          if (i + d < _sizex && j - d >= 0) {
-            startItem->add_link(_switches[i + d][j - d])
-                ->setdir(SwitchDir::NE2)
-                ->set_lat(l);
-          }
-          if (i + d < _sizex && j + d < _sizey) {
-            startItem->add_link(_switches[i + d][j + d])
-                ->setdir(SwitchDir::SE2)
-                ->set_lat(l);
+          for (int k = 0; k < 4; ++k) {
+            int x = i + cx[k] * d, y = j + cy[k] * d;
+            int idx = x * (_sizey + 1) + y;
+            if (idx >= 0 && idx < sws.size()) {
+              startItem->add_link(sws[idx])->setdir(dir2[k])->set_lat(l);
+            }
           }
         }
 
@@ -1096,17 +588,12 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
         if (skip_hv_dist > 0) {
           int d = skip_hv_dist;
           int l = skip_delay;
-          if (i - d >= 0) {
-            startItem->add_link(_switches[i - d][j])->setdir(SwitchDir::W2)->set_lat(l);
-          }
-          if (j + d < _sizey) {
-            startItem->add_link(_switches[i][j + d])->setdir(SwitchDir::S2)->set_lat(l);
-          }
-          if (j - d >= 0) {
-            startItem->add_link(_switches[i][j - d])->setdir(SwitchDir::N2)->set_lat(l);
-          }
-          if (i + d < _sizex) {
-            startItem->add_link(_switches[i + d][j])->setdir(SwitchDir::E2)->set_lat(l);
+          for (int k = 0; k < 4; ++k) {
+            int x = i + di[k] * d, y = j + dj[k] * d;
+            int idx = x * (_sizey + 1) + y;
+            if (idx >= 0 && idx < sws.size()) {
+              startItem->add_link(sws[idx])->setdir(dir3[k])->set_lat(l);
+            }
           }
         }
       }
@@ -1120,19 +607,19 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     int in_index = 0;
     for (int sw = 0; sw < _sizey; sw++) {
       for (int p = 0; p < ips; p++) {
-        add_input(in_index++, _switches[0][_sizey - sw]);
+        add_input(in_index++, sws[_sizey - sw]);
       }
     }
 
     for (int sw = 0; sw < _sizex; sw++) {
       for (int p = 0; p < ips; p++) {
-        add_input(in_index++, _switches[sw][0]);
+        add_input(in_index++, sws[sw * (_sizey + 1)]);
       }
     }
 
     for (int sw = 0; sw < _sizey; sw++) {
       for (int p = 0; p < ips; p++) {
-        add_input(in_index++, _switches[_sizex][sw]);
+        add_input(in_index++, sws[_sizex * (_sizey + 1) + sw]);
       }
     }
 
@@ -1142,7 +629,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
         for (int p = 0; p < ips; p++) {
           // cout << in_index << " ";
           // assert((unsigned)in_index < _inputs.size());
-          add_input(in_index++, _switches[sw + 1][_sizey]);
+          add_input(in_index++, sws[(sw + 1) * (_sizey + 1) + _sizey]);
         }
       }
     }
@@ -1153,7 +640,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
       int out_index = 0;
       for (int sw = 0; sw < _sizex; sw++) {
         for (int p = 0; p < ops; p++) {
-          add_output(out_index++, _switches[sw + 1][_sizey]);
+          add_output(out_index++, sws[sw + 1 * (_sizey + 1) + _sizey]);
         }
       }
 
@@ -1161,12 +648,12 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
       int out_index = 0;
       for (int sw = 0; sw < _sizex; sw++) {
         for (int p = 0; p < ops; p++) {
-          add_output(out_index++, _switches[sw + 1][_sizey]);
+          add_output(out_index++, sws[(sw + 1) * (_sizey + 1) + _sizey]);
         }
       }
       for (int sw = 0; sw < _sizey; sw++) {
         for (int p = 0; p < ops; p++) {
-          add_output(out_index++, _switches[_sizex][_sizey - sw - 1]);
+          add_output(out_index++, sws[_sizex * (_sizey + 1) + _sizey - sw - 1]);
         }
       }
     }
@@ -1178,10 +665,10 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     for (int i = 0; i < _sizex + 1; i++) {
       for (int j = 0; j < _sizey + 1; j++) {
         for (int p = 0; p < ips; p++) {
-          add_input(inum++, _switches[i][_sizey - j]);
+          add_input(inum++, sws[i * (_sizey + 1) + _sizey - j]);
         }
         for (int p = 0; p < ops; p++) {
-          add_output(onum++, _switches[i][_sizey - j]);
+          add_output(onum++, sws[i * (_sizey + 1) + _sizey - j]);
         }
       }
     }
@@ -1199,34 +686,28 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
   for (int i = temp_x; i < temp_x + temp_width; i++) {
     for (int j = temp_y; j < temp_y + temp_height; j++) {
-      _fus[i][j]->set_max_util(64);
+      fus[i * _sizey + j]->set_max_util(64);
 
-      if (i + 1 < temp_x + temp_width) {
-        sslink* link = _fus[i][j]->add_link(_fus[i + 1][j]);
-        link->setdir(SwitchDir::E);
-        link->set_max_util(100);
-      }
-      if (i > temp_x) {
-        sslink* link = _fus[i][j]->add_link(_fus[i - 1][j]);
-        link->setdir(SwitchDir::W);
-        link->set_max_util(100);
-      }
-      if (j + 1 < temp_y + temp_height) {
-        sslink* link = _fus[i][j]->add_link(_fus[i][j + 1]);
-        link->setdir(SwitchDir::N);
-        link->set_max_util(100);
-      }
-      if (j > temp_y) {
-        sslink* link = _fus[i][j]->add_link(_fus[i][j - 1]);
-        link->setdir(SwitchDir::S);
-        link->set_max_util(100);
+      const int di[] = {-1, 1, 0, 0};
+      const int dj[] = {0, 0, 1, -1};
+      SwitchDir::DIR dir[] = {SwitchDir::E, SwitchDir::E, SwitchDir::N, SwitchDir::S};
+
+      for (int k = 0; k < 4; ++k) {
+        int x = i + di[k];
+        int y = j + dj[k];
+        if (temp_x <= x && x < temp_x + temp_width &&
+            temp_y <= y && y < temp_y + temp_height) {
+          sslink *link = fus[i * _sizey + j]->add_link(fus[x * _sizey + y]);
+          link->set_max_util(1 << 7);
+          link->setdir(dir[k]);
+        }
       }
     }
   }
 
   for (int i = 0; i < _sizex; ++i) {
     for (int j = 0; j < _sizey; ++j) {
-      auto link = _fus[i][j]->add_link(_fus[i][j]);
+      auto link = fus[i * _sizey + j]->add_link(fus[i * _sizey + j]);
       link->setdir(SwitchDir::IP0);
 
       if (i < temp_x && i >= temp_x + temp_width && j < temp_y &&

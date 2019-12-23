@@ -288,6 +288,7 @@ const char* SwitchDir::dirName(SwitchDir::DIR myDir, bool reverse) {
     case SwitchDir::OP2: return "P2"; break;
     case SwitchDir::IM: return "IM"; break;
     case SwitchDir::END_DIR: return "xxx"; break;
+    default:
+      return "???";
   }
-  return "???";
 }

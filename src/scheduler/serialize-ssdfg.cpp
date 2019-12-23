@@ -106,8 +106,6 @@ void SSDfg::serialize(Archive& ar, const unsigned version) {
   ar& BOOST_SERIALIZATION_NVP(_vecInputs);
   ar& BOOST_SERIALIZATION_NVP(_vecOutputs);
   ar& BOOST_SERIALIZATION_NVP(_edges);
-  ar& BOOST_SERIALIZATION_NVP(_vecInputGroups);
-  ar& BOOST_SERIALIZATION_NVP(_vecOutputGroups);
   ar& BOOST_SERIALIZATION_NVP(_groupProps);
 }
 

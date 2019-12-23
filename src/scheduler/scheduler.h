@@ -105,20 +105,6 @@ class CodesignInstance {
   //1. there are no hangers (elements with no purpose, usually after delete)
   void verify_strong() {
     verify();
-
-    // I realize that hangers are kind of painful to ensure they are deleted
-    // they will get cleaned up over time
-    /*
-    for(auto* node : _ssModel.subModel()->node_list()) {
-      if(!(node->is_output() || node->out_links().size() > 0)) {
-        std::cout << "problem with node, no outputs: " << node->name() << "\n";
-        assert(0 && "bad node, no outputs");
-      }
-      if(!(node->is_input()  || node->in_links().size()  > 0)) {
-        std::cout << "problem with node, no inputs: " << node->name() << "\n";
-        assert(0 && "bad node, no inputs");
-      }
-    }*/
   }
 
   void add_random_edges_to_node(ssnode* n, int min_in, int max_in, 
@@ -128,10 +114,9 @@ class CodesignInstance {
     if (sub->node_list().empty())
       return;
 
-    int n_ins = rand_bt(min_in,max_in);
-    int n_outs = rand_bt(min_out,max_out);
+    int n_ins = rand() % (max_in - min_in) + min_in;
     for(int i = 0; i < n_ins; ++i) {
-      int src_node_index = rand_bt(0,sub->node_list().size());
+      int src_node_index = rand() % sub->nodes<ssnode*>().size();
       ssnode* src = sub->node_list()[src_node_index];
       if(src->is_output() || src == n) {
         i--;
@@ -139,8 +124,9 @@ class CodesignInstance {
       }
       sub->add_link(src,n);
     }
+    int n_outs = rand() % (max_out - min_out) + min_out;
     for(int i = 0; i < n_outs; ++i) {
-      int dst_node_index = rand_bt(0,sub->node_list().size());
+      int dst_node_index = rand() % sub->node_list().size();
       ssnode* dst = sub->node_list()[dst_node_index];
       if(dst->is_input() || dst == n) {
         i--;
@@ -150,11 +136,26 @@ class CodesignInstance {
     }
   }
 
+  template<typename T>
+  bool delete_nodes(std::function<bool(T*)> f) {
+    bool res = false;
+    auto* sub = _ssModel.subModel();
+    std::for_each(sub->nodes<T*>().begin(),
+                  sub->nodes<T*>().end(),
+                  [this, &res, f](T* n) {
+                    if (f(n))
+                      this->delete_hw(n);
+                      res = true;
+                  });
+    return res;
+  }
+
   //Delete FUs, Switches, and Vports that can't possible be useful
   bool delete_hangers() {
     bool deleted_something = false;
 
     auto* sub = _ssModel.subModel();
+
 
     for(ssfu* fu : sub->fu_list()) {
       if(fu->in_links().size() <=1 || fu->out_links().size() < 1) {
@@ -162,16 +163,6 @@ class CodesignInstance {
         deleted_something=true;
       }
     }
-    /*for(ssswitch* sw : sub->switch_list()) {
-      if(sw->in_links().size() < 1 || sw->out_links().size() < 1) {
-        delete_hw(sw);
-      }
-      if(sw->in_links().size() == 1 && sw->out_links().size() == 1) {
-        sub->add_link(sw->in_links().front()->orig(),
-                      sw->out_links().front()->dest());
-        delete_hw(sw);
-      }
-    }*/
     for(ssvport* ivport : sub->input_list()) {
       if(ivport->out_links().size() < 1) {
         delete_hw(ivport);
@@ -188,6 +179,7 @@ class CodesignInstance {
     return deleted_something;
   }
 
+
   void make_random_modification() {
     auto* sub = _ssModel.subModel();
 
@@ -198,41 +190,41 @@ class CodesignInstance {
 
     verify_strong();
     //Choose a set of Items to remove
-    int n_items = rand_bt(1,8);
+    int n_items = rand() % 8 + 1;
     for(int i = 0; i < n_items; ++i) {
-      int item_class = rand_bt(0,100);
+      int item_class = rand() % 100;
       if(item_class < 65) {
         //delete a link
         if(sub->link_list().empty()) continue;
-        int index = rand_bt(0,sub->link_list().size());
+        int index = rand() % sub->link_list().size();
         sslink* l = sub->link_list()[index];
         if(delete_linkp_list.count(l)) continue; //don't double delete
         delete_link(l);
       } else if(item_class < 80) {
         //delete a switch
         if(sub->switch_list().empty()) continue;
-        int index = rand_bt(0,sub->switch_list().size());
+        int index = rand() % sub->switch_list().size();
         ssswitch* sw = sub->switch_list()[index];
         if(delete_nodep_list.count(sw)) continue; //don't double delete
         delete_hw(sw);
       } else if (item_class < 90) {
         //delete an FU
         if(sub->fu_list().empty()) continue;
-        int index = rand_bt(0,sub->fu_list().size());
+        int index = rand() % sub->fu_list().size();
         ssfu* fu = sub->fu_list()[index];
         if(delete_nodep_list.count(fu)) continue; //don't double delete
         delete_hw(fu);
       } else if (item_class < 95) {
         //delete an VPort
         if(sub->input_list().size()==0) continue;
-        int index = rand_bt(0,sub->input_list().size());
+        int index = rand() % sub->input_list().size();
         ssvport* vport = sub->input_list()[index];
         if(delete_nodep_list.count(vport)) continue; //don't double delete
         delete_hw(vport);
       } else { // (item_class < 100) 
         //delete an VPort
         if(sub->output_list().size()==0) continue;
-        int index = rand_bt(0,sub->output_list().size());
+        int index = rand() % sub->output_list().size();
         ssvport* vport = sub->output_list()[index];
         if(delete_nodep_list.count(vport)) continue; //don't double delete
         delete_hw(vport);
@@ -253,9 +245,9 @@ class CodesignInstance {
 
 
     //Modifiers
-    n_items = rand_bt(0,8);
+    n_items = rand() % 8;
     for(int i = 0; i < n_items; ++i) {
-      int item_class = rand_bt(0,100);      
+      int item_class = rand() % 100;  
       if(item_class < 40) {
         /*
         // This was for link flow-control, which I don't want any more
@@ -278,7 +270,7 @@ class CodesignInstance {
           });
         }*/
         if (sub->node_list().empty()) continue;
-        int node_index  = rand_bt(0, sub->node_list().size());
+        int node_index  = rand() % sub->node_list().size();
         ssnode* node = sub->node_list()[node_index];
         if(node->is_input() || node->is_output()) continue;
  
@@ -299,9 +291,9 @@ class CodesignInstance {
 
         if (sub->fu_list().empty()) continue;
         // Modify FU delay-fifo depth
-        int diff = rand_bt(-8,8);
+        int diff = rand() % 16 - 8;
         if(diff==0) continue;
-        int fu_index  = rand_bt(0, sub->fu_list().size());
+        int fu_index  = rand() % sub->fu_list().size();
         ssfu* fu = sub->fu_list()[fu_index];
   
         int old_util = fu->max_util();
@@ -331,8 +323,8 @@ class CodesignInstance {
 
         if (sub->fu_list().empty()) continue;
         // Modify FU delay-fifo depth
-        int diff = rand_bt(-2,1);
-        int fu_index  = rand_bt(0, sub->fu_list().size());
+        int diff = -(rand() % 3);
+        int fu_index  = rand() % sub->fu_list().size();
         ssfu* fu = sub->fu_list()[fu_index];
         int new_delay_fifo_depth = std::max(0,fu->delay_fifo_depth() + diff);
         fu->set_delay_fifo_depth(new_delay_fifo_depth);
@@ -355,14 +347,14 @@ class CodesignInstance {
     }
 
     //Items to add
-    n_items = rand_bt(0,8);
+    n_items = rand() % 8;
     for(int i = 0; i < n_items; ++i) {
-      int item_class = rand_bt(0,100);      
+      int item_class = rand() % 100;
       if(item_class < 65) {
         // Add a random link -- really? really
         if(sub->node_list().empty()) continue;
-        int src_node_index = rand_bt(0,sub->node_list().size());
-        int dst_node_index = rand_bt(0,sub->node_list().size());
+        int src_node_index = rand() % sub->node_list().size();
+        int dst_node_index = rand() % sub->node_list().size();
         ssnode* src = sub->node_list()[src_node_index];
         ssnode* dst = sub->node_list()[dst_node_index];
         if(src->is_output() || dst->is_input() || src == dst) continue;
@@ -384,7 +376,7 @@ class CodesignInstance {
          if (fu_defs.empty()) continue;
          ssfu* fu = sub->add_fu();
          std::cout << "adding fu" << fu->id() << " ----------------------------\n";
-         int fu_def_index = rand_bt(0,fu_defs.size());
+         int fu_def_index = rand() % fu_defs.size();
          func_unit_def* def = &fu_defs[fu_def_index];
          fu->setFUDef(def);
 
@@ -504,9 +496,6 @@ class CodesignInstance {
     verify(); 
 
     // Remove the elements from these lists
-    sub->delete_fus(delete_fu_list);
-    sub->delete_switches(delete_sw_list);
-    sub->delete_vports(delete_vport_list);
     sub->delete_nodes(delete_node_list); //these happen after above, b/c above uses id
     sub->delete_links(delete_link_list);
 
@@ -607,7 +596,7 @@ class CodesignInstance {
     return obj;
   }
 
-  private:
+ private:
   //When we delete a hardware element, we need to:
   //1. deschedule anything that was assigned to that element
   //2. remove the concept of that element from the schedule (consistency)
@@ -717,24 +706,6 @@ class Scheduler {
 
   float _optcr, _optca, _reslim;
   std::chrono::time_point<std::chrono::steady_clock> _start;
-};
-
-class HeuristicScheduler : public Scheduler {
- public:
-  HeuristicScheduler(SS_CONFIG::SSModel* ssModel)
-      : Scheduler(ssModel), fscore(std::make_pair(MAX_ROUTE, MAX_ROUTE)) {}
-
- protected:
-  const std::pair<int, int> fscore;
-
-  void random_order(int n, std::vector<int>& order);
-
-  std::vector<bool> rand_node_choose_k(int k, std::vector<ssnode*>& input_nodes,
-                                       std::vector<ssnode*>& output_nodes);
-
-  void rand_n_choose_k(int n, int m, std::vector<int>& indices);
-
-  int _route_times = 0;
 };
 
 void make_directories(const std::string &s);

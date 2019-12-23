@@ -12,7 +12,6 @@
 #include "ss-config/model.h"
 
 #include "ss-scheduler/scheduler.h"
-#include "ss-scheduler/scheduler_gams.h"
 #include "ss-scheduler/scheduler_sa.h"
 #include "ss-scheduler/ssdfg.h"
 
@@ -28,7 +27,6 @@ static struct option long_options[] = {
     {"sub-alg",        required_argument, nullptr, 's',},
     {"verbose",        no_argument,       nullptr, 'v',},
     {"print-bits",     no_argument,       nullptr, 'b',},
-    {"show-gams",      no_argument,       nullptr, 'G',},
     {"mipstart",       no_argument,       nullptr, 'm',},
     {"sll",            no_argument,       nullptr, 'S',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
@@ -50,8 +48,8 @@ Scheduler* scheduler;
 int main(int argc, char* argv[]) {
   int opt;
   bool verbose = false;
-  bool show_gams = false, mipstart = false, sll = false;
-  int seed = 0;
+  bool mipstart = false, sll = false;
+  int seed = time(0);
 
   string str_schedType = string("sa");
   string str_subalg = string("");
@@ -67,12 +65,11 @@ int main(int argc, char* argv[]) {
   bool est_perf = false;
   bool indirect = false;
 
-  while ((opt = getopt_long(argc, argv, "vGa:s:r:g:t:mfpcd:e:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:mfpcd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
       case 'v': verbose = true; break;
-      case 'G': show_gams = true; break;
       case 'm': mipstart = true; break;
       case 'f': is_dse = true; break;
       case 'p': est_perf = true; break;
@@ -110,13 +107,7 @@ int main(int argc, char* argv[]) {
   ssmodel.indirect(indirect);
 
 
-  if (str_schedType == "gams") {
-    auto* scheduler_gams = new GamsScheduler(&ssmodel);
-    scheduler_gams->showGams(show_gams);
-    scheduler_gams->setMipstart(mipstart);
-    scheduler_gams->setSll(sll);
-    scheduler = scheduler_gams;
-  } else if (str_schedType == "sa") { /*simulated annealing*/
+  if (str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
   } else {
     cerr << "Something Went Wrong with Default Scheduler String";

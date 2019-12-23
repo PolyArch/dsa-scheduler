@@ -44,14 +44,18 @@ struct CandidateRoute {
   std::unordered_map<SSDfgEdge*, EdgeProp> edges;
 };
 
-class SchedulerSimulatedAnnealing : public HeuristicScheduler {
+class SchedulerSimulatedAnnealing : public Scheduler {
  public:
+  bool is_dse{false};
+
+  int routing_times{0};
+
   int candidates_tried{0}, candidates_succ{0};
 
   void initialize(SSDfg*, Schedule*&);
 
   SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel)
-      : HeuristicScheduler(ssModel) {}
+      : Scheduler(ssModel) {}
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
@@ -103,9 +107,8 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 
   bool map_io_to_completion(SSDfg* ssDFG, Schedule* sched);
 
-  template <typename T>
   inline int try_candidates(const std::vector<std::pair<int, ssnode*>>& candidates,
-                            Schedule*, T* node);
+                            Schedule*, SSDfgNode* node);
 
   template <typename T>
   static bool schedule_vec_impl(SchedulerSimulatedAnnealing* engine, T* vec, SSDfg* dfg,
@@ -129,7 +132,7 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
           return 0;
         }
         
-        int best_candidate = try_candidates<SSDfgNode>(candidates, sched, node);
+        int best_candidate = try_candidates(candidates, sched, node);
         return best_candidate == -1 ? -1 : 1;
       }
     }
@@ -146,56 +149,6 @@ class SchedulerSimulatedAnnealing : public HeuristicScheduler {
 
   bool _fake_it = false;
 };
-
-template <typename T>
-int SchedulerSimulatedAnnealing::try_candidates(
-    const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched, T* node) {
-  using std::make_pair;
-  using std::pair;
-  using std::vector;
-  CandidateRoute best_path;
-
-  pair<int, int> bestScore = std::make_pair(INT_MIN, INT_MIN);
-  int best_candidate = -1;
-  bool find_best = rand() % 128;
-
-  if (candidates.empty())
-    return 0;
-
-  for (size_t i = 0; i < candidates.size(); ++i) {
-    ++candidates_tried;
-
-    if (scheduleHere(sched, node, candidates[i])) {
-      ++candidates_succ;
-
-      SchedStats s; 
-      CandidateRoute undo_path;
-      pair<int, int> candScore = obj_creep(sched, s, undo_path);
-
-      if (!find_best) {
-        return i;
-      }
-
-      if (candScore > bestScore) {
-        best_candidate = i;
-        bestScore = candScore;
-        best_path.edges.clear();
-        best_path.fill_from(node, sched);
-        best_path.fill_paths_from_undo(undo_path, sched);
-      }
-
-      undo_path.apply(sched);  // revert to paths before creep-based path lengthening
-      sched->unassign_dfgnode(node);
-    }
-  }
-
-  if (best_candidate != -1) {
-    best_path.apply(sched);
-    sched->assign_node(node, candidates[best_candidate]);
-  }
-
-  return best_candidate;
-}
 
 template <typename T>
 inline void SchedulerSimulatedAnnealing::unmap_one(SSDfg* dfg, Schedule* sched) {

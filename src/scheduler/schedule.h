@@ -14,7 +14,6 @@
 #include "ss-config/sub_model.h"
 
 #include "ssdfg.h"
-#include "bitslice.h"
 #include "color_mapper.h"
 #include "config_defs.h"
 #include "limits.h"
@@ -50,11 +49,6 @@ class Schedule {
 
   void printConfigHeader(std::ostream&, std::string cfg_name, bool cheat = true);
 
-  // Old Interface:
-  void printConfigBits(std::ostream& os, std::string cfg_name);
-
-  void printConfigBits_Hw(std::string& hw_config_filename);
-
   void printConfigCheat(std::ostream& os, std::string cfg_name);
 
   void printConfigVerif(std::ostream& os);
@@ -63,30 +57,6 @@ class Schedule {
 
   // Rest of Stuff
   SSDfg* ssdfg() const { return _ssDFG; }
-
-  std::map<SS_CONFIG::sslink*, SS_CONFIG::sslink*>& link_map_for_sw(ssswitch* sssw) {
-    return _assignSwitch[sssw];
-  }
-
-  // check if inlink
-  sslink* get_switch_in_link(ssswitch* sssw, sslink* out_link) {
-    auto iter = _assignSwitch[sssw].find(out_link);
-    if (iter == _assignSwitch[sssw].end()) {
-      return nullptr;
-    } else {
-      return _assignSwitch[sssw][out_link];
-    }
-  }
-
-  bool have_switch_links() { return !_assignSwitch.empty(); }
-
-  // For a switch, assign the outlink to inlink
-  void assign_switch(ssswitch* sssw, sslink* slink, sslink* slink_out) {
-    assert(sssw);
-    assert(slink);
-    assert(slink_out);
-    _assignSwitch[sssw][slink_out] = slink;  // out to in for a sw
-  }
 
   void assign_lat(SSDfgNode* dfgnode, int lat) { _vertexProp[dfgnode->id()].lat = lat; }
 
@@ -209,8 +179,6 @@ class Schedule {
       return -1;
     }
   }
-
-  // sslink* getNextLink(SSDfgEdge* dfgedge, sslink* link);
 
   // Assign the ssnode to dfgnode and vice verse
   void assign_node(SSDfgNode* dfgnode, std::pair<int, ssnode*> assigned) {
@@ -361,14 +329,14 @@ class Schedule {
     }
   }
 
-  // pdf edge to sslink
+  // pdg edge to sslink
   void assign_edgelink(SSDfgEdge* dfgedge, int slot, sslink* slink,
                        std::list<std::pair<int, sslink*>>::iterator it) {
     assign_link_to_edge(dfgedge, slot, slink);
     _edgeProp[dfgedge->id()].links.insert(it, std::make_pair(slot, slink));
   }
 
-  // pdf edge to sslink
+  // pdg edge to sslink
   void assign_edgelink(SSDfgEdge* dfgedge, int slot, sslink* slink) {
     assign_link_to_edge(dfgedge, slot, slink);
     _edgeProp[dfgedge->id()].links.push_back(std::make_pair(slot, slink));
@@ -565,49 +533,12 @@ class Schedule {
 
   void clearAll() {
     _totalViolation = 0;
-    _assignSwitch.clear();
     _vertexProp.clear();
     _edgeProp.clear();
     _nodeProp.clear();
     _linkProp.clear();
 
     allocate_space();
-  }
-
-  // assign outlink to inlink for a switch
-  // if the dfgnode is associated with the switch
-  // whats is the outlink of the inlink from that node
-  void xfer_link_to_switch() {
-    using namespace SS_CONFIG;
-    using namespace std;
-
-    if (_assignSwitch.size() != 0) {  // switches already assigned!
-      return;
-    }
-
-    vector<ssswitch*>& switches = _ssModel->subModel()->switch_list();  // 1d switches
-
-    for (auto sssw_it : switches) {
-      ssswitch* sssw = sssw_it;
-      for (auto& inlink : sssw->in_links()) {
-        for (int slot_in = 0; slot_in < 8; ++slot_in) {
-          if (linkAssigned(slot_in, inlink)) {
-            // inlink to sw associated with a dfg node
-            SSDfgNode* innode = dfgNodeOf(slot_in, inlink);
-
-            for (auto outlink : sssw->out_links()) {
-              for (int slot_out = 0; slot_out < 8; ++slot_out) {
-                // check if the dfgnode has same outlink and inlink
-                if (linkAssigned(slot_out, outlink) != 0 &&
-                    innode == dfgNodeOf(slot_out, outlink)) {
-                  _assignSwitch[sssw][outlink] = inlink;
-                }
-              }
-            }  // end for out links
-          }
-        }
-      }  // end for sin links
-    }
   }
 
   // NOTE/WARN: interpretConfigBits creates a dfg object that should
@@ -622,8 +553,6 @@ class Schedule {
   void clear_ssdfg();
 
   void reset_simulation_state();
-
-  bitslices<uint64_t>& slices() { return _bitslices; }
 
   void add_passthrough_node(int slot, ssnode* n) {
     _nodeProp[n->id()].slots[slot].num_passthroughs += 1;
@@ -906,12 +835,7 @@ class Schedule {
   std::vector<NodeProp> _nodeProp;
   std::vector<LinkProp> _linkProp;
 
-  std::map<ssswitch*, std::map<sslink*, sslink*>> _assignSwitch;  // out to in
-
   int _decode_lat_mis = 0;
-
-  // CGRA-parsable Config Data
-  bitslices<uint64_t> _bitslices;
 
   // Can consider adjusting these as averages, or making edge-specific
   int _min_expected_route_latency = 2;
@@ -919,7 +843,6 @@ class Schedule {
 
   int _num_passthroughs = 0;
 
-  SwitchDir ssdir;
   ColorMapper _cm;
 };
 

@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 #include <climits>
-#include "./predict.h"
+#include "predict.h"
 #include "direction.h"
 #include "fu_model.h"
 #include <fstream>
@@ -36,6 +36,24 @@ T get_prop_attr(const boost::property_tree::ptree &prop, const std::string &name
   return dft;
 }
 
+template<typename T>
+void fix_id(std::vector<T> &vec) {
+  for (int i = 0, n = vec.size(); i < n; ++i) {
+    vec[i]->set_id(i);
+  }
+}
+
+template<typename T> 
+void vec_delete_by_id(std::vector<T>& vec, std::vector<int>& indices) {
+   auto new_end = std::remove_if(vec.begin(),vec.end(),[&](T fu){
+    for(int index : indices) {
+      if(fu->id() == index) return true;
+    }
+    return false;
+  });
+  vec.erase(new_end,vec.end());
+}
+
 // TODO: Should we delete this class?
 class ssio_interface {
  public:
@@ -54,10 +72,6 @@ class ssio_interface {
   }
 
   void fill_vec();
-
- private:
-  void sort(std::vector<std::pair<int, int>>& portID2size,
-            std::map<int, ssvport*>& vports);
 };
 
 class sslink {
@@ -85,10 +99,6 @@ class sslink {
   sslink* getCycleLink();
 
   std::string name() const;
-
-  std::string gams_name(int config) const;
-
-  std::string gams_name(int, int) const;
 
   int id() { return _ID; }
 
@@ -140,35 +150,24 @@ class sslink {
 
 class ssnode {
  public:
+  enum NodeType {
+    FU,
+    Switch,
+    InPort,
+    OutPort,
+    Unknown
+  };
+
   ssnode() {}
 
-  sslink* add_link(ssnode* node) {
-    sslink* link = new sslink(this, node);
-    if (this == node) {
-      if (_cycle_link) {
-        std::cout << "two cycle link :\n";
-        std::cout << "source : " << link->orig()->nodeType() <<"_"<< link -> orig() -> id()<<", ";
-        std::cout << "sink : " << link->dest()->nodeType() <<"_"<< link -> dest() -> id()<<"\n";
-        assert(true && "two cycle links, why?");
-        // Be Attention: When we read the sbmodel, the cycle link is added automatically (implictly),
-        // but when we read the json, every link is added explictly, which cause two cyclic link.
-        };
-      _cycle_link = link;
-    }
-    link->set_out_index(_out_links.size());
-    _out_links.push_back(link);
+  virtual ssnode* copy() = 0;
 
-    //maybe just setup the routing table here?
-    _subnet_table.resize(_out_links.size());
-    create_blank_subnet_table(link);
-
-    node->add_back_link(link);
-    return link;
-  }
+  sslink* add_link(ssnode* node);
 
   void add_back_link(sslink* link) {
-    link->set_in_index(_in_links.size());
-    _in_links.push_back(link);
+    auto &ilinks = links[1];
+    link->set_in_index(ilinks.size());
+    ilinks.push_back(link);
 
     //maybe just setup routing table here?
     create_blank_subnet_table_input(link);
@@ -176,37 +175,39 @@ class ssnode {
 
   // This function removes a link from its parent nodes
   void unlink_outgoing(sslink* link) {
+    auto &olinks = links[0];
     //delete this element of the subnet table -- bye bye!
     _subnet_table.erase(_subnet_table.begin()+link->out_index());
 
-    for(unsigned i = link->out_index()+1; i < _out_links.size(); ++i) {
-      _out_links[i]->set_out_index(i-1);
+    for(unsigned i = link->out_index()+1; i < olinks.size(); ++i) {
+      olinks[i]->set_out_index(i-1);
     }
 
-    auto new_end = std::remove(_out_links.begin(),_out_links.end(),link);
-    _out_links.erase(new_end,_out_links.end());
+    auto new_end = std::remove(olinks.begin(), olinks.end(),link);
+    olinks.erase(new_end, olinks.end());
   }
+
   void unlink_incomming(sslink* link) {
-    for(unsigned i = link->in_index()+1; i < _in_links.size(); ++i) {
-      _in_links[i]->set_in_index(i-1);
+    auto &ilinks = links[1];
+    auto &olinks = links[0];
+    for(unsigned i = link->in_index()+1; i < ilinks.size(); ++i) {
+      ilinks[i]->set_in_index(i-1);
     }
  
     // [output][slot][input][slot]
     //delete this element of the subnet table -- bye bye!
-    for(unsigned out_i = 0; out_i < _out_links.size(); ++out_i) {
+    for(unsigned out_i = 0; out_i < olinks.size(); ++out_i) {
       for(unsigned out_s = 0; out_s < MAX_SUBNETS; ++out_s) {
         auto& table = _subnet_table[out_i][out_s];
         table.erase(table.begin()+link->in_index());
       }
     }
 
-    auto new_end = std::remove(_in_links.begin(),_in_links.end(),link);
-    _in_links.erase(new_end,_in_links.end());
+    auto new_end = std::remove(ilinks.begin(),ilinks.end(),link);
+    ilinks.erase(new_end,ilinks.end());
   }
 
   virtual std::string name() const = 0;
-
-  virtual std::string gams_name(int) const = 0;
 
   virtual bool is_input() { return false; }
   virtual bool is_output() { return false; }
@@ -225,33 +226,20 @@ class ssnode {
 
   typedef std::vector<sslink*>::const_iterator const_iterator;
 
-  const std::vector<sslink*>& in_links() { return _in_links; }
+  const std::vector<sslink*>& in_links() { return links[1]; }
 
-  const std::vector<sslink*>& out_links() { return _out_links; }
+  const std::vector<sslink*>& out_links() { return links[0]; }
 
-  int num_non_self_out_links() { return _out_links.size() - (_cycle_link != 0); }
+  virtual bool is_hanger() { return false; }
 
-  sslink* getFirstOutLink() { return _out_links.empty() ? nullptr : _out_links[0]; }
+  int num_non_self_out_links() { return links[0].size() - (_cycle_link != 0); }
 
-  sslink* getFirstInLink() { return _in_links.empty() ? nullptr : _in_links[0]; }
+  sslink* getFirstOutLink() { return links[0].empty() ? nullptr : links[0][0]; }
 
-  sslink* getInLink(SwitchDir::DIR dir) {
-    for (auto& dlink : in_links()) {
-      if (dlink->dir() == dir) return dlink;
-    }
-    return nullptr;
-  }
-
-  sslink* getOutLink(SwitchDir::DIR dir) {
-    for (auto& dlink : out_links()) {
-      if (dlink->dir() == dir) return dlink;
-    }
-    return nullptr;
-  }
-
-  sslink* get_cycle_link() { return _cycle_link; }
+  sslink* getFirstInLink() { return links[1].empty() ? nullptr : links[1][0]; }
 
   std::string nodeType(){return node_type;}
+
   int id() { return _ID; }
 
   void set_ssnode_prop(boost::property_tree::ptree prop) {
@@ -357,10 +345,9 @@ class ssnode {
   virtual void dumpIdentifier(ostream& os) {assert(false);}
   virtual void dumpFeatures(ostream& os) {assert(false);}
 
-  void agg_elem(std::vector<ssnode*>& node_list, std::vector<sslink*>& link_list) {
-    //node_list.push_back(this);
-    for (unsigned i = 0; i < _out_links.size(); ++i) {
-      link_list.push_back(_out_links[i]);
+  void agg_elem(std::vector<sslink*>& link_list) {
+    for (unsigned i = 0; i < links[0].size(); ++i) {
+      link_list.push_back(links[0][i]);
     }
   }
 
@@ -414,8 +401,10 @@ class ssnode {
   void setup_routing_memo();
   void setup_routing_memo_node(int i, int slot, int bitwidth);
 
-  std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p,
-                                                      int bitwidth) {
+  // Maps [input_link_id][slot_number][bitwidth]->vector of legal links/slots
+  std::vector<std::vector<std::pair<int, sslink*>>> _routing_memo;
+
+  std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int bitwidth) {
     int slot = p.first;
     sslink* l = p.second;
     int l_ind = 0;
@@ -423,12 +412,12 @@ class ssnode {
     auto& ret = _routing_memo.at(l_ind * 4 * MAX_SUBNETS + slot * 4 +
                                  (31 - __builtin_clz(bitwidth)));
 
-    if(_out_links.size()!=0 && ret.size() == 0) {
-      std::cout << "ERROR: Link: " << l->name() 
-                << " has output links, but no routing table\n";
-      std::cout << "_routing_memo.size() : " << _routing_memo.size() << "\n";
-      std::cout << "num ins: " << _in_links.size() << "\n";
-      std::cout << "num outs: " << _out_links.size() << "\n";
+    if(links[0].size()!=0 && ret.size() == 0) {
+      std::cerr << "ERROR: Link: " << l->name() 
+                << " has output links, but no routing table\n"
+                << "_routing_memo.size() : " << _routing_memo.size() << "\n"
+                << "num ins: " << links[1].size() << "\n"
+                << "num outs: " << links[0].size() << "\n";
       assert(0 && "bad _routing_memo"); 
     } 
     return ret;
@@ -446,16 +435,11 @@ class ssnode {
 
   sslink* _cycle_link = nullptr;  // to
 
-  std::vector<sslink*> _in_links;  // Incomming and outgoing links
-  std::vector<sslink*> _out_links;
+  std::vector<sslink*> links[2]; // {output, input}
 
   // This table stores the subnetwork routing
   // [output][slot][input][slot]
-  std::vector<std::vector<std::vector<std::vector<bool>>>>
-      _subnet_table;  // convert from subnet_table
-
-  // Maps [input_link_id][slot_number][bitwidth]->vector of legal links/slots
-  std::vector<std::vector<std::pair<int, sslink*>>> _routing_memo;
+  std::vector<std::vector<std::vector<std::vector<bool>>>> _subnet_table;  // convert from subnet_table
 
   // Variables used for scheduling -- these should be moved out at some point (TODO)
   int _node_dist[8];
@@ -478,6 +462,12 @@ private:
 class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
+
+  ssnode *copy() override {
+    auto res = new ssswitch();
+    *res = *this;
+    return res;
+  }
 
   virtual std::string name() const override {
     std::stringstream ss;
@@ -534,16 +524,6 @@ class ssswitch : public ssnode {
     os << "}\n";
   }
 
-  virtual std::string gams_name(int config) const override {
-    std::stringstream ss;
-    if (config != 0) {
-      ss << "Sw" << _x << _y << "c" << config;
-    } else {
-      ss << "Sw" << _x << _y;
-    }
-    return ss.str();
-  }
-
   void set_prop(boost::property_tree::ptree prop) {     
     set_ssnode_prop(prop); 
     // max output fifo depth
@@ -567,8 +547,8 @@ class ssswitch : public ssnode {
       assert(0 && "Decomposer need to be power of two");
     }    
     features[5] = max_fifo_depth;
-    features[6] = _in_links.size();
-    features[7] = _out_links.size();
+    features[6] = links[1].size();
+    features[7] = links[0].size();
     features[8] = _max_util;
 
     //print_features();
@@ -615,6 +595,12 @@ class ssfu : public ssnode {
  public:
   ssfu() : ssnode() {}
 
+  ssnode *copy() override {
+    auto res = new ssfu();
+    *res = *this;
+    return res;
+  }
+
   void setFUDef(func_unit_def* fu_def) { _fu_def = fu_def; }
 
   void set_prop(boost::property_tree::ptree prop) {
@@ -636,6 +622,7 @@ class ssfu : public ssnode {
   void dumpIdentifier(ostream &os) override {
     os << "[" + to_string(_ID) +",\"function unit\""+ "]";
   }
+
   void dumpFeatures(ostream& os) override {
     os << "{\n";
     // ID
@@ -702,16 +689,6 @@ class ssfu : public ssnode {
     return ss.str();
   }
 
-  std::string gams_name(int config) const override {
-    std::stringstream ss;
-    if (config != 0) {
-      ss << "Fu" << _x << _y << "c" << config;
-    } else {
-      ss << "Fu" << _x << _y;
-    }
-    return ss.str();
-  }
-
   double* collect_features() {
     if(decomposer == 0)     decomposer = mf_decomposer;
 
@@ -732,8 +709,8 @@ class ssfu : public ssnode {
       assert(0 && "Decomposer need to be power of two");
     }
     features[7] = _delay_fifo_depth;
-    features[8] = _in_links.size();
-    features[9] = _out_links.size();
+    features[8] = links[1].size();
+    features[9] = links[0].size();
     features[10] = register_file_size;
     features[11] = _max_util;
 
@@ -784,6 +761,10 @@ class ssfu : public ssnode {
     std::cout << "\n";
   }
 
+  bool is_hanger() override {
+    return in_links().size() <=1 || out_links().size() < 1;
+  }
+
   void set_delay_fifo_depth(int d) {_delay_fifo_depth=d;}
 
   virtual int delay_fifo_depth() override {return _delay_fifo_depth;}
@@ -802,12 +783,19 @@ class ssfu : public ssnode {
 // This should be improved later
 class ssvport : public ssnode {
  public:
+
+  ssnode *copy() override {
+    auto res = new ssvport();
+    *res = *this;
+    return res;
+  }
+
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
   std::string name() const override {
     std::stringstream ss;
-    if (_out_links.size() > 0)
+    if (links[0].size() > 0)
       ss << "I";
     else
       ss << "O";
@@ -865,51 +853,49 @@ class ssvport : public ssnode {
     os << "}\n";
   }
 
-
-  std::string gams_name(int i) const override {
-    return name();
-  }
-
-  int output_bitwidth() {
-    int bitwidth = 0;
-    for (auto link : _in_links) {
-      bitwidth += link->bitwidth();
+  int bitwidth_capability() {
+    int res = 0;
+    if (is_output()) {
+      for (auto link : links[1]) {
+        res += link->bitwidth();
+      }
+    } else {
+      assert(is_input());
+      for (auto link : links[0]) {
+        res += link->bitwidth();
+      }
     }
-    return bitwidth;
-  }
-
-  int input_bitwidth() {
-    int bitwidth = 0;
-    for (auto link : _out_links) {
-      bitwidth += link->bitwidth();
-    }
-    return bitwidth;
+    return res;
   }
 
   void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
   ssnode* convert_port2node(std::string portname) { return port2node[portname]; }
   int port() { return _port; }
-  bool is_input() override { return _in_links.size() == 0; }
-  bool is_output() override { return _out_links.size() == 0; }
+  bool is_input() override { return links[1].size() == 0; }
+  bool is_output() override { return links[0].size() == 0; }
 
   double get_area(){
     double vport_features[3];
-    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
-    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
+    vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
     vport_features[2] = channel_buffer;
     return pred_vport_area(vport_features);
   }
 
   double get_power(){
     double vport_features[3];
-    vport_features[0] = _in_links.size() == 0 ? 1.0 : _in_links.size();
-    vport_features[1] = _out_links.size() == 0 ? 1.0 : _out_links.size();
+    vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
+    vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
     vport_features[2] = channel_buffer;
     return pred_vport_power(vport_features);
   }
 
   virtual ~ssvport() {};  
   void set_port(int port) {_port=port;}
+
+  bool is_hanger() override {
+    return in_links().empty() && out_links().empty();
+  }
 
  private:
   int _port = -1;
@@ -996,28 +982,38 @@ class SubModel {
     os << "}\n"; // End of the JSON file
   }
 
-  template <int is_input, typename T>
-  void PrintGamsIO(std::ostream& os);
-
-  void PrintGamsModel(
-      std::ostream& os, std::unordered_map<std::string, std::pair<ssnode*, int>>&,
-      std::unordered_map<std::string, std::pair<sslink*, int>>&,
-      std::unordered_map<std::string, std::pair<ssswitch*, int>>&,
-      std::unordered_map<std::string, std::pair<bool, int>>&, /*isInput, port*/
-      int n_configs = 1);
-
   int sizex() { return _sizex; }
 
   int sizey() { return _sizey; }
 
-  template <typename T>
-  std::vector<T>& nodes();
+  template <typename T> inline std::vector<T> nodes();
 
-  std::vector<ssfu*>& fu_list() { return _fu_list; }
+  template<typename T>
+  T *random(std::function<bool(T*)> condition) {
+    if (nodes<T*>().empty())
+      return nullptr;
+    T *res = nodes<T*>()[rand() % nodes<T*>().size()];
+    return f(res) ? res : nullptr;
+  }
+
+  template<typename T>
+  std::vector<T> node_filter() {
+    std::vector<T> res;
+    for (auto elem : _node_list) {
+      if (auto node = dynamic_cast<T>(elem)) {
+        res.push_back(node);
+      }
+    }
+    return res;
+  }
+
+  std::vector<ssfu*> fu_list() { return node_filter<ssfu*>(); }
+
+  std::vector<ssswitch*> switch_list() { return node_filter<ssswitch*>(); }
 
   double get_fu_total_area() {
     double total_area = 0.0;
-    for (auto fu : fu_list()){
+    for (auto fu : fu_list()) {
       double area_to_add = fu->get_area();
 
       static bool printed_bad_fu=false;
@@ -1040,7 +1036,8 @@ class SubModel {
 
   double get_fu_total_power() {
     double total_power = 0.0;
-    for (auto fu : fu_list()){
+    std::vector<ssfu*> fus = fu_list();
+    for (auto fu : fus) {
       total_power += fu->get_power();
     }
     return total_power;
@@ -1103,11 +1100,10 @@ class SubModel {
 
 
 
-  std::vector<ssswitch*>& switch_list() { return _switch_list; }
 
   bool multi_config() { return _multi_config; }
 
-  size_t num_fu() { return _fu_list.size(); }
+  size_t num_fu() { return fu_list().size(); }
 
   void parse_io(std::istream& istream);
 
@@ -1119,18 +1115,26 @@ class SubModel {
 
   const std::vector<ssnode*>& node_list() { return _node_list; }
 
-  const std::vector<ssvport*>& input_list() { return _input_list; }
 
-  const std::vector<ssvport*>& output_list() { return _output_list; }
+  std::vector<ssvport*> vport_list(){ return node_filter<ssvport*>(); }
 
-  std::vector<ssvport*>& vport_list(){return _vport_list;}
+  std::vector<ssvport*> vlist_impl(bool is_input) {
+    std::vector<ssvport*> res;
+    auto vports = vport_list();
+    for (auto elem : vports) {
+      if (elem->links[is_input].empty())
+        res.push_back(elem);
+    }
+    return res;
+  }
+  std::vector<ssvport*> input_list() { return vlist_impl(true); }
+  std::vector<ssvport*> output_list() { return vlist_impl(false); }
 
   void add_input(int i, ssnode* n) { _io_map[true][i] = n; }
   void add_output(int i, ssnode* n) { _io_map[false][i] = n; }
 
   ssfu* add_fu() {
     auto* fu = new ssfu();
-    _fu_list.push_back(fu);
     fu->setFUDef(nullptr);
     add_node(fu); //id and stuff
     return fu;
@@ -1138,36 +1142,24 @@ class SubModel {
 
   ssfu* add_fu(int x, int y) {
     auto* fu = add_fu();
-    if (x >= (int)_fus.size()) _fus.resize(x + 1);
-    if (y >= (int)_fus[x].size()) _fus[x].resize(y + 1);
-    _fus[x][y] = fu;
     fu->setXY(x, y);
     return fu;
   }
 
   ssswitch* add_switch() {
     auto* sw = new ssswitch();
-    _switch_list.push_back(sw);
     add_node(sw); //id and stuff
     return sw;
   }
 
   ssswitch* add_switch(int x, int y) {
     auto* sw = add_switch();
-    if (x >= (int)_switches.size()) _switches.resize(x + 1);
-    if (y >= (int)_switches[x].size()) _switches[x].resize(y + 1);
-    _switches[x][y] = sw;
     sw->setXY(x, y);
     return sw;
   }
 
   ssvport* add_vport(bool is_input) {
     auto vport = new ssvport();
-    _vport_list.push_back(vport);
-    if (is_input)
-      _input_list.push_back(vport);
-    else
-      _output_list.push_back(vport);
     add_node(vport);
     return vport;
   }
@@ -1175,9 +1167,9 @@ class SubModel {
   ssvport* add_vport(bool is_input, int port_num) {
     ssvport* vport = add_vport(is_input);
     if (_ssio_interf.vports_map[is_input].count(port_num)) {
-      std::cout << "Error: Multiple " << (is_input ? "input" : "output")
+      std::cerr << "Error: Multiple " << (is_input ? "input" : "output")
                 << " ports with port number " << port_num << "created\n\n";
-      assert(0 && "port duplication error");
+      assert(false && "port duplication error");
     }
     _ssio_interf.vports_map[is_input][port_num] = vport;
     vport->set_port(port_num);
@@ -1196,59 +1188,13 @@ class SubModel {
     copy_sub->_ssio_interf = _ssio_interf;
     copy_sub->_multi_config = _multi_config;
 
-    copy_sub->_switch_list.resize(_switch_list.size());
-    copy_sub->_fu_list.resize(_fu_list.size());
-    copy_sub->_vport_list.resize(_vport_list.size());
     copy_sub->_node_list.resize(_node_list.size());
     copy_sub->_link_list.resize(_link_list.size());
-    copy_sub->_input_list.resize(_input_list.size());
-    copy_sub->_output_list.resize(_output_list.size());
 
-    for(unsigned i = 0; i < _switch_list.size(); ++i) {
-      auto* sw = _switch_list[i];
-      auto* copy_sw = new ssswitch();
-      *copy_sw = *sw; //get the non-pointer-y things
-      copy_sub->_switch_list[i]=copy_sw;
-      assert(copy_sub->_node_list[sw->id()]==NULL);
-      copy_sub->_node_list[sw->id()]=copy_sw;
+    for (int i = 0, n = _node_list.size(); i < n; ++i) {
+      auto node = _node_list[i];
+      copy_sub->_node_list[i] = node->copy();
     }
-
-    for(unsigned i = 0; i < _fu_list.size(); ++i) {
-      auto* fu = _fu_list[i];
-      auto* copy_fu = new ssfu();
-      *copy_fu = *fu; //get the non-pointer-y things
-      copy_sub->_fu_list[i]=copy_fu;
-      assert(copy_sub->_node_list[fu->id()]==NULL);
-      copy_sub->_node_list[fu->id()]=copy_fu;
-    }
-
-    for(unsigned i = 0; i < _vport_list.size(); ++i) {
-      auto* vport = _vport_list[i];
-      auto* copy_vport = new ssvport();
-      *copy_vport = *vport;
-      copy_sub->_vport_list[i] = copy_vport;
-      assert(copy_sub->_node_list[vport->id()]==NULL);
-      copy_sub->_node_list[vport->id()]=copy_vport;
-    }
-
-    for(unsigned i = 0; i < _input_list.size(); ++i) {
-      auto* vport = _input_list[i];
-      ssvport* copy_vport = (ssvport*) copy_sub->_node_list[vport->id()];
-      copy_sub->_input_list[i] = copy_vport;
-    }
-
-    for(unsigned i = 0; i < _output_list.size(); ++i) {
-      auto* vport = _output_list[i];
-      ssvport* copy_vport = (ssvport*) copy_sub->_node_list[vport->id()];
-      copy_sub->_output_list[i] = copy_vport;
-    }
-
-    for(unsigned I = 0; I < _node_list.size(); ++I) {
-      if(copy_sub->_node_list[I]==0) {
-        std::cout << _node_list[I]->name() << " is null in copy\n";
-      }
-    }
-
 
     for(unsigned i = 0; i < _link_list.size(); ++i) {
       auto* link = _link_list[i];
@@ -1266,14 +1212,11 @@ class SubModel {
       auto* node = _node_list[I];
       auto* copy_node = copy_sub->_node_list[I];
 
-      for(unsigned i = 0; i < node->_in_links.size(); ++i) {
-        sslink* link = node->_in_links[i];
-        copy_node->_in_links[i] = copy_sub->_link_list[link->id()]; 
-      }
-
-      for(unsigned i = 0; i < node->_out_links.size(); ++i) {
-        sslink* link = node->_out_links[i];
-        copy_node->_out_links[i] = copy_sub->_link_list[link->id()]; 
+      for (int j = 0; j < 2; ++j) {
+        for(unsigned i = 0; i < node->links[j].size(); ++i) {
+          sslink* link = node->links[j][i];
+          copy_node->links[j][i] = copy_sub->_link_list[link->id()]; 
+        }
       }
 
       copy_node->setup_routing_memo();
@@ -1293,17 +1236,11 @@ class SubModel {
     indices.push_back(INT_MAX);
     std::sort(indices.begin(), indices.end(), [](int x, int y) { return x<y; });
 
-    //for(auto i : indices) {
-    //  std::cout << i << "\n";
-    //}
-  
     int ind = 0;
     unsigned nindex = indices[ind];
     int diff=0;
  
     for(unsigned i = 0; i < vec.size(); ++i) {
-      //std::cout << i << ": diff:" << diff 
-      //           << " nindex: " << nindex << " ind:" << ind <<"\n";
 
       if(diff>0) {
         vec[i-diff] = vec[i];
@@ -1320,51 +1257,17 @@ class SubModel {
   //These we can use the faster bulk vec delete
   void delete_nodes(std::vector<int> v)  {
     vec_delete_by_id(_node_list,v);
-    fix_node_id();
+    fix_id(_node_list);
   }
   void delete_links(std::vector<int> v)  {
-    //std::cout << "\n" << "linkcount before : " << v.size() << " " << _link_list.size();
     vec_delete_by_id(_link_list,v);
-    //std::cout << "linkcount after : " << v.size() << " " << _link_list.size();
-    fix_link_id();
+    fix_id(_link_list);
   }
-
-  // These functions just make the nodes and links aware of their own position
-  // in the array which holds them
-  void fix_node_id() {
-    for(unsigned i = 0; i < _node_list.size(); ++i) {
-      _node_list[i]->set_id(i);
-    }
-  }
-  void fix_link_id() {
-    for(unsigned i = 0; i < _link_list.size(); ++i) {
-      _link_list[i]->set_id(i);
-    }
-  }
-
- // Slightly less efficient delete from vector by matching on id() function
- // O(n * #indices)
- template<typename T> 
- void vec_delete_by_id(std::vector<T>& vec, std::vector<int>& indices) {
-    auto new_end = std::remove_if(vec.begin(),vec.end(),[&](T fu){
-     for(int index : indices) {
-       if(fu->id() == index) return true;
-     }
-     return false;
-   });
-   vec.erase(new_end,vec.end());
- }
-
- void delete_fus(std::vector<int> v)      {vec_delete_by_id(_fu_list,v);}
- void delete_switches(std::vector<int> v) {vec_delete_by_id(_switch_list,v);}
- void delete_vports(std::vector<int> v)   {
-   vec_delete_by_id(_vport_list,v);
-   vec_delete_by_id(_input_list,v);
-   vec_delete_by_id(_output_list,v);
- }
 
  //External add link -- used by arch. search
  sslink* add_link(ssnode* src, ssnode* dst) {
+   if (src->is_output() || dst->is_input())
+     return nullptr;
    sslink* link = src->add_link(dst);
    link->set_id(_link_list.size());
    _link_list.push_back(link);
@@ -1374,27 +1277,17 @@ class SubModel {
  //add node 
  void add_node(ssnode* n) {
    n->set_id(_node_list.size());
-   //if(ssswitch* sw = dynamic_cast<ssswitch*>(n)) {
-   //  _switch_list.push_back(sw);
-   //} else if(ssfu* fu = dynamic_cast<ssfu*>(n)) {
-   //  _fu_list.push_back(fu);
-   //} else if(ssvport* vport = dynamic_cast<ssvport*>(n)) {
-   //  if(vport->is_input()) _input_list.push_back(vport);
-   //  else _output_list.push_back(vport);
-   //  _vport_list.push_back(vport);
-   //}
    _node_list.push_back(n);
  }
 
-  virtual ~SubModel() {
-    for(ssnode* n : _node_list) {
-      delete n;
-    }
-    for(sslink* l : _link_list) {
-      delete l;
-    }
-
-  }; 
+ virtual ~SubModel() {
+   for(ssnode* n : _node_list) {
+     delete n;
+   }
+   for(sslink* l : _link_list) {
+     delete l;
+   }
+ }
 
  private:
   void build_substrate(int x, int y);
@@ -1405,18 +1298,12 @@ class SubModel {
 
   // These are only valid after regroup_vecs()
   std::vector<ssnode*> _node_list;
-  std::vector<sslink*> _link_list;
-  std::vector<ssvport*> _vport_list;
-  std::vector<ssvport*> _input_list;
-  std::vector<ssvport*> _output_list;
-
   std::vector<ssfu*> _fu_list;
-  std::vector<ssswitch*> _switch_list;
+  std::vector<sslink*> _link_list;
+
 
   // Temporary Datastructures, only for constructing the mapping
   int _sizex, _sizey;  // size of SS cgra
-  std::vector<std::vector<ssfu*>> _fus;
-  std::vector<std::vector<ssswitch*>> _switches;
   std::map<int, ssnode*> _io_map[2];
 
   //Property that should be deprecated...
@@ -1424,6 +1311,10 @@ class SubModel {
 
   ssio_interface _ssio_interf;
 };
+
+template <> inline std::vector<ssfu*> SubModel::nodes() { return fu_list(); }
+template <> inline std::vector<ssnode*> SubModel::nodes() { return _node_list; }
+template <> inline std::vector<ssvport*> SubModel::nodes() { return vport_list(); }
 
 }  // namespace SS_CONFIG
 

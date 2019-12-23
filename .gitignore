@@ -14,7 +14,6 @@ julia/
 remap.dot
 compile_commands.json
 .idea
-CMakeLists.txt
 cmake-build-debug/*
 .vscode
 test_config/*

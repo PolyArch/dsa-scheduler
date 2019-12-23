@@ -25,60 +25,6 @@ int rand_bt_large(int s, int e) {
 }
 
 
-// floyd's unique-number sampling algorithm (ordered)
-// CACM Programming Pearls, 1987
-void HeuristicScheduler::rand_n_choose_k(int n, int k, std::vector<int>& indices) {
-  std::vector<bool> mask;
-  mask.resize(n);
-  indices.clear();
-
-  for (int j = n - k; j < n; ++j) {
-    int t = rand_bt(0, j + 1);
-    if (mask[t] == false) {
-      mask[t] = true;
-    } else {
-      mask[j] = true;
-    }
-  }
-  for (int i = 0; i < n; ++i) {
-    if (mask[i]) {
-      indices.push_back(i);
-    }
-  }
-}
-
-void HeuristicScheduler::random_order(int n, std::vector<int>& order) {
-  order.clear();
-  for (int i = 0; i < n; ++i) order.push_back(i);
-  std::random_shuffle(order.begin(), order.end());
-}
-
-// could make this a template really!
-vector<bool> HeuristicScheduler::rand_node_choose_k(int k,
-                                                    std::vector<ssnode*>& poss_nodes,
-                                                    std::vector<ssnode*>& chosen_nodes) {
-  std::vector<bool> mask;
-  int n = poss_nodes.size();
-  mask.resize(n);
-  chosen_nodes.clear();
-
-  for (int j = n - k; j < n; ++j) {
-    int t = rand_bt(0, j + 1);
-    if (mask[t] == false) {
-      mask[t] = true;
-    } else {
-      mask[j] = true;
-    }
-  }
-
-  for (int i = 0; i < n; ++i) {
-    if (mask[i]) {
-      chosen_nodes.push_back(poss_nodes[i]);
-    }
-  }
-  return mask;
-}
-
 bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   auto* sub = ssmodel->subModel();
 
@@ -87,8 +33,8 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   std::vector<int> vec_out_sizes;
   std::vector<int> dfg_in_sizes;
   std::vector<int> dfg_out_sizes;
-  for(auto& p : sub->input_list()) vec_in_sizes.push_back(p->input_bitwidth());
-  for(auto& p : sub->output_list()) vec_out_sizes.push_back(p->output_bitwidth());
+  for(auto& p : sub->input_list()) vec_in_sizes.push_back(p->bitwidth_capability());
+  for(auto& p : sub->output_list()) vec_out_sizes.push_back(p->bitwidth_capability());
   for(auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
   for(auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
 

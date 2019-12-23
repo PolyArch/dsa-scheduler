@@ -1,6 +1,7 @@
 #ifndef __INST_MODEL_H__
 #define __INST_MODEL_H__
 
+#include "../utils/debug.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -65,7 +66,6 @@ class FuType {
 class InstModel {
  public:
   InstModel(char* filename);  // read the file and populate the instructions
-  // DyInst* GetDyInstByName(std::string& name);
   void PowerAreaModel(char* filename); 
 
   void printCFiles(char* header, char* cpp);
@@ -73,6 +73,8 @@ class InstModel {
  private:
   std::vector<ConfigInst*> _instList;
   std::vector<FuType*> _fuTypeList;
+  std::string filename_;
+  std::string base_folder;
 };
 
 }  // namespace SS_CONFIG
