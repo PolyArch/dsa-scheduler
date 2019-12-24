@@ -1063,8 +1063,12 @@ void SSDfgInst::forward() {
   }
 
   _invalid |= discard;
-  for (size_t i = 0; i < values().size(); ++i) {
-    values()[i]->push(_output_vals[i], !_invalid, lat_of_inst());
+
+  // TODO(@were): We need a better name for this flag.
+  if (!_invalid || !getenv("DSCDIVLD")) {
+    for (size_t i = 0; i < values().size(); ++i) {
+      values()[i]->push(_output_vals[i], !_invalid, lat_of_inst());
+    }
   }
 
   for (auto elem : values()) {
