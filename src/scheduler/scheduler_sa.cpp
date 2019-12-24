@@ -255,12 +255,12 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
+  initialize(ssDFG, sched); //initialize if null, otherwise its fine
+
   if(!check_feasible(sched->ssdfg(),sched->ssModel(),false/*silent*/)) {
     std::cerr << "Cannot be mapped, give up!\n";
     return false;
   }
-
-  initialize(ssDFG, sched); //initialize if null, otherwise its fine
 
   int max_iters_no_improvement = _ssModel->subModel()->node_list().size() * 10;
   srand(++_srand);
