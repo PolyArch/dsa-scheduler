@@ -525,9 +525,9 @@ class Schedule {
 
   void calcLatency(int& lat, int& latmis, bool warnMismatch = false);
 
-  void cheapCalcLatency(int& lat, int& latmis, bool set_delay = false);
+  void cheapCalcLatency(int& lat, int& latmis);
 
-  void calcNodeLatency(SSDfgNode*, int& lat, int& latmis, bool set_delay = false);
+  void calcNodeLatency(SSDfgNode*, int& lat, int& latmis);
 
   bool fixLatency(int& lat, int& latmis);
 

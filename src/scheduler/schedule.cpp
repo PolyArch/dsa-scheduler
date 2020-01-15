@@ -379,7 +379,7 @@ bool Schedule::fixLatency(int& max_lat, int& max_lat_mis) {
 
   max_lat = 0;
   max_lat_mis = 0;
-  cheapCalcLatency(max_lat, max_lat_mis, false);
+  cheapCalcLatency(max_lat, max_lat_mis);
 
   // int max_lat2=0;
   // int max_lat_mis2=0;
@@ -575,21 +575,18 @@ void Schedule::iterativeFixLatency() {
   }
 }
 
-void Schedule::cheapCalcLatency(int& max_lat, int& max_lat_mis, bool set_delay) {
+void Schedule::cheapCalcLatency(int& max_lat, int& max_lat_mis) {
   _totalViolation = 0;
   max_lat_mis = 0;
   max_lat = 0;
   _groupMismatch.clear();
 
-  std::vector<SSDfgNode*> ordered_non_temp = ordered_non_temporal();
-
-  for (SSDfgNode* node : ordered_non_temp) {
-    calcNodeLatency(node, max_lat, max_lat_mis, set_delay);
+  for (SSDfgNode* node : _ssDFG->ordered_nodes()) {
+    calcNodeLatency(node, max_lat, max_lat_mis);
   }
 }
 
-void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis,
-                               bool set_delay) {
+void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis) {
   int low_lat = MAX_SCHED_LAT, up_lat = 0;
 
   for (auto edge : node->in_edges()) {
@@ -604,7 +601,6 @@ void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis,
     if (origNode != nullptr) {
       int edge_lat = edge_delay(edge) + routing_latency - 1;
       assert(edge_lat >= 0);
-      assert(edge_delay(edge) == 0 || set_delay == 0);
       int lat = latOf(origNode) + edge_lat;
 
       if (lat > up_lat) up_lat = lat;
@@ -623,6 +619,12 @@ void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis,
     if (diff > _groupMismatch[node->group_id()]) {
       _groupMismatch[node->group_id()] = diff;
     }
+    if (diff > 0) {
+      add_violation(diff);
+      record_violation(node, diff);
+    } else {
+      record_violation(node, 0);
+    }
   }
 
   int new_lat = node->lat_of_inst() + up_lat;
@@ -635,14 +637,6 @@ void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis,
 
   if (max_lat < new_lat) max_lat = new_lat;
 
-  if (diff > 0) {
-    add_violation(diff);
-    record_violation(node, diff);
-  } else {
-    record_violation(node, 0);
-  }
-
-  assert(!set_delay);  // set delay depricated
 }
 
 void Schedule::validate() {

@@ -143,9 +143,10 @@ class CodesignInstance {
     std::for_each(sub->nodes<T*>().begin(),
                   sub->nodes<T*>().end(),
                   [this, &res, f](T* n) {
-                    if (f(n))
+                    if (f(n)) {
                       this->delete_hw(n);
                       res = true;
+                    }
                   });
     return res;
   }
