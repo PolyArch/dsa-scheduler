@@ -23,7 +23,8 @@ void checked_system(const char* command) {
 
 std::string SSDfgEdge::name() {
   std::stringstream ss;
-  ss << def()->name() << "[" << l() << ", " << r() << "]" << "->" << use()->name();
+  ss << def()->name() << "." << _value->index() << "[" << l() << ", " << r() << "]" << "->"
+     << use()->name();
   return ss.str();
 }
 
@@ -44,7 +45,6 @@ SSDfgNode* SSDfgEdge::get(int x) const {
   if (x == 0) return def();
   if (x == 1) return _use;
   assert(0);
-  return NULL;
 }
 
 int SSDfgEdge::id() { return _ID; }
@@ -537,10 +537,16 @@ ParseResult* SSDfg::create_inst(std::string opcode, std::vector<ParseResult*>& a
       assert(false && "Invalide Node type");
     }
   }
-
-  ParseResult* res =
-      new ValueEntry(dfg_inst->values()[0], 0, SS_CONFIG::bitwidth[inst] - 1);
+  std::vector<ValueEntry*> values(dfg_inst->values().size());
+  for (int i = 0; i < values.size(); ++i) {
+    values[i] = new ValueEntry(dfg_inst->values()[i], 0, dfg_inst->bitwidth() - 1);
+  }
   add<SSDfgInst>(dfg_inst);
+  if (values.size() == 1) {
+    return values[0];
+  }
+  auto res = new ConvergeEntry();
+  res->entries = values;
   return res;
 }
 
@@ -709,6 +715,7 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
 SSDfgEdge* SSDfg::connect(SSDfgValue* orig, SSDfgNode* dest, int dest_slot,
                           SSDfgEdge::EdgeType etype, int l, int r, int operand_pos) {
   SSDfgEdge* new_edge = new SSDfgEdge(orig, dest, etype, this, l, r);
+  std::cerr << "connected: " << new_edge->name() << std::endl;
   dest->addOperand(dest_slot, new_edge, operand_pos);
   orig->addOutEdge(new_edge);  // this also adds to the node
   _edges.push_back(new_edge);
@@ -952,25 +959,43 @@ std::vector<std::pair<int, ssnode*>> SSDfgVecOutput::candidates(Schedule* sched,
 void SSDfgValue::push(uint64_t val, bool valid, int delay) {
   // TODO: Support FIFO length backpressure.
   fifo.push(simulation::Data(_node->_ssdfg->cur_cycle() + delay, val, valid));
+
+  //static int64_t last_print = 0;
+  //if (node()->is_temporal()) {
+  //  if (last_print != node()->ssdfg()->cur_cycle()) {
+  //    std::cerr << " Cycle[" << node()->ssdfg()->cur_cycle() << "]:" << node()->name()
+  //              << " Available @" << node()->ssdfg()->cur_cycle() + delay << " "
+  //              << (node()->ssdfg()->cur_cycle() - last_print)
+  //              << std::endl;
+  //    last_print = node()->ssdfg()->cur_cycle();
+  //  }
+  //}
 }
 
 // new compute for back cgra-----------------------------
-void SSDfgInst::forward() {
+void SSDfgInst::forward(Schedule *sched) {
 
+  auto loc = sched->location_of(this);
   static bool print = getenv("COMP") != nullptr;
 
-  // Check the instruction throughput
   int inst_throughput = inst_thr(inst());
-  if (_ssdfg->cur_cycle() - last_execution < inst_throughput) {
-    return;
+  if (auto value = sched->lastExecutionKv.Find(loc)) {
+    if (_ssdfg->cur_cycle() - *value < inst_throughput) {
+      //std::cerr << _ssdfg->cur_cycle() << ": cannot issue " << name()
+      //          << _ssdfg->cur_cycle() - *value << " < "
+      //          << inst_throughput << " " << loc.first << ", " << loc.second << std::endl;
+      return;
+    }
   }
 
   // Check the avaiability of output buffer
   if (!values()[0]->fifo.empty()) {
     for (auto elem : values()) {
       assert(!elem->fifo.empty());
-      if (!elem->forward(true))
+      if (!elem->forward(true)) {
+        //std::cerr << "Cannot forward " << name() << " because backpressure of " << elem->name() << std::endl;
         return;
+      }
     }
     for (auto elem : values()) {
       assert(elem->forward(false));
@@ -986,6 +1011,7 @@ void SSDfgInst::forward() {
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
     if (!_ops[i].ready()) {
+      //std::cerr << "Cannot forward " << name() << " since " << i << " th op not ready" << std::endl;
       return;
     }
   }
@@ -1027,10 +1053,11 @@ void SSDfgInst::forward() {
         _ssdfg->dbg_stream() << std::hex << _input_vals[i] << " ";
     }
 
-    _ssdfg->inc_total_dyn_insts();
+    _ssdfg->inc_total_dyn_insts(is_temporal());
 
     // Read in some temp value and set _val after inst_lat cycles
     output = do_compute(discard);
+    sched->lastExecutionKv.Set(loc, _ssdfg->cur_cycle());
     _self_bits.test(output, _back_array, discard, pred, reset);
 
     if (print) {
@@ -1042,7 +1069,6 @@ void SSDfgInst::forward() {
 
   // TODO/FIXME: change to all registers
   if (reset) {
-    std::cout << "Reset the register file! " << _reg[0] << "\n";
     for (size_t i = 0; i < _reg.size(); ++i)
       _reg[i] = 0;
   }
@@ -1070,6 +1096,7 @@ void SSDfgInst::forward() {
       values()[i]->push(_output_vals[i], !_invalid, lat_of_inst());
     }
   }
+  //std::cerr << _ssdfg->cur_cycle() << ": " << name() << " (" << loc.first << ", " << loc.second << ") issued!" << std::endl;
 
   for (auto elem : values()) {
     if (!elem->forward(true))
@@ -1109,14 +1136,15 @@ bool SSDfgValue::forward(bool attempt) {
         auto edge = operand.edges[i];
         if (edge == user) {
           // TODO: delete this!
-          //std::cout << (attempt ? "[attempt] " : "[actual] ") << _node->name()
+          //std::cerr << (attempt ? "[attempt] " : "[actual] ") << _node->name() << "[" << this << "]"
           //          << " pushes " << data.value << "(" << data.valid << ")" << "to "
           //          << user->use()->name() << "'s " << j << "th operand "
           //          << operand.fifos[i].size() + 1 << "/" << edge->buffer_size()
           //          << std::endl;
           if (operand.fifos[i].size() < edge->buffer_size()
               /*FIXME: The buffer size should be something more rigorous*/) {
-            simulation::Data entry(data.available_at + edge->delay(), data.value, data.valid);
+            simulation::Data entry(data.available_at + edge->delay(),
+                                   data.value, data.valid);
             if (!attempt) {
               operand.fifos[i].push(entry);
             }
@@ -1133,17 +1161,28 @@ bool SSDfgValue::forward(bool attempt) {
   return true;
 }
 
-void SSDfgVecInput::forward() {
-  for (auto elem : values()) {
+void SSDfgVecInput::forward(Schedule *) {
+
+  if (is_temporal()) {
+    if (!values()[current_]->forward(true)) {
+      return;
+    }
+    values()[current_]->forward(false);
+    current_ = (current_ + 1) % ((int) values().size());
+    return;
+  }
+
+  for (auto &elem : values()) {
     if (!elem->forward(true))
       return;
   }
-  for (auto elem : values()) {
+  for (auto &elem : values()) {
     assert(elem->forward(false));
   }
 }
 
-int SSDfg::forward(bool asap) {
+int SSDfg::forward(bool asap, Schedule *sched) {
+  clear_issued();
   std::vector<bool> group_ready(true, num_groups());
   if (!asap) {
     for (int i = 0; i < _nodes.size(); ++i) {
@@ -1166,16 +1205,13 @@ int SSDfg::forward(bool asap) {
   }
   for (auto elem : nodes<SSDfgNode*>()) {
     if (asap || group_ready[elem->group_id()]) {
-      //std::cout << elem->name() << " forward" << std::endl;
-      elem->forward();
+      elem->forward(sched);
     } else {
-      std::cout << "cannot forward " << elem->name() << std::endl;
+      std::cerr << "cannot forward " << elem->name() << std::endl;
     }
   }
   ++_cur_cycle;
-  int res = _total_dyn_insts;
-  _total_dyn_insts = 0;
-  return res;
+  return 0;
 }
 
 bool SSDfgVecInput::can_push() {
@@ -1210,7 +1246,7 @@ uint64_t SSDfgOperand::poll() {
   for (int i = fifos.size() - 1; i >= 0; --i) {
     uint64_t full = ~0ull >> (64 - edges[i]->bitwidth());
     uint64_t sliced = (fifos[i].front().value >> edges[i]->l()) & full;
-    res = res << edges[i]->bitwidth() | sliced;
+    res = (res << edges[i]->bitwidth()) | sliced;
   }
   return res;
 }
@@ -1284,6 +1320,10 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   return overall;
 }
 
+std::string SSDfgValue::name() {
+  return node()->name() + "." + std::to_string(index());
+}
+
 namespace ssdfg {
 
 const char *MetaPort::DataText[] = {
@@ -1318,3 +1358,4 @@ CompileMeta::CompileMeta(const MetaPort &meta, SSDfgVec *parent) : MetaPort(meta
 }
 
 }
+

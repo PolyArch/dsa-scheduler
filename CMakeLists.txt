@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.12)
 
 # Use config.cmake file
 if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/config.cmake)

@@ -1,7 +1,7 @@
 [fu-model]
 # fu_types and capabilities
 # Number after colon specifies encoding
-FU_TYPE FU_MUL:  BackMul64:2, Mul64:3, Mul64:4, Mul64: 5, Sqr64: 6, FxMul16x4: 7, FMulX32x2: 8, FMul64: 9, FxMulX16x4: 10, NegFMul32x2: 11, CplxMulCons: 12, Discard: 13, Keep: 16, Delay: 15, Nor: 16, And3: 17, And3: 18, MacRed16x2: 19, FxMul32x2: 20, FxRed32x2: 21
+FU_TYPE FU_MUL:  BackMul64:2, Mul64:3, Mul64:4, Mul64: 5, Sqr64: 6, FxMul16x4: 7, FMulX32x2: 8, FMul64: 9, FxMulX16x4: 10, NegFMul32x2: 11, CplxMulCons: 12, Discard: 13, Keep: 16, Delay: 15, Nor: 16, And3: 17, And3: 18, MacRed16x2: 19, FxMul32x2: 20, FxRed32x2: 21, Add32: 22
 
 FU_TYPE FU_ADD: Index_match:3, ICmpNE:4, Acc16x4:5, FxSub16x4:6, ICmpNE:7, ICmpNE:8, ICmpNE:9, Add64:10,  RShf64:11, ICmp:12, Phi:13, Sub64:14, Mod16x4:15, Min16x4:16, SpuMul16x4:17, SpuAdd16x4:18, Hold:19, Mod16x4:20, Keep16:21, RedSMin16x4:22, Select:23, And:24, Or:25, Xor:26, LShf64:27, Acc16:28, ICmpEQ:29, Acc16:30, FAdd32x2:31, RShf16x4:32, Add16x4: 33, Add16x4: 34, Sub16x4: 35, FxExp16x4: 36, FAcc32x2: 37, Mul16: 38, Mul16x4: 39, FSub64: 40, FAdd64:41, Merge: 42, IndexMatch16: 43, Acc64: 44, Acc64: 45, Div16x4: 46, DupHigh32: 47, ConcatLow32: 48, FxRedCom16x4: 49, ICmpG: 50, Add64: 51, Keep16: 52, Delay: 53, MatchIndex2: 54, Concatenate16To32: 55, Concatenate32To64: 56, IndexMatch32x2:57, BackSub32x2:58, BackNormRed32x2: 59, FxExp64:60, Red16x4: 61
 

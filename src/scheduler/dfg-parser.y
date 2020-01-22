@@ -91,29 +91,32 @@ statement
         ParseResult *s = $3;
         if (auto ne = dynamic_cast<ValueEntry*>($3)) {
           SSDfgNode* node = ne->value->node();
-          std::string name = (*$1)[0];
-          if(!node->has_name()) node->set_name(name);
-          auto& values = node->values();
-          
-          if(values.size() < $1->size()) {
-            std::cout << "The instruction for node: \"" << node->name() 
-                 << " \"only supports " << values.size() << " output\n";
-            assert(0);
-          }
-
-          for (int i = 0; i < $1->size(); ++i) {
-            name = (*$1)[i];
-            p->symbols.set(name, new ValueEntry(values[i], ne->l, ne->r));
-          }
-        } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
-          //By definition, converge entries only need one symbol (just def)
           assert($1->size()==1);
           std::string name = (*$1)[0];
-          for (auto elem : ce->entries) {
-            auto node = elem->value->node();
-            if(!node->has_name()) node->set_name(name);
+          p->symbols.set(name, new ValueEntry(ne->value, ne->l, ne->r));
+        } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
+          //By definition, converge entries only need one symbol (just def)
+          if ($1->size()==1) {
+            std::string name = (*$1)[0];
+            for (auto elem : ce->entries) {
+              auto node = elem->value->node();
+              if(!node->has_name()) node->set_name(name);
+            }
+            p->symbols.set(name, $3);
+          } else if ($1->size() == ce->entries.size()) {
+            auto o = dynamic_cast<ValueEntry*>(ce->entries[0]);
+            assert(o && "Assumption check failure, the first element should be a value entry!");
+            assert(dynamic_cast<SSDfgInst*>(o->value->node()) && "Should be a instruction!");
+            p->symbols.set((*$1)[0], o->value);
+            for (int i = 1; i < ce->entries.size(); ++i) {
+              if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
+                assert(ve->value->node() == o->value->node() && "Should all from the same node!");
+                p->symbols.set((*$1)[i], ve->value);
+              } else {
+                assert(false && "Assumption check failure! All the remaining element should also be a value entry!");
+              }
+            }
           }
-          p->symbols.set(name,$3);
         }
         delete $1;
       }
@@ -288,6 +291,7 @@ edge_list
 edge
     : IDENT {
         $$ = p->symbols.get_sym(*$1);
+        auto res = p->symbols.get_sym(*$1);
         delete $1;
       }
     | IDENT ':' I_CONST ':' I_CONST {

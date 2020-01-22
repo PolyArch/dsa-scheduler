@@ -669,6 +669,7 @@ void Schedule::validate() {
   }
 }
 
+
 // Calculate the exact latency by traversing the schedule
 // -- Note that this function is performance non-critical, as its
 // purpose is to verify the schedule's latency calcuated cheaply

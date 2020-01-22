@@ -297,7 +297,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     //}
 
     // if we don't improve for some time, lets reset
-    if (iter - last_improvement_iter > 128) {
+    if (iter - last_improvement_iter > 1024) {
       *cur_sched = *sched;
     }
 

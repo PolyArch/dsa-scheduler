@@ -23,7 +23,36 @@ using namespace SS_CONFIG;
 #define MAX_SCHED_LAT 1000000
 
 class Schedule {
+
+  struct LastExecution {
+  
+    std::vector<std::pair<std::pair<int, ssnode*>, uint64_t>> kv;
+  
+    uint64_t *Find(std::pair<int, ssnode*> k) {
+      static uint64_t res;
+      for (int i = 0, n = kv.size(); i < n; ++i) {
+        if (kv[i].first == k) {
+          res = kv[i].second;
+          return &res;
+        }
+      }
+      return nullptr;
+    }
+  
+    void Set(std::pair<int, ssnode*> k, uint64_t v) {
+      for (int i = 0, n = kv.size(); i < n; ++i) {
+        if (kv[i].first == k) {
+          kv[i].second = v;
+          return;
+        }
+      }
+      kv.emplace_back(k, v);
+    }
+  
+  };
  public:
+  LastExecution lastExecutionKv;
+
   Schedule() {}
 
   // Read in schedule (both ssmodel, ssdfg, and schedule from file)

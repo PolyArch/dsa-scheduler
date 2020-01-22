@@ -43,6 +43,14 @@ struct Data {
   Data(int64_t aa, uint64_t value, bool valid) : available_at(aa), value(value), valid(valid) {}
 };
 
+struct ComputeStatus {
+  int temporal{0};
+  int dedicated{0};
+  int total() {
+    return temporal + dedicated;
+  }
+};
+
 }
 
 class SSDfgVec;
@@ -92,6 +100,8 @@ class SSDfgValue {
   std::queue<simulation::Data> fifo;
   void push(uint64_t value, bool valid, int delay);
   bool forward(bool attempt);
+
+  std::string name();
 
  private:
   SSDfgNode* _node = nullptr;  // This is the node that it belongs to
@@ -203,11 +213,12 @@ struct SSDfgOperand {
 
   bool predicate() {
     assert(ready());
-    bool res = true;
     for (int i = fifos.size() - 1; i >= 0; --i) {
-      res = res && fifos[i].front().valid;
+      if (!fifos[i].front().valid) {
+        return false;
+      }
     }
-    return res;
+    return true;
   }
 
   void pop() {
@@ -309,7 +320,7 @@ class SSDfgNode {
 
   int id() { return _ID; }
 
-  virtual void forward() = 0;
+  virtual void forward(Schedule *) = 0;
 
   //--------------------------------------------
 
@@ -523,7 +534,7 @@ class SSDfgInst : public SSDfgNode {
 
   int last_execution{-1};
 
-  void forward() override;
+  void forward(Schedule*) override;
 
   virtual int lat_of_inst() override { return inst_lat(inst()); }
 
@@ -671,7 +682,8 @@ class SSDfgVecInput : public SSDfgVec {
 
   friend class boost::serialization::access;
 
-  void forward() override;
+  int current_{0};
+  void forward(Schedule*) override;
   bool can_push();
 
   template <class Archive>
@@ -712,7 +724,7 @@ class SSDfgVecOutput : public SSDfgVec {
     return -1;
   }
 
-  void forward() override {}
+  void forward(Schedule*) override {}
   bool can_pop();
   void pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid);
 
@@ -890,7 +902,7 @@ class SSDfg {
 
   int cycle(bool print, bool verif);
 
-  int forward(bool);
+  int forward(bool asap, Schedule *);
 
   double estimated_performance(Schedule *, bool);
 
@@ -906,9 +918,11 @@ class SSDfg {
 
   void check_for_errors();
 
-  void inc_total_dyn_insts() { _total_dyn_insts++; }
+  void inc_total_dyn_insts(bool is_temporal) { dyn_isssued[is_temporal]++; }
 
-  int total_dyn_insts() { return _total_dyn_insts; }
+  int total_dyn_insts(bool is_temporal) { return dyn_isssued[is_temporal]; }
+
+  void clear_issued() { memset(dyn_isssued, 0, sizeof dyn_isssued); }
 
   int get_max_lat() { return MAX_LAT; }
 
@@ -965,7 +979,7 @@ class SSDfg {
   std::unordered_map<int, uint64_t> _complex_fu_free_cycle;
 
   // stats
-  int _total_dyn_insts = 0;
+  int dyn_isssued[2] = {0, 0};
 
   friend class boost::serialization::access;
 
