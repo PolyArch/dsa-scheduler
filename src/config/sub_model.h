@@ -72,11 +72,14 @@ class ssio_interface {
   }
 
   void fill_vec();
+
 };
 
 class sslink {
  public:
   sslink() {}
+
+  ~sslink();
 
   ssnode* orig() const { return _orig; }
 
@@ -119,11 +122,45 @@ class sslink {
   void set_lat(int i) { _lat = i; }
   int lat() { return _lat; }
 
-  void set_out_index(int i) { _out_index = i; }
-  void set_in_index(int i) { _in_index = i; }
+  /* To check the connectivity in O(1), here we apply a tricky idea:
+   * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
+   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we want to
+   * go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1), which is O(w).
+   *
+   * Here we first transform the meaning of subnet[i][delta], which means
+   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity between
+   * `i' and `j', under width `w', where delta=j-i, the check becomes:
+   * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
+   *
+   * Then two tricks together enables O(1) check:
+   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access continuous.
+   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can check the
+   *    one's in O(1) by bit operation.
+   * */
+  std::vector<int64_t> subnet;
 
-  int in_index() { return _in_index; }
-  int out_index() { return _out_index; }
+  int slots(int slot, int width) {
+    uint64_t res = 0;
+    int n = subnet.size();
+    auto f = [](int64_t a, int bits) {
+      int full_mask = ~0ull >> (64 - bits);
+      return (a & full_mask) == full_mask;
+    };
+    for (int i = 0; i < n; ++i) {
+      if (slot + width <= n) {
+        if (f(subnet[i] >> slot, width)) {
+          res |= 1 << (i + slot) % n;
+        }
+      } else {
+        int high = n - slot;
+        int low = width - high;
+        if (f(subnet[i] >> slot, high) && f(subnet[i], low)) {
+          res |= 1 << (i + slot) % n;
+        }
+      }
+    }
+    return res;
+  }
 
  protected:
   int _ID = -1;
@@ -134,11 +171,6 @@ class sslink {
   bool _flow_control = true;  // whether link supports backpressure
   int _bitwidth = 64;         // bitwidth of link
   int _decomp_bitwidth = 8;   // minimum bitwidth the link may be decomposed into
-
-  // this is so we know the relative index of this link in the input and output
-  // nodes to which this node belongs
-  int _in_index = -1;
-  int _out_index = -1;
 
   ssnode* _orig;
   ssnode* _dest;
@@ -163,49 +195,6 @@ class ssnode {
   virtual ssnode* copy() = 0;
 
   sslink* add_link(ssnode* node);
-
-  void add_back_link(sslink* link) {
-    auto &ilinks = links[1];
-    link->set_in_index(ilinks.size());
-    ilinks.push_back(link);
-
-    //maybe just setup routing table here?
-    create_blank_subnet_table_input(link);
-  }
-
-  // This function removes a link from its parent nodes
-  void unlink_outgoing(sslink* link) {
-    auto &olinks = links[0];
-    //delete this element of the subnet table -- bye bye!
-    _subnet_table.erase(_subnet_table.begin()+link->out_index());
-
-    for(unsigned i = link->out_index()+1; i < olinks.size(); ++i) {
-      olinks[i]->set_out_index(i-1);
-    }
-
-    auto new_end = std::remove(olinks.begin(), olinks.end(),link);
-    olinks.erase(new_end, olinks.end());
-  }
-
-  void unlink_incomming(sslink* link) {
-    auto &ilinks = links[1];
-    auto &olinks = links[0];
-    for(unsigned i = link->in_index()+1; i < ilinks.size(); ++i) {
-      ilinks[i]->set_in_index(i-1);
-    }
- 
-    // [output][slot][input][slot]
-    //delete this element of the subnet table -- bye bye!
-    for(unsigned out_i = 0; out_i < olinks.size(); ++out_i) {
-      for(unsigned out_s = 0; out_s < MAX_SUBNETS; ++out_s) {
-        auto& table = _subnet_table[out_i][out_s];
-        table.erase(table.begin()+link->in_index());
-      }
-    }
-
-    auto new_end = std::remove(ilinks.begin(),ilinks.end(),link);
-    ilinks.erase(new_end,ilinks.end());
-  }
 
   virtual std::string name() const = 0;
 
@@ -248,12 +237,16 @@ class ssnode {
   
     // Count the number of input port and output port
     // vector port can have 0 input_node or 0 output_node
-    auto input_nodes = prop.get_child_optional("input_nodes");int num_input = 0;
-    auto output_nodes = prop.get_child_optional("output_nodes");int num_output = 0;
+    auto input_nodes = prop.get_child_optional("input_nodes");
+    int num_input = 0;
+    auto output_nodes = prop.get_child_optional("output_nodes");
+    int num_output = 0;
     if(input_nodes.is_initialized())
       num_input = prop.get_child("input_nodes").size();
     if(output_nodes.is_initialized())
       num_output = prop.get_child("output_nodes").size();
+    (void) num_input;
+    (void) num_output;
     
     // Parse Decomposer
     if (node_type != "vector port"){
@@ -270,6 +263,10 @@ class ssnode {
     std :: cout << "data width = " << data_width << ", granularity = " << granularity <<"\n";
     
     // parser the subnet table
+
+
+    /* TODO(@were): I need @sihao's help to adopt our new subnet routine. 
+
     auto subnet_offset_node = prop.get_child_optional("subnet_offset");
     if (subnet_offset_node.is_initialized()){
 
@@ -338,6 +335,7 @@ class ssnode {
       // End Debug Print: feel free to delete it
 
     }// End of Parse subnet_table
+    */
   }
 
   void set_id(int id) { _ID = id; }
@@ -386,42 +384,25 @@ class ssnode {
 
   int bitwidth() { return _bitwidth; }
 
-  std::vector<std::vector<std::vector<std::vector<bool>>>>& subnet_table () {
-    return _subnet_table;
-  }
+  //std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int bitwidth) {
+  //  int slot = p.first;
+  //  sslink* l = p.second;
+  //  int l_ind = 0;
+  //  if (l) l_ind = l->in_index();
+  //  auto& ret = _routing_memo.at(l_ind * 4 * MAX_SUBNETS + slot * 4 +
+  //                               (31 - __builtin_clz(bitwidth)));
 
-  void setup_default_routing_table(sslink* inlink, sslink* outlink);
+  //  if(links[0].size()!=0 && ret.size() == 0) {
+  //    std::cerr << "ERROR: Link: " << l->name() 
+  //              << " has output links, but no routing table\n"
+  //              << "_routing_memo.size() : " << _routing_memo.size() << "\n"
+  //              << "num ins: " << links[1].size() << "\n"
+  //              << "num outs: " << links[0].size() << "\n";
+  //    assert(0 && "bad _routing_memo"); 
+  //  } 
+  //  return ret;
+  //}
 
-  void create_blank_subnet_table_input(sslink* outlink);
-
-  void create_blank_subnet_table(sslink* outlink, int o_sub, sslink* inlink);
-  void create_blank_subnet_table(sslink* outlink, int o_sub);
-  void create_blank_subnet_table(sslink* outlink);
-
-  void setup_routing_memo();
-  void setup_routing_memo_node(int i, int slot, int bitwidth);
-
-  // Maps [input_link_id][slot_number][bitwidth]->vector of legal links/slots
-  std::vector<std::vector<std::pair<int, sslink*>>> _routing_memo;
-
-  std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int bitwidth) {
-    int slot = p.first;
-    sslink* l = p.second;
-    int l_ind = 0;
-    if (l) l_ind = l->in_index();
-    auto& ret = _routing_memo.at(l_ind * 4 * MAX_SUBNETS + slot * 4 +
-                                 (31 - __builtin_clz(bitwidth)));
-
-    if(links[0].size()!=0 && ret.size() == 0) {
-      std::cerr << "ERROR: Link: " << l->name() 
-                << " has output links, but no routing table\n"
-                << "_routing_memo.size() : " << _routing_memo.size() << "\n"
-                << "num ins: " << links[1].size() << "\n"
-                << "num outs: " << links[0].size() << "\n";
-      assert(0 && "bad _routing_memo"); 
-    } 
-    return ret;
-  }
   virtual ~ssnode() {};  
 
  protected:
@@ -436,10 +417,6 @@ class ssnode {
   sslink* _cycle_link = nullptr;  // to
 
   std::vector<sslink*> links[2]; // {output, input}
-
-  // This table stores the subnetwork routing
-  // [output][slot][input][slot]
-  std::vector<std::vector<std::vector<std::vector<bool>>>> _subnet_table;  // convert from subnet_table
 
   // Variables used for scheduling -- these should be moved out at some point (TODO)
   int _node_dist[8];
@@ -457,6 +434,7 @@ class ssnode {
 private:
 
   friend class SubModel;
+  friend class sslink;
 };
 
 class ssswitch : public ssnode {
@@ -1176,8 +1154,6 @@ class SubModel {
     return vport;
   }
   
-  void post_process();
-
   //Creates a copy of the datastructre which gaurantees ordering
   //within the *_list datastructures (so they can be used for matching) 
   SubModel* copy() {
@@ -1211,7 +1187,6 @@ class SubModel {
     for(unsigned I = 0; I < _node_list.size(); ++I) {
       auto* node = _node_list[I];
       auto* copy_node = copy_sub->_node_list[I];
-
       for (int j = 0; j < 2; ++j) {
         for(unsigned i = 0; i < node->links[j].size(); ++i) {
           sslink* link = node->links[j][i];
@@ -1219,13 +1194,7 @@ class SubModel {
         }
       }
 
-      copy_node->setup_routing_memo();
     }
-
-    for(auto& node : copy_sub->node_list()) {
-      assert(node->subnet_table().size() == node->out_links().size());
-    }
-
 
     return copy_sub;
   }
@@ -1268,9 +1237,11 @@ class SubModel {
  sslink* add_link(ssnode* src, ssnode* dst) {
    if (src->is_output() || dst->is_input())
      return nullptr;
+
    sslink* link = src->add_link(dst);
    link->set_id(_link_list.size());
    _link_list.push_back(link);
+
    return link;
  }
 
@@ -1281,13 +1252,15 @@ class SubModel {
  }
 
  virtual ~SubModel() {
-   for(ssnode* n : _node_list) {
-     delete n;
-   }
    for(sslink* l : _link_list) {
      delete l;
    }
+   for(ssnode* n : _node_list) {
+     delete n;
+   }
  }
+
+  void post_process();
 
  private:
   void build_substrate(int x, int y);

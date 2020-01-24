@@ -91,7 +91,6 @@ class CodesignInstance {
 
     });
     for(auto& node : _ssModel.subModel()->node_list()) {
-      assert(node->subnet_table().size() == node->out_links().size());
       if (auto fu = dynamic_cast<ssfu*>(node)) {
         assert(fu->fu_def());
       }
@@ -408,10 +407,6 @@ class CodesignInstance {
     // TODO: add some entries in routing tables?
 
     //End this by making sure all the routing tables are generated
-    for(auto* node : sub->node_list()) {
-      node->setup_routing_memo();
-    }
-
     verify_strong();
   }
 
@@ -431,10 +426,6 @@ class CodesignInstance {
     //std::cout << "copy from:" << copy_sub << " copy to:" << _ssModel.subModel() << "\n";
     //assert(_ssModel.subModel() != copy_sub);
 
-    for(auto& node : _ssModel.subModel()->node_list()) {
-      assert(node->subnet_table().size() == node->out_links().size());
-    }
-
     workload_array = c.workload_array;
 
     for_each_sched([&](Schedule& sched){ 
@@ -442,10 +433,6 @@ class CodesignInstance {
       sched.swap_model(_ssModel.subModel());
       sched.set_model(&_ssModel);
     });
-
-    for(auto& node : _ssModel.subModel()->node_list()) {
-      assert(node->subnet_table().size() == node->out_links().size());
-    }
 
   }
 
@@ -512,11 +499,12 @@ class CodesignInstance {
     //that's why we tracked these datastructures
     for(auto* link : delete_linkp_list) {
       // we also need to tell the model to delete the link from its little lists
-      link->orig()->unlink_outgoing(link);
-      link->dest()->unlink_incomming(link);
+      // The sslink destructor unlinks it from the connected nodes' references
       delete link;
     }
-    for(auto* node : delete_nodep_list) delete node;
+    for(auto* node : delete_nodep_list) {
+      delete node;
+    }
 
     verify();
 

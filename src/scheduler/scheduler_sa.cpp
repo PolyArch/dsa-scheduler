@@ -228,10 +228,6 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
   //5. profit?
 
   is_dse = true;
-  for(auto& node : _ssModel->subModel()->node_list()) {
-    assert(node->subnet_table().size() == node->out_links().size());
-  } 
-
 
   int i = 0; 
   for(WorkloadSchedules& ws : inst.workload_array) {
@@ -638,59 +634,47 @@ int SchedulerSimulatedAnnealing::route(
       }
     }
 
-    auto p_in = node->came_from(slot);
-    p_in.first = slot;
-    auto& linkslots = node->linkslots_for(p_in, edge->bitwidth() / 8);
-    // if(p_in.second) {
-    //  cout << p_in.second->name() << ":" <<p_in.first << " can: ";
-    //} else {
-    //  cout << node->name() << ":" <<p_in.first << " can: ";
-    //}
-    // for(auto p_in : linkslots) {
-    //  cout << p_in.second->name() << ":" <<p_in.first << " ";
-    //}
-    // cout << "\n";
-    for (auto next_pair : linkslots) {
-      int next_slot = next_pair.first;
-      // if(next_slot != slot && ((slot+1)%8) != next_slot) {
-      //  cout << node->name() << " " << slot << "     edge:";
-      //  if(p_in.second) {
-      //    cout << p_in.second->name() << ":" <<p_in.first << " bad-can: ";
-      //  } else {
-      //    cout << node->name() << ":" <<p_in.first << " bad-can: ";
-      //  }
-      //  cout << next_pair.second->name() << ":" << next_pair.first << "\n";
-      //}
-      sslink* next_link = next_pair.second;
-      ssnode* next = next_link->dest();
+    for (auto link : node->out_links()) {
+      int slots = link->slots(slot, edge->bitwidth() / 8);
+      while (slots) {
+        int raw = slots & -slots;
+        slots -= raw;
+        int next_slot = 31 - __builtin_clz(raw);
+        sslink* next_link = link;
+        ssnode* next = next_link->dest();
+        std::pair<int, sslink*> next_pair(next_slot, next_link);
 
-      int route_cost;
-      if (!path_lengthen) {  // Normal thing
-        route_cost = routing_cost(edge, slot, next_slot, next_link, sched, dest);
-      } else {
-        // For path lengthening, only route on free spaces
-        route_cost = sched->routing_cost(next_pair, edge);
-        if (route_cost != 1 || sched->dfgNodeOf(next_slot, next)) route_cost = -1;
-      }
+        DEBUG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->orig()->name() << "'s "
+                     << slot << " to " << link->dest()->name() << "'s " << next_slot << "\n";
 
-      if (route_cost == -1) continue;
-
-      int new_dist = cur_dist + route_cost;
-
-      int next_dist = next->node_dist(next_slot);
-
-      bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
-
-      if (next_dist == -1 || next_dist > new_dist || over_ride) {
-        if (next_dist != -1) {
-          int next_rand_prio = next->done(next_slot);
-          auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
-          if (iter != openset.end()) openset.erase(iter);
+        int route_cost;
+        if (!path_lengthen) {  // Normal thing
+          route_cost = routing_cost(edge, slot, next_slot, next_link, sched, dest);
+        } else {
+          // For path lengthening, only route on free spaces
+          route_cost = sched->routing_cost(next_pair, edge);
+          if (route_cost != 1 || sched->dfgNodeOf(next_slot, next)) route_cost = -1;
         }
-        int new_rand_prio = rand() % 16;
-        next->set_done(next_slot, new_rand_prio);  // remeber for later for deleting
-        openset.emplace(new_dist, new_rand_prio, next_slot, next);
-        next->update_dist(next_slot, new_dist, slot, next_link);
+
+        if (route_cost == -1) continue;
+
+        int new_dist = cur_dist + route_cost;
+
+        int next_dist = next->node_dist(next_slot);
+
+        bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
+
+        if (next_dist == -1 || next_dist > new_dist || over_ride) {
+          if (next_dist != -1) {
+            int next_rand_prio = next->done(next_slot);
+            auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
+            if (iter != openset.end()) openset.erase(iter);
+          }
+          int new_rand_prio = rand() % 16;
+          next->set_done(next_slot, new_rand_prio);  // remeber for later for deleting
+          openset.emplace(new_dist, new_rand_prio, next_slot, next);
+          next->update_dist(next_slot, new_dist, slot, next_link);
+        }
       }
     }
   }
@@ -715,8 +699,6 @@ int SchedulerSimulatedAnnealing::route(
 
     link.first = x.first;
 
-    // cout << link.second->name() << " " << link.first << " <- ";
-
     if ((alt_edge = sched->alt_edge_for_link(link, edge))) {
       break;
     }
@@ -725,7 +707,6 @@ int SchedulerSimulatedAnnealing::route(
 
     x = std::make_pair(link_backup.first, link.second->orig());
   }
-  // cout << "\n";
 
   // Need to make sure we add back the other links in-order.
   // With path lengthening (which has cycles) the previous
@@ -766,6 +747,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, SSDfgNode* node,
       if (sched->is_scheduled(node)) {                                \
         auto loc = sched->location_of(node);                          \
         if (!route(sched, edge, src, dest, nullptr, 0)) {             \
+          DEBUG(ROUTE) << "Cannot route " << edge->name() << "\n";    \
           for (auto revert : to_revert) sched->unassign_edge(revert); \
           for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]); \
           return false;                                               \

@@ -168,6 +168,7 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
       _subModel->parse_io(ifs);
     }
   }
+
   _subModel->post_process();
 }
 
@@ -202,7 +203,6 @@ void SSModel::parse_json(std::istream& istream) {
   }
 
   // Vector Port
-  auto& io = _subModel->io_interf();
   int num_ivp = 0;
   int num_ovp = 0;  // Count the number of vector port
   int num_inputs = 0;
@@ -211,8 +211,6 @@ void SSModel::parse_json(std::istream& istream) {
   for (auto& p : root.get_child("nodes")) {
     // Get Node and its properties
     auto& node_def = p.second;
-    int y = node_def.get<int>("row_idx", 0);
-    int x = node_def.get<int>("col_idx", 0);
     // Construct it Identification
     string type = node_def.get<std::string>("nodeType", "");
     int id = node_def.get<int>("id", -1);

@@ -9,7 +9,7 @@
 
 class Debug {
 
-  bool logging;
+  bool logging{false};
 
  public:
   Debug(std::string s) : logging(static_cast<bool>(getenv(s.c_str()))) {}

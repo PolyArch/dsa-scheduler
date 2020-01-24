@@ -27,8 +27,6 @@ static struct option long_options[] = {
     {"sub-alg",        required_argument, nullptr, 's',},
     {"verbose",        no_argument,       nullptr, 'v',},
     {"print-bits",     no_argument,       nullptr, 'b',},
-    {"mipstart",       no_argument,       nullptr, 'm',},
-    {"sll",            no_argument,       nullptr, 'S',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
     {"design-space",   no_argument,       nullptr, 'f',},
     {"estmt-perf",     no_argument,       nullptr, 'p',},
@@ -48,7 +46,6 @@ Scheduler* scheduler;
 int main(int argc, char* argv[]) {
   int opt;
   bool verbose = false;
-  bool mipstart = false, sll = false;
   int seed = time(0);
 
   string str_schedType = string("sa");
@@ -65,15 +62,13 @@ int main(int argc, char* argv[]) {
   bool est_perf = false;
   bool indirect = false;
 
-  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:mfpcd:e:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:fpcd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
       case 'v': verbose = true; break;
-      case 'm': mipstart = true; break;
       case 'f': is_dse = true; break;
       case 'p': est_perf = true; break;
-      case 'S': sll = true; break;
       case 'b': print_bits = true; break;
       case 'c': indirect = true; break;
 
@@ -124,10 +119,6 @@ int main(int argc, char* argv[]) {
   if (is_dse) {
 
     scheduler->set_start_time();
-
-    for(auto& node : ssmodel.subModel()->node_list()) {
-      assert(node->subnet_table().size() == node->out_links().size());
-    }
 
     CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
     cur_ci->verify();

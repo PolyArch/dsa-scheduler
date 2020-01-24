@@ -42,6 +42,16 @@ sslink* sslink::getCycleLink() {
   return NULL;
 }
 
+sslink::~sslink() {
+  auto f = [this](std::vector<sslink*> &links) {
+    auto iter = std::find(links.begin(), links.end(), this);
+    assert(iter != links.end() && "Cannot find this link!");
+    links.erase(iter);
+  };
+  f(orig()->links[0]);
+  f(dest()->links[1]);
+}
+
 // ---------------------- ssswitch --------------------------------------------
 
 void parse_list_of_ints(std::istream& istream, std::vector<int>& int_vec) {
@@ -326,189 +336,16 @@ sslink* ssnode::add_link(ssnode *node) {
     _cycle_link = link;
   }
   auto &olinks = links[0];
-  link->set_out_index(olinks.size());
   olinks.push_back(link);
 
-  //maybe just setup the routing table here?
-  _subnet_table.resize(olinks.size());
-  create_blank_subnet_table(link);
+  link->subnet.resize(link->bitwidth() / 8);
+  link->subnet[0] = ~0ull >> (64 - link->bitwidth());
+  link->subnet[1] = ~0ull >> (64 - link->bitwidth());
 
-  node->add_back_link(link);
+  DEBUG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
+
+  node->links[1].push_back(link);
   return link;
-}
-
-void ssnode::setup_routing_memo_node(int i, int in_off, int bitwidth_log) {
-  if(links[1].size()==0 && !is_input()) return;
-
-  std::vector<std::pair<int, sslink*>>& memo_links =
-      _routing_memo.at(i * 4 * MAX_SUBNETS + in_off * 4 + bitwidth_log);
-  int slots = 1;
-  for (int b = 0; b < bitwidth_log; ++b) slots *= 2;
-
-  int in_slots;
-  int in_index;
-  if (links[1].size() > 0) {
-    sslink* inlink = links[1][i];
-    in_slots = inlink->bitwidth() / 8;
-    in_index = inlink->in_index();
-    // cout << inlink->name() << ":" << in_off << ", size:" << slots << " -- ";
-
-  } else {  // no inputs (like an input ssvport)
-    in_slots = bitwidth() / 8;
-    in_index = 0;
-    // cout << "any for " << name() << ":" << in_off << ", size:" << slots << "--";
-  }
-
-  for (sslink* outlink : links[0]) {
-    // start at each output offset
-    for (int out_off = 0; out_off < outlink->bitwidth() / 8; ++out_off) {
-      bool failed = false;
-
-      for (int i = 0; i < slots; ++i) {
-        int out_slot = (out_off + i) % (outlink->bitwidth() / 8);
-        int in_slot = (in_off + i) % (in_slots);
-        if (!_subnet_table[outlink->out_index()][out_slot][in_index][in_slot]) {
-          failed = true;
-          break;
-        }
-      }
-
-      if (!failed) {
-        // cout << outlink->name() << ":" << out_off << " ";
-
-        memo_links.push_back(make_pair(out_off, outlink));
-      }
-    }
-  }
-  // cout << "\n";
-}
-
-void ssnode::setup_default_routing_table(sslink* inlink, sslink* outlink) {
-  // By default we just want each corresponding output + one decomposable
-  // bitwidth away
-
-  int in_slots;
-  int in_index;
-  if (inlink) {
-    in_slots = inlink->bitwidth() / 8;
-    in_index = inlink->in_index();
-  } else {
-    in_slots = bitwidth() / 8;
-    in_index = 0;
-  }
-
-  int min_slots = std::min(in_slots, outlink->bitwidth() / 8);
-
-  for (int out_off = 0; out_off < outlink->bitwidth() / 8; out_off += min_slots) {
-    for (int in_off = 0; in_off < in_slots; in_off += min_slots) {
-      // Now we've created a square region.
-      // first, avoid connecting multiple subnetworks to one output if the
-      // switch is not decomposable at all
-      if (outlink->decomp_bitwidth() == outlink->bitwidth() && in_off != 0) continue;
-
-      // first connect same subnet
-      for (int i = 0; i < min_slots; ++i) {
-        _subnet_table.at(outlink->out_index())
-            .at(out_off + i)
-            .at(in_index)
-            .at(in_off + i) = true;
-      }
-
-      // If its an FU, don't subnet hop
-      if (dynamic_cast<ssfu*>(outlink->orig()) ||
-          dynamic_cast<ssvport*>(outlink->orig())) {
-        continue;
-      }
-
-      // If we aren't also changing bitwidths, lets allow some subnet connections
-      if (in_slots != outlink->bitwidth() / 8) continue;
-
-      for (int i = 0; i < min_slots; ++i) {
-        int out = out_off + ((i + outlink->decomp_bitwidth() / 8) % min_slots);
-        _subnet_table.at(outlink->out_index()).at(out).at(in_index).at(in_off + i) =
-            true;
-      }
-    }
-  }
-}
-
-// Add blank space for a given link input
-void ssnode::create_blank_subnet_table_input(sslink* inlink) {
-  for (sslink* outlink : links[0]) {
-    for (int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
-      _subnet_table[outlink->out_index()][o_sub].resize(
-          std::max(1, (int)links[1].size()));
-
-      create_blank_subnet_table(outlink,o_sub,inlink);    
-    }
-    setup_default_routing_table(inlink, outlink);
-  }
-}
-
-// Subnet table layout
-// [output][slot][input][slot]
-
-void ssnode::create_blank_subnet_table(sslink* outlink, int o_sub, sslink* inlink) {
-  _subnet_table[outlink->out_index()][o_sub][inlink->in_index()].resize(MAX_SUBNETS);
-}
-
-void ssnode::create_blank_subnet_table(sslink* outlink, int o_sub) {
-  _subnet_table[outlink->out_index()][o_sub].resize(
-      std::max(1, (int)in_links().size()));
-  for (sslink* inlink : in_links()) {
-    create_blank_subnet_table(outlink,o_sub,inlink);
-  }
-  if (in_links().size() == 0) {
-    _subnet_table[outlink->out_index()][o_sub][0].resize(MAX_SUBNETS);
-  }
-}
-
-
-void ssnode::create_blank_subnet_table(sslink* outlink) {
-  _subnet_table[outlink->out_index()].resize(MAX_SUBNETS);
-  for (int o_sub = 0; o_sub < MAX_SUBNETS; ++o_sub) {
-    create_blank_subnet_table(outlink,o_sub);
-  }
-
-  for (sslink* inlink : in_links()) {
-    setup_default_routing_table(inlink, outlink);
-  }
-  if (in_links().empty()) {
-    setup_default_routing_table(nullptr, outlink);
-  }
-
-}
-
-void ssnode::setup_routing_memo() {
-
-  _routing_memo.clear();
-  _routing_memo.resize(std::max(1, (int)in_links().size()) * _bitwidth / 8 * 4);
-  
-
-  for (int i = 0; i < std::max(1, (int)in_links().size()); ++i) {
-    for (int slot = 0; slot < 8; ++slot) {
-      for (int bitwidth = 0; bitwidth <= 3; ++bitwidth) {
-        setup_routing_memo_node(i, slot, bitwidth);
-      }
-    }
-  }
-}
-
-// Group Nodes/Links and Set IDs
-// This should be done after all the links are added
-void SubModel::post_process() {
-  _link_list.clear();
-
-  for (auto elem : _node_list) elem->agg_elem(_link_list);
-  fix_id(_link_list); 
-
-  // Setup the subnetwork topology lookup tables for each node if it has not been
-  // setup already during configuration.
-  for (auto node : _node_list) {
-    node->setup_routing_memo();
-  }
-
-  _ssio_interf.fill_vec();
 }
 
 void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,
@@ -728,4 +565,15 @@ void ssio_interface::fill_vec() {
                 return a.second->size() < b.second->size();
               });
   }
+}
+
+// Group Nodes/Links and Set IDs	
+// This should be done after all the links are added	
+void SubModel::post_process() {
+  _link_list.clear();
+
+  for (auto elem : _node_list) elem->agg_elem(_link_list);
+  fix_id(_link_list);
+
+  _ssio_interf.fill_vec();
 }
