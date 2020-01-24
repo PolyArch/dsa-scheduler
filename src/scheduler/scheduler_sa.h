@@ -2,6 +2,7 @@
 #define __SS__SCHEDULE_SIMULATEDANNEALING_H__
 
 #include <iostream>
+
 #include "scheduler.h"
 
 #define DEBUG_SCHED (false)
@@ -54,8 +55,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   void initialize(SSDfg*, Schedule*&);
 
-  SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel)
-      : Scheduler(ssModel) {}
+  SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel) : Scheduler(ssModel) {}
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
@@ -68,8 +68,8 @@ class SchedulerSimulatedAnnealing : public Scheduler {
  protected:
   std::pair<int, int> obj(Schedule*& sched, SchedStats& s);
 
-  std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s, 
-      CandidateRoute& undo_path);
+  std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s,
+                                CandidateRoute& undo_path);
 
   bool length_creep(Schedule* sched, SSDfgEdge* edge, int& num, CandidateRoute& cand);
 
@@ -131,7 +131,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
         if (candidates.empty()) {
           return 0;
         }
-        
+
         int best_candidate = try_candidates(candidates, sched, node);
         return best_candidate == -1 ? -1 : 1;
       }

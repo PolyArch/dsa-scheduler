@@ -34,26 +34,23 @@ class SSModel {
   void setMaxEdgeDelay(int d);
 
   int indirect(int v = -1) {
-    if (v != -1)
-      ind_memory = v;
+    if (v != -1) ind_memory = v;
     return ind_memory;
   }
 
-  double host_area() {
-    return (indirect() * 88800) + 5200 + 41000;
-  }
+  double host_area() { return (indirect() * 88800) + 5200 + 41000; }
 
   SSModel(const SSModel& m) {
-     _fuModel = m._fuModel;
-     _subModel = m._subModel->copy();
-     _dispatch_inorder = m._dispatch_inorder;
-     _dispatch_width = m._dispatch_width;
-     _maxEdgeDelay = m._maxEdgeDelay;
+    _fuModel = m._fuModel;
+    _subModel = m._subModel->copy();
+    _dispatch_inorder = m._dispatch_inorder;
+    _dispatch_width = m._dispatch_width;
+    _maxEdgeDelay = m._maxEdgeDelay;
   }
   const std::string filename;
 
   ~SSModel() {
-    //Don't delete _fuModel, just let it leak
+    // Don't delete _fuModel, just let it leak
     delete _subModel;
   }
 

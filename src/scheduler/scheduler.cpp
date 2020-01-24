@@ -1,72 +1,70 @@
 #include "scheduler.h"
+
 #include "scheduler_sa.h"
 
 using namespace SS_CONFIG;
 using namespace std;
 
-#include <fstream>
-#include <sstream>
-#include <unordered_map>
-
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <fstream>
 #include <list>
-#include <signal.h>
+#include <sstream>
+#include <unordered_map>
 
-//Utility functions
-int rand_bt(int s, int e) { 
+// Utility functions
+int rand_bt(int s, int e) {
   assert(e > s && "bad range for rand_bt");
-  return rand() % (e - s) + s; 
+  return rand() % (e - s) + s;
 }
 
-int rand_bt_large(int s, int e) { 
-  return (rand() * RAND_MAX + rand()) % (e - s) + s; 
-}
-
+int rand_bt_large(int s, int e) { return (rand() * RAND_MAX + rand()) % (e - s) + s; }
 
 bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   auto* sub = ssmodel->subModel();
 
-  //Fast algorithm for checking if there are enough vports
+  // Fast algorithm for checking if there are enough vports
   std::vector<int> vec_in_sizes;
   std::vector<int> vec_out_sizes;
   std::vector<int> dfg_in_sizes;
   std::vector<int> dfg_out_sizes;
-  for(auto& p : sub->input_list()) vec_in_sizes.push_back(p->bitwidth_capability());
-  for(auto& p : sub->output_list()) vec_out_sizes.push_back(p->bitwidth_capability());
-  for(auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
-  for(auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
+  for (auto& p : sub->input_list()) vec_in_sizes.push_back(p->bitwidth_capability());
+  for (auto& p : sub->output_list()) vec_out_sizes.push_back(p->bitwidth_capability());
+  for (auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
+  for (auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
 
-  if(dfg_in_sizes.size() > vec_in_sizes.size()) return false;
-  if(dfg_out_sizes.size() > vec_out_sizes.size()) return false;
+  if (dfg_in_sizes.size() > vec_in_sizes.size()) return false;
+  if (dfg_out_sizes.size() > vec_out_sizes.size()) return false;
 
-  std::sort(vec_in_sizes.begin(),vec_in_sizes.end(),greater<int>());
-  std::sort(vec_out_sizes.begin(),vec_out_sizes.end(),greater<int>());
-  std::sort(dfg_in_sizes.begin(),dfg_in_sizes.end(),greater<int>());
-  std::sort(dfg_out_sizes.begin(),dfg_out_sizes.end(),greater<int>());
+  std::sort(vec_in_sizes.begin(), vec_in_sizes.end(), greater<int>());
+  std::sort(vec_out_sizes.begin(), vec_out_sizes.end(), greater<int>());
+  std::sort(dfg_in_sizes.begin(), dfg_in_sizes.end(), greater<int>());
+  std::sort(dfg_out_sizes.begin(), dfg_out_sizes.end(), greater<int>());
 
-  for(unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
-    if(dfg_in_sizes[i] > vec_in_sizes[i]) {
-      if(verbose) { 
+  for (unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
+    if (dfg_in_sizes[i] > vec_in_sizes[i]) {
+      if (verbose) {
         std::cerr << "Vector Inputs Insufficient\n";
       }
       return false;
     }
   }
-  for(unsigned i = 0; i < dfg_out_sizes.size(); ++i) {
-    if(dfg_out_sizes[i] > vec_out_sizes[i]) {
-      if(verbose) { 
+  for (unsigned i = 0; i < dfg_out_sizes.size(); ++i) {
+    if (dfg_out_sizes[i] > vec_out_sizes[i]) {
+      if (verbose) {
         std::cerr << "Vector Outputs Insufficient\n";
       }
       return false;
     }
   }
-  return true; 
+  return true;
 }
 
 bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
-  if(!vport_feasible(ssDFG,ssmodel,verbose)) {
+  if (!vport_feasible(ssDFG, ssmodel, verbose)) {
     return false;
   }
   int dedicated_insts = 0;
@@ -93,7 +91,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   //       << nfus << " fus)\n\n";
   //  return false;
   //}
-  
+
   if (temporal_insts > temporal_inst_slots) {
     cerr << "\n\nError: Too many temporal instructions (" << temporal_insts
          << ") in SSDfg for given SSCONFIG (has " << temporal_inst_slots
@@ -135,7 +133,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
     int dfg_count = pair.second;
 
     int fu_count = 0;
-    for(ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
+    for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
       if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(ss_inst)) {
         fu_count += cand_fu->max_util(ss_inst);
       }
@@ -176,12 +174,12 @@ std::string basedir(const std::string& filename) {
   return filename.substr(0, lastindex);
 }
 
-
-Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
+Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   bool succeed_sched = false;
-  Schedule *sched = nullptr;
+  Schedule* sched = nullptr;
 
-  string dfg_base = basename(dfg->filename);  // the name without preceeding dirs or file extension
+  string dfg_base =
+      basename(dfg->filename);  // the name without preceeding dirs or file extension
   string pdg_dir = basedir(dfg->filename);  // preceeding directories only
   if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
     pdg_dir += "/";
@@ -201,13 +199,10 @@ Schedule *Scheduler::invoke(SSModel *model, SSDfg *dfg, bool print_bits) {
   int lastindex = model_filename.find_last_of(".");
   string model_rawname = model_filename.substr(0, lastindex);
   string model_base =
-        model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
+      model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
 
   if (check_feasible(dfg, model, verbose)) {
-
-    auto sigint_handler = [] (int) {
-      exit(1);
-    };
+    auto sigint_handler = [](int) { exit(1); };
 
     // Setup signal so we can stop if we need to
     struct sigaction sigIntHandler;

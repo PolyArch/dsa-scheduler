@@ -4,8 +4,11 @@
 
 #include <assert.h>
 #include <math.h>
+
 #include <algorithm>
 #include <bitset>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -16,13 +19,9 @@
 #include <unordered_set>
 #include <vector>
 
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-
-#include "ss-scheduler/metadata.h"
 #include "ss-config/model.h"
 #include "ss-config/ssinst.h"
-
+#include "ss-scheduler/metadata.h"
 
 using SS_CONFIG::SubModel;
 
@@ -40,18 +39,17 @@ struct Data {
   int64_t available_at;
   uint64_t value;
   bool valid;
-  Data(int64_t aa, uint64_t value, bool valid) : available_at(aa), value(value), valid(valid) {}
+  Data(int64_t aa, uint64_t value, bool valid)
+      : available_at(aa), value(value), valid(valid) {}
 };
 
 struct ComputeStatus {
   int temporal{0};
   int dedicated{0};
-  int total() {
-    return temporal + dedicated;
-  }
+  int total() { return temporal + dedicated; }
 };
 
-}
+}  // namespace simulation
 
 class SSDfgVec;
 
@@ -59,11 +57,11 @@ namespace ssdfg {
 
 struct CompileMeta : MetaPort {
   SSDfgVec *parent, *destination;
-  CompileMeta(const MetaPort &, SSDfgVec *);
-  CompileMeta() {};
+  CompileMeta(const MetaPort&, SSDfgVec*);
+  CompileMeta(){};
 };
 
-}
+}  // namespace ssdfg
 
 // Datastructure describing a value created by an input vector or an instruction
 class SSDfgValue {
@@ -223,11 +221,10 @@ struct SSDfgOperand {
 
   void pop() {
     assert(ready());
-    for (auto &elem : fifos) {
+    for (auto& elem : fifos) {
       elem.pop();
     }
   }
-
 };
 
 // DFG Node -- abstract base class
@@ -320,7 +317,7 @@ class SSDfgNode {
 
   int id() { return _ID; }
 
-  virtual void forward(Schedule *) = 0;
+  virtual void forward(Schedule*) = 0;
 
   //--------------------------------------------
 
@@ -362,11 +359,9 @@ class SSDfgNode {
 
   SSDfg* ssdfg() { return _ssdfg; }
 
-  bool needs_ctrl_dep() { return _needs_ctrl_dep;}
+  bool needs_ctrl_dep() { return _needs_ctrl_dep; }
 
-  int candidates_cnt() {
-    return candidates_cnt_;
-  }
+  int candidates_cnt() { return candidates_cnt_; }
 
  private:
   friend class boost::serialization::access;
@@ -393,7 +388,7 @@ class SSDfgNode {
   std::vector<SSDfgValue*> _values;  // out edges by index
   std::vector<SSDfgEdge*> _uses;     // out edges in flat form
 
-  bool _needs_ctrl_dep =false;
+  bool _needs_ctrl_dep = false;
 
   int _min_lat = 0;
   int _sched_lat = 0;
@@ -464,7 +459,7 @@ struct CtrlBits {
   template <class Archive>
   void serialize(Archive& ar, const unsigned version);
 
-  bool needs_ctrl_dep() {return _needs_ctrl_dep;}
+  bool needs_ctrl_dep() { return _needs_ctrl_dep; }
 
  private:
   uint64_t mask{0};
@@ -574,25 +569,23 @@ class SSDfgInst : public SSDfgNode {
 
   /// Control signal, either controlled by an dependent inst or itself
   /// {
-  void set_ctrl_bits(const CtrlBits& c) { 
-    _ctrl_bits = c; 
-    if(_ctrl_bits.needs_ctrl_dep()) backprop_ctrl_dep(); 
+  void set_ctrl_bits(const CtrlBits& c) {
+    _ctrl_bits = c;
+    if (_ctrl_bits.needs_ctrl_dep()) backprop_ctrl_dep();
   }
   uint64_t ctrl_bits() { return _ctrl_bits.bits(); }
   CtrlBits ctrlBits() { return _ctrl_bits; }
 
-  void set_self_ctrl(const CtrlBits& c) { 
-    _self_bits = c; 
-    if(_self_bits.needs_ctrl_dep()) backprop_ctrl_dep(); 
+  void set_self_ctrl(const CtrlBits& c) {
+    _self_bits = c;
+    if (_self_bits.needs_ctrl_dep()) backprop_ctrl_dep();
   }
   uint64_t self_bits() { return _self_bits.bits(); }
   /// }
 
   virtual int bitwidth() override { return SS_CONFIG::bitwidth[_ssinst]; }
 
-  uint64_t getout(int i) {
-    return _output_vals[i];
-  }
+  uint64_t getout(int i) { return _output_vals[i]; }
 
  private:
   friend class boost::serialization::access;
@@ -624,13 +617,12 @@ class SSDfgInst : public SSDfgNode {
 // vector class
 class SSDfgVec : public SSDfgNode {
  public:
-
   friend class SSDfg;
 
   SSDfgVec() {}
 
   SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, int id, SSDfg* ssdfg,
-           const ssdfg::MetaPort &meta);
+           const ssdfg::MetaPort& meta);
 
   void set_port_width(int n) { _port_width = n; }
 
@@ -673,7 +665,7 @@ class SSDfgVecInput : public SSDfgVec {
   SSDfgVecInput() {}
 
   SSDfgVecInput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
-                const ssdfg::MetaPort &meta)
+                const ssdfg::MetaPort& meta)
       : SSDfgVec(V_INPUT, len, width, name, id, ssdfg, meta) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule*,
@@ -700,7 +692,7 @@ class SSDfgVecOutput : public SSDfgVec {
   SSDfgVecOutput() {}
 
   SSDfgVecOutput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
-                 const ssdfg::MetaPort &meta)
+                 const ssdfg::MetaPort& meta)
       : SSDfgVec(V_OUTPUT, len, width, name, id, ssdfg, meta) {}
 
   std::vector<std::pair<int, SS_CONFIG::ssnode*>> candidates(Schedule*,
@@ -816,14 +808,14 @@ class SSDfg {
   inline void insert_vec(T*);
 
   template <typename T>
-  inline void add_parsed_vec(const std::string& name, int len, EntryTable& syms, int width,
-                             const ssdfg::MetaPort &meta);
+  inline void add_parsed_vec(const std::string& name, int len, EntryTable& syms,
+                             int width, const ssdfg::MetaPort& meta);
 
   void addVecOutput(const std::string& name, int len, EntryTable& syms, int width,
-                    const ssdfg::MetaPort &meta);
+                    const ssdfg::MetaPort& meta);
 
   void addVecInput(const std::string& name, int len, EntryTable& syms, int width,
-                   const ssdfg::MetaPort &meta);
+                   const ssdfg::MetaPort& meta);
 
   SSDfgEdge* connect(SSDfgValue* orig, SSDfgNode* dest, int slot,
                      SSDfgEdge::EdgeType etype, int l = 0, int r = 63,
@@ -842,13 +834,9 @@ class SSDfg {
 
   int num_vec_output() { return _vecOutputs.size(); }
 
-  void insert_vec_in(SSDfgVecInput* in) {
-    _vecInputs.push_back(in);
-  }
+  void insert_vec_in(SSDfgVecInput* in) { _vecInputs.push_back(in); }
 
-  void insert_vec_out(SSDfgVecOutput* out) {
-    _vecOutputs.push_back(out);
-  }
+  void insert_vec_out(SSDfgVecOutput* out) { _vecOutputs.push_back(out); }
 
   void insert_vec_in_group(SSDfgVecInput* in, unsigned group) {
     _vecInputs.push_back(in);
@@ -884,27 +872,27 @@ class SSDfg {
   bool push_vector(SSDfgVecInput* vec_in, std::vector<uint64_t> data,
                    std::vector<bool> valid, bool print, bool verif);
 
-  void push_transient(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail,
-                      int cycle, bool is_computed) {
+  void push_transient(SSDfgValue* dfg_val, uint64_t v, bool valid, bool avail, int cycle,
+                      bool is_computed) {
     struct cycle_result* temp = new cycle_result(dfg_val, v, valid, avail);
     // If this is a newly computed value, append to the back.
-    // Otherwise, it is a value delayed from previous cycles, so it should be inserted before
-    // any element of this cycle.
-    auto &to_insert = transient_values[(cycle + cur_node_ptr) % get_max_lat()];
+    // Otherwise, it is a value delayed from previous cycles, so it should be inserted
+    // before any element of this cycle.
+    auto& to_insert = transient_values[(cycle + cur_node_ptr) % get_max_lat()];
     to_insert.insert(is_computed ? to_insert.end() : to_insert.begin(), temp);
   }
 
   void push_buf_transient(SSDfgEdge* e, bool is_dummy, int cycle) {
     struct buffer_pop_info* temp = new buffer_pop_info(e, is_dummy);
-    auto &to_insert = buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()];
+    auto& to_insert = buf_transient_values[(cycle + cur_buf_ptr) % get_max_lat()];
     to_insert.push_back(temp);
   }
 
   int cycle(bool print, bool verif);
 
-  int forward(bool asap, Schedule *);
+  int forward(bool asap, Schedule*);
 
-  double estimated_performance(Schedule *, bool);
+  double estimated_performance(Schedule*, bool);
 
   // ---------------------------------------------------------------------------
 
@@ -988,7 +976,6 @@ class SSDfg {
 
   std::vector<SSDfgNode*> _nodes;
 
-
   std::vector<SSDfgNode*> _orderedNodes;
 
   // redundant storage:
@@ -1039,7 +1026,7 @@ inline void SSDfg::insert_vec(T* node) {
 
 template <typename T>
 inline void SSDfg::add_parsed_vec(const std::string& name, int len, EntryTable& syms,
-                                  int width, const ssdfg::MetaPort &meta) {
+                                  int width, const ssdfg::MetaPort& meta) {
   int n = std::max(1, len);
   int slice = 64 / width;
   // int t = ceil(n / float(slice)); -- FIXME: do we need this?

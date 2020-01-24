@@ -1,9 +1,10 @@
 #include "direction.h"
-#include "model_parsing.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "model_parsing.h"
 
 using namespace SS_CONFIG;
 using namespace std;
@@ -288,7 +289,6 @@ const char* SwitchDir::dirName(SwitchDir::DIR myDir, bool reverse) {
     case SwitchDir::OP2: return "P2"; break;
     case SwitchDir::IM: return "IM"; break;
     case SwitchDir::END_DIR: return "xxx"; break;
-    default:
-      return "???";
+    default: return "???";
   }
 }

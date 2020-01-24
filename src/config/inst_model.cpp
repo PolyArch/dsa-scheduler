@@ -1,10 +1,12 @@
+#include "inst_model.h"
+
 #include <stdlib.h>
 #include <string.h>
-#include <set>
+
 #include <map>
+#include <set>
 #include <sstream>
 
-#include "inst_model.h"
 #include "model_parsing.h"
 
 using namespace SS_CONFIG;
@@ -71,7 +73,7 @@ InstModel::InstModel(char* filename) : filename_(filename) {
 }
 
 // constructor based on the input csv file
-void InstModel::PowerAreaModel(char* filename){
+void InstModel::PowerAreaModel(char* filename) {
   // Open the CSV Power & Area model
   ifstream ifs(filename, ios::in);
 
@@ -84,7 +86,7 @@ void InstModel::PowerAreaModel(char* filename){
 
   // Parsing the instructions
   char line[1024];
-  while(ifs.good()){
+  while (ifs.good()) {
     // reading
     DEBUG(PA_MODEL) << "reading and parse the csv file\n";
     // fetch line
@@ -103,167 +105,154 @@ void InstModel::PowerAreaModel(char* filename){
     std::vector<std::string> tokens;
     ModelParsing::split(line, ',', tokens);
 
-    if(ModelParsing::is_number(tokens[5]) && ModelParsing::is_number(tokens[6])){
+    if (ModelParsing::is_number(tokens[5]) && ModelParsing::is_number(tokens[6])) {
       char* end = 0;
       std::string inst_name = tokens[4];
       double power = strtod(tokens[5].c_str(), &end);
       double area = strtod(tokens[6].c_str(), &end);
-      if(ModelParsing::StartsWith(inst_name, "FLOAT") || 
-          ModelParsing::StartsWith(inst_name, "FIXED")){
-          FuType * fuType = new FuType();
-          fuType -> setName(inst_name);
-          fuType -> setArea(area);
-          fuType -> setPower(power);
-          _fuTypeList.push_back(fuType);
-          continue; // skip parsing the float/fixed function unit
+      if (ModelParsing::StartsWith(inst_name, "FLOAT") ||
+          ModelParsing::StartsWith(inst_name, "FIXED")) {
+        FuType* fuType = new FuType();
+        fuType->setName(inst_name);
+        fuType->setArea(area);
+        fuType->setPower(power);
+        _fuTypeList.push_back(fuType);
+        continue;  // skip parsing the float/fixed function unit
       }
-      inst_to_power_area.insert(
-        pair<std::string, pair<double, double>>
-        (inst_name, std::pair<double, double>(power,area)));
-    }else{
+      inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+          inst_name, std::pair<double, double>(power, area)));
+    } else {
       continue;
     }
   }
 
   // add power and area to decomposed insts, unsigned/signed/fixed
 
-  string prefix_fixed_str[6] = {"L","H","I", "S", "U", "Fx"}; 
+  string prefix_fixed_str[6] = {"L", "H", "I", "S", "U", "Fx"};
   // High, Low, Int, Signed, Unsigned, Fixed are assumed to be the same
   auto fixed_size_map = inst_to_power_area;
-  for (auto inst_pa : fixed_size_map){
+  for (auto inst_pa : fixed_size_map) {
     string inst_name = inst_pa.first;
     string last_two_str = inst_name.substr(inst_name.length() - 2);
-    DEBUG(PA_MODEL) << "the outer loop -- inst name = " << inst_name <<"\n";
-    if(inst_name[0] == 'F'){// Floating Unit
+    DEBUG(PA_MODEL) << "the outer loop -- inst name = " << inst_name << "\n";
+    if (inst_name[0] == 'F') {  // Floating Unit
       // Add floating-point 32x2 here
-      if (last_two_str == "32"){
+      if (last_two_str == "32") {
         pair<double, double> power_area = inst_to_power_area[inst_name];
-        pair<double, double> power_areax2 = pair<double, double>(power_area.first*2, power_area.second*2);
+        pair<double, double> power_areax2 =
+            pair<double, double>(power_area.first * 2, power_area.second * 2);
         inst_to_power_area.insert(
-          pair<string, pair<double, double>>
-          (inst_name + "x2", power_areax2)
-        );
+            pair<string, pair<double, double>>(inst_name + "x2", power_areax2));
       }
       DEBUG(PA_MODEL) << "deal with the floating point\n";
-      continue; // Skip the rest floating-point inst
-    }else{// Fixed Instruction
+      continue;  // Skip the rest floating-point inst
+    } else {     // Fixed Instruction
       // Add sign prefix to every fixed inst
       pair<double, double> power_area = inst_to_power_area[inst_name];
-      for (auto prefix : prefix_fixed_str){
+      for (auto prefix : prefix_fixed_str) {
         stringstream sign_inst_ss;
         sign_inst_ss << prefix << inst_name;
         inst_to_power_area.insert(
-          pair<std::string, pair<double, double>>
-          (sign_inst_ss.str(), power_area));
-        DEBUG(PA_MODEL) << "length of map = "<< inst_to_power_area.size() << " -- "<< prefix <<" : deal with the add sign bit to fixed point\n";
+            pair<std::string, pair<double, double>>(sign_inst_ss.str(), power_area));
+        DEBUG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
+                        << prefix << " : deal with the add sign bit to fixed point\n";
       }
       // Add power area to decomposed instruction
       char last_char = inst_name.back();
-      if(last_char == '8' || last_two_str == "16" || last_two_str == "32"){
-        DEBUG(PA_MODEL) << "length of map = "<< inst_to_power_area.size() << " -- " << "deal with the decomposed instructions\n";
-        if(last_char == '8'){
-          string func_name = inst_name.substr(0,inst_name.length()-1);
-          int decomposers[3] = {2,4,8};
-          for(const int & decomposer : decomposers){
+      if (last_char == '8' || last_two_str == "16" || last_two_str == "32") {
+        DEBUG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
+                        << "deal with the decomposed instructions\n";
+        if (last_char == '8') {
+          string func_name = inst_name.substr(0, inst_name.length() - 1);
+          int decomposers[3] = {2, 4, 8};
+          for (const int& decomposer : decomposers) {
             stringstream decomp_ss;
-            decomp_ss << inst_name << "x" << decomposer; 
+            decomp_ss << inst_name << "x" << decomposer;
             string decomp_inst_name = decomp_ss.str();
-            pair<double, double> power_area_x_decomposer = 
-            pair<double, double>(power_area.first * decomposer, power_area.second * decomposer);
-            inst_to_power_area.insert(
-              pair<std::string, pair<double, double>>
-              (decomp_inst_name, power_area_x_decomposer)
-              );
-            for(auto prefix : prefix_fixed_str){
+            pair<double, double> power_area_x_decomposer = pair<double, double>(
+                power_area.first * decomposer, power_area.second * decomposer);
+            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+                decomp_inst_name, power_area_x_decomposer));
+            for (auto prefix : prefix_fixed_str) {
               stringstream sign_decomp_ss;
               sign_decomp_ss << prefix << decomp_inst_name;
-              DEBUG(PA_MODEL) <<"signed decoup inst = "<<sign_decomp_ss.str()<<"\n";
-              inst_to_power_area.insert(
-                pair<std::string, pair<double, double>>
-                (sign_decomp_ss.str(), power_area_x_decomposer));
+              DEBUG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+              inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+                  sign_decomp_ss.str(), power_area_x_decomposer));
             }
           }
           continue;
         }
-        if(last_two_str == "16"){
-          string func_name = inst_name.substr(0,inst_name.length()-2);
-          int decomposers[2] = {2,4};
-          for(const int & decomposer : decomposers){
+        if (last_two_str == "16") {
+          string func_name = inst_name.substr(0, inst_name.length() - 2);
+          int decomposers[2] = {2, 4};
+          for (const int& decomposer : decomposers) {
             stringstream decomp_ss;
-            decomp_ss << inst_name << "x" << decomposer; 
+            decomp_ss << inst_name << "x" << decomposer;
             string decomp_inst_name = decomp_ss.str();
-            pair<double, double> power_area_x_decomposer = 
-            pair<double, double>(power_area.first * decomposer, power_area.second * decomposer);
-            inst_to_power_area.insert(
-              pair<std::string, pair<double, double>>
-              (decomp_inst_name, power_area_x_decomposer)
-              );
-            for(auto prefix : prefix_fixed_str){
+            pair<double, double> power_area_x_decomposer = pair<double, double>(
+                power_area.first * decomposer, power_area.second * decomposer);
+            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+                decomp_inst_name, power_area_x_decomposer));
+            for (auto prefix : prefix_fixed_str) {
               stringstream sign_decomp_ss;
               sign_decomp_ss << prefix << decomp_inst_name;
-              DEBUG(PA_MODEL) <<"signed decoup inst = "<<sign_decomp_ss.str()<<"\n";
-              inst_to_power_area.insert(
-                pair<std::string, pair<double, double>>
-                (sign_decomp_ss.str(), power_area_x_decomposer));
+              DEBUG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+              inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+                  sign_decomp_ss.str(), power_area_x_decomposer));
             }
           }
           continue;
         }
-        if(last_two_str == "32"){
-          string func_name = inst_name.substr(0,inst_name.length()-2);
+        if (last_two_str == "32") {
+          string func_name = inst_name.substr(0, inst_name.length() - 2);
           int decomposer = 2;
           stringstream decomp_ss;
-          decomp_ss << inst_name << "x" << decomposer; 
+          decomp_ss << inst_name << "x" << decomposer;
           string decomp_inst_name = decomp_ss.str();
-          pair<double, double> power_area_x_decomposer = 
-          pair<double, double>(power_area.first * decomposer, power_area.second * decomposer);
-          inst_to_power_area.insert(
-            pair<std::string, pair<double, double>>
-            (decomp_inst_name, power_area_x_decomposer)
-            );
-          for(auto prefix : prefix_fixed_str){
+          pair<double, double> power_area_x_decomposer = pair<double, double>(
+              power_area.first * decomposer, power_area.second * decomposer);
+          inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+              decomp_inst_name, power_area_x_decomposer));
+          for (auto prefix : prefix_fixed_str) {
             stringstream sign_decomp_ss;
             sign_decomp_ss << prefix << decomp_inst_name;
-            DEBUG(PA_MODEL) <<"signed decoup inst = "<<sign_decomp_ss.str()<<"\n";
-            inst_to_power_area.insert(
-              pair<std::string, pair<double, double>>
-              (sign_decomp_ss.str(), power_area_x_decomposer));
+            DEBUG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+                sign_decomp_ss.str(), power_area_x_decomposer));
           }
           continue;
         }
-        
-      }else{
+
+      } else {
         continue;
-      } 
+      }
     }
   }
 
   // Adding the default instruction if ending with 64
   fixed_size_map = inst_to_power_area;
-  for (auto inst_pa : fixed_size_map){
+  for (auto inst_pa : fixed_size_map) {
     string inst_name = inst_pa.first;
     string last_two_str = inst_name.substr(inst_name.length() - 2);
-    if(last_two_str == "64"){
+    if (last_two_str == "64") {
       string func_name = inst_name.substr(0, inst_name.length() - 2);
       pair<double, double> power_area = inst_to_power_area[inst_name];
       inst_to_power_area.insert(
-        pair<string, pair<double, double>>
-        (func_name, power_area)
-      );
+          pair<string, pair<double, double>>(func_name, power_area));
     }
     DEBUG(PA_MODEL) << "deal with instruction with out bitwidth\n";
   }
 
   // Add the power / area to inst list
-  for (auto inst : _instList){
-    string inst_name = inst -> name();
-    if(inst_to_power_area.count(inst_name) > 0){
+  for (auto inst : _instList) {
+    string inst_name = inst->name();
+    if (inst_to_power_area.count(inst_name) > 0) {
       auto power_area = inst_to_power_area[inst_name];
-      inst -> setArea(power_area.second);
-      inst -> setPower(power_area.first);
+      inst->setArea(power_area.second);
+      inst->setPower(power_area.first);
     }
   }
-
 }
 
 void InstModel::printCFiles(char* header_file, char* cpp_file) {
@@ -336,8 +325,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "fu_type_t fu_type_from_string(const char* str);\n"
          "const char* name_of_fu_type(fu_type_t fu_type);\n"
          "double fu_type_area(fu_type_t fu_type);\n"
-         "double fu_type_power(fu_type_t fu_type);\n"
-         ;
+         "double fu_type_power(fu_type_t fu_type);\n";
 
   // Generate an execute function for all bitwidths
   int bitwidths[4] = {64, 32, 16, 8};
@@ -429,8 +417,6 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "  else {return SS_ERR;}\n";
   ofs << "}\n\n";
 
-
-
   // Properties of Instructions
 
   // name_of_inst
@@ -474,11 +460,10 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
   // area of the ssinst
   ofs << "double SS_CONFIG::inst_area(ss_inst_t inst) {\n"
-          "  switch(inst) {\n";
+         "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->area()
-        << ";\n";
+        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->area() << ";\n";
   }
   ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
   ofs << "  }\n\n";
@@ -486,22 +471,23 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
   // power of the ssinst
   ofs << "double SS_CONFIG::inst_power(ss_inst_t inst) {\n"
-          "  switch(inst) {\n";
+         "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->power()
-        << ";\n";
+        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->power() << ";\n";
   }
   ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
- // Pre-defined Function Unit Type
+  // Pre-defined Function Unit Type
   ofs << "fu_type_t SS_CONFIG::fu_type_from_string(const char* str) {\n"
-          "  if(strcmp(str, \"NON_PREDEFINED_FU_TYPE\") == 0) return NON_PREDEFINED_FU_TYPE;\n";
+         "  if(strcmp(str, \"NON_PREDEFINED_FU_TYPE\") == 0) return "
+         "NON_PREDEFINED_FU_TYPE;\n";
   for (unsigned i = 0; i < _fuTypeList.size(); ++i) {
     ofs << "  else if(strcmp(str,\"" << _fuTypeList[i]->name() << "\")==0) return "
-        << _fuTypeList[i]->name() << ";\n";}
+        << _fuTypeList[i]->name() << ";\n";
+  }
   ofs << "  else {return NON_PREDEFINED_FU_TYPE;}\n";
   ofs << "}\n\n";
 
@@ -509,8 +495,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "const char* SS_CONFIG::name_of_fu_type(fu_type_t fu_type) {\n"
          "  switch(fu_type) {\n";
   for (unsigned i = 0; i < _fuTypeList.size(); ++i) {
-    ofs << "    case "
-        <<  _fuTypeList[i]->name() << ": return \"" << _fuTypeList[i]->name()<< "\";\n";
+    ofs << "    case " << _fuTypeList[i]->name() << ": return \""
+        << _fuTypeList[i]->name() << "\";\n";
   }
   ofs << "    case NON_PREDEFINED_FU_TYPE: return \"NON_PREDEFINED_FU_TYPE\";\n";
   ofs << "    default: return \"NON_PREDEFINED_FU_TYPE\";\n";
@@ -519,10 +505,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
   // area of the fu_type
   ofs << "double SS_CONFIG::fu_type_area(fu_type_t fu_type) {\n"
-          "  switch(fu_type) {\n";
+         "  switch(fu_type) {\n";
   for (unsigned i = 0; i < _fuTypeList.size(); ++i) {
-    ofs << "    case "
-        << _fuTypeList[i]->name() << ": return " << _fuTypeList[i]->area()
+    ofs << "    case " << _fuTypeList[i]->name() << ": return " << _fuTypeList[i]->area()
         << ";\n";
   }
   ofs << "    default:  return -1.0;\n";
@@ -531,10 +516,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
   // power of the fu_type
   ofs << "double SS_CONFIG::fu_type_power(fu_type_t fu_type) {\n"
-          "  switch(fu_type) {\n";
+         "  switch(fu_type) {\n";
   for (unsigned i = 0; i < _fuTypeList.size(); ++i) {
-    ofs << "    case "
-        << _fuTypeList[i]->name() << ": return " << _fuTypeList[i]->power()
+    ofs << "    case " << _fuTypeList[i]->name() << ": return " << _fuTypeList[i]->power()
         << ";\n";
   }
   ofs << "    default:  return -1.0;\n";
@@ -630,7 +614,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
 int main(int argc, char** argv) {
   if (argc != 5) {
-    std::cerr << "Usage:\n inst_model [input file] [power&area file] [header file] [cpp file]\n";
+    std::cerr << "Usage:\n inst_model [input file] [power&area file] [header file] [cpp "
+                 "file]\n";
     return 1;
   }
 

@@ -2,56 +2,56 @@
 #define __SS_SUB_MODEL_H__
 
 #include <algorithm>
-#include <climits>
 #include <boost/any.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <climits>
+#include <fstream>
 #include <map>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <climits>
-#include "predict.h"
+
 #include "direction.h"
 #include "fu_model.h"
-#include <fstream>
+#include "predict.h"
 
 namespace SS_CONFIG {
 
+using std::ofstream;
 using std::ostream;
 using std::to_string;
-using std::ofstream;
 
 const int MAX_SUBNETS = 8;
 
 class ssnode;
 class ssvport;
 
-template<typename T>
-T get_prop_attr(const boost::property_tree::ptree &prop, const std::string &name, T dft) {
+template <typename T>
+T get_prop_attr(const boost::property_tree::ptree& prop, const std::string& name, T dft) {
   if (auto entry = prop.get_child_optional(name)) {
     return entry->get_value<T>();
   }
   return dft;
 }
 
-template<typename T>
-void fix_id(std::vector<T> &vec) {
+template <typename T>
+void fix_id(std::vector<T>& vec) {
   for (int i = 0, n = vec.size(); i < n; ++i) {
     vec[i]->set_id(i);
   }
 }
 
-template<typename T> 
+template <typename T>
 void vec_delete_by_id(std::vector<T>& vec, std::vector<int>& indices) {
-   auto new_end = std::remove_if(vec.begin(),vec.end(),[&](T fu){
-    for(int index : indices) {
-      if(fu->id() == index) return true;
+  auto new_end = std::remove_if(vec.begin(), vec.end(), [&](T fu) {
+    for (int index : indices) {
+      if (fu->id() == index) return true;
     }
     return false;
   });
-  vec.erase(new_end,vec.end());
+  vec.erase(new_end, vec.end());
 }
 
 // TODO: Should we delete this class?
@@ -72,7 +72,6 @@ class ssio_interface {
   }
 
   void fill_vec();
-
 };
 
 class sslink {
@@ -112,7 +111,10 @@ class sslink {
   int set_max_util(int m) { return _max_util = m; }
 
   // Right I ignore this because area model doesn't use it anyways
-  void set_flow_control(bool v) { _flow_control=v; assert(0); }
+  void set_flow_control(bool v) {
+    _flow_control = v;
+    assert(0);
+  }
   bool flow_control();
 
   int bitwidth() { return _bitwidth; }
@@ -124,18 +126,20 @@ class sslink {
 
   /* To check the connectivity in O(1), here we apply a tricky idea:
    * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
-   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we want to
-   * go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1), which is O(w).
+   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we
+   * want to go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1),
+   * which is O(w).
    *
    * Here we first transform the meaning of subnet[i][delta], which means
-   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity between
-   * `i' and `j', under width `w', where delta=j-i, the check becomes:
+   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity
+   * between `i' and `j', under width `w', where delta=j-i, the check becomes:
    * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
    *
    * Then two tricks together enables O(1) check:
-   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access continuous.
-   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can check the
-   *    one's in O(1) by bit operation.
+   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access
+   * continuous.
+   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can
+   * check the one's in O(1) by bit operation.
    * */
   std::vector<int64_t> subnet;
 
@@ -182,13 +186,7 @@ class sslink {
 
 class ssnode {
  public:
-  enum NodeType {
-    FU,
-    Switch,
-    InPort,
-    OutPort,
-    Unknown
-  };
+  enum NodeType { FU, Switch, InPort, OutPort, Unknown };
 
   ssnode() {}
 
@@ -201,7 +199,7 @@ class ssnode {
   virtual bool is_input() { return false; }
   virtual bool is_output() { return false; }
 
-  virtual int delay_fifo_depth() {return 0;}
+  virtual int delay_fifo_depth() { return 0; }
 
   // just for visualization
   void setXY(int x, int y) {
@@ -227,45 +225,43 @@ class ssnode {
 
   sslink* getFirstInLink() { return links[1].empty() ? nullptr : links[1][0]; }
 
-  std::string nodeType(){return node_type;}
+  std::string nodeType() { return node_type; }
 
   int id() { return _ID; }
 
   void set_ssnode_prop(boost::property_tree::ptree prop) {
     node_type = prop.get_child("nodeType").get_value<std::string>();
     data_width = prop.get_child("data_width").get_value<int>();
-  
+
     // Count the number of input port and output port
     // vector port can have 0 input_node or 0 output_node
     auto input_nodes = prop.get_child_optional("input_nodes");
     int num_input = 0;
     auto output_nodes = prop.get_child_optional("output_nodes");
     int num_output = 0;
-    if(input_nodes.is_initialized())
-      num_input = prop.get_child("input_nodes").size();
-    if(output_nodes.is_initialized())
-      num_output = prop.get_child("output_nodes").size();
-    (void) num_input;
-    (void) num_output;
-    
+    if (input_nodes.is_initialized()) num_input = prop.get_child("input_nodes").size();
+    if (output_nodes.is_initialized()) num_output = prop.get_child("output_nodes").size();
+    (void)num_input;
+    (void)num_output;
+
     // Parse Decomposer
-    if (node_type != "vector port"){
+    if (node_type != "vector port") {
       auto d_node = prop.get_child_optional("granularity");
-      if(!d_node.is_initialized()){
+      if (!d_node.is_initialized()) {
         decomposer = mf_decomposer;
-        std::cout << "Warning: non-vectorport-node need to have decomposer as properties,"<<
-         "use most fine grain decomposer instead\n";
-      }else{
+        std::cout << "Warning: non-vectorport-node need to have decomposer as properties,"
+                  << "use most fine grain decomposer instead\n";
+      } else {
         granularity = prop.get_child("granularity").get_value<int>();
         decomposer = data_width / granularity;
       }
     }
-    std :: cout << "data width = " << data_width << ", granularity = " << granularity <<"\n";
-    
+    std ::cout << "data width = " << data_width << ", granularity = " << granularity
+               << "\n";
+
     // parser the subnet table
 
-
-    /* TODO(@were): I need @sihao's help to adopt our new subnet routine. 
+    /* TODO(@were): I need @sihao's help to adopt our new subnet routine.
 
     auto subnet_offset_node = prop.get_child_optional("subnet_offset");
     if (subnet_offset_node.is_initialized()){
@@ -287,22 +283,23 @@ class ssnode {
 
       // Assigne the subnet table via offset
       auto & subnet_offset = prop.get_child("subnet_offset");
-      int decompose_ratio = mf_decomposer / decomposer; // calculatet the ratio of most-fine-grain decomposer by normal-decomposer
-      std:: cout << "the subnet offset is : ";
-      for(auto & offset : subnet_offset){
-        int offset_value = offset.second.get_value<int>();
-        std :: cout << offset_value << " ";
-        for (int op_idx = 0; op_idx < num_output; op_idx++){
-          for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
-            for (int ip_idx = 0; ip_idx < num_input; ip_idx++){
-              for (int is_idx = 0; is_idx < mf_decomposer; is_idx++){
+      int decompose_ratio = mf_decomposer / decomposer; // calculatet the ratio of
+    most-fine-grain decomposer by normal-decomposer std:: cout << "the subnet offset is :
+    "; for(auto & offset : subnet_offset){ int offset_value =
+    offset.second.get_value<int>(); std :: cout << offset_value << " "; for (int op_idx =
+    0; op_idx < num_output; op_idx++){ for (int os_idx = 0; os_idx < mf_decomposer;
+    os_idx++){ for (int ip_idx = 0; ip_idx < num_input; ip_idx++){ for (int is_idx = 0;
+    is_idx < mf_decomposer; is_idx++){
                 // get the real decomposer
                 int real_os_idx = os_idx / decompose_ratio;
                 int real_is_idx = is_idx / decompose_ratio;
                 // whether the slot difference equal the offset
-                bool connect = ((real_is_idx - real_os_idx) % decomposer == offset_value) || 
-                                ((real_is_idx - real_os_idx - decomposer) % decomposer == offset_value) ||
-                                ((real_is_idx - real_os_idx + decomposer) % decomposer == offset_value);
+                bool connect = ((real_is_idx - real_os_idx) % decomposer == offset_value)
+    ||
+                                ((real_is_idx - real_os_idx - decomposer) % decomposer ==
+    offset_value) ||
+                                ((real_is_idx - real_os_idx + decomposer) % decomposer ==
+    offset_value);
                 // ATTENTION: This is tricky, ask Sihao if you feel confused
                 bool same_mf_slot = os_idx % decompose_ratio == is_idx % decompose_ratio;
                 // connect in subnet table
@@ -340,8 +337,8 @@ class ssnode {
 
   void set_id(int id) { _ID = id; }
 
-  virtual void dumpIdentifier(ostream& os) {assert(false);}
-  virtual void dumpFeatures(ostream& os) {assert(false);}
+  virtual void dumpIdentifier(ostream& os) { assert(false); }
+  virtual void dumpFeatures(ostream& os) { assert(false); }
 
   void agg_elem(std::vector<sslink*>& link_list) {
     for (unsigned i = 0; i < links[0].size(); ++i) {
@@ -379,12 +376,13 @@ class ssnode {
 
   bool is_shared() { return _max_util > 1; }  // TODO: max_util > 1
 
-  void set_flow_control(bool v) { _flow_control=v; }
+  void set_flow_control(bool v) { _flow_control = v; }
   bool flow_control() { return _flow_control; }
 
   int bitwidth() { return _bitwidth; }
 
-  //std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int bitwidth) {
+  // std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int
+  // bitwidth) {
   //  int slot = p.first;
   //  sslink* l = p.second;
   //  int l_ind = 0;
@@ -393,30 +391,30 @@ class ssnode {
   //                               (31 - __builtin_clz(bitwidth)));
 
   //  if(links[0].size()!=0 && ret.size() == 0) {
-  //    std::cerr << "ERROR: Link: " << l->name() 
+  //    std::cerr << "ERROR: Link: " << l->name()
   //              << " has output links, but no routing table\n"
   //              << "_routing_memo.size() : " << _routing_memo.size() << "\n"
   //              << "num ins: " << links[1].size() << "\n"
   //              << "num outs: " << links[0].size() << "\n";
-  //    assert(0 && "bad _routing_memo"); 
-  //  } 
+  //    assert(0 && "bad _routing_memo");
+  //  }
   //  return ret;
   //}
 
-  virtual ~ssnode() {};  
+  virtual ~ssnode(){};
 
  protected:
   std::string node_type = "empty";
   int _ID = -1;
   int _x = -1, _y = -1;  // just for visualization
 
-  int _max_util = 1;  // Convert from "share_slot_size"
-  bool _flow_control = true; // convert from "flow_control"
-  int _bitwidth = 64;  // maximum bitwidth of PE, convert from "bit_width"
+  int _max_util = 1;          // Convert from "share_slot_size"
+  bool _flow_control = true;  // convert from "flow_control"
+  int _bitwidth = 64;         // maximum bitwidth of PE, convert from "bit_width"
 
   sslink* _cycle_link = nullptr;  // to
 
-  std::vector<sslink*> links[2]; // {output, input}
+  std::vector<sslink*> links[2];  // {output, input}
 
   // Variables used for scheduling -- these should be moved out at some point (TODO)
   int _node_dist[8];
@@ -424,15 +422,16 @@ class ssnode {
   std::pair<int, sslink*> _came_from[8];
 
   // Decomposability
-  // TODO:Please replace 8 with mf_decomposer 
+  // TODO:Please replace 8 with mf_decomposer
   int data_width = 64;
-  int granularity = 8; // the most fine-grain # of bit, 8 means byte-decomposable
+  int granularity = 8;  // the most fine-grain # of bit, 8 means byte-decomposable
   int mf_decomposer = data_width / granularity;
-  int decomposer = data_width / granularity; // convert from decomposer // to be integrate with subnet_table
+  int decomposer =
+      data_width /
+      granularity;  // convert from decomposer // to be integrate with subnet_table
   // TODO: most-fine-grain decomposer, to be removed or need to be defined by user
 
-private:
-
+ private:
   friend class SubModel;
   friend class sslink;
 };
@@ -441,7 +440,7 @@ class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
 
-  ssnode *copy() override {
+  ssnode* copy() override {
     auto res = new ssswitch();
     *res = *this;
     return res;
@@ -449,7 +448,7 @@ class ssswitch : public ssnode {
 
   virtual std::string name() const override {
     std::stringstream ss;
-    if(_x != -1 && _y != -1) {
+    if (_x != -1 && _y != -1) {
       ss << "SW"
          << "_" << _x << "_" << _y;
     } else {
@@ -458,18 +457,20 @@ class ssswitch : public ssnode {
     return ss.str();
   }
   void dumpIdentifier(ostream& os) override {
-    os<< "[" + to_string(_ID) +",\"switch\""+ "]";
+    os << "[" + to_string(_ID) + ",\"switch\"" + "]";
   }
   void dumpFeatures(ostream& os) override {
     os << "{\n";
     // ID
     os << "\"id\" : " << id() << ",\n";
     // NodeType
-    os << "\"nodeType\" : "<<"\"switch\""<<",\n";
+    os << "\"nodeType\" : "
+       << "\"switch\""
+       << ",\n";
     // data width
     os << "\"data_width\" : " << data_width << ",\n";
     // granularity
-    os << "\"granularity\" : " <<granularity<< ",\n";
+    os << "\"granularity\" : " << granularity << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -483,53 +484,57 @@ class ssswitch : public ssnode {
     // input nodes
     os << "\"input_nodes\" : [";
     int idx_link = 0;
-    for (auto in_link : in_links()){
+    for (auto in_link : in_links()) {
       in_link->orig()->dumpIdentifier(os);
-      if (idx_link < num_input - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "],\n";
+    }
+    os << "],\n";
     // output nodes
     os << "\"output_nodes\" : [";
     idx_link = 0;
-    for (auto out_link : out_links()){
+    for (auto out_link : out_links()) {
       out_link->dest()->dumpIdentifier(os);
-      if (idx_link < num_output - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "]";
+    }
+    os << "]";
 
     os << "}\n";
   }
 
-  void set_prop(boost::property_tree::ptree prop) {     
-    set_ssnode_prop(prop); 
+  void set_prop(boost::property_tree::ptree prop) {
+    set_ssnode_prop(prop);
     // max output fifo depth
     max_fifo_depth = get_prop_attr(prop, "max_fifo_depth", 4);
   }
 
   void collect_features() {
-    if(decomposer==0) decomposer=mf_decomposer;
+    if (decomposer == 0) decomposer = mf_decomposer;
     features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
-    
+
     assert(features[0] || features[1]);
     features[2] = _flow_control ? 0.0 : 1.0;
     features[3] = _flow_control ? 1.0 : 0.0;
     assert((features[2] || features[3]) &&
            "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = decomposer;
-    if(decomposer == 0 && (decomposer & (decomposer - 1))) {
-      std::cout << "Problem: Decomposer for node " 
-                << name() << " is: " << decomposer << "\n";
+    if (decomposer == 0 && (decomposer & (decomposer - 1))) {
+      std::cout << "Problem: Decomposer for node " << name() << " is: " << decomposer
+                << "\n";
       assert(0 && "Decomposer need to be power of two");
-    }    
+    }
     features[5] = max_fifo_depth;
     features[6] = links[1].size();
     features[7] = links[0].size();
     features[8] = _max_util;
 
-    //print_features();
+    // print_features();
   }
 
   double get_area() {
@@ -541,15 +546,15 @@ class ssswitch : public ssnode {
     return router_power_predict(features);
   }
 
-  virtual ~ssswitch() {};  
+  virtual ~ssswitch(){};
 
   void print_features() {
     std::cout << "------ Features : >>>>>> ";
     std::cout << "Not Shared ? " << features[0] << ", "
               << "Shared ? " << features[1] << ", "
-              << "Not Flow Control ? " << features[2] <<", "
-              << "Flow Control ? " << features[3] <<", "
-              << "decomposer = " << features[4] <<", "
+              << "Not Flow Control ? " << features[2] << ", "
+              << "Flow Control ? " << features[3] << ", "
+              << "decomposer = " << features[4] << ", "
               << "max fifo depth = " << features[5] << ", "
               << "# input links = " << features[6] << ", "
               << "# output links = " << features[7] << ", "
@@ -558,7 +563,7 @@ class ssswitch : public ssnode {
   }
 
   void dump_features() {
-    for(int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 9; ++i) {
       std::cout << features[i] << " ";
     }
     std::cout << "\n";
@@ -566,14 +571,14 @@ class ssswitch : public ssnode {
 
  protected:
   double features[9];
-  int max_fifo_depth=2;
+  int max_fifo_depth = 2;
 };
 
 class ssfu : public ssnode {
  public:
   ssfu() : ssnode() {}
 
-  ssnode *copy() override {
+  ssnode* copy() override {
     auto res = new ssfu();
     *res = *this;
     return res;
@@ -590,15 +595,15 @@ class ssfu : public ssnode {
     _delay_fifo_depth = get_prop_attr(prop, "delay_fifo_depth", 4);
 
     // output_select_mode
-    output_select_mode = get_prop_attr<std::string>(prop, "output_select_mode", "Universal");
+    output_select_mode =
+        get_prop_attr<std::string>(prop, "output_select_mode", "Universal");
 
     // register_file_size
     register_file_size = get_prop_attr(prop, "register_file_size", 8);
-
   }
 
-  void dumpIdentifier(ostream &os) override {
-    os << "[" + to_string(_ID) +",\"function unit\""+ "]";
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + to_string(_ID) + ",\"function unit\"" + "]";
   }
 
   void dumpFeatures(ostream& os) override {
@@ -606,11 +611,13 @@ class ssfu : public ssnode {
     // ID
     os << "\"id\" : " << id() << ",\n";
     // NodeType
-    os << "\"nodeType\" : " << "\"function unit\""<<",\n";
+    os << "\"nodeType\" : "
+       << "\"function unit\""
+       << ",\n";
     // data width
     os << "\"data_width\" : " << data_width << ",\n";
     // granularity
-    os << "\"granularity\" : " <<granularity<< ",\n";
+    os << "\"granularity\" : " << granularity << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -629,37 +636,42 @@ class ssfu : public ssnode {
     os << "\"instructions\" : [";
     int idx_inst = 0;
     int num_inst = fu_def()->num_inst();
-    for (ss_inst_t inst : fu_def()->cap()){
+    for (ss_inst_t inst : fu_def()->cap()) {
       os << "\"" << SS_CONFIG::name_of_inst(inst) << "\"";
-      if (idx_inst < num_inst-1){
-        os <<", ";
-        idx_inst ++ ;
+      if (idx_inst < num_inst - 1) {
+        os << ", ";
+        idx_inst++;
       }
-    }os << "],\n";
+    }
+    os << "],\n";
     // input nodes
     os << "\"input_nodes\" : [";
     int idx_link = 0;
-    for (auto in_link : in_links()){
+    for (auto in_link : in_links()) {
       in_link->orig()->dumpIdentifier(os);
-      if (idx_link < num_input - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "],\n";
+    }
+    os << "],\n";
     // output nodes
     os << "\"output_nodes\" : [";
     idx_link = 0;
-    for (auto out_link : out_links()){
+    for (auto out_link : out_links()) {
       out_link->dest()->dumpIdentifier(os);
-      if (idx_link < num_output - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "]";
+    }
+    os << "]";
     os << "}\n";
   }
 
   std::string name() const override {
     std::stringstream ss;
-    if(_x != -1 && _y != -1) {
+    if (_x != -1 && _y != -1) {
       ss << "FU" << _x << "_" << _y;
     } else {
       ss << "FU" << _ID;
@@ -668,22 +680,23 @@ class ssfu : public ssnode {
   }
 
   double* collect_features() {
-    if(decomposer == 0)     decomposer = mf_decomposer;
+    if (decomposer == 0) decomposer = mf_decomposer;
 
     features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
-    
+
     assert(features[0] || features[1]);
     features[2] = !_flow_control ? 1.0 : 0.0;
     features[3] = _flow_control ? 1.0 : 0.0;
-    assert((features[2] || features[3]) && "Either Data(Static) or DataValidReady(Dynamic)");
+    assert((features[2] || features[3]) &&
+           "Either Data(Static) or DataValidReady(Dynamic)");
     features[4] = output_select_mode == "Individual" ? 1.0 : 0.0;
     features[5] = output_select_mode == "Universal" ? 1.0 : 0.0;
     assert((features[4] || features[5]) && "Either Individual or Universal");
     features[6] = decomposer;
-    if(decomposer == 0 && (decomposer & (decomposer - 1))) {
-      std::cout << "Problem: Decomposer for node " 
-                << name() << " is: " << decomposer << "\n";
+    if (decomposer == 0 && (decomposer & (decomposer - 1))) {
+      std::cout << "Problem: Decomposer for node " << name() << " is: " << decomposer
+                << "\n";
       assert(0 && "Decomposer need to be power of two");
     }
     features[7] = _delay_fifo_depth;
@@ -692,38 +705,38 @@ class ssfu : public ssnode {
     features[10] = register_file_size;
     features[11] = _max_util;
 
-    //print_features();
+    // print_features();
 
     return features;
   }
 
   double get_area() {
     collect_features();
-    double inst_dep_area = fu_def() -> area();
+    double inst_dep_area = fu_def()->area();
     double inst_indep_area = pe_area_predict(features);
     return inst_dep_area + inst_indep_area;
   }
 
   double get_power() {
     collect_features();
-    double inst_dep_power = fu_def() -> power();
+    double inst_dep_power = fu_def()->power();
     double inst_indep_power = pe_power_predict(features);
     return inst_dep_power + inst_indep_power;
   }
 
   func_unit_def* fu_def() { return _fu_def; }
 
-  virtual ~ssfu() {};  
+  virtual ~ssfu(){};
 
   void print_features() {
     std::cout << " ------ Features : >>>>>> ";
     std::cout << "Not Shared ? " << features[0] << ", "
               << "Shared ? " << features[1] << ", "
-              << "Not Flow Control ? " << features[2] <<", "
-              << "Flow Control ? " << features[3] <<", "
-              << "Output Mode Individual ? " << features[4] <<", "
-              << "Output Mode Universal ? " << features[5] <<", "
-              << "decomposer = " << features[6] <<", "
+              << "Not Flow Control ? " << features[2] << ", "
+              << "Flow Control ? " << features[3] << ", "
+              << "Output Mode Individual ? " << features[4] << ", "
+              << "Output Mode Universal ? " << features[5] << ", "
+              << "decomposer = " << features[6] << ", "
               << "max delay fifo depth = " << features[7] << ", "
               << "# input links = " << features[8] << ", "
               << "# output links = " << features[9] << ", "
@@ -733,26 +746,24 @@ class ssfu : public ssnode {
   }
 
   void dump_features() {
-    for(int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 12; ++i) {
       std::cout << features[i] << " ";
     }
     std::cout << "\n";
   }
 
-  bool is_hanger() override {
-    return in_links().size() <=1 || out_links().size() < 1;
-  }
+  bool is_hanger() override { return in_links().size() <= 1 || out_links().size() < 1; }
 
-  void set_delay_fifo_depth(int d) {_delay_fifo_depth=d;}
+  void set_delay_fifo_depth(int d) { _delay_fifo_depth = d; }
 
-  virtual int delay_fifo_depth() override {return _delay_fifo_depth;}
+  virtual int delay_fifo_depth() override { return _delay_fifo_depth; }
 
  protected:
   func_unit_def* _fu_def;
   double features[12];
   std::string output_select_mode = std::string("Universal");
-  int _delay_fifo_depth=8;
-  int register_file_size=4;
+  int _delay_fifo_depth = 8;
+  int register_file_size = 4;
 
  private:
   friend class SubModel;
@@ -761,8 +772,7 @@ class ssfu : public ssnode {
 // This should be improved later
 class ssvport : public ssnode {
  public:
-
-  ssnode *copy() override {
+  ssnode* copy() override {
     auto res = new ssvport();
     *res = *this;
     return res;
@@ -777,7 +787,7 @@ class ssvport : public ssnode {
       ss << "I";
     else
       ss << "O";
-    if(_port != -1) {
+    if (_port != -1) {
       ss << "P" << _port;
     } else {
       ss << _ID;
@@ -786,7 +796,7 @@ class ssvport : public ssnode {
   }
 
   void dumpIdentifier(ostream& os) override {
-    os<< "[" + std::to_string(_ID) +",\"vector port\""+ "]";
+    os << "[" + std::to_string(_ID) + ",\"vector port\"" + "]";
   }
   void dumpFeatures(ostream& os) override {
     os << "{\n";
@@ -795,11 +805,13 @@ class ssvport : public ssnode {
     // # Port
     os << "\"port\" : " << port() << ",\n";
     // NodeType
-    os << "\"nodeType\" : "<<"\"vector port\""<<",\n";
+    os << "\"nodeType\" : "
+       << "\"vector port\""
+       << ",\n";
     // data width
     os << "\"data_width\" : " << data_width << ",\n";
     // granularity
-    os << "\"granularity\" : " <<granularity<< ",\n";
+    os << "\"granularity\" : " << granularity << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -813,21 +825,25 @@ class ssvport : public ssnode {
     // input nodes
     os << "\"input_nodes\" : [";
     int idx_link = 0;
-    for (auto in_link : in_links()){
+    for (auto in_link : in_links()) {
       in_link->orig()->dumpIdentifier(os);
-      if (idx_link < num_input - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "],\n";
+    }
+    os << "],\n";
     // output nodes
     os << "\"output_nodes\" : [";
     idx_link = 0;
-    for (auto out_link : out_links()){
+    for (auto out_link : out_links()) {
       out_link->dest()->dumpIdentifier(os);
-      if (idx_link < num_output - 1){
-        idx_link ++ ;os << ", ";
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
       }
-    }os << "]";
+    }
+    os << "]";
     os << "}\n";
   }
 
@@ -852,7 +868,7 @@ class ssvport : public ssnode {
   bool is_input() override { return links[1].size() == 0; }
   bool is_output() override { return links[0].size() == 0; }
 
-  double get_area(){
+  double get_area() {
     double vport_features[3];
     vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
     vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
@@ -860,7 +876,7 @@ class ssvport : public ssnode {
     return pred_vport_area(vport_features);
   }
 
-  double get_power(){
+  double get_power() {
     double vport_features[3];
     vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
     vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
@@ -868,12 +884,10 @@ class ssvport : public ssnode {
     return pred_vport_power(vport_features);
   }
 
-  virtual ~ssvport() {};  
-  void set_port(int port) {_port=port;}
+  virtual ~ssvport(){};
+  void set_port(int port) { _port = port; }
 
-  bool is_hanger() override {
-    return in_links().empty() && out_links().empty();
-  }
+  bool is_hanger() override { return in_links().empty() && out_links().empty(); }
 
  private:
   int _port = -1;
@@ -904,17 +918,17 @@ class SubModel {
     ofstream os(name);
     assert(os.good());
 
-    os << "{\n"; // Start of the JSON file
+    os << "{\n";  // Start of the JSON file
     // Instruction Set
     int start_enc = 3;
     std::set<ss_inst_t> ss_inst_set;
     os << "\"Instruction Set\" : {\n";
-    for (ssnode * node : node_list()){
-      ssfu * fu_node = dynamic_cast<ssfu *>(node);
-      if (fu_node != nullptr){
-        std::set<ss_inst_t> curr_inst_set = fu_node -> fu_def() ->cap();
-        for (ss_inst_t each_inst : curr_inst_set){
-          if(ss_inst_set.count(each_inst) == 0){
+    for (ssnode* node : node_list()) {
+      ssfu* fu_node = dynamic_cast<ssfu*>(node);
+      if (fu_node != nullptr) {
+        std::set<ss_inst_t> curr_inst_set = fu_node->fu_def()->cap();
+        for (ss_inst_t each_inst : curr_inst_set) {
+          if (ss_inst_set.count(each_inst) == 0) {
             ss_inst_set.insert(each_inst);
           }
         }
@@ -922,59 +936,65 @@ class SubModel {
     }
     int num_total_inst = ss_inst_set.size();
     int idx_inst = 0;
-    for (ss_inst_t inst : ss_inst_set){
+    for (ss_inst_t inst : ss_inst_set) {
       os << "\"" << SS_CONFIG::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
-      if(idx_inst < num_total_inst){
+      if (idx_inst < num_total_inst) {
         os << ",";
-      }os<<"\n";
+      }
+      os << "\n";
     }
     os << "},\n";
 
     // Links
-    os << "\"links\" : [\n"; // The Start of Links
-    int idx_link = 0; int size_links = link_list().size();
-    for (auto link : link_list()){
+    os << "\"links\" : [\n";  // The Start of Links
+    int idx_link = 0;
+    int size_links = link_list().size();
+    for (auto link : link_list()) {
       os << "{\n";
       os << "\"source\":";
-      link->orig()->dumpIdentifier(os);os << ",\n";
+      link->orig()->dumpIdentifier(os);
+      os << ",\n";
       os << "\"sink\":";
       link->dest()->dumpIdentifier(os);
       os << "}";
-      if(idx_link < size_links - 1){
-        idx_link ++;os << ",\n"; // Seperate the links
+      if (idx_link < size_links - 1) {
+        idx_link++;
+        os << ",\n";  // Seperate the links
       }
     }
-    os << "],\n"; // The End of Links
+    os << "],\n";  // The End of Links
 
     // Nodes
-    os << "\"nodes\" : [\n"; // The Start of Nodes
-    int idx_node = 0; int size_nodes = node_list().size();
-    for (auto node : node_list()){
-      node -> dumpFeatures(os);
-      if (idx_node < size_nodes - 1){
-        idx_node++;os << ",\n";
+    os << "\"nodes\" : [\n";  // The Start of Nodes
+    int idx_node = 0;
+    int size_nodes = node_list().size();
+    for (auto node : node_list()) {
+      node->dumpFeatures(os);
+      if (idx_node < size_nodes - 1) {
+        idx_node++;
+        os << ",\n";
       }
     }
-    os << "]\n"; // The End of Nodes
+    os << "]\n";  // The End of Nodes
 
-    os << "}\n"; // End of the JSON file
+    os << "}\n";  // End of the JSON file
   }
 
   int sizex() { return _sizex; }
 
   int sizey() { return _sizey; }
 
-  template <typename T> inline std::vector<T> nodes();
+  template <typename T>
+  inline std::vector<T> nodes();
 
-  template<typename T>
-  T *random(std::function<bool(T*)> condition) {
-    if (nodes<T*>().empty())
-      return nullptr;
-    T *res = nodes<T*>()[rand() % nodes<T*>().size()];
+  template <typename T>
+  T* random(std::function<bool(T*)> condition) {
+    if (nodes<T*>().empty()) return nullptr;
+    T* res = nodes<T*>()[rand() % nodes<T*>().size()];
     return f(res) ? res : nullptr;
   }
 
-  template<typename T>
+  template <typename T>
   std::vector<T> node_filter() {
     std::vector<T> res;
     for (auto elem : _node_list) {
@@ -994,18 +1014,18 @@ class SubModel {
     for (auto fu : fu_list()) {
       double area_to_add = fu->get_area();
 
-      static bool printed_bad_fu=false;
-      if(fu->get_area() < 0 && printed_bad_fu==false) {
-        printed_bad_fu=true;
+      static bool printed_bad_fu = false;
+      if (fu->get_area() < 0 && printed_bad_fu == false) {
+        printed_bad_fu = true;
         std::cout << "FU Area: " << fu->get_area() << "\n";
-        std::cout << "ins/outs:" <<
-            fu->in_links().size() << "/" << fu->out_links().size() << "\n";
-        std::cout << "decomposer:" << fu->decomposer  
-                  <<  " gran: "    << fu->granularity << "\n";
+        std::cout << "ins/outs:" << fu->in_links().size() << "/" << fu->out_links().size()
+                  << "\n";
+        std::cout << "decomposer:" << fu->decomposer << " gran: " << fu->granularity
+                  << "\n";
         fu->print_features();
         std::cout << "\n";
         area_to_add = abs(area_to_add) + 200;
-        //assert(0 && "neg area");
+        // assert(0 && "neg area");
       }
       total_area += area_to_add;
     }
@@ -1023,21 +1043,21 @@ class SubModel {
 
   double get_sw_total_area() {
     double total_area = 0.0;
-    for (auto sw : switch_list()){
+    for (auto sw : switch_list()) {
       double area_to_add = sw->get_area();
 
-      static bool printed_bad_sw=false;
-      if(sw->get_area() < 0 && printed_bad_sw==false) {
-        printed_bad_sw=true;
+      static bool printed_bad_sw = false;
+      if (sw->get_area() < 0 && printed_bad_sw == false) {
+        printed_bad_sw = true;
         std::cout << "SW Area: " << sw->get_area() << "\n";
-        std::cout << "ins/outs:" <<
-            sw->in_links().size() << "/" << sw->out_links().size() << "\n";
-        std::cout << "decomposer:" << sw->decomposer << " " << sw->mf_decomposer 
-                  <<  " gran: "    << sw->granularity << "\n";
+        std::cout << "ins/outs:" << sw->in_links().size() << "/" << sw->out_links().size()
+                  << "\n";
+        std::cout << "decomposer:" << sw->decomposer << " " << sw->mf_decomposer
+                  << " gran: " << sw->granularity << "\n";
         sw->print_features();
         std::cout << "\n";
         area_to_add = abs(area_to_add) + 200;
-        //assert(0 && "neg area");
+        // assert(0 && "neg area");
       }
       total_area += area_to_add;
     }
@@ -1046,24 +1066,24 @@ class SubModel {
 
   double get_sw_total_power() {
     double total_power = 0.0;
-    for (auto sw : switch_list()){
+    for (auto sw : switch_list()) {
       total_power += sw->get_power();
     }
     return total_power;
   }
 
-  double get_vport_area(){
+  double get_vport_area() {
     double total_area = 0.0;
-    for (auto vp : vport_list()){
-      total_area += vp -> get_area();
+    for (auto vp : vport_list()) {
+      total_area += vp->get_area();
     }
     return total_area;
   }
 
-  double get_vport_power(){
+  double get_vport_power() {
     double total_power = 0.0;
-    for (auto vp : vport_list()){
-      total_power += vp -> get_power();
+    for (auto vp : vport_list()) {
+      total_power += vp->get_power();
     }
     return total_power;
   }
@@ -1075,9 +1095,6 @@ class SubModel {
   double get_overall_area() {
     return get_sw_total_area() + get_fu_total_area() + get_vport_area();
   }
-
-
-
 
   bool multi_config() { return _multi_config; }
 
@@ -1093,15 +1110,13 @@ class SubModel {
 
   const std::vector<ssnode*>& node_list() { return _node_list; }
 
-
-  std::vector<ssvport*> vport_list(){ return node_filter<ssvport*>(); }
+  std::vector<ssvport*> vport_list() { return node_filter<ssvport*>(); }
 
   std::vector<ssvport*> vlist_impl(bool is_input) {
     std::vector<ssvport*> res;
     auto vports = vport_list();
     for (auto elem : vports) {
-      if (elem->links[is_input].empty())
-        res.push_back(elem);
+      if (elem->links[is_input].empty()) res.push_back(elem);
     }
     return res;
   }
@@ -1114,7 +1129,7 @@ class SubModel {
   ssfu* add_fu() {
     auto* fu = new ssfu();
     fu->setFUDef(nullptr);
-    add_node(fu); //id and stuff
+    add_node(fu);  // id and stuff
     return fu;
   }
 
@@ -1126,7 +1141,7 @@ class SubModel {
 
   ssswitch* add_switch() {
     auto* sw = new ssswitch();
-    add_node(sw); //id and stuff
+    add_node(sw);  // id and stuff
     return sw;
   }
 
@@ -1153,14 +1168,14 @@ class SubModel {
     vport->set_port(port_num);
     return vport;
   }
-  
-  //Creates a copy of the datastructre which gaurantees ordering
-  //within the *_list datastructures (so they can be used for matching) 
+
+  // Creates a copy of the datastructre which gaurantees ordering
+  // within the *_list datastructures (so they can be used for matching)
   SubModel* copy() {
     SubModel* copy_sub = new SubModel();
 
-    copy_sub->_sizex=_sizex;
-    copy_sub->_sizey=_sizey;
+    copy_sub->_sizex = _sizex;
+    copy_sub->_sizey = _sizey;
     copy_sub->_ssio_interf = _ssio_interf;
     copy_sub->_multi_config = _multi_config;
 
@@ -1172,7 +1187,7 @@ class SubModel {
       copy_sub->_node_list[i] = node->copy();
     }
 
-    for(unsigned i = 0; i < _link_list.size(); ++i) {
+    for (unsigned i = 0; i < _link_list.size(); ++i) {
       auto* link = _link_list[i];
       auto* copy_link = new sslink();
       *copy_link = *link;
@@ -1184,81 +1199,78 @@ class SubModel {
     }
 
     // make the nodes point to the new links
-    for(unsigned I = 0; I < _node_list.size(); ++I) {
+    for (unsigned I = 0; I < _node_list.size(); ++I) {
       auto* node = _node_list[I];
       auto* copy_node = copy_sub->_node_list[I];
       for (int j = 0; j < 2; ++j) {
-        for(unsigned i = 0; i < node->links[j].size(); ++i) {
+        for (unsigned i = 0; i < node->links[j].size(); ++i) {
           sslink* link = node->links[j][i];
-          copy_node->links[j][i] = copy_sub->_link_list[link->id()]; 
+          copy_node->links[j][i] = copy_sub->_link_list[link->id()];
         }
       }
-
     }
 
     return copy_sub;
   }
 
   // Efficient bulk delete from vector based on indices (O(n))
-  template<typename T> 
+  template <typename T>
   void bulk_vec_delete(std::vector<T>& vec, std::vector<int>& indices) {
     indices.push_back(INT_MAX);
-    std::sort(indices.begin(), indices.end(), [](int x, int y) { return x<y; });
+    std::sort(indices.begin(), indices.end(), [](int x, int y) { return x < y; });
 
     int ind = 0;
     unsigned nindex = indices[ind];
-    int diff=0;
- 
-    for(unsigned i = 0; i < vec.size(); ++i) {
+    int diff = 0;
 
-      if(diff>0) {
-        vec[i-diff] = vec[i];
-      } 
-      if(i > nindex) {
-        nindex=indices[++ind];
+    for (unsigned i = 0; i < vec.size(); ++i) {
+      if (diff > 0) {
+        vec[i - diff] = vec[i];
+      }
+      if (i > nindex) {
+        nindex = indices[++ind];
         diff++;
-      }     
+      }
     }
-  
-    vec.resize(vec.size()-diff);
+
+    vec.resize(vec.size() - diff);
   }
 
-  //These we can use the faster bulk vec delete
-  void delete_nodes(std::vector<int> v)  {
-    vec_delete_by_id(_node_list,v);
+  // These we can use the faster bulk vec delete
+  void delete_nodes(std::vector<int> v) {
+    vec_delete_by_id(_node_list, v);
     fix_id(_node_list);
   }
-  void delete_links(std::vector<int> v)  {
-    vec_delete_by_id(_link_list,v);
+  void delete_links(std::vector<int> v) {
+    vec_delete_by_id(_link_list, v);
     fix_id(_link_list);
   }
 
- //External add link -- used by arch. search
- sslink* add_link(ssnode* src, ssnode* dst) {
-   if (src->is_output() || dst->is_input())
-     return nullptr;
+  // External add link -- used by arch. search
+  sslink* add_link(ssnode* src, ssnode* dst) {
+    if (src->is_output() || dst->is_input()) return nullptr;
 
-   sslink* link = src->add_link(dst);
-   link->set_id(_link_list.size());
-   _link_list.push_back(link);
+    sslink* link = src->add_link(dst);
+    link->set_id(_link_list.size());
+    _link_list.push_back(link);
 
-   return link;
- }
+    return link;
+  }
 
- //add node 
- void add_node(ssnode* n) {
-   n->set_id(_node_list.size());
-   _node_list.push_back(n);
- }
+  // add node
+  void add_node(ssnode* n) {
+    n->set_id(_node_list.size());
+    _node_list.push_back(n);
+  }
 
- virtual ~SubModel() {
-   for(sslink* l : _link_list) {
-     delete l;
-   }
-   for(ssnode* n : _node_list) {
-     delete n;
-   }
- }
+  virtual ~SubModel() {
+    for (sslink* l : _link_list) {
+      delete l;
+    }
+    for (ssnode* n : _node_list) {
+      delete n;
+    }
+  }
 
   void post_process();
 
@@ -1274,20 +1286,28 @@ class SubModel {
   std::vector<ssfu*> _fu_list;
   std::vector<sslink*> _link_list;
 
-
   // Temporary Datastructures, only for constructing the mapping
   int _sizex, _sizey;  // size of SS cgra
   std::map<int, ssnode*> _io_map[2];
 
-  //Property that should be deprecated...
+  // Property that should be deprecated...
   bool _multi_config;
 
   ssio_interface _ssio_interf;
 };
 
-template <> inline std::vector<ssfu*> SubModel::nodes() { return fu_list(); }
-template <> inline std::vector<ssnode*> SubModel::nodes() { return _node_list; }
-template <> inline std::vector<ssvport*> SubModel::nodes() { return vport_list(); }
+template <>
+inline std::vector<ssfu*> SubModel::nodes() {
+  return fu_list();
+}
+template <>
+inline std::vector<ssnode*> SubModel::nodes() {
+  return _node_list;
+}
+template <>
+inline std::vector<ssvport*> SubModel::nodes() {
+  return vport_list();
+}
 
 }  // namespace SS_CONFIG
 

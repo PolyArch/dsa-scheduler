@@ -1,9 +1,5 @@
-#include "schedule.h"
-#include "serialization.h"
-
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/archive/text_oarchive.hpp>
-
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/export.hpp>
 #include <boost/serialization/list.hpp>
@@ -11,6 +7,9 @@
 #include <boost/serialization/unordered_map.hpp>
 #include <boost/serialization/unordered_set.hpp>
 #include <boost/serialization/vector.hpp>
+
+#include "schedule.h"
+#include "serialization.h"
 
 template <class Archive>
 void serialize(Archive& ar, std::pair<int, int>& pr, const unsigned int version) {

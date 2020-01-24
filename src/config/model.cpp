@@ -1,12 +1,15 @@
 #include "model.h"
+
 #include <assert.h>
 #include <math.h>
+
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
 #include "model_parsing.h"
 #include "ssinst.h"
 
@@ -37,7 +40,7 @@ SSModel::SSModel(bool multi_config) {
 }
 
 void SSModel::setMaxEdgeDelay(int d) {
-  for(auto* fu : _subModel->fu_list()) {
+  for (auto* fu : _subModel->fu_list()) {
     fu->set_delay_fifo_depth(d);
   }
 }
@@ -225,52 +228,60 @@ void SSModel::parse_json(std::istream& istream) {
       // Set Possible x,y for visualization
       ssfu* fu = _subModel->add_fu();
       fu->set_id(id);
-      fu -> set_prop(node_def); 
+      fu->set_prop(node_def);
       auto link = fu->add_link(fu);  // For decomposability
       link->setdir(SwitchDir::IP0);
 
-      sym_tab[id]=fu;
+      sym_tab[id] = fu;
       auto& insts = node_def.get_child("instructions");
 
       stringstream fudef_name;
       fudef_name << "function unit_" << id;
-      func_unit_def * fudef = new func_unit_def(fudef_name.str().c_str());
+      func_unit_def* fudef = new func_unit_def(fudef_name.str().c_str());
       fu->setFUDef(fudef);
 
       std::vector<func_unit_def> fudefs = _fuModel->fu_defs();
-      fudefs.push_back(* fudef);
+      fudefs.push_back(*fudef);
 
       for (auto& inst : insts) {
         std::string inst_name = inst.second.get_value<std::string>();
         ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
         int enc = inst_enc_map[ss_inst];
-        //cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id << "\n";
+        // cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id <<
+        // "\n";
         fudef->add_cap(ss_inst);
         fudef->set_encoding(ss_inst, enc);
       }
     } else if (type == "vector port") {
       bool is_input;
-      // the number of input port of this vector port, input vector port has zero input port
+      // the number of input port of this vector port, input vector port has zero input
+      // port
       int in_vec_width = node_def.get_child("num_input").get_value<int>();
-      // the number of output port of this vector port, output vector port has zero output port
+      // the number of output port of this vector port, output vector port has zero output
+      // port
       int out_vec_width = node_def.get_child("num_output").get_value<int>();
 
       int port_num = node_def.get_child("port").get_value<int>();
 
       // whether is a input/output vector port
-      if(in_vec_width > 0){
-        is_input = false; num_ovp++; num_outputs += in_vec_width;
-      }else if(out_vec_width > 0){
-        is_input = true; num_ivp++; num_inputs += out_vec_width;
-      }else{
+      if (in_vec_width > 0) {
+        is_input = false;
+        num_ovp++;
+        num_outputs += in_vec_width;
+      } else if (out_vec_width > 0) {
+        is_input = true;
+        num_ivp++;
+        num_inputs += out_vec_width;
+      } else {
         assert(0 && "vector port without connection?");
       }
 
-      //int port_num = is_input ? num_ivp : num_ovp;
+      // int port_num = is_input ? num_ivp : num_ovp;
 
-      //cout << "new " << (is_input ? "input" : "output") << " port: \"" << id << "\" \n";
+      // cout << "new " << (is_input ? "input" : "output") << " port: \"" << id << "\"
+      // \n";
 
-      ssvport * vp = _subModel->add_vport(is_input, port_num);
+      ssvport* vp = _subModel->add_vport(is_input, port_num);
       vp->set_ssnode_prop(node_def);
       sym_tab[id] = vp;
       vp->set_id(id);
@@ -302,37 +313,37 @@ void SSModel::parse_json(std::istream& istream) {
     ssnode* to_module = sym_tab[sink_id];
     assert(from_module && to_module);
     _subModel->add_link(from_module, to_module);
-    //std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() << " --> ";
-    //std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
+    // std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() <<
+    // " --> "; std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
   }
 
   _subModel->post_process();
-  //for (auto node : _subModel->node_list()) {
+  // for (auto node : _subModel->node_list()) {
   //  node->setup_routing_memo();
   //}
 
   // Print out the Analytical Model for FU
   int id = 0;
-  for (auto fu : _subModel -> fu_list()){
-      // Test for Analytical Model
-      //std::cout << "fu " << id << "'s area = " << fu -> get_area() <<" um^2\n";
-      //std::cout << "fu " << id << "'s power = " << fu -> get_power() <<" mW\n";
-      (void) fu;
-      ++id;
+  for (auto fu : _subModel->fu_list()) {
+    // Test for Analytical Model
+    // std::cout << "fu " << id << "'s area = " << fu -> get_area() <<" um^2\n";
+    // std::cout << "fu " << id << "'s power = " << fu -> get_power() <<" mW\n";
+    (void)fu;
+    ++id;
   }
 
   // Print out the Switches Analytical Model Estimation
   id = 0;
-  for (auto sw : _subModel -> switch_list()){
-      // Test for Analytical Model
-      //std::cout << "switch " << id << "'s area = " << sw -> get_area() <<" um^2\n";
-      //std::cout << "switch " << id << "'s power = " << sw -> get_power() <<" mW\n";
-      (void) sw;
-      ++id;
+  for (auto sw : _subModel->switch_list()) {
+    // Test for Analytical Model
+    // std::cout << "switch " << id << "'s area = " << sw -> get_area() <<" um^2\n";
+    // std::cout << "switch " << id << "'s power = " << sw -> get_power() <<" mW\n";
+    (void)sw;
+    ++id;
   }
 
-  //std::cout << "Overall Area = " << _subModel -> get_overall_area() << " um^2\n";
-  //std::cout << "Overall Power = " << _subModel -> get_overall_power() << " mW\n";
+  // std::cout << "Overall Area = " << _subModel -> get_overall_area() << " um^2\n";
+  // std::cout << "Overall Power = " << _subModel -> get_overall_power() << " mW\n";
 
   assert(num_outputs > 0);
   assert(num_inputs > 0);

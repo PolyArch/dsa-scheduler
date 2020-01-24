@@ -1,18 +1,19 @@
 #include "scheduler_sa.h"
+
 #include "../utils/debug.h"
 
 using namespace SS_CONFIG;
 using namespace std;
-
-#include <fstream>
-#include <list>
-#include <unordered_map>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <fstream>
+#include <list>
+#include <unordered_map>
 
 // Major things left to try that might improve the algorithm:
 // 1. Overprovisioning while routing/placing
@@ -43,12 +44,10 @@ using namespace std;
 // edge
 
 void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
-  if(sched == nullptr) {
+  if (sched == nullptr) {
     sched = new Schedule(getSSModel(), ssDFG);  // just a dummy one
   }
 }
-
-
 
 std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched, SchedStats& s) {
   int num_left = sched->num_left();
@@ -74,7 +73,7 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, SSDfgEdge* edge,
   while (chances_left-- && num > 0) {
     auto& links = sched->links_of(edge);
 
-    if(links.empty()) continue;
+    if (links.empty()) continue;
 
     int rand_link_no = rand() % links.size();
     auto it = links.begin();
@@ -142,7 +141,7 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, SSDfgEdge* edge,
   return changed;
 }
 
-std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched, 
+std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
                                                            SchedStats& s,
                                                            CandidateRoute& undo_routing) {
   int num_left = sched->num_left();
@@ -177,7 +176,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
 
       for (auto e : v->in_edges()) {
         int vio = sched->vioOf(e);
-        if(vio > 0) {
+        if (vio > 0) {
           vio = rand() % vio;
           bool changed = false;
           changed |= length_creep(sched, e, vio, undo_routing);
@@ -212,48 +211,45 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
   return curScore;
 }
 
-/* This function will perform one iteration of an incremental scheduling of all 
- * workloads which are stored in the scheduling tabl 
+/* This function will perform one iteration of an incremental scheduling of all
+ * workloads which are stored in the scheduling tabl
  */
 bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
-
-  //need to make sure the scheduler has the right submodel
+  // need to make sure the scheduler has the right submodel
   _ssModel = inst.ss_model();
 
-  //Just for fun, lets see if we can:
-  //1. create a deep copy of the sub model
-  //2. create a copy of the schedule
-  //3. make the schedules consistent with the new deep copy
-  //4. try to schedule something on it. 
-  //5. profit?
+  // Just for fun, lets see if we can:
+  // 1. create a deep copy of the sub model
+  // 2. create a copy of the schedule
+  // 3. make the schedules consistent with the new deep copy
+  // 4. try to schedule something on it.
+  // 5. profit?
 
   is_dse = true;
 
-  int i = 0; 
-  for(WorkloadSchedules& ws : inst.workload_array) {
+  int i = 0;
+  for (WorkloadSchedules& ws : inst.workload_array) {
     int j = 0;
-    for(Schedule& sr : ws.sched_array) {
+    for (Schedule& sr : ws.sched_array) {
       Schedule* sched = &sr;
 
       SchedStats s;
-      auto p = obj(sched,s);
+      auto p = obj(sched, s);
       cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
       ++j;
 
-      schedule(sched->ssdfg(),sched);
+      schedule(sched->ssdfg(), sched);
     }
     ++i;
-  } 
-
+  }
 
   return true;
 }
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
+  initialize(ssDFG, sched);  // initialize if null, otherwise its fine
 
-  initialize(ssDFG, sched); //initialize if null, otherwise its fine
-
-  if(!check_feasible(sched->ssdfg(),sched->ssModel(),false/*silent*/)) {
+  if (!check_feasible(sched->ssdfg(), sched->ssModel(), false /*silent*/)) {
     std::cerr << "Cannot be mapped, give up!\n";
     return false;
   }
@@ -262,7 +258,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   srand(++_srand);
 
   Schedule* cur_sched = new Schedule(getSSModel(), ssDFG);
-  *cur_sched= *sched;
+  *cur_sched = *sched;
 
   std::pair<int, int> best_score = make_pair(0, 0);
   bool best_succeeded = false;
@@ -283,10 +279,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       break;
     }
 
-
     bool print_stat = (iter & (256 - 1)) == 0;
 
-    //if ((iter & (4096 - 1)) == 0) {
+    // if ((iter & (4096 - 1)) == 0) {
     //  // Every so often, lets give up and start over from scratch
     //  delete cur_sched;
     //  cur_sched = new Schedule(getSSModel(), ssDFG);
@@ -314,7 +309,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     bool succeed_sched = cur_sched->is_complete<SSDfgNode>();
 
-    SchedStats s; 
+    SchedStats s;
     std::pair<int, int> score = obj(cur_sched, s);
 
     int succeed_timing = (s.latmis == 0) && (s.ovr == 0);
@@ -332,22 +327,21 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
         cout << cur_sched->vecPortOf(ssDFG->vec_out(i)) << " ";
       }
 
-      fprintf(stdout,
-              "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
-              "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
-              "obj:%d, ins: %d/%d, outs: %d/%d,"
-              " insts: %d/%d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
-              iter, total_msec() / 1000.f, routing_times / total_msec(),
-              cur_sched->num_left(), s.lat, cur_sched->violation(), s.latmis, 
-              s.ovr, s.agg_ovr, s.max_util, -score.second, 
-              cur_sched->num_mapped<SSDfgVecInput>(),
-              (int)ssDFG->nodes<SSDfgVecInput*>().size(),
-              cur_sched->num_mapped<SSDfgVecOutput>(),
-              (int)ssDFG->nodes<SSDfgVecOutput*>().size(),
-              cur_sched->num_mapped<SSDfgInst>(), presize, postsize,
-              cur_sched->num_passthroughs(), cur_sched->num_links_mapped(),
-              cur_sched->num_edge_links_mapped(), succeed_sched ? ", all mapped" : "",
-              succeed_timing ? ", mismatch == 0" : "");
+      fprintf(
+          stdout,
+          "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
+          "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
+          "obj:%d, ins: %d/%d, outs: %d/%d,"
+          " insts: %d/%d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
+          iter, total_msec() / 1000.f, routing_times / total_msec(),
+          cur_sched->num_left(), s.lat, cur_sched->violation(), s.latmis, s.ovr,
+          s.agg_ovr, s.max_util, -score.second, cur_sched->num_mapped<SSDfgVecInput>(),
+          (int)ssDFG->nodes<SSDfgVecInput*>().size(),
+          cur_sched->num_mapped<SSDfgVecOutput>(),
+          (int)ssDFG->nodes<SSDfgVecOutput*>().size(), cur_sched->num_mapped<SSDfgInst>(),
+          presize, postsize, cur_sched->num_passthroughs(), cur_sched->num_links_mapped(),
+          cur_sched->num_edge_links_mapped(), succeed_sched ? ", all mapped" : "",
+          succeed_timing ? ", mismatch == 0" : "");
       if (score > best_score) {
         cout << "\n";
       } else {
@@ -361,7 +355,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
       best_score = score;
       *sched = *cur_sched;  // shallow copy of sched should work?
-      //if (succeed_timing && !best_succeeded) {
+      // if (succeed_timing && !best_succeeded) {
       //  max_iters_no_improvement = std::max(1000, iter * 2);
       //}
 
@@ -370,19 +364,19 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       last_improvement_iter = iter;
     }
 
-    if (((iter - last_improvement_iter) > max_iters_no_improvement) ) {
+    if (((iter - last_improvement_iter) > max_iters_no_improvement)) {
       break;
     }
 
     if (best_succeeded) {
       break;
     }
-
   }
 
   if (verbose) {
-    cout << "Breaking at Iter " << iter << ", candidates success / candidates tried:  "
-         << this->candidates_succ << "/" << this->candidates_tried << std::endl;
+    cout << "Breaking at Iter " << iter
+         << ", candidates success / candidates tried:  " << this->candidates_succ << "/"
+         << this->candidates_tried << std::endl;
   }
 
   if (cur_sched) {
@@ -418,11 +412,10 @@ bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* s
 }
 
 int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
-
   auto nodes = sched->ssdfg()->nodes<SSDfgNode*>();
   int n = nodes.size();
 
-  std::sort(nodes.begin(), nodes.end(), [](SSDfgNode *a, SSDfgNode *b) {
+  std::sort(nodes.begin(), nodes.end(), [](SSDfgNode* a, SSDfgNode* b) {
     return a->candidates_cnt() < b->candidates_cnt();
   });
 
@@ -442,7 +435,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
 
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < n; ++j) {
-      SSDfgNode *node = nodes[j];
+      SSDfgNode* node = nodes[j];
       if (!sched->is_scheduled(node)) {
         auto candidates = node->candidates(sched, _ssModel, 50);
         if (candidates.empty()) {
@@ -488,7 +481,6 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
 }
 
 int SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {
-
   unmap_some(ssDFG, sched);
 
   if (_fake_it) {
@@ -582,8 +574,8 @@ int SchedulerSimulatedAnnealing::route(
     Schedule* sched, SSDfgEdge* edge, std::pair<int, SS_CONFIG::ssnode*> source,
     std::pair<int, SS_CONFIG::ssnode*> dest,
     std::list<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen) {
-
-  //if (!sched->ssModel()->subModel()->connected[source.second->id()][dest.second->id()]) {
+  // if (!sched->ssModel()->subModel()->connected[source.second->id()][dest.second->id()])
+  // {
   //  return 0;
   //}
 
@@ -609,8 +601,7 @@ int SchedulerSimulatedAnnealing::route(
   // Distance, random priority, slot, node
   set<std::tuple<int, int, int, ssnode*>> openset;
 
-  if (!path_lengthen)
-    source.first = edge->def()->slot_for_use(edge, source.first);
+  if (!path_lengthen) source.first = edge->def()->slot_for_use(edge, source.first);
   dest.first = edge->use()->slot_for_op(edge, dest.first);
 
   int new_rand_prio = 0;                                 // just pick zero
@@ -644,8 +635,9 @@ int SchedulerSimulatedAnnealing::route(
         ssnode* next = next_link->dest();
         std::pair<int, sslink*> next_pair(next_slot, next_link);
 
-        DEBUG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->orig()->name() << "'s "
-                     << slot << " to " << link->dest()->name() << "'s " << next_slot << "\n";
+        DEBUG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->orig()->name()
+                     << "'s " << slot << " to " << link->dest()->name() << "'s "
+                     << next_slot << "\n";
 
         int route_cost;
         if (!path_lengthen) {  // Normal thing
@@ -667,7 +659,8 @@ int SchedulerSimulatedAnnealing::route(
         if (next_dist == -1 || next_dist > new_dist || over_ride) {
           if (next_dist != -1) {
             int next_rand_prio = next->done(next_slot);
-            auto iter = openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
+            auto iter =
+                openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
             if (iter != openset.end()) openset.erase(iter);
           }
           int new_rand_prio = rand() % 16;
@@ -768,7 +761,8 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, SSDfgNode* node,
 }
 
 int SchedulerSimulatedAnnealing::try_candidates(
-    const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched, SSDfgNode* node) {
+    const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched,
+    SSDfgNode* node) {
   DEBUG(MAP) << "Mapping " << node->name() << "\n";
   using std::make_pair;
   using std::pair;
@@ -779,8 +773,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   int best_candidate = -1;
   bool find_best = rand() % 128;
 
-  if (candidates.empty())
-    return 0;
+  if (candidates.empty()) return 0;
 
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
@@ -788,7 +781,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
     if (scheduleHere(sched, node, candidates[i])) {
       ++candidates_succ;
 
-      SchedStats s; 
+      SchedStats s;
       CandidateRoute undo_path;
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
 

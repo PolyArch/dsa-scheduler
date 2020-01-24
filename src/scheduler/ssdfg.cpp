@@ -1,12 +1,14 @@
 #include "ssdfg.h"
+
 #include <iomanip>
 #include <list>
 #include <set>
 #include <string>
 #include <vector>
+
 #include "dfg-parser.tab.h"
-#include "ss-config/model_parsing.h"
 #include "schedule.h"
+#include "ss-config/model_parsing.h"
 
 using namespace std;
 using namespace SS_CONFIG;
@@ -23,8 +25,8 @@ void checked_system(const char* command) {
 
 std::string SSDfgEdge::name() {
   std::stringstream ss;
-  ss << def()->name() << "." << _value->index() << "[" << l() << ", " << r() << "]" << "->"
-     << use()->name();
+  ss << def()->name() << "." << _value->index() << "[" << l() << ", " << r() << "]"
+     << "->" << use()->name();
   return ss.str();
 }
 
@@ -102,9 +104,9 @@ bool SSDfgOperand::valid() {
 /// { SSDfgNode
 
 void SSDfgNode::backprop_ctrl_dep() {
-  if(!_needs_ctrl_dep) {
-    _needs_ctrl_dep=true;
-    for(auto* e : _inc_edge_list) {
+  if (!_needs_ctrl_dep) {
+    _needs_ctrl_dep = true;
+    for (auto* e : _inc_edge_list) {
       e->def()->backprop_ctrl_dep();
     }
   }
@@ -243,9 +245,7 @@ void SSDfgNode::push_buf_dummy_node() {
 }
 
 // TODO: free all buffers and clear inputs ready
-void SSDfgNode::reset_node() {
-  _inputs_ready = 0;
-}
+void SSDfgNode::reset_node() { _inputs_ready = 0; }
 
 SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v)
     : _ssdfg(ssdfg), _ID(ssdfg->inc_node_id()), _vtype(v) {
@@ -293,9 +293,9 @@ void SSDfgNode::depInsts(std::vector<SSDfgInst*>& insts) {
 /// { Parsing data structure
 
 void CtrlBits::set(uint64_t val, Control b) {
-  if(b == CtrlBits::B1 || b == CtrlBits::B2) {
-    _needs_ctrl_dep=true;
-  } 
+  if (b == CtrlBits::B1 || b == CtrlBits::B2) {
+    _needs_ctrl_dep = true;
+  }
 
   int loc = val * Total + b;
   assert(loc >= 0 && loc < 64);
@@ -430,7 +430,7 @@ void SSDfg::printGraphviz(const char* fname, Schedule* sched) {
 }
 
 void SSDfg::check_for_errors() {
-  //printGraphviz("viz/error_check_dfg.dot");
+  // printGraphviz("viz/error_check_dfg.dot");
 
   bool error = false;
   for (auto elem : vec_inputs()) {
@@ -550,7 +550,7 @@ ParseResult* SSDfg::create_inst(std::string opcode, std::vector<ParseResult*>& a
   return res;
 }
 
-void SSDfg::set_pragma(const std::string &c, const std::string &s) {
+void SSDfg::set_pragma(const std::string& c, const std::string& s) {
   if (c == string("dfg")) {
     cout << "No pragmas yet for dfg\n";
   } else if (c == string("group")) {
@@ -560,16 +560,15 @@ void SSDfg::set_pragma(const std::string &c, const std::string &s) {
     }
   } else if (c == "frequency" || c == "unroll") {
     std::istringstream iss(s);
-    auto &ref = c == "frequency" ? _groupProps.back().frequency : _groupProps.back().unroll;
+    auto& ref =
+        c == "frequency" ? _groupProps.back().frequency : _groupProps.back().unroll;
     iss >> ref;
   } else {
     cout << "Context \"" << c << "\" not recognized.";
   }
 }
 
-void SSDfg::start_new_dfg_group() {
-  _groupProps.emplace_back(GroupProp());
-}
+void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
 
 SSDfg::SSDfg(string filename_) : filename(filename_) {
   string line;
@@ -591,7 +590,7 @@ void SSDfgInst::setImmSlot(int i) {
 }
 
 SSDfgVec::SSDfgVec(V_TYPE v, int num_values, int bitwidth, const std::string& name,
-                   int id, SSDfg* ssdfg, const ssdfg::MetaPort &meta_)
+                   int id, SSDfg* ssdfg, const ssdfg::MetaPort& meta_)
     : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), meta(meta_, this) {
   _values.push_back(new SSDfgValue(this, 0, bitwidth));
   for (int i = 1; i < num_values; ++i) {
@@ -600,26 +599,25 @@ SSDfgVec::SSDfgVec(V_TYPE v, int num_values, int bitwidth, const std::string& na
   _group_id = ssdfg->num_groups() - 1;
 }
 
-template<typename Tfrom, typename Tto>
-std::vector<Tto> cast_vector(const vector<Tfrom> &a) {
+template <typename Tfrom, typename Tto>
+std::vector<Tto> cast_vector(const vector<Tfrom>& a) {
   std::vector<Tto> res(a.size());
-  for (size_t i = 0; i < a.size(); ++i)
-    res[i] = a[i];
+  for (size_t i = 0; i < a.size(); ++i) res[i] = a[i];
   return res;
 }
 
-uint64_t SSDfgInst::do_compute(bool &discard) {
+uint64_t SSDfgInst::do_compute(bool& discard) {
   last_execution = _ssdfg->cur_cycle();
 
-#define EXECUTE(bw)                                                                            \
-  case bw: {                                                                                   \
-    std::vector<uint##bw##_t> input = cast_vector<uint64_t, uint##bw##_t>(_input_vals);        \
-    std::vector<uint##bw##_t> outputs(values().size());                                        \
-      output = SS_CONFIG::execute##bw(_ssinst, input,                                          \
-                                      outputs, (uint##bw##_t*)&_reg[0], discard, _back_array); \
-      outputs[0] = output;                                                                     \
-      _output_vals = cast_vector<uint##bw##_t, uint64_t>(outputs);                             \
-      return output;                                                                           \
+#define EXECUTE(bw)                                                                     \
+  case bw: {                                                                            \
+    std::vector<uint##bw##_t> input = cast_vector<uint64_t, uint##bw##_t>(_input_vals); \
+    std::vector<uint##bw##_t> outputs(values().size());                                 \
+    output = SS_CONFIG::execute##bw(_ssinst, input, outputs, (uint##bw##_t*)&_reg[0],   \
+                                    discard, _back_array);                              \
+    outputs[0] = output;                                                                \
+    _output_vals = cast_vector<uint##bw##_t, uint64_t>(outputs);                        \
+    return output;                                                                      \
   }
 
   uint64_t output;
@@ -634,17 +632,14 @@ uint64_t SSDfgInst::do_compute(bool &discard) {
   }
 
 #undef EXECUTE
-
 }
 
-void SSDfgInst::resize_vals(int n) {
-  _input_vals.resize(n);
-}
+void SSDfgInst::resize_vals(int n) { _input_vals.resize(n); }
 
 void SSDfgInst::print_output(std::ostream& os) {
   os << " = ";
   for (int i = 0; i < (int)_values.size(); ++i) {
-      os << _output_vals[i];
+    os << _output_vals[i];
     os << " ";
   }
 }
@@ -661,7 +656,7 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
 
   if (_needs_ctrl_dep) {
     os << ":C";
-  } 
+  }
 
   if (sched) {
     os << "\\n lat=" << sched->latOf(this) << " ";
@@ -828,12 +823,12 @@ void SSDfg::calc_minLats() {
 }
 
 void SSDfg::addVecOutput(const std::string& name, int len, EntryTable& syms, int width,
-                         const ssdfg::MetaPort &meta) {
+                         const ssdfg::MetaPort& meta) {
   add_parsed_vec<SSDfgVecOutput>(name, len, syms, width, meta);
 }
 
 void SSDfg::addVecInput(const std::string& name, int len, EntryTable& syms, int width,
-                        const ssdfg::MetaPort &meta) {
+                        const ssdfg::MetaPort& meta) {
   add_parsed_vec<SSDfgVecInput>(name, len, syms, width, meta);
 }
 
@@ -887,12 +882,12 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
       }
 
       for (int k = 0; k < 8; k += this->bitwidth() / 8) {
-        int cnt=0;
+        int cnt = 0;
         for (int sub_slot = k; sub_slot < k + this->bitwidth() / 8; ++sub_slot) {
           cnt += sched->dfg_nodes_of(sub_slot, cand_fu).size();
         }
-        cnt=cnt/8+1;
-         
+        cnt = cnt / 8 + 1;
+
         if (rand() % (cnt * cnt) == 0) {
           spots.emplace_back(k, fus[i]);
         } else {
@@ -907,14 +902,14 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
       if ((int)sched->dfg_nodes_of(0, cand_fu).size() + 1 < cand_fu->max_util()) {
         spots.emplace_back(0, fus[i]);
       } else {
-        not_chosen_spots.emplace_back(0,fus[i]);
+        not_chosen_spots.emplace_back(0, fus[i]);
       }
     }
   }
 
   // If we couldn't find any good spots, we can just pick a bad spot for now
-  if(spots.size() == 0) {
-    spots=not_chosen_spots;
+  if (spots.size() == 0) {
+    spots = not_chosen_spots;
   }
 
   std::random_shuffle(spots.begin(), spots.end());
@@ -960,8 +955,8 @@ void SSDfgValue::push(uint64_t val, bool valid, int delay) {
   // TODO: Support FIFO length backpressure.
   fifo.push(simulation::Data(_node->_ssdfg->cur_cycle() + delay, val, valid));
 
-  //static int64_t last_print = 0;
-  //if (node()->is_temporal()) {
+  // static int64_t last_print = 0;
+  // if (node()->is_temporal()) {
   //  if (last_print != node()->ssdfg()->cur_cycle()) {
   //    std::cerr << " Cycle[" << node()->ssdfg()->cur_cycle() << "]:" << node()->name()
   //              << " Available @" << node()->ssdfg()->cur_cycle() + delay << " "
@@ -973,17 +968,17 @@ void SSDfgValue::push(uint64_t val, bool valid, int delay) {
 }
 
 // new compute for back cgra-----------------------------
-void SSDfgInst::forward(Schedule *sched) {
-
+void SSDfgInst::forward(Schedule* sched) {
   auto loc = sched->location_of(this);
   static bool print = getenv("COMP") != nullptr;
 
   int inst_throughput = inst_thr(inst());
   if (auto value = sched->lastExecutionKv.Find(loc)) {
     if (_ssdfg->cur_cycle() - *value < inst_throughput) {
-      //std::cerr << _ssdfg->cur_cycle() << ": cannot issue " << name()
+      // std::cerr << _ssdfg->cur_cycle() << ": cannot issue " << name()
       //          << _ssdfg->cur_cycle() - *value << " < "
-      //          << inst_throughput << " " << loc.first << ", " << loc.second << std::endl;
+      //          << inst_throughput << " " << loc.first << ", " << loc.second <<
+      //          std::endl;
       return;
     }
   }
@@ -993,7 +988,8 @@ void SSDfgInst::forward(Schedule *sched) {
     for (auto elem : values()) {
       assert(!elem->fifo.empty());
       if (!elem->forward(true)) {
-        //std::cerr << "Cannot forward " << name() << " because backpressure of " << elem->name() << std::endl;
+        // std::cerr << "Cannot forward " << name() << " because backpressure of " <<
+        // elem->name() << std::endl;
         return;
       }
     }
@@ -1011,7 +1007,8 @@ void SSDfgInst::forward(Schedule *sched) {
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
     if (!_ops[i].ready()) {
-      //std::cerr << "Cannot forward " << name() << " since " << i << " th op not ready" << std::endl;
+      // std::cerr << "Cannot forward " << name() << " since " << i << " th op not ready"
+      // << std::endl;
       return;
     }
   }
@@ -1069,8 +1066,7 @@ void SSDfgInst::forward(Schedule *sched) {
 
   // TODO/FIXME: change to all registers
   if (reset) {
-    for (size_t i = 0; i < _reg.size(); ++i)
-      _reg[i] = 0;
+    for (size_t i = 0; i < _reg.size(); ++i) _reg[i] = 0;
   }
 
   if (print) {
@@ -1096,17 +1092,16 @@ void SSDfgInst::forward(Schedule *sched) {
       values()[i]->push(_output_vals[i], !_invalid, lat_of_inst());
     }
   }
-  //std::cerr << _ssdfg->cur_cycle() << ": " << name() << " (" << loc.first << ", " << loc.second << ") issued!" << std::endl;
+  // std::cerr << _ssdfg->cur_cycle() << ": " << name() << " (" << loc.first << ", " <<
+  // loc.second << ") issued!" << std::endl;
 
   for (auto elem : values()) {
-    if (!elem->forward(true))
-      return;
+    if (!elem->forward(true)) return;
   }
 
   for (auto elem : values()) {
     assert(elem->forward(false));
   }
-
 }
 
 bool SSDfgOperand::ready() {
@@ -1125,26 +1120,26 @@ bool SSDfgOperand::ready() {
 }
 
 bool SSDfgValue::forward(bool attempt) {
-  if (fifo.empty())
-    return false;
+  if (fifo.empty()) return false;
   simulation::Data data(fifo.front());
   for (auto user : _uses) {
     int j = 0;
-    for (auto &operand : user->use()->ops()) {
+    for (auto& operand : user->use()->ops()) {
       ++j;
       for (size_t i = 0; i < operand.edges.size(); ++i) {
         auto edge = operand.edges[i];
         if (edge == user) {
           // TODO: delete this!
-          //std::cerr << (attempt ? "[attempt] " : "[actual] ") << _node->name() << "[" << this << "]"
+          // std::cerr << (attempt ? "[attempt] " : "[actual] ") << _node->name() << "["
+          // << this << "]"
           //          << " pushes " << data.value << "(" << data.valid << ")" << "to "
           //          << user->use()->name() << "'s " << j << "th operand "
           //          << operand.fifos[i].size() + 1 << "/" << edge->buffer_size()
           //          << std::endl;
           if (operand.fifos[i].size() < edge->buffer_size()
               /*FIXME: The buffer size should be something more rigorous*/) {
-            simulation::Data entry(data.available_at + edge->delay(),
-                                   data.value, data.valid);
+            simulation::Data entry(data.available_at + edge->delay(), data.value,
+                                   data.valid);
             if (!attempt) {
               operand.fifos[i].push(entry);
             }
@@ -1161,27 +1156,25 @@ bool SSDfgValue::forward(bool attempt) {
   return true;
 }
 
-void SSDfgVecInput::forward(Schedule *) {
-
+void SSDfgVecInput::forward(Schedule*) {
   if (is_temporal()) {
     if (!values()[current_]->forward(true)) {
       return;
     }
     values()[current_]->forward(false);
-    current_ = (current_ + 1) % ((int) values().size());
+    current_ = (current_ + 1) % ((int)values().size());
     return;
   }
 
-  for (auto &elem : values()) {
-    if (!elem->forward(true))
-      return;
+  for (auto& elem : values()) {
+    if (!elem->forward(true)) return;
   }
-  for (auto &elem : values()) {
+  for (auto& elem : values()) {
     assert(elem->forward(false));
   }
 }
 
-int SSDfg::forward(bool asap, Schedule *sched) {
+int SSDfg::forward(bool asap, Schedule* sched) {
   clear_issued();
   std::vector<bool> group_ready(true, num_groups());
   if (!asap) {
@@ -1224,7 +1217,7 @@ bool SSDfgVecInput::can_push() {
 }
 
 void SSDfgVecOutput::pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid) {
-  for (auto &operand : _ops) {
+  for (auto& operand : _ops) {
     data.push_back(operand.poll());
     data_valid.push_back(operand.predicate());
     operand.pop();
@@ -1232,7 +1225,7 @@ void SSDfgVecOutput::pop(std::vector<uint64_t>& data, std::vector<bool>& data_va
 }
 
 bool SSDfgVecOutput::can_pop() {
-  for (auto &elem : _ops) {
+  for (auto& elem : _ops) {
     if (!elem.ready()) {
       return false;
     }
@@ -1251,25 +1244,24 @@ uint64_t SSDfgOperand::poll() {
   return res;
 }
 
-double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
+double SSDfg::estimated_performance(Schedule* sched, bool verbose) {
   std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
-  std::vector<double> coef(num_groups(), (double) 1.0);
-  
-  for (auto &elem : nodes<SSDfgVecInput*>()) {
-    if (elem->meta.op == (int) ssdfg::MetaPort::Operation::Read &&
+  std::vector<double> coef(num_groups(), (double)1.0);
+
+  for (auto& elem : nodes<SSDfgVecInput*>()) {
+    if (elem->meta.op == (int)ssdfg::MetaPort::Operation::Read &&
         elem->meta.source != ssdfg::MetaPort::Data::Unknown) {
-      bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] += 
-        elem->get_vp_len() * elem->get_port_width() / 8;
-    } else if ((elem->meta.op & (int) ssdfg::MetaPort::Operation::IndRead) || 
-               (elem->meta.op & (int) ssdfg::MetaPort::Operation::Atomic)) {
-      if (!sched->ssModel()->indirect())
-        coef[elem->group_id()] = 0.1;
+      bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] +=
+          elem->get_vp_len() * elem->get_port_width() / 8;
+    } else if ((elem->meta.op & (int)ssdfg::MetaPort::Operation::IndRead) ||
+               (elem->meta.op & (int)ssdfg::MetaPort::Operation::Atomic)) {
+      if (!sched->ssModel()->indirect()) coef[elem->group_id()] = 0.1;
     }
     coef[elem->group_id()] *= elem->meta.cmd;
   }
 
   std::vector<int> inst_cnt(num_groups(), 0);
-  for (auto &elem : nodes<SSDfgInst*>()) {
+  for (auto& elem : nodes<SSDfgInst*>()) {
     ++inst_cnt[elem->group_id()];
   }
 
@@ -1293,7 +1285,7 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
 
   std::vector<double> rec_lat(num_groups(), 0.0);
   std::vector<double> rec_hide(num_groups(), 0.0);
-  for (auto &elem : nodes<SSDfgVecOutput*>()) {
+  for (auto& elem : nodes<SSDfgVecOutput*>()) {
     if (elem->meta.dest == ssdfg::MetaPort::Data::LocalPort) {
       double lat = sched->latOf(elem);
       double hide = elem->meta.conc / group_prop(elem->group_id()).unroll;
@@ -1307,7 +1299,8 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   double overall = 0.0;
 
   for (int i = 0; i < num_groups(); ++i) {
-    double v = std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
+    double v =
+        std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
     if (verbose) {
       std::cout << "[Group " << i << "] Freq: " << group_prop(i).frequency
                 << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
@@ -1320,28 +1313,23 @@ double SSDfg::estimated_performance(Schedule *sched, bool verbose) {
   return overall;
 }
 
-std::string SSDfgValue::name() {
-  return node()->name() + "." + std::to_string(index());
-}
+std::string SSDfgValue::name() { return node()->name() + "." + std::to_string(index()); }
 
 namespace ssdfg {
 
-const char *MetaPort::DataText[] = {
-  "memory",
-  "spad",
-  "localport",
-  "remoteport",
+const char* MetaPort::DataText[] = {
+    "memory",
+    "spad",
+    "localport",
+    "remoteport",
 };
 
-const char *MetaPort::OperationText[] = {
-  "read",
-  "write",
-  "indread",
-  "indwrite",
-  "atomic",
+const char* MetaPort::OperationText[] = {
+    "read", "write", "indread", "indwrite", "atomic",
 };
 
-CompileMeta::CompileMeta(const MetaPort &meta, SSDfgVec *parent) : MetaPort(meta), parent(parent) {
+CompileMeta::CompileMeta(const MetaPort& meta, SSDfgVec* parent)
+    : MetaPort(meta), parent(parent) {
   assert(parent);
   if (dest == Data::LocalPort && !dest_port.empty()) {
     bool found = false;
@@ -1357,5 +1345,4 @@ CompileMeta::CompileMeta(const MetaPort &meta, SSDfgVec *parent) : MetaPort(meta
   }
 }
 
-}
-
+}  // namespace ssdfg

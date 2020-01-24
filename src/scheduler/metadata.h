@@ -6,7 +6,6 @@
 namespace ssdfg {
 
 struct MetaPort {
-
   enum class Data {
     Memory,
     SPad,
@@ -15,7 +14,7 @@ struct MetaPort {
     Unknown,
   };
 
-  static const char *DataText[(int) Data::Unknown];
+  static const char* DataText[(int)Data::Unknown];
 
   enum class Operation {
     Read,
@@ -26,7 +25,7 @@ struct MetaPort {
     Unknown,
   };
 
-  static const char *OperationText[(int) Operation::Unknown];
+  static const char* OperationText[(int)Operation::Unknown];
 
   Data source, dest;
 
@@ -54,13 +53,13 @@ struct MetaPort {
     dest_port = "";
   }
 
-  void set(const std::string &key, const std::string &val) {
+  void set(const std::string& key, const std::string& val) {
     bool success = false;
     if (key == "src" || key == "dest") {
-      auto &ref = key == "src" ? source : dest;
-      for (int i = 0; i < (int) Data::Unknown; ++i) {
+      auto& ref = key == "src" ? source : dest;
+      for (int i = 0; i < (int)Data::Unknown; ++i) {
         if (val == DataText[i]) {
-          ref = (Data) i;
+          ref = (Data)i;
           success = true;
           break;
         }
@@ -70,7 +69,7 @@ struct MetaPort {
         success = true;
       }
     } else if (key == "op") {
-      for (int i = 0; i < (int) Operation::Unknown; ++i) {
+      for (int i = 0; i < (int)Operation::Unknown; ++i) {
         if (val == OperationText[i]) {
           op |= 1 << i;
           success = true;
@@ -83,7 +82,7 @@ struct MetaPort {
       success = true;
     } else if (key == "repeat" || key == "cmd") {
       std::istringstream iss(val);
-      auto &ref = key == "repeat" ? repeat : cmd;
+      auto& ref = key == "repeat" ? repeat : cmd;
       iss >> ref;
       success = true;
     }
@@ -93,17 +92,17 @@ struct MetaPort {
     }
   }
 
-  void to_pragma(std::ostream &os) const {
+  void to_pragma(std::ostream& os) const {
     if (source != Data::Unknown) {
-      os << "#pragma src=" << DataText[(int) source] << "\n";
+      os << "#pragma src=" << DataText[(int)source] << "\n";
     }
     if (dest != Data::Unknown) {
-      os << "#pragma dest=" << DataText[(int) dest] << "\n";
+      os << "#pragma dest=" << DataText[(int)dest] << "\n";
     }
     if (!dest_port.empty()) {
       os << "#pragma dest=" << dest_port << "\n";
     }
-    for (int i = 0; i < (int) Operation::Unknown; ++i) {
+    for (int i = 0; i < (int)Operation::Unknown; ++i) {
       if (op >> i & 1) {
         os << "#pragma op=" << OperationText[i] << "\n";
       }
@@ -114,9 +113,8 @@ struct MetaPort {
     os << "#pragma cmd=" << cmd << "\n";
     os << "#pragma repeat=" << repeat << "\n";
   }
-
 };
 
-}
+}  // namespace ssdfg
 
-#endif // __SS_METADATA_H__
+#endif  // __SS_METADATA_H__

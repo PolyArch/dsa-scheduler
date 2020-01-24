@@ -1,16 +1,14 @@
-#include <getopt.h>
-
 #include <assert.h>
-#include <fstream>
-#include <iostream>
-#include <cstdlib>
-#include <string>
-#include <chrono>
-#include <iostream>
+#include <getopt.h>
 #include <signal.h>
 
-#include "ss-config/model.h"
+#include <chrono>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <string>
 
+#include "ss-config/model.h"
 #include "ss-scheduler/scheduler.h"
 #include "ss-scheduler/scheduler_sa.h"
 #include "ss-scheduler/ssdfg.h"
@@ -62,7 +60,8 @@ int main(int argc, char* argv[]) {
   bool est_perf = false;
   bool indirect = false;
 
-  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:fpcd:e:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:fpcd:e:", long_options, nullptr)) !=
+         -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
       case 's': str_subalg = string(optarg); break;
@@ -80,7 +79,6 @@ int main(int argc, char* argv[]) {
       case 'd': max_edge_delay = atoi(optarg); break;
       case 'e': seed = atoi(optarg); break;
 
-
       default: exit(1);
     }
   }
@@ -96,11 +94,9 @@ int main(int argc, char* argv[]) {
   std::string model_filename = argv[0];
   std::string pdg_filename = argv[1];
 
-
   SSModel ssmodel(model_filename.c_str());
   ssmodel.setMaxEdgeDelay(max_edge_delay);
   ssmodel.indirect(indirect);
-
 
   if (str_schedType == "sa") { /*simulated annealing*/
     scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
@@ -117,7 +113,6 @@ int main(int argc, char* argv[]) {
   scheduler->set_max_iters(max_iters);
 
   if (is_dse) {
-
     scheduler->set_start_time();
 
     CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
@@ -140,8 +135,8 @@ int main(int argc, char* argv[]) {
     {
       // Filter out useless fu models.
       std::set<SS_CONFIG::ss_inst_t> used_insts;
-      for (auto &elem : cur_ci->workload_array) {
-        for (auto &dfg : elem.sched_array) {
+      for (auto& elem : cur_ci->workload_array) {
+        for (auto& dfg : elem.sched_array) {
           std::set<SS_CONFIG::ss_inst_t> delta = dfg.ssdfg()->insts_used();
           for (auto inst : delta) {
             used_insts.insert(inst);
@@ -149,9 +144,9 @@ int main(int argc, char* argv[]) {
         }
       }
       for (int i = 0; i < ssmodel.fuModel()->fu_defs().size(); ++i) {
-        auto &fudef = ssmodel.fuModel()->fu_defs()[i];
+        auto& fudef = ssmodel.fuModel()->fu_defs()[i];
         bool intersect = false;
-        for (auto &elem : used_insts) {
+        for (auto& elem : used_insts) {
           if (fudef.is_cap(elem)) {
             intersect = true;
           }
@@ -167,9 +162,9 @@ int main(int argc, char* argv[]) {
 
     int improv_iter = 0;
 
-    auto dump_checkpoint = [] (Schedule *sched, const std::string &filename, double performance) {
-      if (!sched)
-        return;
+    auto dump_checkpoint = [](Schedule* sched, const std::string& filename,
+                              double performance) {
+      if (!sched) return;
       std::cout << "Dumping " << sched->ssdfg()->filename << " viz/" << filename << "/ "
                 << performance << std::endl;
       std::string path = "viz/" + filename;
@@ -179,9 +174,8 @@ int main(int argc, char* argv[]) {
       sched->printConfigHeader(ofs, filename);
     };
 
-    for(int i = 0; i < 2000000; ++i) {
-
-      if( (i-improv_iter) > max_iters_no_improvement) {
+    for (int i = 0; i < 2000000; ++i) {
+      if ((i - improv_iter) > max_iters_no_improvement) {
         break;
       }
 
@@ -201,19 +195,24 @@ int main(int argc, char* argv[]) {
       if (cand_ci->dse_obj() < 1e-6) {
         continue;
       }
-      
+
       auto* sub = cand_ci->ss_model()->subModel();
-      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
-           << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
-           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
+      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area()
+           << "um2\n"
+           << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area()
+           << "um2\n"
+           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area()
+           << "um2\n"
            << "Ctrl: " << cand_ci->ss_model()->host_area() << "um2" << std::endl;
 
-      //std::cout << "======================= ALL ===============================================\n";
-      //for (int x = 0, ew = cand_ci->workload_array.size(); x < ew; ++x) {
+      // std::cout << "======================= ALL
+      // ===============================================\n"; for (int x = 0, ew =
+      // cand_ci->workload_array.size(); x < ew; ++x) {
       //  for (int y = 0; y < cand_ci->workload_array[x].sched_array.size(); ++y) {
       //    std::cout << i << ": " << x << " " << y << ": "
       //      << cand_ci->dse_sched_obj(&cand_ci->workload_array[x].sched_array[y]).first
-      //      << " left: " << cand_ci->workload_array[x].sched_array[y].num_left() << std::endl;
+      //      << " left: " << cand_ci->workload_array[x].sched_array[y].num_left() <<
+      //      std::endl;
       //  }
       //}
 
@@ -226,13 +225,14 @@ int main(int argc, char* argv[]) {
         for (int x = 0, ew = cur_ci->workload_array.size(); x < ew; ++x) {
           ostringstream oss;
           oss << "iter_" << i << "_" << x;
-          dump_checkpoint(cur_ci->res[x], oss.str(), cur_ci->dse_sched_obj(cur_ci->res[x]).first);
+          dump_checkpoint(cur_ci->res[x], oss.str(),
+                          cur_ci->dse_sched_obj(cur_ci->res[x]).first);
         }
 
         // dump the new hw json
         stringstream hw_ss;
-        hw_ss << "viz/dse-sched-" << i <<".json";
-        cur_ci -> ss_model()->subModel()->DumpHwInJSON(hw_ss.str().c_str());
+        hw_ss << "viz/dse-sched-" << i << ".json";
+        cur_ci->ss_model()->subModel()->DumpHwInJSON(hw_ss.str().c_str());
 
       } else {
         delete cand_ci;
@@ -246,24 +246,27 @@ int main(int argc, char* argv[]) {
     cur_ci->verify();
 
     cout << "FINAL DSE OBJ: " << cur_ci->dse_obj() << " -- ";
-        
+
     auto* sub = cur_ci->ss_model()->subModel();
     cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2\n"
-         << "Switches: " << sub->switch_list().size() << " "<< sub->get_sw_total_area() << "um2\n"
-         << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2\n"
+         << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area()
+         << "um2\n"
+         << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area()
+         << "um2\n"
          << "Ctrl: " << cur_ci->ss_model()->host_area() << "um2" << std::endl;
 
     for (int x = 0, ew = cur_ci->workload_array.size(); x < ew; ++x) {
       ostringstream oss;
       oss << "final_" << x;
-      dump_checkpoint(cur_ci->res[x], oss.str(), cur_ci->dse_sched_obj(cur_ci->res[x]).first);
+      dump_checkpoint(cur_ci->res[x], oss.str(),
+                      cur_ci->dse_sched_obj(cur_ci->res[x]).first);
     }
 
     return 0;
   }
 
   SSDfg ssdfg(pdg_filename);
-  Schedule *sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
+  Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
   if (est_perf) {
     double est = ssdfg.estimated_performance(sched, true);
     std::cout << "Estimated overall performance: " << est << std::endl;

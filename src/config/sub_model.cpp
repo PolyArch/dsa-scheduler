@@ -1,7 +1,9 @@
 #include "sub_model.h"
-#include "model_parsing.h"
 
 #include <assert.h>
+
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -9,10 +11,8 @@
 #include <utility>
 #include <vector>
 
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
-
 #include "../utils/debug.h"
+#include "model_parsing.h"
 
 namespace pt = boost::property_tree;
 
@@ -21,9 +21,7 @@ using namespace std;
 
 // ----------------------- sslink ---------------------------------------------
 
-bool sslink::flow_control() {
-  return _dest->flow_control(); 
-}
+bool sslink::flow_control() { return _dest->flow_control(); }
 
 std::string sslink::name() const {
   std::stringstream ss;
@@ -43,7 +41,7 @@ sslink* sslink::getCycleLink() {
 }
 
 sslink::~sslink() {
-  auto f = [this](std::vector<sslink*> &links) {
+  auto f = [this](std::vector<sslink*>& links) {
     auto iter = std::find(links.begin(), links.end(), this);
     assert(iter != links.end() && "Cannot find this link!");
     links.erase(iter);
@@ -234,7 +232,6 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
                 }
               }
             }
-
           }
         }
 
@@ -256,7 +253,7 @@ void SubModel::PrintGraphviz(ostream& os) {
   os << "Digraph G { \n";
 
   // switchesnew_sched
-  for(auto* sw : switch_list()) {
+  for (auto* sw : switch_list()) {
     // os << switches[i][j]->name() <<"[ label = \"Switch[" << i << "][" << j << "]\"
     // ];\n";
 
@@ -268,7 +265,7 @@ void SubModel::PrintGraphviz(ostream& os) {
   }
 
   // fus
-  for(auto* fu : fu_list()) {
+  for (auto* fu : fu_list()) {
     for (auto& elem : fu->out_links()) {
       const ssnode* dest_node = elem->dest();  // Output link of each FU
       os << fu->name() << " -> " << dest_node->name() << ";\n";
@@ -324,18 +321,21 @@ void SubModel::build_substrate(int sizex, int sizey) {
   }
 }
 
-sslink* ssnode::add_link(ssnode *node) {
+sslink* ssnode::add_link(ssnode* node) {
   sslink* link = new sslink(this, node);
   if (this == node) {
     if (_cycle_link) {
-      DEBUG(CYCLELINK) << "two cycle links :\n" << "source : " << link->orig()->nodeType()
-                       <<"_"<< link -> orig() -> id() <<", " << "sink : "
-                       << link->dest()->nodeType() <<"_"<< link -> dest() -> id()<< "\n"
-                       << "[Warning] two cycle links, why?" << "\n";
+      DEBUG(CYCLELINK) << "two cycle links :\n"
+                       << "source : " << link->orig()->nodeType() << "_"
+                       << link->orig()->id() << ", "
+                       << "sink : " << link->dest()->nodeType() << "_"
+                       << link->dest()->id() << "\n"
+                       << "[Warning] two cycle links, why?"
+                       << "\n";
     }
     _cycle_link = link;
   }
-  auto &olinks = links[0];
+  auto& olinks = links[0];
   olinks.push_back(link);
 
   link->subnet.resize(link->bitwidth() / 8);
@@ -356,7 +356,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   auto sws = switch_list();
 
   {
-
     const int di[] = {0, 1, 1, 0};
     const int dj[] = {0, 0, 1, 1};
     const SwitchDir::DIR dir[] = {SwitchDir::SE, SwitchDir::SW, SwitchDir::NW,
@@ -374,10 +373,13 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
         }
 
         // output from FU -- SE
-        fus[i * _sizey + j]->add_link(sws[(i + 1) * (_sizey + 1) + (j + 1)])->setdir(SwitchDir::SE);
+        fus[i * _sizey + j]
+            ->add_link(sws[(i + 1) * (_sizey + 1) + (j + 1)])
+            ->setdir(SwitchDir::SE);
 
         // For temporal region, lets add some extra outputs!
-        if (i >= temp_x && i < temp_x + temp_width && j >= temp_y && j < temp_y + temp_height) {
+        if (i >= temp_x && i < temp_x + temp_width && j >= temp_y &&
+            j < temp_y + temp_height) {
           for (int k = 0; k < 3; ++k) {
             int x = i + t_di[k], y = j + t_dj[k];
             fus[i * _sizey + j]->add_link(sws[x * (_sizey + 1) + y])->setdir(t_dir[k]);
@@ -394,15 +396,19 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     const int cx[] = {-1, 1, 1, 1};
     const int cy[] = {-1, 1, -1, 1};
     const SwitchDir::DIR dir[] = {SwitchDir::W, SwitchDir::N, SwitchDir::E, SwitchDir::S};
-    const SwitchDir::DIR dir2[] = {SwitchDir::NW2, SwitchDir::SW2, SwitchDir::NE2, SwitchDir::SE2};
-    const SwitchDir::DIR dir3[] = {SwitchDir::W2, SwitchDir::S2, SwitchDir::N2, SwitchDir::E2};
+    const SwitchDir::DIR dir2[] = {SwitchDir::NW2, SwitchDir::SW2, SwitchDir::NE2,
+                                   SwitchDir::SE2};
+    const SwitchDir::DIR dir3[] = {SwitchDir::W2, SwitchDir::S2, SwitchDir::N2,
+                                   SwitchDir::E2};
     for (int i = 0; i < _sizex + 1; i++) {
       for (int j = 0; j < _sizey + 1; j++) {
         for (int k = 0; k < 4; ++k) {
           int _i = i + di[k];
           int _j = j + dj[k];
           if (_i >= 0 && _i <= _sizex && _j >= 0 && _j <= _sizey)
-            sws[i * (_sizey + 1) + j]->add_link(sws[_i * (_sizey + 1) + _j])->setdir(dir[k]);
+            sws[i * (_sizey + 1) + j]
+                ->add_link(sws[_i * (_sizey + 1) + _j])
+                ->setdir(dir[k]);
         }
 
         // crazy diagonals
@@ -532,9 +538,9 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
       for (int k = 0; k < 4; ++k) {
         int x = i + di[k];
         int y = j + dj[k];
-        if (temp_x <= x && x < temp_x + temp_width &&
-            temp_y <= y && y < temp_y + temp_height) {
-          sslink *link = fus[i * _sizey + j]->add_link(fus[x * _sizey + y]);
+        if (temp_x <= x && x < temp_x + temp_width && temp_y <= y &&
+            y < temp_y + temp_height) {
+          sslink* link = fus[i * _sizey + j]->add_link(fus[x * _sizey + y]);
           link->set_max_util(1 << 7);
           link->setdir(dir[k]);
         }
@@ -567,8 +573,8 @@ void ssio_interface::fill_vec() {
   }
 }
 
-// Group Nodes/Links and Set IDs	
-// This should be done after all the links are added	
+// Group Nodes/Links and Set IDs
+// This should be done after all the links are added
 void SubModel::post_process() {
   _link_list.clear();
 

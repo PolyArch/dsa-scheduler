@@ -1,11 +1,12 @@
 #ifndef __INST_MODEL_H__
 #define __INST_MODEL_H__
 
-#include "../utils/debug.h"
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+
+#include "../utils/debug.h"
 
 namespace SS_CONFIG {
 
@@ -31,11 +32,12 @@ class ConfigInst {
   int throughput() { return _throughput; }
   void setThroughput(int thr) { _throughput = thr; }
 
-  double area(){return _area;}
-  void setArea(double area){_area = area;}
+  double area() { return _area; }
+  void setArea(double area) { _area = area; }
 
-  double power(){return _power;}
-  void setPower(double power){_power = power;}
+  double power() { return _power; }
+  void setPower(double power) { _power = power; }
+
  private:
   std::string _name;
   int _latency;
@@ -48,25 +50,26 @@ class ConfigInst {
 };
 
 class FuType {
-  public:
-    std::string name(){return _name;}
-    void setName(std::string name){_name = name;}
+ public:
+  std::string name() { return _name; }
+  void setName(std::string name) { _name = name; }
 
-    double area(){return _area;}
-    void setArea(double area){_area = area;}
+  double area() { return _area; }
+  void setArea(double area) { _area = area; }
 
-    double power(){return _power;}
-    void setPower(double power){_power = power;}
-  private:
-    std::string _name;
-    double _area = -1.0;
-    double _power = -1.0;
+  double power() { return _power; }
+  void setPower(double power) { _power = power; }
+
+ private:
+  std::string _name;
+  double _area = -1.0;
+  double _power = -1.0;
 };
 
 class InstModel {
  public:
   InstModel(char* filename);  // read the file and populate the instructions
-  void PowerAreaModel(char* filename); 
+  void PowerAreaModel(char* filename);
 
   void printCFiles(char* header, char* cpp);
 

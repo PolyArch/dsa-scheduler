@@ -1,23 +1,22 @@
 #include "schedule.h"
 
-#include <fstream>
-#include <iostream>
-#include <map>
 #include <assert.h>
-#include <iomanip>
-#include <list>
-#include <unordered_set>
-#include <set>
 
 #include <boost/foreach.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <exception>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <list>
+#include <map>
+#include <set>
+#include <unordered_set>
 
-#include "ssdfg.h"
 #include "ss-config/model_parsing.h"
 #include "ss-config/ssinst.h"
-
+#include "ssdfg.h"
 
 using namespace std;
 using namespace SS_CONFIG;
@@ -39,7 +38,8 @@ void Schedule::reset_simulation_state() {
   }
 }
 
-std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBits(int size, uint64_t* bits) {
+std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBits(int size,
+                                                                  uint64_t* bits) {
   // Figure out if this configuration is real or not
   // NOTE: the first 9 characters of the configuration must spell filename
   // for this hack to work!
@@ -110,7 +110,7 @@ std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBitsCheat(char* s) 
   }
 
   for (auto node : _ssDFG->nodes<SSDfgNode*>()) {
-    for (auto &op : node->ops()) {
+    for (auto& op : node->ops()) {
       op.fifos.resize(op.edges.size());
     }
   }
@@ -188,7 +188,7 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
   // Approximate number of config words, good enough for now
   int config_words = _ssModel->subModel()->node_list().size();
 
-  config_words = std::max((int) file_name.size(), config_words);
+  config_words = std::max((int)file_name.size(), config_words);
   // Negative size indicates funny thing
   os << "#define " << cfg_name << "_size " << config_words << "\n\n";
 
@@ -359,8 +359,7 @@ void Schedule::stat_printOutputLatency() {
     SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
     auto loc = location_of(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.second);
-    cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size()
-         << ": ";
+    cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : vec_out->in_edges()) {
       int routing_latency = edge_latency(inc_edge);
       int edge_lat = edge_delay(inc_edge) + routing_latency - 1;
@@ -415,7 +414,7 @@ void Schedule::iterativeFixLatency() {
   bool changed = true;
   reset_lat_bounds();
 
-  //int max_ed = _ssModel->maxEdgeDelay();
+  // int max_ed = _ssModel->maxEdgeDelay();
   int iters = 0;
 
   bool overflow = false;
@@ -496,8 +495,8 @@ void Schedule::iterativeFixLatency() {
         int routing_latency = edge_latency(edge);
         int edge_lat = routing_latency - 1 + node->lat_of_inst();
 
-        //int my_max_ed = max_ed;
-        //if (dynamic_cast<SSDfgVecOutput*>(useNode)) {
+        // int my_max_ed = max_ed;
+        // if (dynamic_cast<SSDfgVecOutput*>(useNode)) {
         //  my_max_ed = 0;
         //}
         int max_ed = max_edge_delay(edge);
@@ -547,7 +546,7 @@ void Schedule::iterativeFixLatency() {
       SSDfgNode* origNode = edge->def();
 
       int routing_latency = edge_latency(edge);
-      //int max_edge_delay = _ssModel->maxEdgeDelay();
+      // int max_edge_delay = _ssModel->maxEdgeDelay();
       int max_ed = max_edge_delay(edge);
 
       if (routing_latency == 0) {  // if its not scheduled yet, be more liberal
@@ -636,31 +635,30 @@ void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis) 
   //  << max_lat_mis << "diff: " << diff << "\n";
 
   if (max_lat < new_lat) max_lat = new_lat;
-
 }
 
 void Schedule::validate() {
-  //Invariant: All paths should start at the source, and end at the
-  //destination
-  for(SSDfgEdge* edge : _ssDFG->edges()) {
+  // Invariant: All paths should start at the source, and end at the
+  // destination
+  for (SSDfgEdge* edge : _ssDFG->edges()) {
     auto& links = _edgeProp[edge->id()].links;
     ssnode* def_node = locationOf(edge->def());
     ssnode* use_node = locationOf(edge->use());
 
-    if(links.size()==0) continue; //maybe a partial schedule 
+    if (links.size() == 0) continue;  // maybe a partial schedule
 
     int i = 0;
     sslink* prev_link;
-    for(auto& linkp : links) {
+    for (auto& linkp : links) {
       sslink* link = linkp.second;
-      if(i==0) {
+      if (i == 0) {
         assert(link->orig() == def_node);
       }
-      if(i>0) {
+      if (i > 0) {
         assert(prev_link->dest() == link->orig());
       }
-      if(i + 1 < links.size()) {
-        assert(dynamic_cast<ssvport*>(link->dest())==0);
+      if (i + 1 < links.size()) {
+        assert(dynamic_cast<ssvport*>(link->dest()) == 0);
       }
       ++i;
       prev_link = link;
@@ -668,7 +666,6 @@ void Schedule::validate() {
     assert(prev_link->dest() == use_node);
   }
 }
-
 
 // Calculate the exact latency by traversing the schedule
 // -- Note that this function is performance non-critical, as its
@@ -843,7 +840,6 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
   _max_lat = max_lat;
   _max_lat_mis = max_lat_mis;
 }
-
 
 template <typename T>
 int count_unique(std::vector<T>& vec) {

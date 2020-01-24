@@ -1,6 +1,8 @@
 #include "color_mapper.h"
+
 #include <math.h>
 #include <stdlib.h>
+
 #include "ssdfg.h"
 
 int getrgb(int r, int g, int b) { return ((r << 16) | (g << 8) | b); }
