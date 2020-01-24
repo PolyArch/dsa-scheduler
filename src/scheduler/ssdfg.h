@@ -36,10 +36,10 @@ class SSDfgVecInput;
 namespace simulation {
 
 struct Data {
-  int64_t available_at;
+  uint64_t available_at;
   uint64_t value;
   bool valid;
-  Data(int64_t aa, uint64_t value, bool valid)
+  Data(uint64_t aa, uint64_t value, bool valid)
       : available_at(aa), value(value), valid(valid) {}
 };
 
@@ -505,7 +505,7 @@ class SSDfgInst : public SSDfgNode {
                                                              SS_CONFIG::SSModel*,
                                                              int n) override;
 
-  SSDfgInst(SSDfg* ssdfg, SS_CONFIG::ss_inst_t inst, bool is_dummy = false)
+  SSDfgInst(SSDfg* ssdfg, SS_CONFIG::OpCode inst, bool is_dummy = false)
       : SSDfgNode(ssdfg, V_INST),
         _predInv(false),
         _isDummy(is_dummy),
@@ -543,7 +543,7 @@ class SSDfgInst : public SSDfgNode {
 
   bool isDummy() { return _isDummy; }
 
-  SS_CONFIG::ss_inst_t inst() { return _ssinst; }
+  SS_CONFIG::OpCode inst() { return _ssinst; }
 
   virtual int maxThroughput() override;
 
@@ -611,7 +611,7 @@ class SSDfgInst : public SSDfgNode {
   std::vector<uint64_t> _reg;
 
   uint64_t _imm;
-  SS_CONFIG::ss_inst_t _ssinst;
+  SS_CONFIG::OpCode _ssinst;
 };
 
 // vector class
@@ -794,8 +794,8 @@ class SSDfg {
     _nodes.erase(std::remove(_nodes.begin(), _nodes.end(), inst), _nodes.end());
   }
 
-  std::set<SS_CONFIG::ss_inst_t> insts_used() {
-    std::set<SS_CONFIG::ss_inst_t> res;
+  std::set<SS_CONFIG::OpCode> insts_used() {
+    std::set<SS_CONFIG::OpCode> res;
     for (auto elem : _insts) {
       res.insert(elem->inst());
     }
@@ -926,7 +926,7 @@ class SSDfg {
 
   void push_ready_node(SSDfgNode* node) { _ready_nodes.push_back(node); }
 
-  int64_t cur_cycle() { return _cur_cycle; }
+  uint64_t cur_cycle() { return _cur_cycle; }
 
  private:
   // to keep track of number of cycles---------------------

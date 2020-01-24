@@ -12,8 +12,53 @@ using namespace std;
 // FU_type(func_unit_def) capabilities
 // FU_ADD: Add16x4:1
 
-FuModel::FuModel(std::istream& istream) {
-  // char line[512];
+// This function reads line from an ifstream, and gets a param and value,
+// seperated by a ":"
+void ParseCapabilities(Capability& fu, string& cap_string) {
+  stringstream ss(cap_string);
+  string cur_cap;
+
+  while (getline(ss, cur_cap, ',')) {
+    stringstream pss(cur_cap);
+    string cap;
+    string enc_str;
+
+    getline(pss, cap, ':');
+
+    ModelParsing::trim(cap);
+
+    if (cap.empty()) {
+      return;
+    }
+
+    if (ModelParsing::stricmp(cap, "ALL")) {
+      for (int i = 0; i < SS_NUM_TYPES; ++i) {
+        fu.Add((OpCode) i, i);
+      }
+      return;
+    }
+
+    OpCode ss_inst = inst_from_string(cap.c_str());
+
+    if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
+      continue;
+    }
+
+    if (pss.good()) {  // then there must be an encoding string
+      unsigned encoding;
+      pss >> encoding;
+      fu.Add(ss_inst, encoding);
+    } else {
+      assert(false && "OpCode with no encoding?");
+    }
+  }
+}
+
+namespace SS_CONFIG {
+
+std::vector<Capability> ParseFuType(std::istream& istream) {
+  std::vector<Capability> res;
+
   string param, value;
 
   while (istream.good()) {
@@ -34,35 +79,24 @@ FuModel::FuModel(std::istream& istream) {
       getline(ss, param, ' ');
       getline(ss, newtype);
 
-      func_defs.push_back(func_unit_def(newtype));
-      AddCapabilities(func_defs[func_defs.size() - 1], value);
+      res.push_back(Capability(newtype));
+      ParseCapabilities(res.back(), value);
 
     } else if (ModelParsing::StartsWith(param, "SWITCH_TYPE")) {
       // AddCapabilities(*GetFU("SWITCH"), value);
       assert(0);
     }
   }
+
+  return res;
 }
 
-func_unit_def* FuModel::GetFUDef(char* fu_cstr) {
-  string s(fu_cstr);
-  return GetFUDef(s);
-}
-
-// Get a functional unit based upon the description string (the name)
-func_unit_def* FuModel::GetFUDef(string& fu_string) {
-  for (unsigned i = 0; i < func_defs.size(); ++i) {
-    if (func_defs[i].name().compare(fu_string) == 0) {
-      return &func_defs[i];
-    }
-  }
-  return nullptr;  // if no fu, return null
 }
 
 // Find all supported instructions by current instruction
-std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst) {
+std::set<OpCode> Capability::find_all_insts_covered(OpCode source_inst) {
   // initialize the covered instructions
-  std::set<ss_inst_t> covered_inst;
+  std::set<OpCode> covered_inst;
   // parse the current instruction
   std::string inst_name = SS_CONFIG::name_of_inst(source_inst);
   // std::cout << "parsing " << inst_name << "\n";
@@ -156,12 +190,11 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
   if (inst_name.find('_') != std::string::npos) {
     func_name = inst_name.substr(0, inst_name.find('_'));
   } else {
-    int num_loc = 0;
-    while ((num_loc < inst_name.length()) &&
-           (inst_name[num_loc] < '0' || inst_name[num_loc] > '9')) {
-      num_loc++;
+    auto iter = inst_name.begin();
+    while (iter != inst_name.end() && !isdigit(*iter)) {
+      ++iter;
     }
-    func_name = inst_name.substr(0, num_loc);
+    func_name = std::string(inst_name.begin(), iter);
   }
 
   // if it is a fixed-point instruction, it is possible that it starts with "S", "I", "U",
@@ -190,9 +223,18 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
   int decomposer_range[4] = {1, 2, 4, 8};
   std::string fixed_prefixs[5] = {"", "S", "U", "I", "Fx"};
   std::set<std::string> cover_possible_insts;
-  if (_inst_cover_group_map.count(func_name) >
-      0) {  // this inst can cover more that one kind inst
-    std::set<std::string> covering_func_names = _inst_cover_group_map[func_name];
+
+  // to its group, like Add -> {Acc, Sub, Add}, FDiv -> {FDiv, FSqrt}
+  static const std::map<std::string, std::set<std::string>> InstCoverage{
+      {"Add", {"Add", "Sub", "Acc"}},     {"Sub", {"Add", "Sub", "Acc"}},
+      {"Acc", {"Add", "Sub", "Acc"}},     {"FDiv", {"FDiv", "FSqrt"}},
+      {"FAdd", {"FAdd", "FSub", "FAcc"}}, {"FSub", {"FAdd", "FSub", "FAcc"}},
+      {"FAcc", {"FAdd", "FSub", "FAcc"}}};
+
+  // this inst can cover more that one kind inst
+  auto iter = InstCoverage.find(func_name);
+  if (iter != InstCoverage.end()) {
+    std::set<std::string> covering_func_names = iter->second;
     if (is_fixed_point) {  // is fixed point
       // loop all covering function name
       for (const std::string cand_func_name : covering_func_names) {
@@ -281,7 +323,7 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
 
   // convert inst string to ss_inst
   for (std::string cand_inst_name : cover_possible_insts) {
-    ss_inst_t curr_ssinst_t = SS_CONFIG::inst_from_string(cand_inst_name.c_str());
+    OpCode curr_ssinst_t = SS_CONFIG::inst_from_string(cand_inst_name.c_str());
     if (curr_ssinst_t != SS_CONFIG::SS_ERR) {
       covered_inst.insert(curr_ssinst_t);
     }
@@ -292,43 +334,42 @@ std::set<ss_inst_t> func_unit_def::find_all_insts_covered(ss_inst_t source_inst)
 }
 
 // Determine the instruction accountability
-void func_unit_def::determine_inst_accountability() {
+void Capability::determine_inst_accountability() {
   // reset the accountability map (assume all instructions are accountable for hardware)
-  for (auto inst_acc : _account_for_hw) {
-    inst_acc.second = true;
+  for (auto &elem : capability) {
+    elem.count = true;
   }
 
   // loop for every instruction
-  for (auto& inst_acc : _account_for_hw) {
-    ss_inst_t inst = inst_acc.first;
-    bool account = inst_acc.second;
+  int n = capability.size();
+  for (int i = 0; i < n; ++i) {
+    auto &inst = capability[i];
+    OpCode op = inst.op;
+    bool account = inst.count;
+    for (int j = i + 1; j < n; ++j) {
     // if this instruction is valid for hw
-    if (account) {
-      // find all instructions that covered by this instruction
-      std::set<ss_inst_t> all_insts_covered_by_this = find_all_insts_covered(inst);
-      // check all instructions
-      for (auto& other_inst_acc : _account_for_hw) {
-        if (!other_inst_acc.second) {
+      if (account) {
+        auto &other_inst = capability[j];
+        // find all instructions that covered by this instruction
+        std::set<OpCode> all_insts_covered_by_this = find_all_insts_covered(op);
+        // check all instructions
+        if (!other_inst.count) {
           continue;  // either has already been supported by other instruction
         } else {
           // skip itself
-          if (other_inst_acc.first == inst) {
-            continue;
-          }
+          assert(other_inst.op != op && "Did you abuse the capability entries?");
           // check whether cover other insts
-          if (all_insts_covered_by_this.count(other_inst_acc.first) > 0) {
+          if (all_insts_covered_by_this.count(other_inst.op) > 0) {
             // std::cout << SS_CONFIG::name_of_inst(other_inst_acc.first)
             //          << " covered by " << SS_CONFIG::name_of_inst(inst) << "\n";
             // or covered by this instruction
-            other_inst_acc.second = false;
-          } else {
-            // otherwise this instruction is accountable for hw (power and area)
-            other_inst_acc.second = true;
+            other_inst.count = false;
+            break;
           }
         }
+      } else {
+        continue;
       }
-    } else {
-      continue;
     }
   }
 
@@ -339,22 +380,21 @@ void func_unit_def::determine_inst_accountability() {
   //}
   // std::cout << "\n";
 
-  _accountability_dirty_bit = false;
 }
 
-double func_unit_def::get_area_from_inst_set() {
+double Capability::get_area_from_inst_set() {
   // check if the accountability is not determined
-  if (_accountability_dirty_bit) {
+  if (area_ < 0) {
     determine_inst_accountability();
   }
 
   // add the area of instruction that accountable
   double area = 0.0;
-  for (ss_inst_t inst : cap()) {
-    if (!is_accountable_for_fw(inst)) {
+  for (auto elem : capability) {
+    if (elem.count) {
       continue;
     }
-    double curr_area = SS_CONFIG::inst_area(inst);
+    double curr_area = SS_CONFIG::inst_area(elem.op);
     if (curr_area < 0.0) {
       // std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for area
       // estimation"
@@ -368,19 +408,19 @@ double func_unit_def::get_area_from_inst_set() {
   return area;
 }
 
-double func_unit_def::get_power_from_inst_set() {
+double Capability::get_power_from_inst_set() {
   // check if the accountability is not determined
-  if (_accountability_dirty_bit) {
+  if (power_ < 0) {
     determine_inst_accountability();
   }
 
   // add the power of instruction that accountable
   double power = 0.0;
-  for (ss_inst_t inst : cap()) {
-    if (!is_accountable_for_fw(inst)) {
+  for (auto &elem : capability) {
+    if (elem.count) {
       continue;
     }
-    double curr_power = SS_CONFIG::inst_power(inst);
+    double curr_power = SS_CONFIG::inst_power(elem.op);
     if (curr_power < 0.0) {
       // std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for power
       // estimation"
@@ -397,16 +437,16 @@ double func_unit_def::get_power_from_inst_set() {
 }
 
 // Power
-double func_unit_def::power() {
+double Capability::power() {
   // if no new cap is added, just return the old power
-  if (!_power_dirty_bit) {
+  if (power_ > 0) {
     // std::cout << "use the old power, no need to recalculate\n";
-    return _power;
+    return power_;
   }
 
   // recalculate the power
-  double _power = 0.0;
-  std::string fu_name = name();
+  double &_power = power_;
+  std::string fu_name = name;
 
   if (fu_name.find('-') != std::string::npos) {
     // when finding '-', means that this function definition can be a combined fu
@@ -440,28 +480,27 @@ double func_unit_def::power() {
 
   // This FU type is not a combined fu, then either a pre-defined (look up power)
   // or get power from instruction set
-  fu_type_t fu_type = fu_type_from_string(name().c_str());
+  fu_type_t fu_type = fu_type_from_string(name.c_str());
   if (fu_type == SS_CONFIG::fu_type_t::NON_PREDEFINED_FU_TYPE) {
     _power = get_power_from_inst_set();
   } else {
     _power = SS_CONFIG::fu_type_power(fu_type);
   }
 
-  _power_dirty_bit = false;
   return _power;
 }
 
 // Area Model
-double func_unit_def::area() {
+double Capability::area() {
   // if no new cap is added, just return the old area
-  if (!_area_dirty_bit) {
+  if (area_ > 0) {
     // std::cout << "use the old area, no need to recalculate\n";
-    return _area;
+    return area_;
   }
 
   // recalculate the area
-  double _area = 0.0;
-  std::string fu_name = name();
+  double &_area = area_;
+  std::string fu_name = name;
 
   if (fu_name.find('-') != std::string::npos) {
     // when finding '-', means that this function definition can be a combined fu
@@ -495,56 +534,12 @@ double func_unit_def::area() {
 
   // This FU type is not a combined fu, then either a pre-defined (look up area)
   // or get area from instruction set
-  fu_type_t fu_type = fu_type_from_string(name().c_str());
+  fu_type_t fu_type = fu_type_from_string(name.c_str());
   if (fu_type == SS_CONFIG::fu_type_t::NON_PREDEFINED_FU_TYPE) {
     _area = get_area_from_inst_set();
   } else {
     _area = SS_CONFIG::fu_type_area(fu_type);
   }
 
-  _area_dirty_bit = false;
   return _area;
-}
-
-// This function reads line from an ifstream, and gets a param and value,
-// seperated by a ":"
-void FuModel::AddCapabilities(func_unit_def& fu, string& cap_string) {
-  stringstream ss(cap_string);
-  string cur_cap;
-
-  while (getline(ss, cur_cap, ',')) {
-    stringstream pss(cur_cap);
-    string cap;
-    string enc_str;
-
-    getline(pss, cap, ':');
-
-    ModelParsing::trim(cap);
-
-    if (cap.empty()) {
-      return;
-    }
-
-    if (ModelParsing::stricmp(cap, "ALL")) {
-      for (int i = 0; i < SS_NUM_TYPES; ++i) {
-        fu.add_cap((ss_inst_t)i);
-      }
-      return;
-    }
-
-    ss_inst_t ss_inst = inst_from_string(cap.c_str());
-
-    if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
-      continue;
-    }
-
-    fu.add_cap(ss_inst);
-
-    if (pss.good()) {  // then there must be an encoding string
-      unsigned encoding;
-      pss >> encoding;
-
-      fu.set_encoding(ss_inst, encoding);
-    }
-  }
 }

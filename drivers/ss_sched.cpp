@@ -134,25 +134,25 @@ int main(int argc, char* argv[]) {
 
     {
       // Filter out useless fu models.
-      std::set<SS_CONFIG::ss_inst_t> used_insts;
+      std::set<SS_CONFIG::OpCode> used_insts;
       for (auto& elem : cur_ci->workload_array) {
         for (auto& dfg : elem.sched_array) {
-          std::set<SS_CONFIG::ss_inst_t> delta = dfg.ssdfg()->insts_used();
+          std::set<SS_CONFIG::OpCode> delta = dfg.ssdfg()->insts_used();
           for (auto inst : delta) {
             used_insts.insert(inst);
           }
         }
       }
-      for (int i = 0; i < ssmodel.fuModel()->fu_defs().size(); ++i) {
-        auto& fudef = ssmodel.fuModel()->fu_defs()[i];
+      for (int i = 0, n = ssmodel.fu_types.size(); i < n; ++i) {
+        auto& fudef = ssmodel.fu_types[i];
         bool intersect = false;
         for (auto& elem : used_insts) {
-          if (fudef.is_cap(elem)) {
+          if (fudef.Capable(elem)) {
             intersect = true;
           }
         }
         if (!intersect) {
-          ssmodel.fuModel()->fu_defs().erase(ssmodel.fuModel()->fu_defs().begin() + i);
+          ssmodel.fu_types.erase(ssmodel.fu_types.begin() + i);
           --i;
         }
       }
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
       std::cout << "Dumping " << sched->ssdfg()->filename << " viz/" << filename << "/ "
                 << performance << std::endl;
       std::string path = "viz/" + filename;
-      system(("mkdir -p " + path).c_str());
+      assert(system(("mkdir -p " + path).c_str()) == 0);
       sched->printGraphviz((path + "/graph.gv").c_str());
       std::ofstream ofs(path + "/" + filename + ".dfg.h");
       sched->printConfigHeader(ofs, filename);

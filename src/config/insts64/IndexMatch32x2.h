@@ -14,6 +14,7 @@ uint32_t b1 = (ops[1] & 0xFFFFFFFF00000000) >> 32;
 
 int fm1 = 0;
 int fm2 = 0;
+(void) fm2;
 
 if (a0 == b0) {
   fm1 = 1;
@@ -48,3 +49,5 @@ if (a1 == SENTINAL32 && b1 == SENTINAL32) {
 } else {
   assert(0 && "not possible");
 }
+
+#undef SENTINAL32

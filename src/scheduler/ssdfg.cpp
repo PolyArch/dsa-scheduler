@@ -466,9 +466,9 @@ int SSDfg::maxGroupThroughput(int g) {
   int res = 0;
 
   assert(g < num_groups());
-  for (int i = 0; i < _nodes.size(); ++i) {
-    if (_nodes[i]->group_id() == g) {
-      if (auto vi = dynamic_cast<SSDfgVecInput*>(_nodes[i])) {
+  for (auto &node : _nodes) {
+    if (node->group_id() == g) {
+      if (auto vi = dynamic_cast<SSDfgVecInput*>(node)) {
         for (auto use : vi->uses()) {
           res = std::max(res, use->use()->maxThroughput());
         }
@@ -509,7 +509,7 @@ bool conv_to_double(std::string s, double& dval) {
 }
 
 ParseResult* SSDfg::create_inst(std::string opcode, std::vector<ParseResult*>& args) {
-  SS_CONFIG::ss_inst_t inst = inst_from_string(opcode.c_str());
+  SS_CONFIG::OpCode inst = inst_from_string(opcode.c_str());
   auto* dfg_inst = new SSDfgInst(this, inst);
 
   for (unsigned i = 0; i < args.size(); ++i) {
@@ -538,7 +538,7 @@ ParseResult* SSDfg::create_inst(std::string opcode, std::vector<ParseResult*>& a
     }
   }
   std::vector<ValueEntry*> values(dfg_inst->values().size());
-  for (int i = 0; i < values.size(); ++i) {
+  for (int i = 0, n = values.size(); i < n; ++i) {
     values[i] = new ValueEntry(dfg_inst->values()[i], 0, dfg_inst->bitwidth() - 1);
   }
   add<SSDfgInst>(dfg_inst);
@@ -710,7 +710,6 @@ void SSDfgNode::printGraphviz(ostream& os, Schedule* sched) {
 SSDfgEdge* SSDfg::connect(SSDfgValue* orig, SSDfgNode* dest, int dest_slot,
                           SSDfgEdge::EdgeType etype, int l, int r, int operand_pos) {
   SSDfgEdge* new_edge = new SSDfgEdge(orig, dest, etype, this, l, r);
-  std::cerr << "connected: " << new_edge->name() << std::endl;
   dest->addOperand(dest_slot, new_edge, operand_pos);
   orig->addOutEdge(new_edge);  // this also adds to the node
   _edges.push_back(new_edge);
@@ -867,7 +866,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
   for (size_t i = 0; i < fus.size(); ++i) {
     ssfu* cand_fu = fus[i];
 
-    if ((cand_fu->fu_def() != nullptr && !cand_fu->fu_def()->is_cap(this->inst())) ||
+    if ((cand_fu->fu_type_ != nullptr && !cand_fu->fu_type_->Capable(inst())) ||
         (cand_fu->num_non_self_out_links() < (int)this->values().size())) {
       continue;
     }
@@ -974,7 +973,7 @@ void SSDfgInst::forward(Schedule* sched) {
 
   int inst_throughput = inst_thr(inst());
   if (auto value = sched->lastExecutionKv.Find(loc)) {
-    if (_ssdfg->cur_cycle() - *value < inst_throughput) {
+    if (_ssdfg->cur_cycle() - *value < (uint64_t) inst_throughput) {
       // std::cerr << _ssdfg->cur_cycle() << ": cannot issue " << name()
       //          << _ssdfg->cur_cycle() - *value << " < "
       //          << inst_throughput << " " << loc.first << ", " << loc.second <<
@@ -1136,7 +1135,7 @@ bool SSDfgValue::forward(bool attempt) {
           //          << user->use()->name() << "'s " << j << "th operand "
           //          << operand.fifos[i].size() + 1 << "/" << edge->buffer_size()
           //          << std::endl;
-          if (operand.fifos[i].size() < edge->buffer_size()
+          if ((int)operand.fifos[i].size() < edge->buffer_size()
               /*FIXME: The buffer size should be something more rigorous*/) {
             simulation::Data entry(data.available_at + edge->delay(), data.value,
                                    data.valid);
@@ -1178,11 +1177,11 @@ int SSDfg::forward(bool asap, Schedule* sched) {
   clear_issued();
   std::vector<bool> group_ready(true, num_groups());
   if (!asap) {
-    for (int i = 0; i < _nodes.size(); ++i) {
-      if (!group_ready[_nodes[i]->group_id()]) {
+    for (auto &node : _nodes) {
+      if (!group_ready[node->group_id()]) {
         continue;
       }
-      if (auto vi = dynamic_cast<SSDfgVecInput*>(_nodes[i])) {
+      if (auto vi = dynamic_cast<SSDfgVecInput*>(node)) {
         bool ready = true;
         for (auto value : vi->values()) {
           if (!value->forward(true)) {
@@ -1191,7 +1190,7 @@ int SSDfg::forward(bool asap, Schedule* sched) {
           }
         }
         if (!ready) {
-          group_ready[i] = false;
+          group_ready[node->group_id()] = false;
         }
       }
     }

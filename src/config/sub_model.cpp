@@ -150,7 +150,7 @@ bool parseInt(std::string param, string value, const char* param_name, int& i) {
 
 // ------------------------ submodel impl -------------------------------------
 
-SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
+SubModel::SubModel(std::istream& istream, const std::vector<Capability> &fu_types, bool multi_config) {
   string param, value;
 
   bool should_read = true;
@@ -228,7 +228,11 @@ SubModel::SubModel(std::istream& istream, FuModel* fuModel, bool multi_config) {
             for (auto elem : _node_list) {
               if (auto fu = dynamic_cast<ssfu*>(elem)) {
                 if (fu->x() == i && fu->y() == j) {
-                  fu->setFUDef(fuModel->GetFUDef(fustring));
+                  for (auto &type : fu_types) {
+                    if (type.name == fustring) {
+                      fu->fu_type_ = const_cast<Capability*>(&type);
+                    }
+                  }
                 }
               }
             }
@@ -358,31 +362,26 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   {
     const int di[] = {0, 1, 1, 0};
     const int dj[] = {0, 0, 1, 1};
-    const SwitchDir::DIR dir[] = {SwitchDir::SE, SwitchDir::SW, SwitchDir::NW,
-                                  SwitchDir::NE};
 
     const int t_di[] = {0, 1, 0};
     const int t_dj[] = {0, 0, 1};
-    const SwitchDir::DIR t_dir[] = {SwitchDir::NW, SwitchDir::NE, SwitchDir::SW};
     // first connect switches to FUs
     for (int i = 0; i < _sizex; i++) {
       for (int j = 0; j < _sizey; j++) {
         for (int k = 0; k < 4; ++k) {
           int x = i + di[k], y = j + dj[k];
-          sws[x * (_sizey + 1) + y]->add_link(fus[i * _sizey + j])->setdir(dir[k]);
+          sws[x * (_sizey + 1) + y]->add_link(fus[i * _sizey + j]);
         }
 
         // output from FU -- SE
-        fus[i * _sizey + j]
-            ->add_link(sws[(i + 1) * (_sizey + 1) + (j + 1)])
-            ->setdir(SwitchDir::SE);
+        fus[i * _sizey + j]->add_link(sws[(i + 1) * (_sizey + 1) + (j + 1)]);
 
         // For temporal region, lets add some extra outputs!
         if (i >= temp_x && i < temp_x + temp_width && j >= temp_y &&
             j < temp_y + temp_height) {
           for (int k = 0; k < 3; ++k) {
             int x = i + t_di[k], y = j + t_dj[k];
-            fus[i * _sizey + j]->add_link(sws[x * (_sizey + 1) + y])->setdir(t_dir[k]);
+            fus[i * _sizey + j]->add_link(sws[x * (_sizey + 1) + y]);
           }
         }
       }
@@ -395,11 +394,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     const int dj[] = {0, -1, 0, 1};
     const int cx[] = {-1, 1, 1, 1};
     const int cy[] = {-1, 1, -1, 1};
-    const SwitchDir::DIR dir[] = {SwitchDir::W, SwitchDir::N, SwitchDir::E, SwitchDir::S};
-    const SwitchDir::DIR dir2[] = {SwitchDir::NW2, SwitchDir::SW2, SwitchDir::NE2,
-                                   SwitchDir::SE2};
-    const SwitchDir::DIR dir3[] = {SwitchDir::W2, SwitchDir::S2, SwitchDir::N2,
-                                   SwitchDir::E2};
     for (int i = 0; i < _sizex + 1; i++) {
       for (int j = 0; j < _sizey + 1; j++) {
         for (int k = 0; k < 4; ++k) {
@@ -407,8 +401,7 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           int _j = j + dj[k];
           if (_i >= 0 && _i <= _sizex && _j >= 0 && _j <= _sizey)
             sws[i * (_sizey + 1) + j]
-                ->add_link(sws[_i * (_sizey + 1) + _j])
-                ->setdir(dir[k]);
+                ->add_link(sws[_i * (_sizey + 1) + _j]);
         }
 
         // crazy diagonals
@@ -421,8 +414,8 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           for (int k = 0; k < 4; ++k) {
             int x = i + cx[k] * d, y = j + cy[k] * d;
             int idx = x * (_sizey + 1) + y;
-            if (idx >= 0 && idx < sws.size()) {
-              startItem->add_link(sws[idx])->setdir(dir2[k])->set_lat(l);
+            if (idx >= 0 && idx < (int) sws.size()) {
+              startItem->add_link(sws[idx])->set_lat(l);
             }
           }
         }
@@ -434,8 +427,8 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
           for (int k = 0; k < 4; ++k) {
             int x = i + di[k] * d, y = j + dj[k] * d;
             int idx = x * (_sizey + 1) + y;
-            if (idx >= 0 && idx < sws.size()) {
-              startItem->add_link(sws[idx])->setdir(dir3[k])->set_lat(l);
+            if (idx >= 0 && idx < (int) sws.size()) {
+              startItem->add_link(sws[idx])->set_lat(l);
             }
           }
         }
@@ -533,7 +526,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
 
       const int di[] = {-1, 1, 0, 0};
       const int dj[] = {0, 0, 1, -1};
-      SwitchDir::DIR dir[] = {SwitchDir::E, SwitchDir::E, SwitchDir::N, SwitchDir::S};
 
       for (int k = 0; k < 4; ++k) {
         int x = i + di[k];
@@ -542,7 +534,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
             y < temp_y + temp_height) {
           sslink* link = fus[i * _sizey + j]->add_link(fus[x * _sizey + y]);
           link->set_max_util(1 << 7);
-          link->setdir(dir[k]);
         }
       }
     }
@@ -551,7 +542,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   for (int i = 0; i < _sizex; ++i) {
     for (int j = 0; j < _sizey; ++j) {
       auto link = fus[i * _sizey + j]->add_link(fus[i * _sizey + j]);
-      link->setdir(SwitchDir::IP0);
 
       if (i < temp_x && i >= temp_x + temp_width && j < temp_y &&
           j >= temp_y + temp_height) {

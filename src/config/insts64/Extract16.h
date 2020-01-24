@@ -22,7 +22,7 @@ switch (reg[1]) {
   case 2: val = (ops[0] & 0x00000000FFFF0000) >> 16; break;
   case 1: val = (ops[0] & 0x0000FFFF00000000) >> 32; break;
   case 0: val = (ops[0] & 0xFFFF000000000000) >> 48; break;
-  default: printf("wrong slice number"); break;
+  default: assert(false && "wrong slice number"); break;
 }
 
 uint64_t ret = 0x0000000000000000 | val;

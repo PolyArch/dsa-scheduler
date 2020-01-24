@@ -1,3 +1,5 @@
+#define SENTINAL16 ((((uint16_t)1) << 15) - 1)
+
 uint16_t ret;
 
 // control signal
@@ -28,3 +30,5 @@ if (ops[0] < ops[1]) {
 }
 
 return ret;
+
+#undef SENTINAL16

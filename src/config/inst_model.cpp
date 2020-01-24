@@ -291,7 +291,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "uint64_t as_uint64(const std::complex<float> &val);\n"
          "\n"
 
-         "enum ss_inst_t {\n"
+         "enum OpCode {\n"
          "SS_NONE=0,\n"
          "SS_ERR,\n";
 
@@ -313,14 +313,14 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "extern int bitwidth[" << _instList.size() + 2 << "];\n";
 
   ofs << "\n"
-         "// ss_inst_t\n"
-         "ss_inst_t inst_from_string(const char* str);\n"
-         "const char* name_of_inst(ss_inst_t inst);\n"
-         "double inst_area(ss_inst_t inst);\n"
-         "double inst_power(ss_inst_t inst);\n"
-         "int inst_lat(ss_inst_t inst);\n"
-         "int inst_thr(ss_inst_t inst);\n"
-         "int num_values(ss_inst_t inst);\n"
+         "// OpCode\n"
+         "OpCode inst_from_string(const char* str);\n"
+         "const char* name_of_inst(OpCode inst);\n"
+         "double inst_area(OpCode inst);\n"
+         "double inst_power(OpCode inst);\n"
+         "int inst_lat(OpCode inst);\n"
+         "int inst_thr(OpCode inst);\n"
+         "int num_values(OpCode inst);\n"
          "// fu_type_t\n"
          "fu_type_t fu_type_from_string(const char* str);\n"
          "const char* name_of_fu_type(fu_type_t fu_type);\n"
@@ -336,7 +336,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   for (int i = 0; i < 4; ++i) {
     string dtype = types[i];
     string suffix = suffixes[i];
-    ofs << dtype << " execute" << suffix << "(ss_inst_t inst, "
+    ofs << dtype << " execute" << suffix << "(OpCode inst, "
         << "std::vector<" << dtype << ">& ops, "
         << "std::vector<" << dtype << ">& outs, " << dtype << "* reg, "
         << "bool &discard, std::vector<bool>& back_array);\n";
@@ -402,7 +402,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "\n"
 
          "using namespace SS_CONFIG;\n\n"
-         "ss_inst_t SS_CONFIG::inst_from_string(const char* str) {\n"
+         "OpCode SS_CONFIG::inst_from_string(const char* str) {\n"
          "  if(strcmp(str,\"NONE\")==0) return SS_NONE;\n";
 
   for (unsigned i = 0; i < _instList.size(); ++i) {
@@ -420,7 +420,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   // Properties of Instructions
 
   // name_of_inst
-  ofs << "const char* SS_CONFIG::name_of_inst(ss_inst_t inst) {\n"
+  ofs << "const char* SS_CONFIG::name_of_inst(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -435,7 +435,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "}\n\n";
 
   // FUNCTION: inst_lat
-  ofs << "int SS_CONFIG::inst_lat(ss_inst_t inst) {\n"
+  ofs << "int SS_CONFIG::inst_lat(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -447,7 +447,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "}\n\n";
 
   // FUNCTION: inst_thr
-  ofs << "int SS_CONFIG::inst_thr(ss_inst_t inst) {\n"
+  ofs << "int SS_CONFIG::inst_thr(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -459,7 +459,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "}\n\n";
 
   // area of the ssinst
-  ofs << "double SS_CONFIG::inst_area(ss_inst_t inst) {\n"
+  ofs << "double SS_CONFIG::inst_area(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -470,7 +470,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "}\n\n";
 
   // power of the ssinst
-  ofs << "double SS_CONFIG::inst_power(ss_inst_t inst) {\n"
+  ofs << "double SS_CONFIG::inst_power(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -526,7 +526,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "}\n\n";
 
   // FUNCTION: num_values
-  ofs << "int SS_CONFIG::num_values(ss_inst_t inst) {\n"
+  ofs << "int SS_CONFIG::num_values(OpCode inst) {\n"
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
@@ -567,17 +567,17 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     string dtype = types[i];
     string suffix = suffixes[i];
 
-    ofs << dtype << " SS_CONFIG::execute" << suffix << "(ss_inst_t inst, "
+    ofs << dtype << " SS_CONFIG::execute" << suffix << "(OpCode inst, "
         << "std::vector<" << dtype << ">& ops, "
         << "std::vector<" << dtype << ">& outs, " << dtype << " *reg, "
         << "bool &discard, std::vector<bool>& back_array) {\n";
 
     // somwhere below is an implementation of pass through, is it though? (tony, 2018)
 
-    ofs << dtype
-        << "& accum = reg[0]; \n"
-           "  assert(ops.size() <= 4); \n"
-           "  assert(ops.size() <=  (unsigned)(num_ops[inst]+1)); \n"
+    ofs << "  " << dtype << "& accum = reg[0];\n"
+           "  (void) accum;\n"
+           "  assert(ops.size() <= 4);\n"
+           "  assert(ops.size() <=  (unsigned)(num_ops[inst]+1));\n"
 
            "  switch(inst) {\n";
     for (unsigned i = 0; i < _instList.size(); ++i) {

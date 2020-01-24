@@ -562,12 +562,12 @@ class Schedule {
 
   // NOTE/WARN: interpretConfigBits creates a dfg object that should
   // be cleaned up later by the schedule object
-  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBits(int size, uint64_t* bits);
+  std::map<SS_CONFIG::OpCode, int> interpretConfigBits(int size, uint64_t* bits);
 
-  std::map<SS_CONFIG::ss_inst_t, int> interpretConfigBitsCheat(char* s);
+  std::map<SS_CONFIG::OpCode, int> interpretConfigBitsCheat(char* s);
 
   // TODO: Implement it to support MGRA
-  // std::map<SS_CONFIG::ss_inst_t,int> interpretConfigBitsDedicated();
+  // std::map<SS_CONFIG::OpCode,int> interpretConfigBitsDedicated();
 
   void clear_ssdfg();
 

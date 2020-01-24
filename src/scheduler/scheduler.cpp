@@ -101,7 +101,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
   bool failed_count_check = false;
 
-  std::map<ss_inst_t, int> dedicated_count_types, temporal_count_types;
+  std::map<OpCode, int> dedicated_count_types, temporal_count_types;
   for (auto elem : ssDFG->inst_vec()) {
     if (!elem->is_temporal()) {
       dedicated_count_types[elem->inst()]++;
@@ -111,12 +111,12 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   }
 
   for (auto& pair : dedicated_count_types) {
-    ss_inst_t ss_inst = pair.first;
+    OpCode ss_inst = pair.first;
     int dfg_count = pair.second;
 
     int fu_count = 0;
     for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->fu_def()->is_cap(ss_inst)) {
+      if (cand_fu->fu_type_->Capable(ss_inst)) {
         fu_count += 64 / SS_CONFIG::bitwidth[ss_inst];
       }
     }
@@ -129,12 +129,12 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   }
 
   for (auto& pair : temporal_count_types) {
-    ss_inst_t ss_inst = pair.first;
+    OpCode ss_inst = pair.first;
     int dfg_count = pair.second;
 
     int fu_count = 0;
     for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->max_util() > 1 && cand_fu->fu_def()->is_cap(ss_inst)) {
+      if (cand_fu->max_util() > 1 && cand_fu->fu_type_->Capable(ss_inst)) {
         fu_count += cand_fu->max_util(ss_inst);
       }
     }

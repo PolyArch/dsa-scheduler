@@ -88,7 +88,7 @@ class CodesignInstance {
     });
     for (auto& node : _ssModel.subModel()->node_list()) {
       if (auto fu = dynamic_cast<ssfu*>(node)) {
-        assert(fu->fu_def());
+        assert(fu->fu_type_);
       }
     }
     for (unsigned i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
@@ -357,13 +357,13 @@ class CodesignInstance {
         //          << sw->in_links().size() << "/" << sw->out_links().size() << "\n";
       } else if (item_class < 90) {
         // Randomly pick an FU type from the set
-        auto& fu_defs = _ssModel.fuModel()->fu_defs();
+        auto& fu_defs = _ssModel.fu_types;
         if (fu_defs.empty()) continue;
         ssfu* fu = sub->add_fu();
         std::cout << "adding fu" << fu->id() << " ----------------------------\n";
         int fu_def_index = rand() % fu_defs.size();
-        func_unit_def* def = &fu_defs[fu_def_index];
-        fu->setFUDef(def);
+        Capability* def = &fu_defs[fu_def_index];
+        fu->fu_type_ = def;
 
         add_random_edges_to_node(fu, 1, 9, 1, 9);
 

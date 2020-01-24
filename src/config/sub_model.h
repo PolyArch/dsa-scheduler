@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include "direction.h"
 #include "fu_model.h"
 #include "predict.h"
 
@@ -83,13 +82,6 @@ class sslink {
   ssnode* orig() const { return _orig; }
 
   ssnode* dest() const { return _dest; }
-
-  SwitchDir::DIR dir() const { return _dir; }
-
-  sslink* setdir(SwitchDir::DIR dir) {
-    _dir = dir;
-    return this;
-  }
 
   // Constructor
   sslink(ssnode* orig, ssnode* dest) {
@@ -178,7 +170,6 @@ class sslink {
 
   ssnode* _orig;
   ssnode* _dest;
-  SwitchDir::DIR _dir;
 
  private:
   friend class SubModel;
@@ -368,7 +359,7 @@ class ssnode {
 
   int max_util() { return _max_util; }
 
-  int max_util(SS_CONFIG::ss_inst_t inst) {
+  int max_util(SS_CONFIG::OpCode inst) {
     return _max_util * 64 / SS_CONFIG::bitwidth[inst];
   }
 
@@ -422,13 +413,11 @@ class ssnode {
   std::pair<int, sslink*> _came_from[8];
 
   // Decomposability
-  // TODO:Please replace 8 with mf_decomposer
   int data_width = 64;
   int granularity = 8;  // the most fine-grain # of bit, 8 means byte-decomposable
   int mf_decomposer = data_width / granularity;
-  int decomposer =
-      data_width /
-      granularity;  // convert from decomposer // to be integrate with subnet_table
+  int decomposer = data_width / granularity;
+  // convert from decomposer // to be integrate with subnet_table
   // TODO: most-fine-grain decomposer, to be removed or need to be defined by user
 
  private:
@@ -584,8 +573,6 @@ class ssfu : public ssnode {
     return res;
   }
 
-  void setFUDef(func_unit_def* fu_def) { _fu_def = fu_def; }
-
   void set_prop(boost::property_tree::ptree prop) {
     set_ssnode_prop(prop);
 
@@ -635,9 +622,9 @@ class ssfu : public ssnode {
     // Instructions
     os << "\"instructions\" : [";
     int idx_inst = 0;
-    int num_inst = fu_def()->num_inst();
-    for (ss_inst_t inst : fu_def()->cap()) {
-      os << "\"" << SS_CONFIG::name_of_inst(inst) << "\"";
+    int num_inst = fu_type_->capability.size();
+    for (auto &elem : fu_type_->capability) {
+      os << "\"" << SS_CONFIG::name_of_inst(elem.op) << "\"";
       if (idx_inst < num_inst - 1) {
         os << ", ";
         idx_inst++;
@@ -712,19 +699,17 @@ class ssfu : public ssnode {
 
   double get_area() {
     collect_features();
-    double inst_dep_area = fu_def()->area();
+    double inst_dep_area = fu_type_->area();
     double inst_indep_area = pe_area_predict(features);
     return inst_dep_area + inst_indep_area;
   }
 
   double get_power() {
     collect_features();
-    double inst_dep_power = fu_def()->power();
+    double inst_dep_power = fu_type_->power();
     double inst_indep_power = pe_power_predict(features);
     return inst_dep_power + inst_indep_power;
   }
-
-  func_unit_def* fu_def() { return _fu_def; }
 
   virtual ~ssfu(){};
 
@@ -758,8 +743,8 @@ class ssfu : public ssnode {
 
   virtual int delay_fifo_depth() override { return _delay_fifo_depth; }
 
+  Capability* fu_type_;
  protected:
-  func_unit_def* _fu_def;
   double features[12];
   std::string output_select_mode = std::string("Universal");
   int _delay_fifo_depth = 8;
@@ -907,7 +892,7 @@ class SubModel {
 
   SubModel() {}
 
-  SubModel(std::istream& istream, FuModel*, bool multi_config = true);
+  SubModel(std::istream& istream, const std::vector<Capability> &, bool multi_config = true);
 
   SubModel(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2,
            bool multi_config = true);
@@ -921,22 +906,19 @@ class SubModel {
     os << "{\n";  // Start of the JSON file
     // Instruction Set
     int start_enc = 3;
-    std::set<ss_inst_t> ss_inst_set;
+    std::set<OpCode> ss_inst_set;
     os << "\"Instruction Set\" : {\n";
     for (ssnode* node : node_list()) {
       ssfu* fu_node = dynamic_cast<ssfu*>(node);
       if (fu_node != nullptr) {
-        std::set<ss_inst_t> curr_inst_set = fu_node->fu_def()->cap();
-        for (ss_inst_t each_inst : curr_inst_set) {
-          if (ss_inst_set.count(each_inst) == 0) {
-            ss_inst_set.insert(each_inst);
-          }
+        for (auto &elem: fu_node->fu_type_->capability) {
+          ss_inst_set.insert(elem.op);
         }
       }
     }
     int num_total_inst = ss_inst_set.size();
     int idx_inst = 0;
-    for (ss_inst_t inst : ss_inst_set) {
+    for (OpCode inst : ss_inst_set) {
       os << "\"" << SS_CONFIG::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
       if (idx_inst < num_total_inst) {
         os << ",";
@@ -1128,7 +1110,7 @@ class SubModel {
 
   ssfu* add_fu() {
     auto* fu = new ssfu();
-    fu->setFUDef(nullptr);
+    fu->fu_type_ = nullptr;
     add_node(fu);  // id and stuff
     return fu;
   }

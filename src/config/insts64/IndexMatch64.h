@@ -19,3 +19,5 @@ if (ops[0] == SENTINAL && ops[1] == SENTINAL) {
 } else {
   assert(0 && "not possible");
 }
+
+#undef SENTINAL

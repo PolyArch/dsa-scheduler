@@ -20,3 +20,5 @@ if (ops[0] == SENTINAL16 && ops[1] == SENTINAL16) {
 } else {
   assert(0 && "not possible");
 }
+
+#undef SENTINAL16

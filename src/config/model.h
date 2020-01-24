@@ -20,7 +20,6 @@ class SSModel {
   SSModel(const char* filename, bool multi = false);
   SSModel(SubModel* sub, bool multi = false);
 
-  FuModel* fuModel() { return (_fuModel); }
   SubModel* subModel() { return (_subModel); }
 
   void printGamsKinds(std::ostream& os);
@@ -41,7 +40,7 @@ class SSModel {
   double host_area() { return (indirect() * 88800) + 5200 + 41000; }
 
   SSModel(const SSModel& m) {
-    _fuModel = m._fuModel;
+    fu_types = m.fu_types;
     _subModel = m._subModel->copy();
     _dispatch_inorder = m._dispatch_inorder;
     _dispatch_width = m._dispatch_width;
@@ -54,9 +53,9 @@ class SSModel {
     delete _subModel;
   }
 
+  std::vector<Capability> fu_types;
  private:
   // InstModel *instModel;
-  FuModel* _fuModel;
   SubModel* _subModel;
 
   bool _dispatch_inorder = false;

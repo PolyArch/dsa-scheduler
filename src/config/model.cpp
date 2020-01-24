@@ -22,7 +22,7 @@ void SSModel::printGamsKinds(ostream& os) {
   os << "set K \"Type of Node\" /Input,Output";
 
   for (int i = 2; i < SS_NUM_TYPES; ++i) {
-    os << "," << name_of_inst((ss_inst_t)i);
+    os << "," << name_of_inst((OpCode)i);
   }
   os << "/";
 }
@@ -151,15 +151,15 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
     }
 
     if (ModelParsing::StartsWith(line, "[fu-model]")) {
-      _fuModel = new FuModel(ifs);
+      this->fu_types = ParseFuType(ifs);
     }
 
     if (ModelParsing::StartsWith(line, "[sub-model]")) {
-      if (_fuModel == nullptr) {
+      if (fu_types.empty()) {
         cerr << "No Fu Model Specified\n";
         exit(1);
       }
-      _subModel = new SubModel(ifs, _fuModel, multi_config);
+      _subModel = new SubModel(ifs, fu_types, multi_config);
     }
 
     if (ModelParsing::StartsWith(line, "[io-model]")) {
@@ -182,9 +182,6 @@ void SSModel::parse_json(std::istream& istream) {
 
   std::map<int, ssnode*> sym_tab;
 
-  // Null Fu Model
-  _fuModel = new FuModel();
-
   // Now create the submodel
   _subModel = new SubModel();
 
@@ -194,11 +191,11 @@ void SSModel::parse_json(std::istream& istream) {
   printf("JSON Rows: %d, Cols %d\n", logical_rows, logical_cols);
 
   // Instruction Set of this Design
-  std::map<ss_inst_t, int> inst_enc_map;
+  std::map<OpCode, int> inst_enc_map;
   for (auto& p : root.get_child("Instruction Set")) {
     std::string inst_name = p.first;
     int enc = p.second.get_value<int>();
-    ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
+    OpCode ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
     if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
       continue;
     }
@@ -230,27 +227,24 @@ void SSModel::parse_json(std::istream& istream) {
       fu->set_id(id);
       fu->set_prop(node_def);
       auto link = fu->add_link(fu);  // For decomposability
-      link->setdir(SwitchDir::IP0);
+      (void) link;
 
       sym_tab[id] = fu;
       auto& insts = node_def.get_child("instructions");
 
       stringstream fudef_name;
       fudef_name << "function unit_" << id;
-      func_unit_def* fudef = new func_unit_def(fudef_name.str().c_str());
-      fu->setFUDef(fudef);
-
-      std::vector<func_unit_def> fudefs = _fuModel->fu_defs();
-      fudefs.push_back(*fudef);
+      fu_types.push_back(Capability(fudef_name.str()));
+      auto &fu_type = fu_types.back();
+      fu->fu_type_ = &fu_type;
 
       for (auto& inst : insts) {
         std::string inst_name = inst.second.get_value<std::string>();
-        ss_inst_t ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
+        OpCode ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
         int enc = inst_enc_map[ss_inst];
         // cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id <<
         // "\n";
-        fudef->add_cap(ss_inst);
-        fudef->set_encoding(ss_inst, enc);
+        fu_type.Add(ss_inst, enc);
       }
     } else if (type == "vector port") {
       bool is_input;

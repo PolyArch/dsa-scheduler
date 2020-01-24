@@ -38,7 +38,7 @@ void Schedule::reset_simulation_state() {
   }
 }
 
-std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBits(int size,
+std::map<SS_CONFIG::OpCode, int> Schedule::interpretConfigBits(int size,
                                                                   uint64_t* bits) {
   // Figure out if this configuration is real or not
   // NOTE: the first 9 characters of the configuration must spell filename
@@ -51,8 +51,8 @@ std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBits(int size,
   }
 }
 
-std::map<SS_CONFIG::ss_inst_t, int> Schedule::interpretConfigBitsCheat(char* s) {
-  std::map<SS_CONFIG::ss_inst_t, int> inst_histo;
+std::map<SS_CONFIG::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
+  std::map<SS_CONFIG::OpCode, int> inst_histo;
 
   ifstream config_file;
 
@@ -648,7 +648,7 @@ void Schedule::validate() {
     if (links.size() == 0) continue;  // maybe a partial schedule
 
     int i = 0;
-    sslink* prev_link;
+    sslink* prev_link = nullptr;
     for (auto& linkp : links) {
       sslink* link = linkp.second;
       if (i == 0) {
@@ -657,12 +657,13 @@ void Schedule::validate() {
       if (i > 0) {
         assert(prev_link->dest() == link->orig());
       }
-      if (i + 1 < links.size()) {
+      if (i + 1 < (int) links.size()) {
         assert(dynamic_cast<ssvport*>(link->dest()) == 0);
       }
       ++i;
       prev_link = link;
     }
+    assert(prev_link);
     assert(prev_link->dest() == use_node);
   }
 }
