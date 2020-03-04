@@ -38,6 +38,7 @@ class SSModel {
   }
 
   double host_area() { return (indirect() * 88800) + 5200 + 41000; }
+  double host_power() { return (indirect() * 18.1) + 9.3 + 10.1; }
 
   SSModel(const SSModel& m) {
     fu_types = m.fu_types;
@@ -53,7 +54,7 @@ class SSModel {
     delete _subModel;
   }
 
-  std::vector<Capability> fu_types;
+  std::vector<Capability*> fu_types;
  private:
   // InstModel *instModel;
   SubModel* _subModel;

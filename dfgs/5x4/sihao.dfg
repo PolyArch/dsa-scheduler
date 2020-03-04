@@ -2,11 +2,12 @@ Input: A
 Input: B
 
 C = Add(A,B)
-D = Sub(A,B)
-
+D = Sub(B,A)
 E = Mul(C,D)
-
 F = Add(D,E)
+G = FMul64(E,F)
+H = FAdd64(C,G)
+I = Mul(H,G)
 
-Output: F
+Output: I
 

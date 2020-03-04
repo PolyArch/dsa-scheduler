@@ -47,7 +47,9 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   for (unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
     if (dfg_in_sizes[i] > vec_in_sizes[i]) {
       if (verbose) {
-        std::cerr << "Vector Inputs Insufficient\n";
+        std::cerr << "DFG Input Size = " << dfg_in_sizes[i] << "\n"
+                  << "Vector Input Size = " << vec_in_sizes[i] <<"\n"
+                  << "Vector Inputs Insufficient\n";
       }
       return false;
     }

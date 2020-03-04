@@ -147,6 +147,7 @@ void Schedule::prepareForSaving() {
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
   // Step 1: Write the vector port mapping
+  // TODO(@Sihao): print out the real config bit stream
   os << "#ifndef "
      << "__" << cfg_name << "_H__\n";
   os << "#define "
@@ -166,10 +167,116 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   if (use_cheat) {
     printConfigCheat(os, cfg_name);
   } else {
-    assert(false && "TODO: Let's formalize bit config later");
+
+    // For each edge, find out the passthrough node
+    int edge_idx = 0;
+    SSDfg * ssDFG = ssdfg();
+    std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
+    std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
+    for(auto & ep : _edgeProp){
+      SSDfgEdge * edge = edge_list[edge_idx];
+      os  << "// -------- EDGE:" << edge_idx
+          << ", extra_lat = "<< ep.extra_lat
+          << " -------- "<<endl;
+      // loop for every link
+      auto link_iter = ep.links.begin();
+      while((++link_iter) != ep.links.end()){
+        sslink * in_link = (--link_iter) -> second;
+        sslink * out_link = (++link_iter) -> second;
+        ssswitch * switch_node = dynamic_cast<ssswitch*>(in_link -> dest());
+        ssfu * fu_node = dynamic_cast<ssfu*>(out_link -> dest());
+        // config the switch
+        if(switch_node != nullptr){
+          os << "//   config " << switch_node -> name() << endl;
+          int in_idx = switch_node -> get_link_idx(in_link, switch_node -> in_links());
+          int out_idx = switch_node -> get_link_idx(out_link, switch_node -> out_links());
+          switch_node->route_io(in_idx, out_idx);
+          //os << "input size = " << switch_node -> in_links().size()
+          //   << ", output size = " << switch_node -> out_links().size()<< endl;
+          os << "//     route input port "<< in_idx 
+             <<" to output port "<< out_idx << endl;
+        }else{
+          assert(false && "edge can only be routed by switch");
+        }
+        // config the fu
+        if(fu_node != nullptr){
+          // the final destination is function unit
+          int fu_id =fu_node -> id();
+          // TODO: Sihao no decomposability supported, so I just take first slot
+          // TODO: and first vertex
+          SSDfgNode * vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
+          //int vertex_idx = vertex_pair.second;
+          int edge_of_vertex_idx = vertex->get_edge_idx(edge, vertex -> in_edges());
+          // which input port does this edge used
+          int input_port_idx = fu_node->get_link_idx(out_link, fu_node -> in_links());
+          assert(input_port_idx >=0 && "not found input port ?");
+          if(edge_of_vertex_idx >= 0){
+            os << "//   config " << fu_node -> name()<<endl
+               << "//     add extra delay " << ep.extra_lat
+               << " for operand " << edge_of_vertex_idx << endl
+               << "//     route input port " << input_port_idx
+               << " to operand " << edge_of_vertex_idx <<endl;
+            fu_node -> add_delay(edge_of_vertex_idx, ep.extra_lat);
+            fu_node -> add_operand_sel(edge_of_vertex_idx, input_port_idx);
+          }else{
+            assert(false && "This edge's destination is fu but not used?");
+          }
+          SSDfgInst * inst_node = dynamic_cast<SSDfgInst *>(vertex);
+          if(inst_node != nullptr){
+            int local_opcode = fu_node ->fu_type_->get_encoding(inst_node -> inst());
+            fu_node -> set_curr_opcode(local_opcode);
+            os << "//     set current opcode to " << local_opcode
+               << " means " << name_of_inst(inst_node -> inst()) << endl;
+          }else{
+            assert(false && "why a non-instruction node will be mapped to fu");
+          }
+        }
+      }
+      edge_idx++;
+    }
+
+    // print out the config bits for every ssnode
+    for(auto & node : ssModel() ->subModel()->node_list()){
+
+      uint64_t config_bits = node->get_config_bits();
+      std::bitset<64> b_config_bit(config_bits);
+
+      os << node->name() << " "
+         << config_bits << " "
+         << b_config_bit 
+         << endl;
+    }
+
+    /*
+    int vertex_idx = 0;
+    for(auto & vp : _vertexProp){
+      os << "// vertex:" <<vertex_idx++<<endl;
+      auto node = vp.node;
+      os << "//   "<< node->name() 
+         << ", min_lat = " <<vp.min_lat
+         << ", max_lat = " <<vp.max_lat
+         << ", lat = " << vp.lat
+         << ", vio = " <<vp.vio
+         << endl;
+    }
+
+    int node_idx = 0;
+    for(auto & np : _nodeProp){
+      os <<"//  node:"<<node_idx++<<endl;
+      for(int slot_idx = 0; slot_idx <8;slot_idx++){
+        auto & vertices = np.slots[slot_idx].vertices;
+        for(auto & vertex : vertices){
+          os<< "//    slot:" << slot_idx 
+            << "  " << vertex.first->name()<<endl;
+        }
+      }
+    }
+    */
+
   }
 
   os << "#endif //" << cfg_name << "_H\n";
+
 }
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {

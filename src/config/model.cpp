@@ -185,23 +185,6 @@ void SSModel::parse_json(std::istream& istream) {
   // Now create the submodel
   _subModel = new SubModel();
 
-  // Row and Col number of Cgra
-  int logical_rows = root.get<int>("numRow", 0);
-  int logical_cols = root.get<int>("numCol", 0);
-  printf("JSON Rows: %d, Cols %d\n", logical_rows, logical_cols);
-
-  // Instruction Set of this Design
-  std::map<OpCode, int> inst_enc_map;
-  for (auto& p : root.get_child("Instruction Set")) {
-    std::string inst_name = p.first;
-    int enc = p.second.get_value<int>();
-    OpCode ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
-    if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
-      continue;
-    }
-    inst_enc_map[ss_inst] = enc;
-  }
-
   // Vector Port
   int num_ivp = 0;
   int num_ovp = 0;  // Count the number of vector port
@@ -234,18 +217,17 @@ void SSModel::parse_json(std::istream& istream) {
 
       stringstream fudef_name;
       fudef_name << "function unit_" << id;
-      fu_types.push_back(Capability(fudef_name.str()));
-      auto &fu_type = fu_types.back();
-      fu->fu_type_ = &fu_type;
+      fu_types.push_back(new Capability(fudef_name.str()));
+      auto fu_type = fu_types.back();
+      fu->fu_type_ = fu_type;
 
+      int enc = 2; // the initial encoding for opcode is 0 (usual for PASS)
       for (auto& inst : insts) {
         std::string inst_name = inst.second.get_value<std::string>();
         OpCode ss_inst = SS_CONFIG::inst_from_string(inst_name.c_str());
-        int enc = inst_enc_map[ss_inst];
-        // cout << "adding capability " << name_of_inst(ss_inst) << " to fu " << id <<
-        // "\n";
-        fu_type.Add(ss_inst, enc);
+        fu_type->Add(ss_inst, enc++);
       }
+
     } else if (type == "vector port") {
       bool is_input;
       // the number of input port of this vector port, input vector port has zero input
@@ -255,25 +237,24 @@ void SSModel::parse_json(std::istream& istream) {
       // port
       int out_vec_width = node_def.get_child("num_output").get_value<int>();
 
-      int port_num = node_def.get_child("port").get_value<int>();
+      // Sihao: I think it is the wrong way to get port num
+      //int port_num = node_def.get_child("port").get_value<int>();
+      int port_num;
 
       // whether is a input/output vector port
       if (in_vec_width > 0) {
         is_input = false;
-        num_ovp++;
+        port_num = num_ovp++;
         num_outputs += in_vec_width;
+        std::cout << "node " << id << " is output vector port\n";
       } else if (out_vec_width > 0) {
         is_input = true;
-        num_ivp++;
+        port_num = num_ivp++;
         num_inputs += out_vec_width;
+        std::cout << "node " << id << " is input vector port\n";
       } else {
         assert(0 && "vector port without connection?");
       }
-
-      // int port_num = is_input ? num_ivp : num_ovp;
-
-      // cout << "new " << (is_input ? "input" : "output") << " port: \"" << id << "\"
-      // \n";
 
       ssvport* vp = _subModel->add_vport(is_input, port_num);
       vp->set_ssnode_prop(node_def);
@@ -306,9 +287,13 @@ void SSModel::parse_json(std::istream& istream) {
     ssnode* from_module = sym_tab[source_id];
     ssnode* to_module = sym_tab[sink_id];
     assert(from_module && to_module);
-    _subModel->add_link(from_module, to_module);
-    // std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() <<
-    // " --> "; std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
+    
+    // Sihao @jian: Why this way of `add_link` not works ?
+    //_subModel->add_link(from_module, to_module);
+    from_module->add_link(to_module);
+
+    std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() <<
+    " --> "; std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
   }
 
   _subModel->post_process();

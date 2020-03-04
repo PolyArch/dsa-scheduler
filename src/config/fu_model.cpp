@@ -56,8 +56,8 @@ void ParseCapabilities(Capability& fu, string& cap_string) {
 
 namespace SS_CONFIG {
 
-std::vector<Capability> ParseFuType(std::istream& istream) {
-  std::vector<Capability> res;
+std::vector<Capability*> ParseFuType(std::istream& istream) {
+  std::vector<Capability*> res;
 
   string param, value;
 
@@ -79,8 +79,8 @@ std::vector<Capability> ParseFuType(std::istream& istream) {
       getline(ss, param, ' ');
       getline(ss, newtype);
 
-      res.push_back(Capability(newtype));
-      ParseCapabilities(res.back(), value);
+      res.push_back(new Capability(newtype));
+      ParseCapabilities(*res.back(), value);
 
     } else if (ModelParsing::StartsWith(param, "SWITCH_TYPE")) {
       // AddCapabilities(*GetFU("SWITCH"), value);

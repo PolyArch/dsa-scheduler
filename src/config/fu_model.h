@@ -37,7 +37,15 @@ class Capability {
     capability.emplace_back(op, encoding, count);
   }
 
+  int get_encoding(OpCode op){
+    auto iter = std::find_if(capability.begin(), capability.end(), [op](const Entry &entry) {
+      return entry.op == op;
+    });
+    return iter == capability.end() ? -1 : iter->encoding;
+  }
+
   bool Capable(OpCode op) {
+    //std::cerr << name << " " << capability.size() << std::endl;
     for (auto &elem : capability) {
       if (elem.op == op)
         return true;
@@ -49,6 +57,16 @@ class Capability {
 
   std::string name;
   std::vector<Entry> capability{Entry(SS_Copy, 1, true)};
+
+  uint get_max_num_operand(){
+    int max_num_operand = -1;
+    for(auto & elem: capability){
+      if(num_ops[elem.op] > max_num_operand){
+        max_num_operand = num_ops[elem.op];
+      }
+    }
+    return max_num_operand;
+  }
 
  private:
   double power_{-1.0};
@@ -67,7 +85,7 @@ class Capability {
   // this map a instruction's function name (like the function name of FxMul16x2 is Mul)
 };
 
-std::vector<Capability> ParseFuType(std::istream& istream);
+std::vector<Capability*> ParseFuType(std::istream& istream);
 
 }  // namespace SS_CONFIG
 

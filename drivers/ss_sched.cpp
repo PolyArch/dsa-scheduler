@@ -22,13 +22,14 @@ using namespace SS_CONFIG;
 // clang-format off
 static struct option long_options[] = {
     {"algorithm",      required_argument, nullptr, 'a',},
-    {"sub-alg",        required_argument, nullptr, 's',},
+    {"from-scratch",   no_argument,       nullptr, 's',},
     {"verbose",        no_argument,       nullptr, 'v',},
     {"print-bits",     no_argument,       nullptr, 'b',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
     {"design-space",   no_argument,       nullptr, 'f',},
     {"estmt-perf",     no_argument,       nullptr, 'p',},
     {"indir-mem",      no_argument,       nullptr, 'c',},
+    {"print-bit",      no_argument,       nullptr, 'b',},
     {"relative-gap",   required_argument, nullptr, 'r',},
     {"absolute-gap",   required_argument, nullptr, 'g',},
     {"timeout",        required_argument, nullptr, 't',},
@@ -59,17 +60,17 @@ int main(int argc, char* argv[]) {
   bool is_dse = false;
   bool est_perf = false;
   bool indirect = false;
+  bool from_scratch = false;
 
-  while ((opt = getopt_long(argc, argv, "va:s:r:g:t:fpcd:e:", long_options, nullptr)) !=
-         -1) {
+  while ((opt = getopt_long(argc, argv, "va:sr:g:t:fpcbd:e:", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'a': str_schedType = string(optarg); break;
-      case 's': str_subalg = string(optarg); break;
+      case 's': from_scratch = true; break;
       case 'v': verbose = true; break;
       case 'f': is_dse = true; break;
       case 'p': est_perf = true; break;
-      case 'b': print_bits = true; break;
       case 'c': indirect = true; break;
+      case 'b': print_bits = true; break;
 
       case 'r': relative_gap = atof(optarg); break;
       case 'g': absolute_gap = atof(optarg); break;
@@ -113,6 +114,7 @@ int main(int argc, char* argv[]) {
   scheduler->set_max_iters(max_iters);
 
   if (is_dse) {
+    clock_t StartTime = clock();
     scheduler->set_start_time();
 
     CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
@@ -125,6 +127,10 @@ int main(int argc, char* argv[]) {
       while (std::getline(dfg_names, curline)) {
         if (curline == "%%") {
           cur_ci->workload_array.emplace_back();
+          cur_ci->weight.push_back(1);
+        } else if (curline.find("weight=") == 0) {
+          std::istringstream ssin(curline.substr(8, curline.size()));
+          ssin >> cur_ci->weight.back();
         } else {
           cur_ci->workload_array.back().sched_array.emplace_back(cur_ci->ss_model(),
                                                                  new SSDfg(curline));
@@ -147,13 +153,14 @@ int main(int argc, char* argv[]) {
         auto& fudef = ssmodel.fu_types[i];
         bool intersect = false;
         for (auto& elem : used_insts) {
-          if (fudef.Capable(elem)) {
+          if (fudef->Capable(elem)) {
             intersect = true;
           }
         }
         if (!intersect) {
           ssmodel.fu_types.erase(ssmodel.fu_types.begin() + i);
           --i;
+          --n;
         }
       }
     }
@@ -181,13 +188,15 @@ int main(int argc, char* argv[]) {
 
       cout << " ### Begin DSE Iteration " << i << " ### \n";
       cur_ci->verify();
-      CodesignInstance* cand_ci = new CodesignInstance(*cur_ci);
+      CodesignInstance* cand_ci = new CodesignInstance(*cur_ci, from_scratch);
       cur_ci->verify();
       cand_ci->verify();
       cand_ci->make_random_modification();
       cand_ci->verify();
 
+      clock_t StartSchedule = clock();
       scheduler->incrementalSchedule(*cand_ci);
+      clock_t ScheduleCollapse = clock() - StartSchedule;
       cand_ci->verify();
 
       cout << "DSE OBJ: " << cand_ci->dse_obj() << "(" << cur_ci->dse_obj() << ") -- ";
@@ -197,13 +206,14 @@ int main(int argc, char* argv[]) {
       }
 
       auto* sub = cand_ci->ss_model()->subModel();
-      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area()
-           << "um2\n"
-           << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area()
-           << "um2\n"
-           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area()
-           << "um2\n"
-           << "Ctrl: " << cand_ci->ss_model()->host_area() << "um2" << std::endl;
+      cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2 "
+           << sub->get_fu_total_power() << "mw\n"
+           << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area() << "um2 "
+           << sub->get_sw_total_power() << "mw\n"
+           << "VPorts: " << sub->vport_list().size() << " " << sub->get_vport_area() << "um2 "
+           << sub->get_vport_power() << "mw\n"
+           << "Ctrl: " << cand_ci->ss_model()->host_area() << "um2 "
+           << cand_ci->ss_model()->host_power() << "mw" << std::endl;
 
       // std::cout << "======================= ALL
       // ===============================================\n"; for (int x = 0, ew =
@@ -220,7 +230,11 @@ int main(int argc, char* argv[]) {
         improv_iter = i;
         delete cur_ci;
         cur_ci = cand_ci;
-        cout << "----------------- IMPROVED OBJ! --------------------\n";
+        std::cout << "----------------- IMPROVED OBJ! --------------------\n";
+        std::cout << "Execution Time: " << std::setprecision(6)
+                  << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC
+                  << ", " << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC
+                  << std::endl;
 
         for (int x = 0, ew = cur_ci->workload_array.size(); x < ew; ++x) {
           ostringstream oss;
@@ -262,6 +276,8 @@ int main(int argc, char* argv[]) {
                       cur_ci->dse_sched_obj(cur_ci->res[x]).first);
     }
 
+    std::cout << "Total Time: " << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC
+              << std::endl;
     return 0;
   }
 
@@ -271,5 +287,7 @@ int main(int argc, char* argv[]) {
     double est = ssdfg.estimated_performance(sched, true);
     std::cout << "Estimated overall performance: " << est << std::endl;
   }
+
+  
   return 0;
 }

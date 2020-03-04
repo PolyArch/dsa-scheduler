@@ -234,11 +234,11 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
       Schedule* sched = &sr;
 
       SchedStats s;
-      auto p = obj(sched, s);
-      cout << "### Schedule (" << i << "," << j << "): " << -p.second << " ###\n";
-      ++j;
 
       schedule(sched->ssdfg(), sched);
+      auto p = obj(sched, s);
+      cout << "### Schedule (" << sched->ssdfg()->filename << "): " << -p.second << " ###\n";
+      ++j;
     }
     ++i;
   }
@@ -355,9 +355,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
       best_score = score;
       *sched = *cur_sched;  // shallow copy of sched should work?
-      // if (succeed_timing && !best_succeeded) {
-      //  max_iters_no_improvement = std::max(1000, iter * 2);
-      //}
 
       best_mapped = succeed_sched;
       best_succeeded = succeed_timing;
@@ -441,7 +438,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         if (candidates.empty()) {
           std::cerr << ssDFG->filename << ": ";
           std::cerr << "Cannot map " << node->name() << std::endl;
-          assert(false && "feasibility check failed!");
+          break;
         }
         int best_candidate = try_candidates(candidates, sched, node);
         if (best_candidate == -1) {

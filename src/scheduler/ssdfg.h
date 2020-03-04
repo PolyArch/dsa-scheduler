@@ -363,6 +363,15 @@ class SSDfgNode {
 
   int candidates_cnt() { return candidates_cnt_; }
 
+  int get_edge_idx(SSDfgEdge * edge, std::vector<SSDfgEdge*> edges){
+    auto find_it = std::find(edges.begin(), edges.end(), edge);
+    if(find_it != edges.end()){
+      return std::distance(edges.begin(), find_it);
+    }else{
+      return -1;
+    }
+  }
+
  private:
   friend class boost::serialization::access;
 

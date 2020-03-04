@@ -66,6 +66,7 @@ class CodesignInstance {
   SSModel* ss_model() { return &_ssModel; }
   std::vector<WorkloadSchedules> workload_array;
   std::vector<Schedule*> res;
+  std::vector<int> weight;
 
   CodesignInstance(SSModel* model) : _ssModel(*model) { verify(); }
 
@@ -362,7 +363,7 @@ class CodesignInstance {
         ssfu* fu = sub->add_fu();
         std::cout << "adding fu" << fu->id() << " ----------------------------\n";
         int fu_def_index = rand() % fu_defs.size();
-        Capability* def = &fu_defs[fu_def_index];
+        Capability* def = fu_defs[fu_def_index];
         fu->fu_type_ = def;
 
         add_random_edges_to_node(fu, 1, 9, 1, 9);
@@ -401,19 +402,29 @@ class CodesignInstance {
   }
 
   // Overide copy constructor to enable deep copies
-  CodesignInstance(const CodesignInstance& c) : _ssModel(c._ssModel) {
+  CodesignInstance(const CodesignInstance& c, bool from_scratch) : _ssModel(c._ssModel) {
     // SSModel* copy_model = (SSModel*)&c._ssModel;
     // auto* copy_sub = copy_model->subModel();
     // std::cout << "copy from:" << copy_sub << " copy to:" << _ssModel.subModel() <<
     // "\n"; assert(_ssModel.subModel() != copy_sub);
 
-    workload_array = c.workload_array;
+    weight = c.weight;
 
-    for_each_sched([&](Schedule& sched) {
-      // replace this ssmodel with the copy
-      sched.swap_model(_ssModel.subModel());
-      sched.set_model(&_ssModel);
-    });
+    if (from_scratch) {
+      for (auto &work: c.workload_array) {
+        workload_array.emplace_back();
+        for (auto &elem : work.sched_array) {
+          workload_array.back().sched_array.emplace_back(ss_model(), elem.ssdfg());
+        }
+      }
+    } else {
+      workload_array = c.workload_array;
+      for_each_sched([&](Schedule& sched) {
+        // replace this ssmodel with the copy
+        sched.swap_model(_ssModel.subModel());
+        sched.set_model(&_ssModel);
+      });
+    }
   }
 
   // Delete link on every schedule
@@ -546,12 +557,12 @@ class CodesignInstance {
 
       if (!yes) meaningful = false;
       // std::cout << "!!!: " << total_score.first << " * " << score.first << std::endl;
-      total_score.first *= score.first;
+      total_score.first *= score.first * weight[&ws - &workload_array[0]];
     }
 
     if (!meaningful) return 0.0;
     // std::cout << "Before: " << total_score.first << std::endl;
-    total_score.first = pow(total_score.first, (1.0 / (int)workload_array.size()));
+    total_score.first = pow(total_score.first, (1.0 / workload_array.size()));
     // std::cout << "After: " << total_score.first << std::endl;
 
     float obj = total_score.first * 1e6 /

@@ -150,7 +150,7 @@ bool parseInt(std::string param, string value, const char* param_name, int& i) {
 
 // ------------------------ submodel impl -------------------------------------
 
-SubModel::SubModel(std::istream& istream, const std::vector<Capability> &fu_types, bool multi_config) {
+SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_types, bool multi_config) {
   string param, value;
 
   bool should_read = true;
@@ -229,8 +229,8 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability> &fu_type
               if (auto fu = dynamic_cast<ssfu*>(elem)) {
                 if (fu->x() == i && fu->y() == j) {
                   for (auto &type : fu_types) {
-                    if (type.name == fustring) {
-                      fu->fu_type_ = const_cast<Capability*>(&type);
+                    if (type->name == fustring) {
+                      fu->fu_type_ = type;
                     }
                   }
                 }
@@ -572,4 +572,8 @@ void SubModel::post_process() {
   fix_id(_link_list);
 
   _ssio_interf.fill_vec();
+}
+
+int ssnode::num_node() {
+  return parent->node_list().size();
 }
