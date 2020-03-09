@@ -1,11 +1,14 @@
 #ifndef __SS_METADATA_H__
 #define __SS_METADATA_H__
 
+#include <cassert>
 #include <iostream>
+#include <sstream>
 
 namespace ssdfg {
 
 struct MetaPort {
+
   enum class Data {
     Memory,
     SPad,

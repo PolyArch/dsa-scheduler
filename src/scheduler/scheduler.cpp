@@ -195,7 +195,6 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   checked_system(("mkdir -p " + iter_dir).c_str());
   checked_system(("mkdir -p " + verif_dir).c_str());
   checked_system(("mkdir -p " + sched_dir).c_str());
-  checked_system("mkdir -p gams/");  // gams will remain at top level
 
   std::string model_filename = model->filename;
   int lastindex = model_filename.find_last_of(".");
