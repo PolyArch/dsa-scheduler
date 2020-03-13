@@ -27,6 +27,21 @@ using SS_CONFIG::SubModel;
 
 void checked_system(const char* command);
 
+// Feature Possibilities
+// 1. Commutative Instruction Groups.  Be able to mark a group of instructions as commutative.  
+//    All of their inputs may be processed in any order.  Scheduler is free to re-order arbitrarily.
+//    This will prevent the compiler from having to reason about whether chains of instructions or 
+//    trees are better for a given architecture/topology.
+// 2. Allow temporal reasoning within dataflow graphs.
+// a)  Instance offset dependences.  Ie. enable operands to cross computation instance boundaries.
+//     One Possible syntax:
+//     A = op(B<2>,C<1>)
+//     This would enable specification of systolic arrays
+//     Scheduler needs to be updated to enforce constraint that delayed inputs arrive later than expected,
+//     according to the II of the region.
+// b)  Cyclic dependences within the dataflow graph.  (optionally define initial constant value, or
+//     one-time constant?)
+
 class Schedule;
 class SSDfgNode;
 class SSDfg;
