@@ -1,14 +1,9 @@
 [fu-model]
 # fu_types and capabilities
 # Number after colon specifies encoding
-FU_TYPE FU_MUL:  Mul16x4:2, Mul32x2:3, Mul64:4, RShf64:5, LShf64:6, Div16x4: 8, FxMul16x4: 9, FMul64: 10, Mul16: 11, Div16: 12, Mod16: 13, Mod16x4: 14
-FU_TYPE FU_ADD:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Add32x2:8, Red32x2:9, Add64:10,  RShf64:11, Sub16x4:12, Abs16x4:13, Sub64:14, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Select:23, And:24, Or:25, Xor:26, LShf64:27, Acc64:28, ICmpEQ:29, Acc16x4:30, FAdd32x2:31, RShf16x4:32, FRed32x2: 33, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36, FAdd64: 37, FSub64: 38, FAcc64: 39, Acc16: 40, ICmpNE16: 41, Not16: 42, Keep16: 43, Add16: 44, ReLU16: 45, Sub16: 46
-FU_TYPE FU_SPC:  RShf4_16x4:6, RShf2_16x4:7, Sig16:8, RShf16x4:32, FxRelu16x4: 53, FxSig16x4: 54, FxTanh16x4: 55, ReLU16: 56
-FU_TYPE FX_ADD:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Add32x2:8, Red32x2:9, Add64:10,  RShf64:11, Sub16x4:12, Abs16x4:13, Sub64:14, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Select:23, And:24, Or:25, Xor:26, LShf64:27, Acc64:28, ICmpEQ:29, Acc16x4:30, RShf16x4:32, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36, Acc16: 37, ReLU16: 38, ICmpNE16: 39, Not16: 40, Keep16: 41, Add16: 42, Sub16: 43
-FU_TYPE FX_MUL:  Mul16x4:2, Mul32x2:3, Mul64:4, RShf64:5, LShf64:6, Div16x4: 8, FxMul16x4: 9, Keep16: 10, ReLU16: 11
-FU_TYPE FX_MUL_NO_DIV:  Mul16x4:2, Mul32x2:3, Mul64:4, RShf64:5, LShf64:6, FxMul16x4: 9, Mul16: 10, Keep16: 11, ReLU16: 12
-FU_TYPE FU_MUL_SMALL:  Mul16x4:2, FxMul16x4: 9, Mul16: 10, Div16: 11, Mod16: 12, Mod16x4: 13, ReLU16: 14, Keep16: 15
-FU_TYPE FU_ADD_SMALL:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Sub16x4:12, Abs16x4:13, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Acc16x4:30, RShf16x4:32, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36, Acc16: 37, ReLU16: 38, Sub16: 39
+FU_TYPE FU_MUL:  Mul16x4:2, FxMul16x4: 9
+FU_TYPE FU_ADD:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Sub16x4:12, Abs16x4:13, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Acc16x4:30, RShf16x4:32, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36
+FU_TYPE FU_SPC:  RShf4_16x4:6, RShf2_16x4:7, Sig16:8, RShf16x4:32, FxRelu16x4: 53, FxSig16x4: 54, FxTanh16x4: 55
 
 OUT_DIRECTIONS: NE:0 SE:1 SW:2 NW:3
 

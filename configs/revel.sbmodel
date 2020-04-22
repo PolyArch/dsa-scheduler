@@ -1,9 +1,9 @@
 [fu-model]
 # fu_types and capabilities
 # Number after colon specifies encoding
-FU_TYPE FU_MUL:  Mul16x4:2, Mul32x2:3, Mul64:4, FMul32x2: 5, Div16x4: 6, FxMul16x4: 7, FMulX32x2: 8, FMul64: 9, FxMulX16x4: 10, NegFMul32x2: 11, CplxMulCons: 12, Discard: 13, Keep: 14, Delay: 15, NegCplxMulCons: 16, CplxMulCplx: 17, CplxMulConj: 18, FMul32: 19
+FU_TYPE FU_MUL:  Mul16x4:2, Mul32x2:3, Mul64:4, FMul32x2: 5, Div16x4: 6, FxMul16x4: 7, FMulX32x2: 8, FMul64: 9, FxMulX16x4: 10, NegFMul32x2: 11, CplxMulCons: 12, Discard: 13, Keep: 14, Delay: 15, NegCplxMulCons: 16, CplxMulCplx: 17, CplxMulConj: 18
 
-FU_TYPE FU_ADD:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Add32x2:8, Red32x2:9, Add64:10,  RShf64:11, Sub16x4:12, Abs16x4:13, Sub64:14, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Select:23, And:24, Or:25, Xor:26, LShf64:27, Acc64:28, ICmpEQ:29, Acc16x4:30, FAdd32x2:31, RShf16x4:32, FRed32x2: 33, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36, FAcc32x2: 37, FAddSub32x2: 38, FSubAdd32x2: 39, FSub64: 40, FAdd64:41, FSub32x2: 42, FxAddSub16x4: 43, FxSubAdd16x4: 44, FxAcc16x4: 45, DupLow32: 46, DupHigh32: 47, ConcatLow32: 48, FxRedCom16x4: 49, CplxRed32x2: 50, Discard: 51, Keep: 52, Delay: 53, FltCplxToFx: 54, FxSub16x4: 55, Add8: 56, FAdd32: 57, FSub32: 58, Concatenate32To64: 59
+FU_TYPE FU_ADD:  Add16x4:3, Red16x4:4, HAdd16x4:5, RShf4_16x4:6, RShf2_16x4:7, Add32x2:8, Red32x2:9, Add64:10,  RShf64:11, Sub16x4:12, Abs16x4:13, Sub64:14, Max16x4:15, Min16x4:16, SMax16x4:17, SMin16x4:18, RedMax16x4:19, RedMin16x4:20, RedSMax16x4:21, RedSMin16x4:22, Select:23, And:24, Or:25, Xor:26, LShf64:27, Acc64:28, ICmpEQ:29, Acc16x4:30, FAdd32x2:31, RShf16x4:32, FRed32x2: 33, FxAdd16x4: 34, FxRed16x4: 35, FxExp16x4: 36, FAcc32x2: 37, FAddSub32x2: 38, FSubAdd32x2: 39, FSub64: 40, FAdd64:41, FSub32x2: 42, FxAddSub16x4: 43, FxSubAdd16x4: 44, FxAcc16x4: 45, DupLow32: 46, DupHigh32: 47, ConcatLow32: 48, FxRedCom16x4: 49, CplxRed32x2: 50, Discard: 51, Keep: 52, Delay: 53, FltCplxToFx: 54, FxSub16x4: 55
 
 FU_TYPE FU_MUX:  Discard: 2, Keep: 3, Delay: 4
 

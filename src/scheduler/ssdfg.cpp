@@ -457,7 +457,7 @@ void SSDfg::check_for_errors() {
       error = true;
     }
   }
-
+  if (error) cerr << filename << "\n";
   assert(!error && "ERROR: BAD DFG");
 }
 
@@ -866,7 +866,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
   for (size_t i = 0; i < fus.size(); ++i) {
     ssfu* cand_fu = fus[i];
 
-    if ((cand_fu->fu_type_ != nullptr && !cand_fu->fu_type_->Capable(inst())) ||
+    if (!cand_fu->fu_type_.Capable(inst()) ||
         (cand_fu->num_non_self_out_links() < (int)this->values().size())) {
       continue;
     }
@@ -1244,17 +1244,23 @@ uint64_t SSDfgOperand::poll() {
 }
 
 double SSDfg::estimated_performance(Schedule* sched, bool verbose) {
-  std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2));
+  std::vector<std::vector<double>> bw(num_groups(), std::vector<double>(2, 0));
   std::vector<double> coef(num_groups(), (double)1.0);
 
   for (auto& elem : nodes<SSDfgVecInput*>()) {
-    if (elem->meta.op == (int)ssdfg::MetaPort::Operation::Read &&
+    if ((elem->meta.op >> (int)ssdfg::MetaPort::Operation::Read & 1) &&
         elem->meta.source != ssdfg::MetaPort::Data::Unknown) {
       bw[elem->group_id()][elem->meta.source == ssdfg::MetaPort::Data::SPad] +=
           elem->get_vp_len() * elem->get_port_width() / 8;
-    } else if ((elem->meta.op & (int)ssdfg::MetaPort::Operation::IndRead) ||
-               (elem->meta.op & (int)ssdfg::MetaPort::Operation::Atomic)) {
-      if (!sched->ssModel()->indirect()) coef[elem->group_id()] = 0.1;
+    } else if ((elem->meta.op >> (int)ssdfg::MetaPort::Operation::IndRead & 1) ||
+               (elem->meta.op >> (int)ssdfg::MetaPort::Operation::IndWrite) & 1) {
+      if (sched->ssModel()->indirect() < 1) {
+        coef[elem->group_id()] = 0.1;
+      }
+    } else if (elem->meta.op >> (int)ssdfg::MetaPort::Operation::Atomic & 1) {
+      if (sched->ssModel()->indirect() < 2) {
+        coef[elem->group_id()] = 0.1;
+      }
     }
     coef[elem->group_id()] *= elem->meta.cmd;
   }
@@ -1264,11 +1270,13 @@ double SSDfg::estimated_performance(Schedule* sched, bool verbose) {
     ++inst_cnt[elem->group_id()];
   }
 
+  double memory_bw = 64 * sched->ssModel()->io_ports;
   std::vector<double> bw_coef(num_groups(), 1.0);
   for (int i = 0; i < num_groups(); ++i) {
     for (int j = 0; j < 2; ++j) {
-      if (bw[i][j] > 64) {
-        bw_coef[i] = std::min(bw_coef[i], 64. / bw[i][j]);
+      //std::cout << "memory bandwidth: " << memory_bw << " ? " << bw[i][j] << std::endl;
+      if (bw[i][j] > memory_bw) {
+        bw_coef[i] = std::min(bw_coef[i], memory_bw / bw[i][j]);
       }
     }
   }
@@ -1304,7 +1312,9 @@ double SSDfg::estimated_performance(Schedule* sched, bool verbose) {
       std::cout << "[Group " << i << "] Freq: " << group_prop(i).frequency
                 << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
                 << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/" << rec_lat[i]
-                << ", Overall: " << v << std::endl;
+                << ", Overall: " << v
+                << ", Performance Coef: " << coef[i]
+                << std::endl;
     }
     overall += v * coef[i];
   }

@@ -19,6 +19,9 @@ add_custom_command(
 file(GLOB_RECURSE CONFIG_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 add_library(ssconfig ${CONFIG_SRC} ${SS_INSTS_CXX})
 
+target_include_directories(ssconfig PRIVATE ${CMAKE_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
+target_link_libraries(ssconfig PRIVATE ${Boost_LIBRARIES})
+
 file(GLOB CONFIG_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 set_target_properties(ssconfig PROPERTIES PUBLIC_HEADER "${CONFIG_HEADERS}")
 

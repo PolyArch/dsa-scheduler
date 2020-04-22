@@ -18,15 +18,6 @@ namespace pt = boost::property_tree;
 using namespace std;
 using namespace SS_CONFIG;
 
-void SSModel::printGamsKinds(ostream& os) {
-  os << "set K \"Type of Node\" /Input,Output";
-
-  for (int i = 2; i < SS_NUM_TYPES; ++i) {
-    os << "," << name_of_inst((OpCode)i);
-  }
-  os << "/";
-}
-
 SSModel::SSModel(SubModel* subModel, bool multi_config) {
   if (subModel) {
     _subModel = subModel;
@@ -219,7 +210,7 @@ void SSModel::parse_json(std::istream& istream) {
       fudef_name << "function unit_" << id;
       fu_types.push_back(new Capability(fudef_name.str()));
       auto fu_type = fu_types.back();
-      fu->fu_type_ = fu_type;
+      fu->fu_type_ = *fu_type;
 
       int enc = 2; // the initial encoding for opcode is 0 (usual for PASS)
       for (auto& inst : insts) {
@@ -229,7 +220,7 @@ void SSModel::parse_json(std::istream& istream) {
       }
 
     } else if (type == "vector port") {
-      bool is_input;
+      bool is_input = false;
       // the number of input port of this vector port, input vector port has zero input
       // port
       int in_vec_width = node_def.get_child("num_input").get_value<int>();
@@ -239,7 +230,7 @@ void SSModel::parse_json(std::istream& istream) {
 
       // Sihao: I think it is the wrong way to get port num
       //int port_num = node_def.get_child("port").get_value<int>();
-      int port_num;
+      int port_num = -1;
 
       // whether is a input/output vector port
       if (in_vec_width > 0) {
@@ -253,7 +244,8 @@ void SSModel::parse_json(std::istream& istream) {
         num_inputs += out_vec_width;
         std::cout << "node " << id << " is input vector port\n";
       } else {
-        assert(0 && "vector port without connection?");
+        continue;
+        //assert(0 && "vector port without connection?");
       }
 
       ssvport* vp = _subModel->add_vport(is_input, port_num);

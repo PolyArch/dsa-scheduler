@@ -144,6 +144,135 @@ void Schedule::prepareForSaving() {
   }
 }
 
+void Schedule::DumpMappingInJson(ostream& os){
+  int edge_idx = 0;
+
+  SSDfg * ssDFG = ssdfg();
+  std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
+  std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
+    os << "{\n";
+  
+  //Software Edge to Hardware Link
+  os << "  \"SwEdge2HwLinks\":[\n";
+  edge_idx = 0;
+  for(auto & ep : _edgeProp){
+    os << "    {\n";
+    os << "    \"edge_id\": " << edge_idx++ << ", \n";
+    os << "    \"extra_latency\": " << ep.extra_lat << ", \n";
+    os << "    \"links\": [";
+    for(auto & link : ep.links){
+      os << "        {" << endl;
+      os << "        \"source_hw_node_type\": "
+         << "\"" << link.second->orig()->nodeType() <<"\" , \n";
+      os << "        \"sink_hw_node_type\": "
+         << "\"" << link.second->dest()->nodeType() <<"\" , \n";
+      os << "        \"source_hw_node_id\": "
+         << "\"" << link.second->orig()->id() <<"\" , \n";
+      os << "        \"sink_hw_node_id\": "
+         << "\"" << link.second->dest()->id() <<"\" , \n";
+    
+      os << "        }," << endl;
+    }
+    os << "    ]";
+    os << "    },\n";
+  }
+  os << "  ],";
+
+  //Software Vertex to Hardware Node
+  os << "  \"SwVertex2HwNode\":[\n";
+  int vertex_idx = 0;
+  for (auto & vp : _vertexProp){
+    os << "    {\n";
+    os << "    \"vertex_id\": " << vertex_idx++ << ", \n";
+    os << "    \"node_id\": " << vp.node->id() << ", \n";
+    os << "    \"node_type\": \"" << vp.node->nodeType() << "\", \n";
+    os << "    },\n";
+  }
+  os << "  ],\n";
+}
+
+void Schedule::DumpSwInJson(ostream& os){
+
+  int edge_idx = 0;
+  SSDfg * ssDFG = ssdfg();
+  std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
+  std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
+
+
+  os << "{\n";
+  // software edges
+  os << "  \"edges\":[\n";
+  for(auto & edge : edge_list){
+    os << "    {\n";
+    os << "    \"edge_id\": " << edge->id() << " ,\n";
+    // Source Vertex
+    SSDfgInst * source_inst = dynamic_cast<SSDfgInst *>(edge->def());
+    os << "    \"source_name\": \"";
+    if(source_inst != nullptr){
+      os << name_of_inst(source_inst->inst());
+    }else{
+      os << edge->def()->name(); 
+    }os <<  "\" ,\n";
+    os << "    \"source_id\": " << edge->def()->id() << " ,\n";
+    // Sink Vertex
+    SSDfgInst * sink_inst = dynamic_cast<SSDfgInst *>(edge->use());
+    os << "    \"sink_name\": \"";
+    if(sink_inst != nullptr){
+      os << name_of_inst(sink_inst->inst());
+    }else{
+      os << edge->use()->name();
+    }os <<  "\" ,\n";
+    os << "    \"sink_id\": " << edge->use()->id() << " ,\n";
+
+    os << "    \"edge_index\": " << edge->val()->index() << " ,\n";
+    os << "    \"msb\": " << edge->r() << " ,\n";
+    os << "    \"lsb\": " << edge->l() << " ,\n";
+    os << "    },\n";
+  }
+  os << "  ],\n";
+
+  // software vertices
+  os << "  \"vertices\":[\n";
+  for(auto & vertex : vertex_list){
+    os << "    {\n";
+    //os << "    \"name\": \"" << vertex->name() << "\" ,\n";
+
+    SSDfgVec * vnode = dynamic_cast<SSDfgVec * >(vertex);
+    SSDfgInst * inst = dynamic_cast<SSDfgInst * >(vertex);
+
+    os << "    \"vertex_id\": " << vertex->id() <<" ,\n";
+
+    if(vnode != nullptr){
+      os << "    \"name\": \"" << vnode->name() << "\" ,\n";
+      SSDfgVecInput * vin = dynamic_cast<SSDfgVecInput *>(vnode);
+      SSDfgVecOutput * vout = dynamic_cast<SSDfgVecOutput *>(vnode);
+      os << "    \"type\": \"vector\" ,\n";
+      if(vin != nullptr){
+        os << "    \"direction\": \"input\" ,\n";
+      }else if(vout != nullptr){
+        os << "    \"direction\": \"output\" ,\n";
+      }else{
+        assert(false && "neither input nor output ?");
+      }
+      os << "    \"width\": "<< vnode->get_port_width() << " ,\n";
+      os << "    \"length\": "<< vnode->get_vp_len() << " ,\n";
+    }
+
+    if(inst != nullptr){
+      os << "    \"type\": \"instruction\" ,\n";
+      os << "    \"name\": \"" << name_of_inst(inst->inst()) << "\" ,\n";
+      os << "    \"width\": "<< inst->bitwidth() << " ,\n";
+      os << "    \"latency\": "<< inst->lat_of_inst() << " ,\n";
+    }
+
+    os << "    },\n";
+  }
+  os << "  ]\n";
+
+  // end of software
+  os << "}\n";
+}
+
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
   // Step 1: Write the vector port mapping
@@ -223,7 +352,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           }
           SSDfgInst * inst_node = dynamic_cast<SSDfgInst *>(vertex);
           if(inst_node != nullptr){
-            int local_opcode = fu_node ->fu_type_->get_encoding(inst_node -> inst());
+            int local_opcode = fu_node ->fu_type_.get_encoding(inst_node -> inst());
             fu_node -> set_curr_opcode(local_opcode);
             os << "//     set current opcode to " << local_opcode
                << " means " << name_of_inst(inst_node -> inst()) << endl;
