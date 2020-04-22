@@ -118,7 +118,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
     int fu_count = 0;
     for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->fu_type_.Capable(ss_inst)) {
+      if (cand_fu->fu_type_->Capable(ss_inst)) {
         fu_count += 64 / SS_CONFIG::bitwidth[ss_inst];
       }
     }
@@ -136,7 +136,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
     int fu_count = 0;
     for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->max_util() > 1 && cand_fu->fu_type_.Capable(ss_inst)) {
+      if (cand_fu->max_util() > 1 && cand_fu->fu_type_->Capable(ss_inst)) {
         fu_count += cand_fu->max_util(ss_inst);
       }
     }

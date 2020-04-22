@@ -391,11 +391,10 @@ double Capability::get_area_from_inst_set() {
   // add the area of instruction that accountable
   double area = 0.0;
   for (auto elem : capability) {
-    if (!elem.count) {
+    if (elem.count) {
       continue;
     }
     double curr_area = SS_CONFIG::inst_area(elem.op);
-    //std::cout << this->name << " " << name_of_inst(elem.op) << " " << curr_area << std::endl;
     if (curr_area < 0.0) {
       // std::cout << SS_CONFIG::name_of_inst(inst) << " is not support for area
       // estimation"
@@ -418,7 +417,7 @@ double Capability::get_power_from_inst_set() {
   // add the power of instruction that accountable
   double power = 0.0;
   for (auto &elem : capability) {
-    if (!elem.count) {
+    if (elem.count) {
       continue;
     }
     double curr_power = SS_CONFIG::inst_power(elem.op);
@@ -428,14 +427,12 @@ double Capability::get_power_from_inst_set() {
       //          << std::endl;
       // to turn off this assertion you can assign a default power to it and change false
       // to true
-      power += 0.01;  // accum 1mW if area is not found for this inst
+      power += 1.0;  // accum 1mW if area is not found for this inst
       // assert(false && "this instruction is not support for power estimation");
     } else {
-      //std::cout << name_of_inst(elem.op) << ": " << curr_power << std::endl;
       power += curr_power;
     }
   }
-  //std::cout << power << std::endl;
   return power;
 }
 
@@ -497,6 +494,7 @@ double Capability::power() {
 double Capability::area() {
   // if no new cap is added, just return the old area
   if (area_ > 0) {
+    // std::cout << "use the old area, no need to recalculate\n";
     return area_;
   }
 

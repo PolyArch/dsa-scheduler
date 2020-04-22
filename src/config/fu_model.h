@@ -24,7 +24,7 @@ class Capability {
   };
 
   void Add(OpCode op, int encoding, bool count = true) {
-    power_ = area_ = -1;
+    power_ = area_ = -114514.1919810;
     for (auto &elem : capability) {
       assert(elem.encoding != encoding && "Op encoding already occupied!");
     }
@@ -37,11 +37,6 @@ class Capability {
     capability.emplace_back(op, encoding, count);
   }
 
-  void Erase(int j) {
-    power_ = area_ = -1;
-    capability.erase(capability.begin() + j);
-  }
-
   int get_encoding(OpCode op){
     auto iter = std::find_if(capability.begin(), capability.end(), [op](const Entry &entry) {
       return entry.op == op;
@@ -50,6 +45,7 @@ class Capability {
   }
 
   bool Capable(OpCode op) {
+    //std::cerr << name << " " << capability.size() << std::endl;
     for (auto &elem : capability) {
       if (elem.op == op)
         return true;
@@ -57,7 +53,6 @@ class Capability {
     return false;
   }
 
-  Capability() {}
   Capability(std::string name) : name(name) {}
 
   std::string name;

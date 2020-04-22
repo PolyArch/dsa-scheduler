@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(SpatialScheduler)
-
 # Use config.cmake file
 if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
   include(${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
@@ -19,9 +17,8 @@ else()
 endif()
 
 # Debug/Release
-set(CMAKE_CXX_FLAGS "-O2")
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O3")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()

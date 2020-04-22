@@ -230,7 +230,7 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
                 if (fu->x() == i && fu->y() == j) {
                   for (auto &type : fu_types) {
                     if (type->name == fustring) {
-                      fu->fu_type_ = *type;
+                      fu->fu_type_ = type;
                     }
                   }
                 }
@@ -250,7 +250,7 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
                     skip_delay);
 }
 
-// Dump the Hardware Description in JSON -- void SubModel::DumpHwInJson(const char* name)
+// Dump the Hardware Description in JSON -- void SubModel::DumpHwInJSON(const char* name)
 
 // Graph of the configuration or substrate
 void SubModel::PrintGraphviz(ostream& os) {

@@ -6,7 +6,6 @@ build/
 drivers/ss_sched
 drivers/stat-config
 dfgs/*/*.h
-dfg/*/amir/*
 dfgs/*/sched/*
 gams/
 verif/
