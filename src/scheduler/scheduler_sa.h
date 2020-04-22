@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "scheduler.h"
+#include "dse.h"
 
 #define DEBUG_SCHED (false)
 
@@ -55,7 +56,9 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   void initialize(SSDfg*, Schedule*&);
 
-  SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel) : Scheduler(ssModel) {}
+  SchedulerSimulatedAnnealing(SS_CONFIG::SSModel* ssModel, double timeout = 1000000.,
+                              int max_iters_ = 20000,
+                              bool verbose = false) : Scheduler(ssModel, timeout, verbose), max_iters(max_iters_) {}
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
@@ -148,6 +151,8 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   bool _strict_timing = true;
 
   bool _fake_it = false;
+
+  int max_iters;
 };
 
 template <typename T>

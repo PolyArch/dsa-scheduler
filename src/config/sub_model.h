@@ -17,6 +17,7 @@
 
 #include "fu_model.h"
 #include "predict.h"
+#include "pa_model.h"
 
 #define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x)) + 1)
 
@@ -373,7 +374,7 @@ class ssnode {
   bool is_shared() { return _max_util > 1; }  // TODO: max_util > 1
 
   void set_flow_control(bool v) { _flow_control = v; }
-  bool flow_control() { return _flow_control; }
+  bool &flow_control() { return _flow_control; }
 
   int bitwidth() { return _bitwidth; }
 
@@ -386,6 +387,8 @@ class ssnode {
     }
   }
 
+  virtual double sync_area() = 0;
+  virtual double sync_power() = 0;
   // std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int
   // bitwidth) {
   //  int slot = p.first;
@@ -408,6 +411,11 @@ class ssnode {
 
   virtual ~ssnode(){};
 
+  int decomposer{8};
+  int granularity{8};
+  int mf_decomposer{8};
+  int data_width{64};
+
  protected:
   std::string node_type = "empty";
   SubModel *parent{nullptr};
@@ -428,11 +436,6 @@ class ssnode {
   int _done[8];
   std::pair<int, sslink*> _came_from[8];
 
-  // Decomposability
-  int data_width = 64;
-  int granularity = 8;  // the most fine-grain # of bit, 8 means byte-decomposable
-  int mf_decomposer = data_width / granularity;
-  int decomposer = data_width / granularity;
   // convert from decomposer // to be integrate with subnet_table
   // TODO: most-fine-grain decomposer, to be removed or need to be defined by user
 
@@ -538,17 +541,22 @@ class ssswitch : public ssnode {
     features[6] = links[1].size();
     features[7] = links[0].size();
     features[8] = _max_util;
-
-    // print_features();
   }
 
   double get_area() {
-    collect_features();
-    return router_area_predict(features);
+    return radix_area(in_links().size(), out_links().size(), decomposer, _flow_control);
   }
+
+  double sync_area() override {
+    return fifo_area(this->max_fifo_depth = 1);
+  }
+
   double get_power() {
-    collect_features();
-    return router_power_predict(features);
+    return radix_power(in_links().size(), out_links().size(), decomposer, _flow_control);
+  }
+
+  double sync_power() override {
+    return fifo_power(max_fifo_depth = 1);
   }
 
   virtual ~ssswitch(){};
@@ -647,7 +655,7 @@ class ssfu : public ssnode {
     std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
 
     // delay_fifo_depth
-    _delay_fifo_depth = get_prop_attr(prop, "max_delay", 4);
+    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", 4);
 
     // register_file_size
     register_file_size = get_prop_attr(prop, "register_file_size", 8);
@@ -686,8 +694,8 @@ class ssfu : public ssnode {
     // Instructions
     os << "\"instructions\" : [";
     int idx_inst = 0;
-    int num_inst = fu_type_->capability.size();
-    for (auto &elem : fu_type_->capability) {
+    int num_inst = fu_type_.capability.size();
+    for (auto &elem : fu_type_.capability) {
       os << "\"" << SS_CONFIG::name_of_inst(elem.op) << "\"";
       if (idx_inst < num_inst - 1) {
         os << ", ";
@@ -731,7 +739,8 @@ class ssfu : public ssnode {
   }
 
   double* collect_features() {
-    if (decomposer == 0) decomposer = mf_decomposer;
+    if (decomposer == 0)
+      decomposer = mf_decomposer;
 
     features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
@@ -759,17 +768,29 @@ class ssfu : public ssnode {
   }
 
   double get_area() {
-    collect_features();
-    double inst_dep_area = fu_type_->area();
-    double inst_indep_area = pe_area_predict(features);
-    return inst_dep_area + inst_indep_area;
+    return fu_type_.area();
+  }
+
+  double nw_area() {
+    return radix_area(links[1].size(), 2, decomposer, _flow_control) +
+	         radix_area(1, links[0].size(), decomposer, _flow_control);
+  }
+
+  double nw_power() {
+    return radix_power(links[1].size(), 2, decomposer, _flow_control) +
+	         radix_power(1, links[0].size(), decomposer, _flow_control);
+  }
+
+  double sync_area() override {
+    return fifo_area(_delay_fifo_depth);
   }
 
   double get_power() {
-    collect_features();
-    double inst_dep_power = fu_type_->power();
-    double inst_indep_power = pe_power_predict(features);
-    return inst_dep_power + inst_indep_power;
+    return fu_type_.power();
+  }
+
+  double sync_power() override {
+    return fifo_power(_delay_fifo_depth);
   }
 
   virtual ~ssfu(){};
@@ -840,7 +861,7 @@ class ssfu : public ssnode {
     config_bits += id();
     // -- config the operand source
     uint64_t num_operand_sel_bit = log2ceil(in_links().size() + 1);
-    uint max_num_operand = fu_type_ -> get_max_num_operand();
+    uint max_num_operand = fu_type_.get_max_num_operand();
     // + 1 is because zero connect to ground
     for(uint operand_idx = 0; operand_idx < max_num_operand; operand_idx ++){
       config_bits = config_bits << num_operand_sel_bit;
@@ -861,7 +882,7 @@ class ssfu : public ssnode {
       }
     }
     // -- config opcode
-    uint64_t num_opcode_bit = log2ceil(static_cast<uint64_t>(fu_type_->capability.size()));
+    uint64_t num_opcode_bit = log2ceil(static_cast<uint64_t>(fu_type_.capability.size()));
     config_bits = config_bits << num_opcode_bit;
     left_bits -= num_opcode_bit;
     config_bits += curr_opcode;
@@ -871,7 +892,7 @@ class ssfu : public ssnode {
     return config_bits;
   }
 
-  Capability* fu_type_;
+  Capability fu_type_;
 
  protected:
   double features[12];
@@ -987,19 +1008,21 @@ class ssvport : public ssnode {
   bool is_output() override { return links[0].size() == 0; }
 
   double get_area() {
-    double vport_features[3];
-    vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
-    vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
-    vport_features[2] = channel_buffer;
-    return pred_vport_area(vport_features);
+    return radix_area(std::max((int) 1, (int) in_links().size()),
+                      std::max((int) 1, (int) out_links().size()), decomposer, false);
   }
 
   double get_power() {
-    double vport_features[3];
-    vport_features[0] = links[1].size() == 0 ? 1.0 : links[1].size();
-    vport_features[1] = links[0].size() == 0 ? 1.0 : links[0].size();
-    vport_features[2] = channel_buffer;
-    return pred_vport_power(vport_features);
+    return radix_power(std::max((int) 1, (int) in_links().size()),
+                      std::max((int) 1, (int) out_links().size()), decomposer, false);
+  }
+
+  double sync_power() override {
+    return fifo_power(2);
+  }
+
+  double sync_area() override {
+    return fifo_area(2);
   }
 
   virtual ~ssvport(){};
@@ -1036,9 +1059,12 @@ class SubModel {
 
   void PrintGraphviz(std::ostream& os);
 
-  void DumpHwInJSON(const char* name) {
+  void DumpHwInJson(const char* name) {
     ofstream os(name);
-    assert(os.good());
+    std::cout << name << std::endl;
+    if (!os.good()) {
+      return;
+    }
 
     os << "{\n";  // Start of the JSON file
     // Instruction Set
@@ -1048,7 +1074,7 @@ class SubModel {
     for (ssnode* node : node_list()) {
       ssfu* fu_node = dynamic_cast<ssfu*>(node);
       if (fu_node != nullptr) {
-        for (auto &elem: fu_node->fu_type_->capability) {
+        for (auto &elem: fu_node->fu_type_.capability) {
           ss_inst_set.insert(elem.op);
         }
       }
@@ -1094,7 +1120,15 @@ class SubModel {
         os << ",\n";
       }
     }
-    os << "]\n";  // The End of Nodes
+    os << "],\n";  // The End of Nodes
+
+    // Hardware Overhead
+    os  << "\"fu_total_area(um2)\" : " << get_fu_total_area() << ",\n"
+        << "\"fu_total_power(mW)\" : " << get_fu_total_power() << ",\n"
+        << "\"sw_total_area(um2)\" : " << get_sw_total_area() << ",\n"
+        << "\"sw_total_power(mW)\" : " << get_sw_total_power() << ",\n"
+        << "\"sync_total_area(um2)\" : " << get_sync_area() << ",\n"
+        << "\"sync_total_power(mW)\" : " << get_sync_power() << "\n";
 
     os << "}\n";  // End of the JSON file
   }
@@ -1164,20 +1198,14 @@ class SubModel {
     double total_area = 0.0;
     for (auto sw : switch_list()) {
       double area_to_add = sw->get_area();
-
-      static bool printed_bad_sw = false;
-      if (sw->get_area() < 0 && printed_bad_sw == false) {
-        printed_bad_sw = true;
-        std::cout << "SW Area: " << sw->get_area() << "\n";
-        std::cout << "ins/outs:" << sw->in_links().size() << "/" << sw->out_links().size()
-                  << "\n";
-        std::cout << "decomposer:" << sw->decomposer << " " << sw->mf_decomposer
-                  << " gran: " << sw->granularity << "\n";
-        sw->print_features();
-        std::cout << "\n";
-        area_to_add = abs(area_to_add) + 200;
-        // assert(0 && "neg area");
-      }
+      total_area += area_to_add;
+    }
+    for (auto sw : vport_list()) {
+      double area_to_add = sw->get_area();
+      total_area += area_to_add;
+    }
+    for (auto sw : fu_list()) {
+      double area_to_add = sw->nw_area();
       total_area += area_to_add;
     }
     return total_area;
@@ -1188,31 +1216,38 @@ class SubModel {
     for (auto sw : switch_list()) {
       total_power += sw->get_power();
     }
+    for (auto sw : vport_list()) {
+      total_power += sw->get_power();
+    }
+    for (auto sw : fu_list()) {
+      double area_to_add = sw->nw_power();
+      total_power += area_to_add;
+    }
     return total_power;
   }
 
-  double get_vport_area() {
+  double get_sync_area() {
     double total_area = 0.0;
-    for (auto vp : vport_list()) {
-      total_area += vp->get_area();
+    for (auto elem : node_list()) {
+      total_area += elem->sync_area();
     }
     return total_area;
   }
 
-  double get_vport_power() {
+  double get_sync_power() {
     double total_power = 0.0;
-    for (auto vp : vport_list()) {
-      total_power += vp->get_power();
+    for (auto vp : node_list()) {
+      total_power += vp->sync_power();
     }
     return total_power;
   }
 
   double get_overall_power() {
-    return get_sw_total_power() + get_fu_total_power() + get_vport_power();
+    return get_sw_total_power() + get_fu_total_power() + get_sync_power();
   }
 
   double get_overall_area() {
-    return get_sw_total_area() + get_fu_total_area() + get_vport_area();
+    return get_sw_total_area() + get_fu_total_area() + get_sync_area();
   }
 
   bool multi_config() { return _multi_config; }
@@ -1247,7 +1282,6 @@ class SubModel {
 
   ssfu* add_fu() {
     auto* fu = new ssfu();
-    fu->fu_type_ = nullptr;
     add_node(fu);  // id and stuff
     return fu;
   }
