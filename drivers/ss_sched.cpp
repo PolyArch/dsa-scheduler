@@ -9,16 +9,16 @@
 #include <string>
 #include <boost/optional.hpp>
 
-#include "ss-config/model.h"
-#include "ss-scheduler/scheduler.h"
-#include "ss-scheduler/scheduler_sa.h"
-#include "ss-scheduler/ssdfg.h"
+#include "dsa/arch/model.h"
+#include "dsa/mapper/scheduler.h"
+#include "dsa/mapper/scheduler_sa.h"
+#include "dsa/ir/ssdfg.h"
 
 using namespace std;
 using sec = chrono::seconds;
 using get_time = chrono::steady_clock;
 
-using namespace SS_CONFIG;
+using namespace dsa;
 
 // clang-format off
 static struct option long_options[] = {
@@ -132,10 +132,6 @@ int main(int argc, char* argv[]) {
          <<  "Memory: " << ssmodel.memory_area() << "um2, "<< ssmodel.memory_power() << "mw\n"
          << std::endl;
   }
-
-  std::string pdg_base = basename(argv[1]);
-  std::string model_base = basename(argv[0]);
-  std::cout << "Hardware Name = " << model_base << ", Software = " << pdg_base << endl;
 
   return 0;
 }
