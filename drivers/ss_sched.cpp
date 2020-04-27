@@ -14,6 +14,10 @@
 #include "dsa/mapper/scheduler_sa.h"
 #include "dsa/ir/ssdfg.h"
 
+#include "json/visitor.h"
+#include "json.lex.h"
+#include "json.tab.h"
+
 using namespace std;
 using sec = chrono::seconds;
 using get_time = chrono::steady_clock;
@@ -89,7 +93,22 @@ int main(int argc, char* argv[]) {
 
   srand(seed);
 
+
+
   std::string model_filename = argv[0];
+/*
+  if (model_filename.compare(model_filename.size() - 5, 5, ".json") == 0) {
+    FILE *fjson = fopen(model_filename.c_str(), "r");
+    struct params p;
+    JSONrestart(fjson);
+    JSONparse(&p);
+    json::JSONPrinter printer(std::cout);
+    std::cout << std::endl;
+    p.data->Accept(&printer);
+    fclose(fjson);
+    delete p.data;
+  }
+*/
   SSModel ssmodel(model_filename.c_str());
 
   ssmodel.memory_size = memory_size;

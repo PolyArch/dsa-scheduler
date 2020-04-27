@@ -13,6 +13,10 @@
 #include "dsa/arch/ssinst.h"
 #include "dsa/arch/model.h"
 
+#include "json.lex.h"
+#include "json.tab.h"
+#include "json/visitor.h"
+
 namespace pt = boost::property_tree;
 
 using namespace std;
@@ -64,45 +68,6 @@ void SSModel::parse_exec(std::istream& istream) {
   }
 }
 
-// trim from start (in place)
-static inline void ltrim(std::string& s) {
-  s.erase(s.begin(),
-          std::find_if(s.begin(), s.end(), [](int ch) { return !std::isspace(ch); }));
-}
-
-// trim from end (in place)
-static inline void rtrim(std::string& s) {
-  s.erase(
-      std::find_if(s.rbegin(), s.rend(), [](int ch) { return !std::isspace(ch); }).base(),
-      s.end());
-}
-
-// trim from both ends (in place)
-static inline void trim(std::string& s) {
-  ltrim(s);
-  rtrim(s);
-}
-bool ends_with(string& s, string ending) {
-  if (ending.size() > s.size()) return false;
-  return std::equal(ending.rbegin(), ending.rend(), s.rbegin());
-}
-bool contains(std::string& s1, std::string s2) {
-  return s1.find(s2) != std::string::npos;
-}
-std::vector<std::string> split(std::string raw_string, string delimiter) {
-  vector<string> strings;
-  size_t pos = 0;
-  std::string token;
-  while ((pos = raw_string.find(delimiter)) != std::string::npos) {
-    token = raw_string.substr(0, pos);
-    trim(token);
-    strings.push_back(token);
-    raw_string.erase(0, pos + delimiter.length());
-  }
-  strings.push_back(raw_string);
-  return strings;
-}
-
 ssnode* if_isVector(ssnode* n, std::string portname) {
   // In case source is a vector port, get I/O node instead
   ssvport* s_vp = dynamic_cast<ssvport*>(n);
@@ -124,8 +89,7 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
   }
 
   // Parse the JSON-format IR
-  string fn = string(filename);
-  bool isJSON = ends_with(fn, string(".json"));
+  bool isJSON = ModelParsing::EndsWith(filename, ".json");
   if (isJSON) {
     parse_json(ifs);
     return;

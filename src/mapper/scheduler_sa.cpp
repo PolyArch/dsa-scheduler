@@ -8,7 +8,7 @@
 #include <list>
 #include <unordered_map>
 
-#include "debug.h"
+#include "dsa/debug.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
 

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "debug.h"
+#include "dsa/debug.h"
 #include "../utils/model_parsing.h"
 #include "dsa/arch/sub_model.h"
 

@@ -10,6 +10,8 @@ else()
   message(STATUS "config.cmake not found, use defined configs")
 endif()
 
+add_subdirectory(${CMAKE_SOURCE_DIR}/json-parser)
+
 # Build assumptions
 set(BUILD_SHARED_LIBS ON)
 if (DEFINED ENV{SS_TOOLS})
@@ -63,12 +65,15 @@ add_library(dsa
   ${FLEX_DFG_LEXER_OUTPUTS}
   ${BISON_DFG_PARSER_OUTPUTS})
 
-target_include_directories(dsa
-  PRIVATE ${CMAKE_SOURCE_DIR}/include ${Boost_INCLUDE_DIRS})
-target_link_libraries(dsa PRIVATE ${Boost_LIBRARIES})
+target_include_directories(dsa PRIVATE
+  ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_SOURCE_DIR}/json-parser/include
+  ${Boost_INCLUDE_DIRS})
+
+target_link_libraries(dsa PRIVATE json ${Boost_LIBRARIES})
 
 # Install the header files and library
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/dsa
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/include/dsa)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/include/)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/drivers)

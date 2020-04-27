@@ -17,9 +17,10 @@ inline bool StartsWith(const std::string& text, const std::string& token) {
   return (text.compare(0, token.length(), token) == 0);
 }
 
-inline bool StartsWith(const std::string& text, const char* token) {
+inline bool EndsWith(const std::string& text, const char* token) {
   if (text.length() < strlen(token)) return false;
-  return (text.compare(0, strlen(token), token) == 0);
+  int len = strlen(token);
+  return (text.compare(text.size() - strlen(token), len, token) == 0);
 }
 
 inline void trim_comments(std::string& s) { s = s.substr(0, s.find("#")); }
