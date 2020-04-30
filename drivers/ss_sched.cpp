@@ -33,6 +33,7 @@ static struct option long_options[] = {
     {"estmt-perf",     no_argument,       nullptr, 'p',},
     {"indir-mem",      no_argument,       nullptr, 'c',},
     {"print-bit",      no_argument,       nullptr, 'b',},
+    {"dump-mapping-if-improved",   no_argument, nullptr, 'u',},
     {"timeout",        required_argument, nullptr, 't',},
     {"max-iters",      required_argument, nullptr, 'i',},
     {"max-edge-delay", required_argument, nullptr, 'd',},
@@ -40,6 +41,9 @@ static struct option long_options[] = {
     {"seed",           required_argument, nullptr, 'e',},
     {"control-flow",   required_argument, nullptr, 'l',},
     {"decomposer",     required_argument, nullptr, 'r',},
+    {"hardware-json",  required_argument, nullptr, 'h',},
+    {"software-json",  required_argument, nullptr, 's',},
+    {"mapping-json",   required_argument, nullptr, 'a',},
     {0, 0, 0, 0,},
 };
 // clang-format on
@@ -65,7 +69,12 @@ int main(int argc, char* argv[]) {
   std::string timing;
   boost::optional<bool> contrl_flow;
 
-  while ((opt = getopt_long(argc, argv, "m:vt:pc:bd:e:l:r:", long_options, nullptr)) != -1) {
+  std::string hw_json_filename = "";
+  std::string sw_json_filename = "";
+  std::string mapping_json_filename = "";
+  bool dump_mapping_if_improved = false;
+
+  while ((opt = getopt_long(argc, argv, "m:vt:pc:bd:e:l:r:h:s:a:u", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'v': verbose = true; break;
       case 'p': est_perf = true; break;
@@ -78,6 +87,10 @@ int main(int argc, char* argv[]) {
       case 'e': seed = atoi(optarg); break;
       case 'l': contrl_flow = atoi(optarg); break;
       case 'r': decomposer = atoi(optarg); break;
+      case 'h': hw_json_filename = optarg; break;
+      case 's': sw_json_filename = optarg; break;
+      case 'a': mapping_json_filename = optarg; break;
+      case 'u': dump_mapping_if_improved = true; break;
       default: exit(1);
     }
   }
@@ -90,25 +103,12 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
-
   srand(seed);
 
 
 
   std::string model_filename = argv[0];
-/*
-  if (model_filename.compare(model_filename.size() - 5, 5, ".json") == 0) {
-    FILE *fjson = fopen(model_filename.c_str(), "r");
-    struct params p;
-    JSONrestart(fjson);
-    JSONparse(&p);
-    json::JSONPrinter printer(std::cout);
-    std::cout << std::endl;
-    p.data->Accept(&printer);
-    fclose(fjson);
-    delete p.data;
-  }
-*/
+
   SSModel ssmodel(model_filename.c_str());
 
   ssmodel.memory_size = memory_size;
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
   if (argc == 2) {
     std::string pdg_filename = argv[1];
 
-    scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose);
+    scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose, mapping_json_filename, dump_mapping_if_improved);
 
     SSDfg ssdfg(pdg_filename);
     Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
@@ -138,7 +138,22 @@ int main(int argc, char* argv[]) {
       double est = ssdfg.estimated_performance(sched, true);
       std::cout << "Estimated overall performance: " << est << std::endl;
     }
+    // Dump hardware
+    if(hw_json_filename != "")
+      ssmodel.subModel()->DumpHwInJson(hw_json_filename.c_str());
+
+    // Dump software
+    if(sw_json_filename != ""){
+      sched -> DumpSwInJson(sw_json_filename);
+    }
+
+    // Dump Final Mapping
+    if(mapping_json_filename != ""){
+      sched->DumpMappingInJson(mapping_json_filename);
+    }
   }
+
+
 
   if (est_perf) {
     auto sub = ssmodel.subModel();

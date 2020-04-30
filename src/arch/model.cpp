@@ -22,6 +22,7 @@ namespace pt = boost::property_tree;
 using namespace std;
 using namespace dsa;
 
+
 SSModel::SSModel(SubModel* subModel, bool multi_config) {
   if (subModel) {
     _subModel = subModel;
@@ -91,7 +92,9 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
   // Parse the JSON-format IR
   bool isJSON = ModelParsing::EndsWith(filename, ".json");
   if (isJSON) {
-    parse_json(ifs);
+    //dsa::SubModel * _subModel = new SubModel();
+    _subModel -> parse_json_without_boost(filename);
+    //parse_json(ifs);
     return;
   }
 
@@ -130,6 +133,8 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
   _subModel->post_process();
 }
 
+
+/*
 // JSON Format is flat format with all objects defined
 void SSModel::parse_json(std::istream& istream) {
   pt::ptree root;
@@ -174,15 +179,22 @@ void SSModel::parse_json(std::istream& istream) {
       fudef_name << "function unit_" << id;
       fu_types.push_back(new Capability(fudef_name.str()));
       auto fu_type = fu_types.back();
-      fu->fu_type_ = *fu_type;
-
+      
       int enc = 2; // the initial encoding for opcode is 0 (usual for PASS)
       for (auto& inst : insts) {
         std::string inst_name = inst.second.get_value<std::string>();
         OpCode ss_inst = dsa::inst_from_string(inst_name.c_str());
         fu_type->Add(ss_inst, enc++);
       }
+      fu->fu_type_ = *fu_type;
 
+      // debug
+      
+      std::cout << fu ->name() << " can perform : ";
+      for(auto capable_ssinst : fu->fu_type_.capability){
+        std::cout << SS_CONFIG::name_of_inst(capable_ssinst.op) << ", ";
+      }
+      
     } else if (type == "vector port") {
       bool is_input = false;
       // the number of input port of this vector port, input vector port has zero input
@@ -282,6 +294,7 @@ void SSModel::parse_json(std::istream& istream) {
 
   assert(num_outputs > 0);
   assert(num_inputs > 0);
+  std::cout << "Json parsed" << std::endl;
 }
-
+*/
 extern "C" void libssconfig_is_present() {}

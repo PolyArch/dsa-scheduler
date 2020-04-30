@@ -95,6 +95,8 @@ class Scheduler {
   float _reslim;
   bool verbose{false};
   bool _should_stop{false};
+  std::string mapping_file{""};
+  bool dump_mapping_if_improved{false};
 
   std::chrono::time_point<std::chrono::steady_clock> _start;
 };

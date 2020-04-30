@@ -73,9 +73,9 @@ class Schedule {
 
   void prepareForSaving();
 
-  void DumpMappingInJson(ostream& os);
+  void DumpMappingInJson(std::string& mapping_filename);
 
-  void DumpSwInJson(ostream& os);
+  void DumpSwInJson(std::string& sw_filename);
 
   void printConfigHeader(std::ostream& os, std::string cfg_name, bool cheat = true);
 

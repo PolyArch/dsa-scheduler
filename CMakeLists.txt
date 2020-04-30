@@ -33,6 +33,7 @@ find_package(Boost REQUIRED system serialization)
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 
+
 FLEX_TARGET(DFG_LEXER ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.l
   ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.yy.cc
   DEFINES_FILE ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.h)
@@ -75,5 +76,6 @@ target_link_libraries(dsa PRIVATE json ${Boost_LIBRARIES})
 # Install the header files and library
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
         DESTINATION ${CMAKE_INSTALL_PREFIX}/include/)
-
+install(TARGETS dsa DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/)
 add_subdirectory(${CMAKE_SOURCE_DIR}/drivers)
+

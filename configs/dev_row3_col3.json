@@ -1,0 +1,507 @@
+{
+  "default_data_width" : 64,
+  "identifier" : [ "id", "col_idx", "nodeType", "row_idx" ],
+  "Default_max_util" : 1,
+  "numCol" : 3,
+  "links" : [ {
+    "source_out_idx" : 0,
+    "source" : [ 0, 0, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 3, 0, "switch", 1 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 3, 0, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 0, 0, "switch", 0 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 0, 0, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 1, 1, "switch", 0 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 1, 1, "switch", 0 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 0, 0, "switch", 0 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 1, 1, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 4, 1, "switch", 1 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 1, 1, "switch", 0 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 1, 1, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 2, 2, "switch", 0 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 2, 2, "switch", 0 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 1, 1, "switch", 0 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 2, 2, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 5, 2, "switch", 1 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 2, 2, "switch", 0 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 3, 0, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 6, 0, "switch", 2 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 6, 0, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 3, 0, "switch", 1 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 3, 0, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 4, 1, "switch", 1 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 3, 0, "switch", 1 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 7, 1, "switch", 2 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 4, 1, "switch", 1 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 5, 2, "switch", 1 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 4, 1, "switch", 1 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 8, 2, "switch", 2 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 8, 2, "switch", 2 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 5, 2, "switch", 1 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 6, 0, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 7, 1, "switch", 2 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 6, 0, "switch", 2 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 8, 2, "switch", 2 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 8, 2, "switch", 2 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 7, 1, "switch", 2 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 0, 0, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 9, 0, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 3, 0, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 9, 0, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 1, 1, "switch", 0 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 9, 0, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 9, 0, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 9, 0, "function unit", 0 ],
+    "sink_in_idx" : 4,
+    "sink" : [ 4, 1, "switch", 1 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 1, 1, "switch", 0 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 10, 1, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 5,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 10, 1, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 2, 2, "switch", 0 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 10, 1, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 10, 1, "function unit", 0 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 10, 1, "function unit", 0 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 5, 2, "switch", 1 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 3, 0, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 11, 0, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 6, 0, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 11, 0, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 6,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 11, 0, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 11, 0, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 11, 0, "function unit", 1 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 7, 1, "switch", 2 ]
+  }, {
+    "source_out_idx" : 7,
+    "source" : [ 4, 1, "switch", 1 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 12, 1, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 12, 1, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 12, 1, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 8, 2, "switch", 2 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 12, 1, "function unit", 1 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 12, 1, "function unit", 1 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 8, 2, "switch", 2 ]
+  }, {
+    "source_out_idx" : 0,
+    "source" : [ 13, "N/A", "vector port", "N/A" ],
+    "sink_in_idx" : 2,
+    "sink" : [ 0, 0, "switch", 0 ]
+  }, {
+    "source_out_idx" : 1,
+    "source" : [ 13, "N/A", "vector port", "N/A" ],
+    "sink_in_idx" : 3,
+    "sink" : [ 1, 1, "switch", 0 ]
+  }, {
+    "source_out_idx" : 2,
+    "source" : [ 13, "N/A", "vector port", "N/A" ],
+    "sink_in_idx" : 2,
+    "sink" : [ 2, 2, "switch", 0 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 13, "N/A", "vector port", "N/A" ],
+    "sink_in_idx" : 3,
+    "sink" : [ 3, 0, "switch", 1 ]
+  }, {
+    "source_out_idx" : 4,
+    "source" : [ 13, "N/A", "vector port", "N/A" ],
+    "sink_in_idx" : 2,
+    "sink" : [ 6, 0, "switch", 2 ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 6, 0, "switch", 2 ],
+    "sink_in_idx" : 0,
+    "sink" : [ 14, "N/A", "vector port", "N/A" ]
+  }, {
+    "source_out_idx" : 5,
+    "source" : [ 7, 1, "switch", 2 ],
+    "sink_in_idx" : 1,
+    "sink" : [ 14, "N/A", "vector port", "N/A" ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 8, 2, "switch", 2 ],
+    "sink_in_idx" : 2,
+    "sink" : [ 14, "N/A", "vector port", "N/A" ]
+  }, {
+    "source_out_idx" : 3,
+    "source" : [ 2, 2, "switch", 0 ],
+    "sink_in_idx" : 3,
+    "sink" : [ 14, "N/A", "vector port", "N/A" ]
+  }, {
+    "source_out_idx" : 5,
+    "source" : [ 5, 2, "switch", 1 ],
+    "sink_in_idx" : 4,
+    "sink" : [ 14, "N/A", "vector port", "N/A" ]
+  } ],
+  "numRow" : 3,
+  "nodes" : [ {
+    "num_node" : 15,
+    "num_output" : 3,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 3,
+    "col_idx" : 0,
+    "output_nodes" : [ [ 3, 0, "switch", 1 ], [ 1, 1, "switch", 0 ], [ 9, 0, "function unit", 0 ] ],
+    "row_idx" : 0,
+    "id" : 0,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 3, 0, "switch", 1 ], [ 1, 1, "switch", 0 ], [ 13, "N/A", "vector port", "N/A" ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 5,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 1,
+    "output_nodes" : [ [ 0, 0, "switch", 0 ], [ 4, 1, "switch", 1 ], [ 2, 2, "switch", 0 ], [ 9, 0, "function unit", 0 ], [ 10, 1, "function unit", 0 ] ],
+    "row_idx" : 0,
+    "id" : 1,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 0, 0, "switch", 0 ], [ 4, 1, "switch", 1 ], [ 2, 2, "switch", 0 ], [ 13, "N/A", "vector port", "N/A" ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 4,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 3,
+    "col_idx" : 2,
+    "output_nodes" : [ [ 1, 1, "switch", 0 ], [ 5, 2, "switch", 1 ], [ 10, 1, "function unit", 0 ], [ 14, "N/A", "vector port", "N/A" ] ],
+    "row_idx" : 0,
+    "id" : 2,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 1, 1, "switch", 0 ], [ 5, 2, "switch", 1 ], [ 13, "N/A", "vector port", "N/A" ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 5,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 0,
+    "output_nodes" : [ [ 0, 0, "switch", 0 ], [ 6, 0, "switch", 2 ], [ 4, 1, "switch", 1 ], [ 9, 0, "function unit", 0 ], [ 11, 0, "function unit", 1 ] ],
+    "row_idx" : 1,
+    "id" : 3,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 0, 0, "switch", 0 ], [ 6, 0, "switch", 2 ], [ 4, 1, "switch", 1 ], [ 13, "N/A", "vector port", "N/A" ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 8,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 5,
+    "col_idx" : 1,
+    "output_nodes" : [ [ 1, 1, "switch", 0 ], [ 3, 0, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 5, 2, "switch", 1 ], [ 9, 0, "function unit", 0 ], [ 10, 1, "function unit", 0 ], [ 11, 0, "function unit", 1 ], [ 12, 1, "function unit", 1 ] ],
+    "row_idx" : 1,
+    "id" : 4,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 1, 1, "switch", 0 ], [ 3, 0, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 5, 2, "switch", 1 ], [ 9, 0, "function unit", 0 ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 6,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 2,
+    "output_nodes" : [ [ 2, 2, "switch", 0 ], [ 4, 1, "switch", 1 ], [ 8, 2, "switch", 2 ], [ 10, 1, "function unit", 0 ], [ 12, 1, "function unit", 1 ], [ 14, "N/A", "vector port", "N/A" ] ],
+    "row_idx" : 1,
+    "id" : 5,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 2, 2, "switch", 0 ], [ 4, 1, "switch", 1 ], [ 8, 2, "switch", 2 ], [ 10, 1, "function unit", 0 ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 4,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 3,
+    "col_idx" : 0,
+    "output_nodes" : [ [ 3, 0, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 11, 0, "function unit", 1 ], [ 14, "N/A", "vector port", "N/A" ] ],
+    "row_idx" : 2,
+    "id" : 6,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 3, 0, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 13, "N/A", "vector port", "N/A" ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 6,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 1,
+    "output_nodes" : [ [ 4, 1, "switch", 1 ], [ 6, 0, "switch", 2 ], [ 8, 2, "switch", 2 ], [ 11, 0, "function unit", 1 ], [ 12, 1, "function unit", 1 ], [ 14, "N/A", "vector port", "N/A" ] ],
+    "row_idx" : 2,
+    "id" : 7,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 4, 1, "switch", 1 ], [ 6, 0, "switch", 2 ], [ 8, 2, "switch", 2 ], [ 11, 0, "function unit", 1 ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 4,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 3,
+    "col_idx" : 2,
+    "output_nodes" : [ [ 5, 2, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 12, 1, "function unit", 1 ], [ 14, "N/A", "vector port", "N/A" ] ],
+    "row_idx" : 2,
+    "id" : 8,
+    "data_width" : 64,
+    "nodeType" : "switch",
+    "granularity" : 16,
+    "switch_mode" : "full-control",
+    "input_nodes" : [ [ 5, 2, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 12, 1, "function unit", 1 ] ]
+  }, {
+    "num_node" : 15,
+    "max_delay_fifo_depth" : 16,
+    "num_register" : 1,
+    "num_output" : 1,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 0,
+    "output_nodes" : [ [ 4, 1, "switch", 1 ] ],
+    "row_idx" : 0,
+    "id" : 9,
+    "data_width" : 64,
+    "nodeType" : "function unit",
+    "granularity" : 64,
+    "instructions" : [ "Add8", "Add16", "Sub16", "Concat16", "Acc16", "Mul16", "Div16", "Mod16", "Keep16", "Min16", "And16", "Not16", "Or16", "RShf16", "IndexMatch16", "Control16", "ICmpEq16", "ReLU16", "ICmpNE16", "Select16", "FMul32", "FAdd32", "FSub32", "Add32", "Mul32", "Div32", "Min32", "Select32", "ICmpNE32", "ICmp32", "And32", "Or32", "Xor32", "Acc32", "Extract16", "BitsliceAcc64", "Concat64", "Sig16", "Add16x4", "TAdd16x4", "HAdd16x4", "RShf16x4", "Sub16x4", "Mod16x4", "Abs16x4", "Acc16x4", "Acc16to32x4", "RShf2_16x4", "RShf4_16x4", "Mul16x4", "Div16x4", "Sig16x4", "Red16x4", "Max16x4", "Min16x4", "SMax16x4", "SMin16x4", "RedMax16x4", "RedMin16x4", "RedSMax16x4", "RedSMin16x4", "DelayFU", "Discard", "Keep", "Mul32x2", "Add32x2", "Red32x2", "RShf32x2", "Max32x2", "Min32x2", "RedMax32x2", "RedMin32x2", "BackMul64", "Mul64", "Sqr64", "Div64", "DivRem64", "Add64", "Sub64", "RShf64", "LShf64", "Max64", "Min64", "Acc64", "FAdd32x2", "FSub32x2", "FRed32x2", "FAddSub32x2", "FSubAdd32x2", "FMul32x2", "FMulX32x2", "FAcc32x2", "FAcc64", "FltCplxToFx", "CplxConj", "CplxMulCplx", "CplxMulConj", "NegCplxMulConj", "CplxRed32x2", "CplxSqrt", "CplxInv", "CplxInvConj", "CplxSqrtInv", "CplxNmlz", "CplxMulCons", "CplxDivCons", "CplxGivensCos", "CplxGivensSin", "CplxGivensRes", "RealSqrt", "RealInv", "RealSqrtInv", "Delay", "Compare64", "Accumulate64", "HouseHolder", "ImplicitQR", "IndexMatch32x2", "IndexMatch64", "BackSub32x2", "BackNormRed32x2", "RLEDecoder16x4", "SpuMul16x4", "SpuAdd16x4", "MacRed16x2", "MatchIndex2", "Concatenate16To32", "Concatenate32To64", "NegFMul32x2", "NegCplxMulCons", "NegCplxDivCons", "FxRelu16x4", "FxSig16x4", "FxTanh16x4", "FxAdd16x4", "FxSub16x4", "FxRed16x4", "FxMul16x4", "FxExp16x4", "FxMulX16x4", "FxAcc16x4", "FxAddSub16x4", "FxSubAdd16x4", "FxRedCom16x4", "FxMul32x2", "FxAdd32x2", "FxSub32x2", "FxRed32x2", "DupLow32", "DupHigh32", "ConcatLow32", "FAdd64", "FSub64", "FMul64", "FDiv64", "Sqrt64", "FxExp64", "Select", "Merge", "MergeSentinal", "Index_match", "ICmp", "Hold", "Nor", "Phi", "And3", "And", "ICmpG", "Or", "Xor", "Not", "Copy", "ICmpEQ", "ICmpNE", "Switch", "Add", "Sub", "Mul", "UDiv", "SDiv", "URem", "SRem", "IMax", "IMin", "SMax", "SMin", "FAdd", "FSub", "FMul", "FDiv", "FRem", "Sqrt", "FSin", "FCos", "FMax", "FMin", "SExt", "Shl", "LShr", "AShr", "Ternary", "ICmpUGT", "ICmpUGE", "ICmpULT", "ICmpULE", "ICmpSGT", "ICmpSGE", "ICmpSLT", "ICmpSLE", "FCmpOEQ", "FCmpONE", "FCmpOGT", "FCmpOGE", "FCmpOLT", "FCmpOLE", "DotProd8x8", "DotProd16x4", "DotProd32x2", "QuantOp", "Mul8x8", "Mul16x4", "Mul32x2", "Mul64", "SMul8x8", "SMul16x4", "SMul32x2", "SMul64", "Add8x8", "Add16x4", "Add32x2", "Add64", "SAdd8x8", "SAdd16x4", "SAdd32x2", "SAdd64", "Sub8x8", "Sub16x4", "Sub32x2", "Sub64", "SSub8x8", "SSub16x4", "SSub32x2", "SSub64", "Abs8x8", "Abs16x4", "Abs32x2", "Abs64", "Negate8x8", "Negate16x4", "Negate32x2", "Negate64", "Acc8x8", "Acc16x4", "Acc32x2", "Acc64", "Red16x4", "Red32x2", "RedAcc32x2", "SRedAcc32x2", "LShf16x4", "LShf32x2", "LShf64", "RShf16x4", "RShf32x2", "RShf64", "ARShf16x4", "ARShf32x2", "ARShf64", "Max8x8", "Max16x4", "Max32x2", "Max64", "SMax8x8", "SMax16x4", "SMax32x2", "SMax64", "Min8x8", "Min16x4", "Min32x2", "Min64", "SMin8x8", "SMin16x4", "SMin32x2", "SMin64", "Select", "And", "Or", "Xor", "Compare", "Concat8", "Concat16", "Concat32", "CmpEQ8x8", "CmpGT8x8", "CmpGE8x8", "CmpLT8x8", "CmpLE8x8", "SCmpGT8x8", "SCmpGE8x8", "SCmpLT8x8", "SCmpLE8x8", "CmpEQ64", "CmpGT64", "CmpGE64", "CmpLT64", "CmpLE64", "SCmpGT64", "SCmpGE64", "SCmpLT64", "SCmpLE64", "CmpEQ32x2", "CmpGT32x2", "CmpGE32x2", "CmpLT32x2", "CmpLE32x2", "SCmpGT32x2", "SCmpGE32x2", "SCmpLT32x2", "SCmpLE32x2", "CmpEQ16x4", "CmpGT16x4", "CmpGE16x4", "CmpLT16x4", "CmpLE16x4", "SCmpGT16x4", "SCmpGE16x4", "SCmpLT16x4", "SCmpLE16x4", "Select8x8", "Select16x4", "Select32x2", "Select64", "NLOp8x8", "NLOp16x4", "NLOp32x2", "NLOp64", "Copy", "Switch", "SignExt8to64", "SignExt16to64", "SignExt32to64", "SignExt16FanOut8x4", "SignExt32FanOut8x2", "SignExt32FanOut16x2", "ZeroExt16FanOut8x4", "ZeroExt32FanOut8x2", "ZeroExt32FanOut16x2", "SignExt8x2to32" ],
+    "input_nodes" : [ [ 0, 0, "switch", 0 ], [ 3, 0, "switch", 1 ], [ 1, 1, "switch", 0 ], [ 4, 1, "switch", 1 ] ]
+  }, {
+    "num_node" : 15,
+    "max_delay_fifo_depth" : 16,
+    "num_register" : 1,
+    "num_output" : 1,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 1,
+    "output_nodes" : [ [ 5, 2, "switch", 1 ] ],
+    "row_idx" : 0,
+    "id" : 10,
+    "data_width" : 64,
+    "nodeType" : "function unit",
+    "granularity" : 64,
+    "instructions" : [ "Add8", "Add16", "Sub16", "Concat16", "Acc16", "Mul16", "Div16", "Mod16", "Keep16", "Min16", "And16", "Not16", "Or16", "RShf16", "IndexMatch16", "Control16", "ICmpEq16", "ReLU16", "ICmpNE16", "Select16", "FMul32", "FAdd32", "FSub32", "Add32", "Mul32", "Div32", "Min32", "Select32", "ICmpNE32", "ICmp32", "And32", "Or32", "Xor32", "Acc32", "Extract16", "BitsliceAcc64", "Concat64", "Sig16", "Add16x4", "TAdd16x4", "HAdd16x4", "RShf16x4", "Sub16x4", "Mod16x4", "Abs16x4", "Acc16x4", "Acc16to32x4", "RShf2_16x4", "RShf4_16x4", "Mul16x4", "Div16x4", "Sig16x4", "Red16x4", "Max16x4", "Min16x4", "SMax16x4", "SMin16x4", "RedMax16x4", "RedMin16x4", "RedSMax16x4", "RedSMin16x4", "DelayFU", "Discard", "Keep", "Mul32x2", "Add32x2", "Red32x2", "RShf32x2", "Max32x2", "Min32x2", "RedMax32x2", "RedMin32x2", "BackMul64", "Mul64", "Sqr64", "Div64", "DivRem64", "Add64", "Sub64", "RShf64", "LShf64", "Max64", "Min64", "Acc64", "FAdd32x2", "FSub32x2", "FRed32x2", "FAddSub32x2", "FSubAdd32x2", "FMul32x2", "FMulX32x2", "FAcc32x2", "FAcc64", "FltCplxToFx", "CplxConj", "CplxMulCplx", "CplxMulConj", "NegCplxMulConj", "CplxRed32x2", "CplxSqrt", "CplxInv", "CplxInvConj", "CplxSqrtInv", "CplxNmlz", "CplxMulCons", "CplxDivCons", "CplxGivensCos", "CplxGivensSin", "CplxGivensRes", "RealSqrt", "RealInv", "RealSqrtInv", "Delay", "Compare64", "Accumulate64", "HouseHolder", "ImplicitQR", "IndexMatch32x2", "IndexMatch64", "BackSub32x2", "BackNormRed32x2", "RLEDecoder16x4", "SpuMul16x4", "SpuAdd16x4", "MacRed16x2", "MatchIndex2", "Concatenate16To32", "Concatenate32To64", "NegFMul32x2", "NegCplxMulCons", "NegCplxDivCons", "FxRelu16x4", "FxSig16x4", "FxTanh16x4", "FxAdd16x4", "FxSub16x4", "FxRed16x4", "FxMul16x4", "FxExp16x4", "FxMulX16x4", "FxAcc16x4", "FxAddSub16x4", "FxSubAdd16x4", "FxRedCom16x4", "FxMul32x2", "FxAdd32x2", "FxSub32x2", "FxRed32x2", "DupLow32", "DupHigh32", "ConcatLow32", "FAdd64", "FSub64", "FMul64", "FDiv64", "Sqrt64", "FxExp64", "Select", "Merge", "MergeSentinal", "Index_match", "ICmp", "Hold", "Nor", "Phi", "And3", "And", "ICmpG", "Or", "Xor", "Not", "Copy", "ICmpEQ", "ICmpNE", "Switch", "Add", "Sub", "Mul", "UDiv", "SDiv", "URem", "SRem", "IMax", "IMin", "SMax", "SMin", "FAdd", "FSub", "FMul", "FDiv", "FRem", "Sqrt", "FSin", "FCos", "FMax", "FMin", "SExt", "Shl", "LShr", "AShr", "Ternary", "ICmpUGT", "ICmpUGE", "ICmpULT", "ICmpULE", "ICmpSGT", "ICmpSGE", "ICmpSLT", "ICmpSLE", "FCmpOEQ", "FCmpONE", "FCmpOGT", "FCmpOGE", "FCmpOLT", "FCmpOLE", "DotProd8x8", "DotProd16x4", "DotProd32x2", "QuantOp", "Mul8x8", "Mul16x4", "Mul32x2", "Mul64", "SMul8x8", "SMul16x4", "SMul32x2", "SMul64", "Add8x8", "Add16x4", "Add32x2", "Add64", "SAdd8x8", "SAdd16x4", "SAdd32x2", "SAdd64", "Sub8x8", "Sub16x4", "Sub32x2", "Sub64", "SSub8x8", "SSub16x4", "SSub32x2", "SSub64", "Abs8x8", "Abs16x4", "Abs32x2", "Abs64", "Negate8x8", "Negate16x4", "Negate32x2", "Negate64", "Acc8x8", "Acc16x4", "Acc32x2", "Acc64", "Red16x4", "Red32x2", "RedAcc32x2", "SRedAcc32x2", "LShf16x4", "LShf32x2", "LShf64", "RShf16x4", "RShf32x2", "RShf64", "ARShf16x4", "ARShf32x2", "ARShf64", "Max8x8", "Max16x4", "Max32x2", "Max64", "SMax8x8", "SMax16x4", "SMax32x2", "SMax64", "Min8x8", "Min16x4", "Min32x2", "Min64", "SMin8x8", "SMin16x4", "SMin32x2", "SMin64", "Select", "And", "Or", "Xor", "Compare", "Concat8", "Concat16", "Concat32", "CmpEQ8x8", "CmpGT8x8", "CmpGE8x8", "CmpLT8x8", "CmpLE8x8", "SCmpGT8x8", "SCmpGE8x8", "SCmpLT8x8", "SCmpLE8x8", "CmpEQ64", "CmpGT64", "CmpGE64", "CmpLT64", "CmpLE64", "SCmpGT64", "SCmpGE64", "SCmpLT64", "SCmpLE64", "CmpEQ32x2", "CmpGT32x2", "CmpGE32x2", "CmpLT32x2", "CmpLE32x2", "SCmpGT32x2", "SCmpGE32x2", "SCmpLT32x2", "SCmpLE32x2", "CmpEQ16x4", "CmpGT16x4", "CmpGE16x4", "CmpLT16x4", "CmpLE16x4", "SCmpGT16x4", "SCmpGE16x4", "SCmpLT16x4", "SCmpLE16x4", "Select8x8", "Select16x4", "Select32x2", "Select64", "NLOp8x8", "NLOp16x4", "NLOp32x2", "NLOp64", "Copy", "Switch", "SignExt8to64", "SignExt16to64", "SignExt32to64", "SignExt16FanOut8x4", "SignExt32FanOut8x2", "SignExt32FanOut16x2", "ZeroExt16FanOut8x4", "ZeroExt32FanOut8x2", "ZeroExt32FanOut16x2", "SignExt8x2to32" ],
+    "input_nodes" : [ [ 1, 1, "switch", 0 ], [ 4, 1, "switch", 1 ], [ 2, 2, "switch", 0 ], [ 5, 2, "switch", 1 ] ]
+  }, {
+    "num_node" : 15,
+    "max_delay_fifo_depth" : 16,
+    "num_register" : 1,
+    "num_output" : 1,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 0,
+    "output_nodes" : [ [ 7, 1, "switch", 2 ] ],
+    "row_idx" : 1,
+    "id" : 11,
+    "data_width" : 64,
+    "nodeType" : "function unit",
+    "granularity" : 64,
+    "instructions" : [ "Add8", "Add16", "Sub16", "Concat16", "Acc16", "Mul16", "Div16", "Mod16", "Keep16", "Min16", "And16", "Not16", "Or16", "RShf16", "IndexMatch16", "Control16", "ICmpEq16", "ReLU16", "ICmpNE16", "Select16", "FMul32", "FAdd32", "FSub32", "Add32", "Mul32", "Div32", "Min32", "Select32", "ICmpNE32", "ICmp32", "And32", "Or32", "Xor32", "Acc32", "Extract16", "BitsliceAcc64", "Concat64", "Sig16", "Add16x4", "TAdd16x4", "HAdd16x4", "RShf16x4", "Sub16x4", "Mod16x4", "Abs16x4", "Acc16x4", "Acc16to32x4", "RShf2_16x4", "RShf4_16x4", "Mul16x4", "Div16x4", "Sig16x4", "Red16x4", "Max16x4", "Min16x4", "SMax16x4", "SMin16x4", "RedMax16x4", "RedMin16x4", "RedSMax16x4", "RedSMin16x4", "DelayFU", "Discard", "Keep", "Mul32x2", "Add32x2", "Red32x2", "RShf32x2", "Max32x2", "Min32x2", "RedMax32x2", "RedMin32x2", "BackMul64", "Mul64", "Sqr64", "Div64", "DivRem64", "Add64", "Sub64", "RShf64", "LShf64", "Max64", "Min64", "Acc64", "FAdd32x2", "FSub32x2", "FRed32x2", "FAddSub32x2", "FSubAdd32x2", "FMul32x2", "FMulX32x2", "FAcc32x2", "FAcc64", "FltCplxToFx", "CplxConj", "CplxMulCplx", "CplxMulConj", "NegCplxMulConj", "CplxRed32x2", "CplxSqrt", "CplxInv", "CplxInvConj", "CplxSqrtInv", "CplxNmlz", "CplxMulCons", "CplxDivCons", "CplxGivensCos", "CplxGivensSin", "CplxGivensRes", "RealSqrt", "RealInv", "RealSqrtInv", "Delay", "Compare64", "Accumulate64", "HouseHolder", "ImplicitQR", "IndexMatch32x2", "IndexMatch64", "BackSub32x2", "BackNormRed32x2", "RLEDecoder16x4", "SpuMul16x4", "SpuAdd16x4", "MacRed16x2", "MatchIndex2", "Concatenate16To32", "Concatenate32To64", "NegFMul32x2", "NegCplxMulCons", "NegCplxDivCons", "FxRelu16x4", "FxSig16x4", "FxTanh16x4", "FxAdd16x4", "FxSub16x4", "FxRed16x4", "FxMul16x4", "FxExp16x4", "FxMulX16x4", "FxAcc16x4", "FxAddSub16x4", "FxSubAdd16x4", "FxRedCom16x4", "FxMul32x2", "FxAdd32x2", "FxSub32x2", "FxRed32x2", "DupLow32", "DupHigh32", "ConcatLow32", "FAdd64", "FSub64", "FMul64", "FDiv64", "Sqrt64", "FxExp64", "Select", "Merge", "MergeSentinal", "Index_match", "ICmp", "Hold", "Nor", "Phi", "And3", "And", "ICmpG", "Or", "Xor", "Not", "Copy", "ICmpEQ", "ICmpNE", "Switch", "Add", "Sub", "Mul", "UDiv", "SDiv", "URem", "SRem", "IMax", "IMin", "SMax", "SMin", "FAdd", "FSub", "FMul", "FDiv", "FRem", "Sqrt", "FSin", "FCos", "FMax", "FMin", "SExt", "Shl", "LShr", "AShr", "Ternary", "ICmpUGT", "ICmpUGE", "ICmpULT", "ICmpULE", "ICmpSGT", "ICmpSGE", "ICmpSLT", "ICmpSLE", "FCmpOEQ", "FCmpONE", "FCmpOGT", "FCmpOGE", "FCmpOLT", "FCmpOLE", "DotProd8x8", "DotProd16x4", "DotProd32x2", "QuantOp", "Mul8x8", "Mul16x4", "Mul32x2", "Mul64", "SMul8x8", "SMul16x4", "SMul32x2", "SMul64", "Add8x8", "Add16x4", "Add32x2", "Add64", "SAdd8x8", "SAdd16x4", "SAdd32x2", "SAdd64", "Sub8x8", "Sub16x4", "Sub32x2", "Sub64", "SSub8x8", "SSub16x4", "SSub32x2", "SSub64", "Abs8x8", "Abs16x4", "Abs32x2", "Abs64", "Negate8x8", "Negate16x4", "Negate32x2", "Negate64", "Acc8x8", "Acc16x4", "Acc32x2", "Acc64", "Red16x4", "Red32x2", "RedAcc32x2", "SRedAcc32x2", "LShf16x4", "LShf32x2", "LShf64", "RShf16x4", "RShf32x2", "RShf64", "ARShf16x4", "ARShf32x2", "ARShf64", "Max8x8", "Max16x4", "Max32x2", "Max64", "SMax8x8", "SMax16x4", "SMax32x2", "SMax64", "Min8x8", "Min16x4", "Min32x2", "Min64", "SMin8x8", "SMin16x4", "SMin32x2", "SMin64", "Select", "And", "Or", "Xor", "Compare", "Concat8", "Concat16", "Concat32", "CmpEQ8x8", "CmpGT8x8", "CmpGE8x8", "CmpLT8x8", "CmpLE8x8", "SCmpGT8x8", "SCmpGE8x8", "SCmpLT8x8", "SCmpLE8x8", "CmpEQ64", "CmpGT64", "CmpGE64", "CmpLT64", "CmpLE64", "SCmpGT64", "SCmpGE64", "SCmpLT64", "SCmpLE64", "CmpEQ32x2", "CmpGT32x2", "CmpGE32x2", "CmpLT32x2", "CmpLE32x2", "SCmpGT32x2", "SCmpGE32x2", "SCmpLT32x2", "SCmpLE32x2", "CmpEQ16x4", "CmpGT16x4", "CmpGE16x4", "CmpLT16x4", "CmpLE16x4", "SCmpGT16x4", "SCmpGE16x4", "SCmpLT16x4", "SCmpLE16x4", "Select8x8", "Select16x4", "Select32x2", "Select64", "NLOp8x8", "NLOp16x4", "NLOp32x2", "NLOp64", "Copy", "Switch", "SignExt8to64", "SignExt16to64", "SignExt32to64", "SignExt16FanOut8x4", "SignExt32FanOut8x2", "SignExt32FanOut16x2", "ZeroExt16FanOut8x4", "ZeroExt32FanOut8x2", "ZeroExt32FanOut16x2", "SignExt8x2to32" ],
+    "input_nodes" : [ [ 3, 0, "switch", 1 ], [ 6, 0, "switch", 2 ], [ 4, 1, "switch", 1 ], [ 7, 1, "switch", 2 ] ]
+  }, {
+    "num_node" : 15,
+    "max_delay_fifo_depth" : 16,
+    "num_register" : 1,
+    "num_output" : 1,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 4,
+    "col_idx" : 1,
+    "output_nodes" : [ [ 8, 2, "switch", 2 ] ],
+    "row_idx" : 1,
+    "id" : 12,
+    "data_width" : 64,
+    "nodeType" : "function unit",
+    "granularity" : 64,
+    "instructions" : [ "Add8", "Add16", "Sub16", "Concat16", "Acc16", "Mul16", "Div16", "Mod16", "Keep16", "Min16", "And16", "Not16", "Or16", "RShf16", "IndexMatch16", "Control16", "ICmpEq16", "ReLU16", "ICmpNE16", "Select16", "FMul32", "FAdd32", "FSub32", "Add32", "Mul32", "Div32", "Min32", "Select32", "ICmpNE32", "ICmp32", "And32", "Or32", "Xor32", "Acc32", "Extract16", "BitsliceAcc64", "Concat64", "Sig16", "Add16x4", "TAdd16x4", "HAdd16x4", "RShf16x4", "Sub16x4", "Mod16x4", "Abs16x4", "Acc16x4", "Acc16to32x4", "RShf2_16x4", "RShf4_16x4", "Mul16x4", "Div16x4", "Sig16x4", "Red16x4", "Max16x4", "Min16x4", "SMax16x4", "SMin16x4", "RedMax16x4", "RedMin16x4", "RedSMax16x4", "RedSMin16x4", "DelayFU", "Discard", "Keep", "Mul32x2", "Add32x2", "Red32x2", "RShf32x2", "Max32x2", "Min32x2", "RedMax32x2", "RedMin32x2", "BackMul64", "Mul64", "Sqr64", "Div64", "DivRem64", "Add64", "Sub64", "RShf64", "LShf64", "Max64", "Min64", "Acc64", "FAdd32x2", "FSub32x2", "FRed32x2", "FAddSub32x2", "FSubAdd32x2", "FMul32x2", "FMulX32x2", "FAcc32x2", "FAcc64", "FltCplxToFx", "CplxConj", "CplxMulCplx", "CplxMulConj", "NegCplxMulConj", "CplxRed32x2", "CplxSqrt", "CplxInv", "CplxInvConj", "CplxSqrtInv", "CplxNmlz", "CplxMulCons", "CplxDivCons", "CplxGivensCos", "CplxGivensSin", "CplxGivensRes", "RealSqrt", "RealInv", "RealSqrtInv", "Delay", "Compare64", "Accumulate64", "HouseHolder", "ImplicitQR", "IndexMatch32x2", "IndexMatch64", "BackSub32x2", "BackNormRed32x2", "RLEDecoder16x4", "SpuMul16x4", "SpuAdd16x4", "MacRed16x2", "MatchIndex2", "Concatenate16To32", "Concatenate32To64", "NegFMul32x2", "NegCplxMulCons", "NegCplxDivCons", "FxRelu16x4", "FxSig16x4", "FxTanh16x4", "FxAdd16x4", "FxSub16x4", "FxRed16x4", "FxMul16x4", "FxExp16x4", "FxMulX16x4", "FxAcc16x4", "FxAddSub16x4", "FxSubAdd16x4", "FxRedCom16x4", "FxMul32x2", "FxAdd32x2", "FxSub32x2", "FxRed32x2", "DupLow32", "DupHigh32", "ConcatLow32", "FAdd64", "FSub64", "FMul64", "FDiv64", "Sqrt64", "FxExp64", "Select", "Merge", "MergeSentinal", "Index_match", "ICmp", "Hold", "Nor", "Phi", "And3", "And", "ICmpG", "Or", "Xor", "Not", "Copy", "ICmpEQ", "ICmpNE", "Switch", "Add", "Sub", "Mul", "UDiv", "SDiv", "URem", "SRem", "IMax", "IMin", "SMax", "SMin", "FAdd", "FSub", "FMul", "FDiv", "FRem", "Sqrt", "FSin", "FCos", "FMax", "FMin", "SExt", "Shl", "LShr", "AShr", "Ternary", "ICmpUGT", "ICmpUGE", "ICmpULT", "ICmpULE", "ICmpSGT", "ICmpSGE", "ICmpSLT", "ICmpSLE", "FCmpOEQ", "FCmpONE", "FCmpOGT", "FCmpOGE", "FCmpOLT", "FCmpOLE", "DotProd8x8", "DotProd16x4", "DotProd32x2", "QuantOp", "Mul8x8", "Mul16x4", "Mul32x2", "Mul64", "SMul8x8", "SMul16x4", "SMul32x2", "SMul64", "Add8x8", "Add16x4", "Add32x2", "Add64", "SAdd8x8", "SAdd16x4", "SAdd32x2", "SAdd64", "Sub8x8", "Sub16x4", "Sub32x2", "Sub64", "SSub8x8", "SSub16x4", "SSub32x2", "SSub64", "Abs8x8", "Abs16x4", "Abs32x2", "Abs64", "Negate8x8", "Negate16x4", "Negate32x2", "Negate64", "Acc8x8", "Acc16x4", "Acc32x2", "Acc64", "Red16x4", "Red32x2", "RedAcc32x2", "SRedAcc32x2", "LShf16x4", "LShf32x2", "LShf64", "RShf16x4", "RShf32x2", "RShf64", "ARShf16x4", "ARShf32x2", "ARShf64", "Max8x8", "Max16x4", "Max32x2", "Max64", "SMax8x8", "SMax16x4", "SMax32x2", "SMax64", "Min8x8", "Min16x4", "Min32x2", "Min64", "SMin8x8", "SMin16x4", "SMin32x2", "SMin64", "Select", "And", "Or", "Xor", "Compare", "Concat8", "Concat16", "Concat32", "CmpEQ8x8", "CmpGT8x8", "CmpGE8x8", "CmpLT8x8", "CmpLE8x8", "SCmpGT8x8", "SCmpGE8x8", "SCmpLT8x8", "SCmpLE8x8", "CmpEQ64", "CmpGT64", "CmpGE64", "CmpLT64", "CmpLE64", "SCmpGT64", "SCmpGE64", "SCmpLT64", "SCmpLE64", "CmpEQ32x2", "CmpGT32x2", "CmpGE32x2", "CmpLT32x2", "CmpLE32x2", "SCmpGT32x2", "SCmpGE32x2", "SCmpLT32x2", "SCmpLE32x2", "CmpEQ16x4", "CmpGT16x4", "CmpGE16x4", "CmpLT16x4", "CmpLE16x4", "SCmpGT16x4", "SCmpGE16x4", "SCmpLT16x4", "SCmpLE16x4", "Select8x8", "Select16x4", "Select32x2", "Select64", "NLOp8x8", "NLOp16x4", "NLOp32x2", "NLOp64", "Copy", "Switch", "SignExt8to64", "SignExt16to64", "SignExt32to64", "SignExt16FanOut8x4", "SignExt32FanOut8x2", "SignExt32FanOut16x2", "ZeroExt16FanOut8x4", "ZeroExt32FanOut8x2", "ZeroExt32FanOut16x2", "SignExt8x2to32" ],
+    "input_nodes" : [ [ 4, 1, "switch", 1 ], [ 7, 1, "switch", 2 ], [ 5, 2, "switch", 1 ], [ 8, 2, "switch", 2 ] ]
+  }, {
+    "num_node" : 15,
+    "num_output" : 5,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 0,
+    "output_nodes" : [ [ 0, 0, "switch", 0 ], [ 1, 1, "switch", 0 ], [ 2, 2, "switch", 0 ], [ 3, 0, "switch", 1 ], [ 6, 0, "switch", 2 ] ],
+    "id" : 13,
+    "data_width" : 64,
+    "nodeType" : "vector port",
+    "granularity" : 64
+  }, {
+    "num_node" : 15,
+    "num_output" : 0,
+    "flow_control" : false,
+    "max_util" : 1,
+    "num_input" : 5,
+    "id" : 14,
+    "data_width" : 64,
+    "nodeType" : "vector port",
+    "granularity" : 64,
+    "input_nodes" : [ [ 6, 0, "switch", 2 ], [ 7, 1, "switch", 2 ], [ 8, 2, "switch", 2 ], [ 2, 2, "switch", 0 ], [ 5, 2, "switch", 1 ] ]
+  } ],
+  "default_granularity" : 64,
+  "module_type" : "cgra.fabric.cgra_fabric",
+  "Defaultflow_control" : false
+}

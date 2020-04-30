@@ -14,10 +14,15 @@
 #include "../utils/model_parsing.h"
 #include "dsa/arch/sub_model.h"
 
+#include "json.lex.h"
+#include "json.tab.h"
+
 namespace pt = boost::property_tree;
 
 using namespace dsa;
 using namespace std;
+
+
 
 // ----------------------- sslink ---------------------------------------------
 
@@ -249,8 +254,6 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
                     temp_x, temp_y, temp_width, temp_height, skip_hv_dist, skip_diag_dist,
                     skip_delay);
 }
-
-// Dump the Hardware Description in JSON -- void SubModel::DumpHwInJson(const char* name)
 
 // Graph of the configuration or substrate
 void SubModel::PrintGraphviz(ostream& os) {
@@ -576,4 +579,125 @@ void SubModel::post_process() {
 
 int ssnode::num_node() {
   return parent->node_list().size();
+}
+
+std::map<std::string, std::function<void(json::BaseNode*)>> functor;
+
+
+struct JSONModel : json::BaseVisitor{
+  std::map<int, ssnode*> sym_tab;
+  dsa::SubModel * _subModel;  
+  JSONModel(dsa::SubModel * subModel_) : _subModel(subModel_){}
+  
+  void nodesVisit(json::BaseNode * jsonNodes){
+    // Vector Port Parameter
+    int num_ivp = 0;
+    int num_ovp = 0;  // Count the number of vector port
+    int num_inputs = 0;
+    int num_outputs = 0;  // Calculate the num of Input and Output in the fabric
+
+    // Go over all nodes
+    for (auto &jsonNode : *jsonNodes->As<plain::Array>()){
+      plain::Object cgranode = *jsonNode->As<plain::Object>();
+      // Type and ID
+      std::string nodeType = *cgranode["nodeType"]->As<std::string>();
+      int id = *cgranode["id"]->As<int64_t>();
+      // Initialize Different Module
+      if(nodeType == "switch"){
+        ssswitch * sw = _subModel -> add_switch();
+        sw -> set_id(id);
+        sw -> set_prop(cgranode);
+        sym_tab[id] = sw;
+      }else if(nodeType == "function unit"){
+        // Set Possible x,y for visualization
+        ssfu* fu = _subModel->add_fu();
+        fu->set_id(id);
+        fu->set_prop(cgranode);
+        auto link = fu->add_link(fu);  // For decomposability
+        (void) link;
+
+        sym_tab[id] = fu;
+        plain::Array insts = *cgranode["instructions"] -> As<plain::Array>();
+
+        stringstream fudef_name;
+        fudef_name << "function unit_" << id;
+        auto fu_type = new Capability(fudef_name.str());
+        
+        int enc = 2; // the initial encoding for opcode is 0 (usual for PASS)
+        for (auto& inst : insts) {
+          std::string inst_name = *inst->As<std::string>();
+          OpCode ss_inst = dsa::inst_from_string(inst_name.c_str());
+          fu_type->Add(ss_inst, enc++);
+        }
+        fu->fu_type_ = *fu_type;
+      }else if(nodeType == "vector port"){
+        bool is_input = false;
+        int in_vec_width = *cgranode["num_input"]->As<int64_t>();
+        int out_vec_width = *cgranode["num_output"]->As<int64_t>();
+        int port_num = -1;
+
+        // whether is a input/output vector port
+        if (in_vec_width > 0) {
+          is_input = false;
+          port_num = num_ovp++;
+          num_outputs += in_vec_width;
+          //std::cout << "node " << id << " is output vector port\n";
+        } else if (out_vec_width > 0) {
+          is_input = true;
+          port_num = num_ivp++;
+          num_inputs += out_vec_width;
+          //std::cout << "node " << id << " is input vector port\n";
+        } else {
+          continue;
+          //assert(0 && "vector port without connection?");
+        }
+        ssvport* vp = _subModel->add_vport(is_input, port_num);
+        vp->set_ssnode_prop(cgranode);
+        sym_tab[id] = vp;
+        vp->set_id(id);
+      }else{
+        std::cerr << id << "has unknown type" << nodeType << "\n";
+        assert(0 && "unknown type");
+      }
+    }
+    assert(num_outputs > 0);
+    assert(num_inputs > 0);
+  }
+
+  void linksVisit(json::BaseNode * jsonNodes){
+    // Go over all links
+    for (auto &jsonNode : *jsonNodes->As<plain::Array>()){
+      plain::Object cgralink = *jsonNode->As<plain::Object>();
+      auto source = *cgralink["source"]->As<plain::Array>();
+      auto sink = *cgralink["sink"]->As<plain::Array>();
+      int source_id = *source[0]->As<int64_t>();
+      int sink_id = *sink[0]->As<int64_t>();
+      
+      ssnode* from_module = sym_tab[source_id];
+      ssnode* to_module = sym_tab[sink_id];
+      assert(from_module && to_module);
+      //connect
+      from_module->add_link(to_module);
+    }
+  }
+
+  void Visit(json::Object * cgraNodes) override {
+    std::cout << "start parse cgra json" << std::endl;
+    auto cgra = *cgraNodes->As<plain::Object>();
+    nodesVisit(cgra["nodes"]);
+    linksVisit(cgra["links"]);
+    _subModel -> post_process();
+    std::cout << "JSON Parsed" << std::endl;
+  }
+};
+
+void SubModel::parse_json_without_boost(const std::string filename){
+  FILE *fjson = fopen(filename.c_str(), "r");
+  struct params p;
+  JSONrestart(fjson);
+  JSONparse(&p);
+  JSONModel modeler(this);
+  p.data -> Accept(&modeler);
+  fclose(fjson);
+  delete p.data;
 }

@@ -247,6 +247,8 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
 }
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
+  std::cout << "Start Schedule" << std::endl;
+
   initialize(ssDFG, sched);  // initialize if null, otherwise its fine
   auto pdgname = basename(ssDFG->filename);
   auto modelname = basename(_ssModel->filename);
@@ -255,7 +257,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     return false;
   }
 
-  int max_iters_no_improvement = _ssModel->subModel()->node_list().size() * 10;
+  int max_iters_no_improvement = _ssModel->subModel()->node_list().size() * 50;
 
   Schedule* cur_sched = new Schedule(getSSModel(), ssDFG);
   *cur_sched = *sched;
@@ -360,39 +362,11 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       best_succeeded = succeed_timing;
       last_improvement_iter = iter;
 
-      // Dump Mapping Json if score improved
-      stringstream mapping_filename;
-      mapping_filename  << "amir/mapping/"
-                        << pdgname << "+"
-                        << modelname << "+"
-                        << iter << "+mapping.json";
-      std::ofstream osh(mapping_filename.str());
-      if (osh.good()) {
-        sched -> DumpMappingInJson(osh);
-
-        // Get Mapping Statistic
-        SchedStats s;
-        sched->get_overprov(s.ovr, s.agg_ovr, s.max_util);
-        sched->fixLatency(s.lat, s.latmis);
-
-        int violation = sched->violation();
-        int obj = s.agg_ovr * 1000 + violation * 200 + s.latmis * 200 + s.lat +
-                  (s.max_util - 1) * 3000 + sched->num_passthroughs();
-        obj = obj * 100 + sched->num_links_mapped();
-
-        int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
-        double performance = sched->ssdfg()->estimated_performance(sched, false);
-
-        // Dump Mapping Statistic
-        osh << "  \"performance\" : " << performance << ", \n"
-            << "  \"provision\" : " << s.ovr << ", \n"
-            << "  \"agg_provision\" : " << s.agg_ovr << ", \n"
-            << "  \"max_util\" : " << s.max_util << ", \n"
-            << "  \"latency\" : " << s.lat << ", \n"
-            << "  \"latency_miss\" : " << s.latmis << ", \n"
-            << "  \"max_delay\" : " << max_delay << ", \n"
-            << "  \"obj\" : " << obj << endl 
-            << "}\n";
+      if(dump_mapping_if_improved){
+        stringstream mapping_file_str;
+        mapping_file_str << mapping_file << "+iter+" << iter <<".json";
+        std::string mapping_file_iter = mapping_file_str.str();
+        sched -> DumpMappingInJson(mapping_file_iter);
       }
     }
 
@@ -414,20 +388,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   if (cur_sched) {
     delete cur_sched;
   }
-
-  // Dump hardware
-  stringstream hwfilename_stream;
-  hwfilename_stream << "amir/hw/" << modelname << ".json";
-  _ssModel->subModel()->DumpHwInJson(hwfilename_stream.str().c_str());
-
-  // Dump software
-  stringstream swfilename_stream;
-  swfilename_stream << "amir/sw/" << pdgname << ".json";
-  std::ofstream osh(swfilename_stream.str());
-  if (osh.good()) {
-    sched -> DumpSwInJson(osh);
-  }
-
 
   return best_mapped;
 }

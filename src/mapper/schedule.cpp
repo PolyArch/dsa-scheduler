@@ -16,7 +16,7 @@
 #include "dsa/mapper/schedule.h"
 #include "dsa/arch/ssinst.h"
 #include "dsa/ir/ssdfg.h"
-
+#include "dsa/mapper/dse.h"
 #include "../utils/model_parsing.h"
 #include "../utils/color_mapper.h"
 
@@ -150,7 +150,10 @@ void Schedule::prepareForSaving() {
   }
 }
 
-void Schedule::DumpMappingInJson(ostream& os){
+void Schedule::DumpMappingInJson(std::string& mapping_filename){
+  std::cout << "Mapping JSON file: " << mapping_filename << std::endl;
+  ofstream os(mapping_filename);
+  assert(os.good());
   int edge_idx = 0;
 
   SSDfg * ssDFG = ssdfg();
@@ -161,54 +164,90 @@ void Schedule::DumpMappingInJson(ostream& os){
   //Software Edge to Hardware Link
   os << "  \"SwEdge2HwLinks\":[\n";
   edge_idx = 0;
+  bool not_outfirst = false;
   for(auto & ep : _edgeProp){
-    os << "    {\n";
-    os << "    \"edge_id\": " << edge_idx++ << ", \n";
-    os << "    \"extra_latency\": " << ep.extra_lat << ", \n";
-    os << "    \"links\": [";
+    if(not_outfirst) os << "    ,\n";
+    os << "    {\n"
+       << "    \"edge_id\": " << edge_idx++ << ", \n"
+       << "    \"extra_latency\": " << ep.extra_lat << ", \n"
+       << "    \"links\": [";
+    bool notfirst = false;
     for(auto & link : ep.links){
-      os << "        {" << endl;
-      os << "        \"source_hw_node_type\": "
-         << "\"" << link.second->orig()->nodeType() <<"\" , \n";
-      os << "        \"sink_hw_node_type\": "
-         << "\"" << link.second->dest()->nodeType() <<"\" , \n";
-      os << "        \"source_hw_node_id\": "
-         << "\"" << link.second->orig()->id() <<"\" , \n";
-      os << "        \"sink_hw_node_id\": "
-         << "\"" << link.second->dest()->id() <<"\" , \n";
-    
-      os << "        }," << endl;
+      if(notfirst) os << "       ," << endl;
+      os << "        {" << endl
+         << "        \"source_hw_node_type\": "
+         << "\"" << link.second->orig()->nodeType() <<"\" , \n"
+         << "        \"sink_hw_node_type\": "
+         << "\"" << link.second->dest()->nodeType() <<"\" , \n"
+         << "        \"source_hw_node_id\": "
+         << "\"" << link.second->orig()->id() <<"\" , \n"
+         << "        \"sink_hw_node_id\": "
+         << "\"" << link.second->dest()->id() <<"\"  \n"
+         << "        }" << endl;
+      notfirst = true;
     }
     os << "    ]";
-    os << "    },\n";
+    os << "    }\n";
+    not_outfirst = true;
   }
   os << "  ],";
 
   //Software Vertex to Hardware Node
   os << "  \"SwVertex2HwNode\":[\n";
   int vertex_idx = 0;
+  not_outfirst = false;
   for (auto & vp : _vertexProp){
+    if(not_outfirst) os << "    ,\n";
     os << "    {\n";
     os << "    \"vertex_id\": " << vertex_idx++ << ", \n";
     os << "    \"node_id\": " << vp.node->id() << ", \n";
-    os << "    \"node_type\": \"" << vp.node->nodeType() << "\", \n";
-    os << "    },\n";
+    os << "    \"node_type\": \"" << vp.node->nodeType() << "\" \n";
+    os << "    }\n";
+    not_outfirst = true;
   }
   os << "  ],\n";
+
+  // Get Mapping Statistic
+  SchedStats s;
+  this->get_overprov(s.ovr, s.agg_ovr, s.max_util);
+  this->fixLatency(s.lat, s.latmis);
+
+  int violation = this->violation();
+  int obj = s.agg_ovr * 1000 + violation * 200 + s.latmis * 200 + s.lat +
+            (s.max_util - 1) * 3000 + this->num_passthroughs();
+  obj = obj * 100 + this->num_links_mapped();
+
+  int max_delay = this->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
+  double performance = this->ssdfg()->estimated_performance(this, false);
+
+  // Dump Mapping Statistic
+  os  << "  \"performance\" : " << performance << ", \n"
+      << "  \"agg_overprovision \" : " << s.agg_ovr << ", \n"
+      << "  \"max_util\" : " << s.max_util << ", \n"
+      << "  \"agg_latency_miss\" : " << violation << ", \n"
+      << "  \"latency_miss\" : " << s.latmis << ", \n"
+      << "  \"latency\" : " << s.lat << ", \n"
+      << "  \"passthrough_PEs\" : " << this->num_passthroughs() << ", \n"
+      << "  \"num_links_mapped\" : " << this->num_links_mapped() << ", \n"
+      << "  \"obj\" : " << obj << endl 
+      << "}\n";
 }
 
-void Schedule::DumpSwInJson(ostream& os){
-
+void Schedule::DumpSwInJson(std::string & sw_json_filename){
+  std::cout << "Software JSON file: " << sw_json_filename << std::endl;
+  std::ofstream os(sw_json_filename);
+  assert(os.good());
   int edge_idx = 0;
   SSDfg * ssDFG = ssdfg();
   std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
   std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
 
-
   os << "{\n";
   // software edges
   os << "  \"edges\":[\n";
+  bool notfirst = false;
   for(auto & edge : edge_list){
+    if(notfirst) os << "    ,";
     os << "    {\n";
     os << "    \"edge_id\": " << edge->id() << " ,\n";
     // Source Vertex
@@ -232,14 +271,17 @@ void Schedule::DumpSwInJson(ostream& os){
 
     os << "    \"edge_index\": " << edge->val()->index() << " ,\n";
     os << "    \"msb\": " << edge->r() << " ,\n";
-    os << "    \"lsb\": " << edge->l() << " ,\n";
-    os << "    },\n";
+    os << "    \"lsb\": " << edge->l() << "\n";
+    os << "    }\n";
+    notfirst = true;
   }
   os << "  ],\n";
 
   // software vertices
   os << "  \"vertices\":[\n";
+  notfirst = false;
   for(auto & vertex : vertex_list){
+    if(notfirst) os << "    ,";
     os << "    {\n";
     //os << "    \"name\": \"" << vertex->name() << "\" ,\n";
 
@@ -261,17 +303,17 @@ void Schedule::DumpSwInJson(ostream& os){
         assert(false && "neither input nor output ?");
       }
       os << "    \"width\": "<< vnode->get_port_width() << " ,\n";
-      os << "    \"length\": "<< vnode->get_vp_len() << " ,\n";
+      os << "    \"length\": "<< vnode->get_vp_len() << "\n";
     }
 
     if(inst != nullptr){
       os << "    \"type\": \"instruction\" ,\n";
       os << "    \"name\": \"" << name_of_inst(inst->inst()) << "\" ,\n";
       os << "    \"width\": "<< inst->bitwidth() << " ,\n";
-      os << "    \"latency\": "<< inst->lat_of_inst() << " ,\n";
+      os << "    \"latency\": "<< inst->lat_of_inst() << "\n";
     }
-
-    os << "    },\n";
+    os << "    }\n";
+    notfirst = true;
   }
   os << "  ]\n";
 

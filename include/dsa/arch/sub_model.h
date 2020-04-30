@@ -5,7 +5,6 @@
 #include <boost/any.hpp>
 #include <boost/utility/binary.hpp>
 #include <bitset>
-#include <boost/property_tree/ptree.hpp>
 #include <climits>
 #include <fstream>
 #include <map>
@@ -18,6 +17,8 @@
 #include "fu_model.h"
 #include "predict.h"
 #include "pa_model.h"
+#include "json/visitor.h"
+
 
 #define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x)) + 1)
 
@@ -35,11 +36,12 @@ class ssnode;
 class ssvport;
 
 template <typename T>
-T get_prop_attr(const boost::property_tree::ptree& prop, const std::string& name, T dft) {
-  if (auto entry = prop.get_child_optional(name)) {
-    return entry->get_value<T>();
-  }
-  return dft;
+T get_prop_attr(plain::Object& prop, const std::string& name, T dft) {
+  auto iter = prop.find(name);
+  if (iter != prop.end())
+    return *iter->second->As<T>();
+  else
+    return dft;
 }
 
 template <typename T>
@@ -227,109 +229,15 @@ class ssnode {
 
   int id() { return _ID; }
 
-  void set_ssnode_prop(boost::property_tree::ptree prop) {
-    node_type = prop.get_child("nodeType").get_value<std::string>();
-    data_width = prop.get_child("data_width").get_value<int>();
-
-    // Count the number of input port and output port
-    // vector port can have 0 input_node or 0 output_node
-    auto input_nodes = prop.get_child_optional("input_nodes");
-    int num_input = 0;
-    auto output_nodes = prop.get_child_optional("output_nodes");
-    int num_output = 0;
-    if (input_nodes.is_initialized()) num_input = prop.get_child("input_nodes").size();
-    if (output_nodes.is_initialized()) num_output = prop.get_child("output_nodes").size();
-    (void)num_input;
-    (void)num_output;
+  void set_ssnode_prop(plain::Object & prop) {
+    node_type = *prop["nodeType"] -> As<std::string>();
+    data_width = *prop["data_width"] -> As<int64_t>();
 
     // Parse Decomposer
     if (node_type != "vector port") {
-      auto d_node = prop.get_child_optional("granularity");
-      if (!d_node.is_initialized()) {
-        decomposer = mf_decomposer;
-        std::cout << "Warning: non-vectorport-node need to have decomposer as properties,"
-                  << "use most fine grain decomposer instead\n";
-      } else {
-        granularity = prop.get_child("granularity").get_value<int>();
-        decomposer = data_width / granularity;
-      }
+      granularity = get_prop_attr(prop, "granularity", static_cast<int64_t>(granularity));
     }
-    // std ::cout << "data width = " << data_width << ", granularity = " << granularity << "\n";
-
-    // parser the subnet table
-
-    /* TODO(@were): I need @sihao's help to adopt our new subnet routine.
-
-    auto subnet_offset_node = prop.get_child_optional("subnet_offset");
-    if (subnet_offset_node.is_initialized()){
-
-      // Initialize the subnet table
-      _subnet_table.resize(num_output);
-      for (int op_idx = 0; op_idx < num_output; op_idx++){
-        _subnet_table[op_idx].resize(mf_decomposer);
-        for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
-          _subnet_table[op_idx][os_idx].resize(num_input);
-          for (int ip_idx = 0; ip_idx < num_input; ip_idx++){
-            _subnet_table[op_idx][os_idx][ip_idx].resize(mf_decomposer);
-            for (int is_idx = 0; is_idx < mf_decomposer; is_idx++){
-              _subnet_table[op_idx][os_idx][ip_idx][is_idx] = false;
-            }// end of input_slot
-          }// end of input_port
-        }// end of output_slot
-      }//end of output_port
-
-      // Assigne the subnet table via offset
-      auto & subnet_offset = prop.get_child("subnet_offset");
-      int decompose_ratio = mf_decomposer / decomposer; // calculatet the ratio of
-    most-fine-grain decomposer by normal-decomposer std:: cout << "the subnet offset is :
-    "; for(auto & offset : subnet_offset){ int offset_value =
-    offset.second.get_value<int>(); std :: cout << offset_value << " "; for (int op_idx =
-    0; op_idx < num_output; op_idx++){ for (int os_idx = 0; os_idx < mf_decomposer;
-    os_idx++){ for (int ip_idx = 0; ip_idx < num_input; ip_idx++){ for (int is_idx = 0;
-    is_idx < mf_decomposer; is_idx++){
-                // get the real decomposer
-                int real_os_idx = os_idx / decompose_ratio;
-                int real_is_idx = is_idx / decompose_ratio;
-                // whether the slot difference equal the offset
-                bool connect = ((real_is_idx - real_os_idx) % decomposer == offset_value)
-    ||
-                                ((real_is_idx - real_os_idx - decomposer) % decomposer ==
-    offset_value) ||
-                                ((real_is_idx - real_os_idx + decomposer) % decomposer ==
-    offset_value);
-                // ATTENTION: This is tricky, ask Sihao if you feel confused
-                bool same_mf_slot = os_idx % decompose_ratio == is_idx % decompose_ratio;
-                // connect in subnet table
-                if(connect && same_mf_slot){
-                  _subnet_table[op_idx][os_idx][ip_idx][is_idx] = true;
-                }
-              }// end of input_slot
-            }// end of input_port
-          }// end of output_slot
-        }//end of output_port
-      }
-      std :: cout << "\n\n";
-
-      // Debug : Print subnet table
-      if(true){
-        for (int op_idx = 0; op_idx < num_output; op_idx++){
-          for (int os_idx = 0; os_idx < mf_decomposer; os_idx++){
-            for (int ip_idx = 0; ip_idx < num_input; ip_idx++){
-              for (int is_idx = 0; is_idx < mf_decomposer; is_idx++){
-                std::cout << _subnet_table[op_idx][os_idx][ip_idx][is_idx];
-              }// end of input_slot
-              std::cout << " ";
-            }// end of input_port
-            std::cout << "\n";
-          }// end of output_slot
-
-          std::cout << "\n";
-        }//end of output_port
-      }
-      // End Debug Print: feel free to delete it
-
-    }// End of Parse subnet_table
-    */
+    decomposer = data_width / granularity;
   }
 
   void set_id(int id) { _ID = id; }
@@ -515,10 +423,10 @@ class ssswitch : public ssnode {
     os << "}\n";
   }
 
-  void set_prop(boost::property_tree::ptree prop) {
+  void set_prop(plain::Object & prop) {
     set_ssnode_prop(prop);
     // max output fifo depth
-    max_fifo_depth = get_prop_attr(prop, "max_fifo_depth", 4);
+    max_fifo_depth = get_prop_attr(prop, "max_fifo_depth", static_cast<int64_t>(max_fifo_depth));
   }
 
   void collect_features() {
@@ -649,16 +557,16 @@ class ssfu : public ssnode {
     return res;
   }
 
-  void set_prop(boost::property_tree::ptree prop) {
+  void set_prop(plain::Object & prop) {
     set_ssnode_prop(prop);
 
-    std::string nodeType = prop.get_child("nodeType").get_value<std::string>();
+    std::string nodeType = *prop["nodeType"]->As<std::string>();
 
     // delay_fifo_depth
-    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", 4);
+    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(_delay_fifo_depth));
 
     // register_file_size
-    register_file_size = get_prop_attr(prop, "register_file_size", 8);
+    register_file_size = get_prop_attr(prop, "register_file_size", static_cast<int64_t>(register_file_size));
   }
 
   void dumpIdentifier(ostream& os) override {
@@ -1061,7 +969,7 @@ class SubModel {
 
   void DumpHwInJson(const char* name) {
     ofstream os(name);
-    std::cout << name << std::endl;
+    std::cout << "Hardware JSON file: " << name << std::endl;
     if (!os.good()) {
       return;
     }
@@ -1128,7 +1036,9 @@ class SubModel {
         << "\"sw_total_area(um2)\" : " << get_sw_total_area() << ",\n"
         << "\"sw_total_power(mW)\" : " << get_sw_total_power() << ",\n"
         << "\"sync_total_area(um2)\" : " << get_sync_area() << ",\n"
-        << "\"sync_total_power(mW)\" : " << get_sync_power() << "\n";
+        << "\"sync_total_power(mW)\" : " << get_sync_power() << ",\n"
+        << "\"total_area(um2)\" : " << get_fu_total_area() + get_sw_total_area() + get_sync_area() << ",\n"
+        << "\"total_power(mW)\" : " << get_fu_total_power() + get_sw_total_power() + get_sync_power() << "\n";
 
     os << "}\n";  // End of the JSON file
   }
@@ -1425,12 +1335,11 @@ class SubModel {
       delete n;
     }
   }
-
+  void parse_json_without_boost(std::string filename);
   void post_process();
 
  private:
   void build_substrate(int x, int y);
-
   void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config,
                          int temp_x, int temp_y, int temp_width, int temp_height,
                          int skip_hv_dist, int skip_diag_dist, int skip_delay);

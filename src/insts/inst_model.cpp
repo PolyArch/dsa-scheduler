@@ -7,6 +7,7 @@
 
 #include "inst_model.h"
 #include "../utils/model_parsing.h"
+
 #include "dsa/debug.h"
 
 using namespace dsa;

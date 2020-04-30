@@ -35,8 +35,18 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   for (auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
   for (auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
 
-  if (dfg_in_sizes.size() > vec_in_sizes.size()) return false;
-  if (dfg_out_sizes.size() > vec_out_sizes.size()) return false;
+  if (dfg_in_sizes.size() > vec_in_sizes.size()) {
+    std::cerr << "DFG has in size = " << dfg_in_sizes.size()
+             << ", but input vport has only size = "
+             << vec_in_sizes.size() << std::endl;
+    return false;
+  }
+  if (dfg_out_sizes.size() > vec_out_sizes.size()){
+    std::cerr << "DFG has out size = " << dfg_out_sizes.size()
+             << ", but output vport has only size = "
+             << vec_out_sizes.size() << std::endl;
+    return false;
+  };
 
   std::sort(vec_in_sizes.begin(), vec_in_sizes.end(), greater<int>());
   std::sort(vec_out_sizes.begin(), vec_out_sizes.end(), greater<int>());
@@ -45,7 +55,7 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
 
   for (unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
     if (dfg_in_sizes[i] > vec_in_sizes[i]) {
-      if (verbose) {
+      if (true) {
         std::cerr << "DFG Input Size = " << dfg_in_sizes[i] << "\n"
                   << "Vector Input Size = " << vec_in_sizes[i] <<"\n"
                   << "Vector Inputs Insufficient\n";
@@ -55,7 +65,7 @@ bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
   }
   for (unsigned i = 0; i < dfg_out_sizes.size(); ++i) {
     if (dfg_out_sizes[i] > vec_out_sizes[i]) {
-      if (verbose) {
+      if (true) {
         std::cerr << "Vector Outputs Insufficient\n";
       }
       return false;
@@ -116,6 +126,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
     int dfg_count = pair.second;
 
     int fu_count = 0;
+    //std::cout << "size of fu list is "<< _ssModel->subModel()->fu_list().size() << endl;
     for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
       if (cand_fu->fu_type_.Capable(ss_inst)) {
         fu_count += 64 / dsa::bitwidth[ss_inst];
@@ -203,6 +214,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
 
   if (check_feasible(dfg, model, verbose)) {
     auto sigint_handler = [](int) { exit(1); };
+    std::cout << "feasible checked" << std::endl;
 
     // Setup signal so we can stop if we need to
     struct sigaction sigIntHandler;
@@ -211,10 +223,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
 
-    // Debug
-    // string hw_config_filename = model_rawname + ".xml";
-    // sched -> printConfigBits_Hw(hw_config_filename);
-
+    
     succeed_sched = schedule_timed(dfg, sched);
 
     int lat = 0, latmis = 0;

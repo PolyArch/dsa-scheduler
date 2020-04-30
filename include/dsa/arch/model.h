@@ -97,7 +97,7 @@ class SSModel {
   int io_ports{1};
  private:
   // InstModel *instModel;
-  SubModel* _subModel;
+  SubModel* _subModel = new SubModel();
 
   bool _dispatch_inorder = false;
   int _dispatch_width = 2;
@@ -106,6 +106,7 @@ class SSModel {
 
   void parse_exec(std::istream& istream);
   void parse_json(std::istream& istream);
+
 };
 
 }  // namespace dsa

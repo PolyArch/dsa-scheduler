@@ -2,9 +2,9 @@
 #define yyHEADER_H 1
 #define yyIN_HEADER 1
 
-#line 6 "/home/weng/ss-stack/ss-scheduler/src/ir/dfg-parser.h"
+#line 6 "/home/sihao/repo/ss-stack/ss-scheduler/src/ss-scheduler/dfg-parser.h"
 
-#line 8 "/home/weng/ss-stack/ss-scheduler/src/ir/dfg-parser.h"
+#line 8 "/home/sihao/repo/ss-stack/ss-scheduler/src/ss-scheduler/dfg-parser.h"
 
 #define  YY_INT_ALIGNED short int
 
@@ -466,9 +466,9 @@ extern int yylex (void);
 #undef yyTABLES_NAME
 #endif
 
-#line 101 "/home/weng/ss-stack/ss-scheduler/src/ir/dfg-parser.l"
+#line 101 "dfg-parser.l"
 
 
-#line 473 "/home/weng/ss-stack/ss-scheduler/src/ir/dfg-parser.h"
+#line 473 "/home/sihao/repo/ss-stack/ss-scheduler/src/ss-scheduler/dfg-parser.h"
 #undef yyIN_HEADER
 #endif /* yyHEADER_H */

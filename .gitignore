@@ -3,10 +3,11 @@
 src/gams_models/*.h
 build/
 *.sw?
+*.tar.gz
 drivers/ss_sched
 drivers/stat-config
 dfgs/*/*.h
-dfg/*/amir/*
+*amir*
 dfgs/*/sched/*
 gams/
 verif/
