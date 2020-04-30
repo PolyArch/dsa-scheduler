@@ -12,6 +12,7 @@
 #include "../utils/model_parsing.h"
 #include "dsa/arch/ssinst.h"
 #include "dsa/arch/model.h"
+#include "dsa/debug.h"
 
 #include "json.lex.h"
 #include "json.tab.h"
@@ -22,17 +23,9 @@ namespace pt = boost::property_tree;
 using namespace std;
 using namespace dsa;
 
-
-SSModel::SSModel(SubModel* subModel, bool multi_config) {
-  if (subModel) {
-    _subModel = subModel;
-  } else {
-    _subModel = new SubModel(5, 5, SubModel::PortType::everysw, multi_config);
-  }
-}
-
-SSModel::SSModel(bool multi_config) {
-  _subModel = new SubModel(5, 5, SubModel::PortType::everysw, multi_config);
+SSModel::SSModel(SubModel* subModel) {
+  CHECK(subModel);
+  _subModel = subModel;
 }
 
 void SSModel::setMaxEdgeDelay(int d) {
@@ -80,7 +73,7 @@ ssnode* if_isVector(ssnode* n, std::string portname) {
 }
 
 // File constructor
-SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_) {
+SSModel::SSModel(const char* filename_) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
   bool failed_read = ifs.fail();
@@ -117,7 +110,7 @@ SSModel::SSModel(const char* filename_, bool multi_config) : filename(filename_)
         cerr << "No Fu Model Specified\n";
         exit(1);
       }
-      _subModel = new SubModel(ifs, fu_types, multi_config);
+      _subModel = new SubModel(ifs, fu_types);
     }
 
     if (ModelParsing::StartsWith(line, "[io-model]")) {
@@ -169,8 +162,6 @@ void SSModel::parse_json(std::istream& istream) {
       ssfu* fu = _subModel->add_fu();
       fu->set_id(id);
       fu->set_prop(node_def);
-      auto link = fu->add_link(fu);  // For decomposability
-      (void) link;
 
       sym_tab[id] = fu;
       auto& insts = node_def.get_child("instructions");
@@ -258,10 +249,12 @@ void SSModel::parse_json(std::istream& istream) {
     
     // Sihao @jian: Why this way of `add_link` not works ?
     //_subModel->add_link(from_module, to_module);
-    from_module->add_link(to_module);
-
-    std::cout << "connect : " << from_module->nodeType() << "_" << from_module->id() <<
-    " --> "; std::cout << to_module-> nodeType() << "_" << to_module->id() << "\n";
+    if (from_module != to_module) {
+      from_module->add_link(to_module);
+      DEBUG(CONNECTIVITY) << from_module->nodeType() << "_" << from_module->id()
+                          << " --> "; std::cout << to_module-> nodeType()
+                          << "_" << to_module->id();
+    }
   }
 
   _subModel->post_process();

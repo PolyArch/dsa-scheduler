@@ -10,13 +10,10 @@
 #include <boost/optional.hpp>
 
 #include "dsa/arch/model.h"
+#include "dsa/arch/estimation.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
 #include "dsa/ir/ssdfg.h"
-
-#include "json/visitor.h"
-#include "json.lex.h"
-#include "json.tab.h"
 
 using namespace std;
 using sec = chrono::seconds;
@@ -108,7 +105,6 @@ int main(int argc, char* argv[]) {
 
 
   std::string model_filename = argv[0];
-
   SSModel ssmodel(model_filename.c_str());
 
   ssmodel.memory_size = memory_size;
@@ -156,15 +152,8 @@ int main(int argc, char* argv[]) {
 
 
   if (est_perf) {
-    auto sub = ssmodel.subModel();
-    cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2, "
-         <<  sub->get_fu_total_power() << "mw\n"
-         << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area() << "um2, "
-         <<  sub->get_sw_total_power() << "mw\n"
-         << "Sync: " << sub->vport_list().size() << " " << sub->get_sync_area() << "um2, "
-         <<  sub->get_sync_power() << "mw\n"
-         <<  "Memory: " << ssmodel.memory_area() << "um2, "<< ssmodel.memory_power() << "mw\n"
-         << std::endl;
+    auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
+    res.Dump(std::cout);
   }
 
   return 0;

@@ -34,9 +34,8 @@ const std::map<std::pair<int, int>, std::pair<double, double>> memory_data = {
 
 class SSModel {
  public:
-  SSModel(bool multi = false);
-  SSModel(const char* filename, bool multi = false);
-  SSModel(SubModel* sub, bool multi = false);
+  SSModel(const char* filename);
+  SSModel(SubModel* sub);
 
   SubModel* subModel() { return (_subModel); }
 
@@ -61,9 +60,6 @@ class SSModel {
     if (v != -1) ind_memory = v;
     return ind_memory;
   }
-
-  //double host_area() { return (indirect() * 88800) + 5200 + 41000; }
-  //double host_power() { return (indirect() * 18.1) + 9.3 + 10.1; }
 
   double memory_area() {
     auto iters = memory_data.find({memory_size, io_ports});

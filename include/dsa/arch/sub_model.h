@@ -13,16 +13,23 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <functional>
 
+#include "dsa/debug.h"
 #include "fu_model.h"
 #include "predict.h"
-#include "pa_model.h"
 #include "json/visitor.h"
 
 
 #define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x)) + 1)
 
 namespace dsa {
+
+namespace adg {
+
+class Visitor;
+
+}
 
 class SubModel;
 
@@ -99,8 +106,6 @@ class sslink {
     _ID = -1;
   }
 
-  sslink* getCycleLink();
-
   std::string name() const;
 
   int id() { return _ID; }
@@ -121,9 +126,6 @@ class sslink {
   int bitwidth() { return _bitwidth; }
 
   int decomp_bitwidth() { return _decomp_bitwidth; }
-
-  void set_lat(int i) { _lat = i; }
-  int lat() { return _lat; }
 
   /* To check the connectivity in O(1), here we apply a tricky idea:
    * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
@@ -171,7 +173,6 @@ class sslink {
   int _ID = -1;
 
   // By default, assume single-flopped, dedicated, and flow-control, 64-bit
-  int _lat = 1;               // whether there is a latch at the end of this stage
   int _max_util = 1;          // max instructions can map to this link
   bool _flow_control = true;  // whether link supports backpressure
   int _bitwidth = 64;         // bitwidth of link
@@ -190,14 +191,14 @@ class ssnode {
 
   ssnode() {}
 
+  // TODO(@were): Deprecate this in the visitor pattern.
   virtual ssnode* copy() = 0;
+
+  virtual void Accept(adg::Visitor *visitor) = 0;
 
   sslink* add_link(ssnode* node);
 
   virtual std::string name() const = 0;
-
-  virtual bool is_input() { return false; }
-  virtual bool is_output() { return false; }
 
   virtual int delay_fifo_depth() { return 0; }
 
@@ -211,19 +212,11 @@ class ssnode {
 
   int y() const { return _y; }
 
-  typedef std::vector<sslink*>::const_iterator const_iterator;
-
   const std::vector<sslink*>& in_links() { return links[1]; }
 
   const std::vector<sslink*>& out_links() { return links[0]; }
 
   virtual bool is_hanger() { return false; }
-
-  int num_non_self_out_links() { return links[0].size() - (_cycle_link != 0); }
-
-  sslink* getFirstOutLink() { return links[0].empty() ? nullptr : links[0][0]; }
-
-  sslink* getFirstInLink() { return links[1].empty() ? nullptr : links[1][0]; }
 
   std::string nodeType() { return node_type; }
 
@@ -244,12 +237,6 @@ class ssnode {
   virtual void dumpIdentifier(ostream& os) = 0;
   virtual void dumpFeatures(ostream& os) = 0;
   virtual uint64_t get_config_bits() = 0;
-
-  void agg_elem(std::vector<sslink*>& link_list) {
-    for (unsigned i = 0; i < links[0].size(); ++i) {
-      link_list.push_back(links[0][i]);
-    }
-  }
 
   int node_dist(int slot) { return _node_dist[slot]; }
 
@@ -286,37 +273,6 @@ class ssnode {
 
   int bitwidth() { return _bitwidth; }
 
-  int get_link_idx(sslink * link, std::vector<sslink*> links){
-    auto find_it = std::find(links.begin(), links.end(), link);
-    if(find_it != links.end()){
-      return std::distance(links.begin(), find_it);
-    }else{
-      return -1;
-    }
-  }
-
-  virtual double sync_area() = 0;
-  virtual double sync_power() = 0;
-  // std::vector<std::pair<int, sslink*>>& linkslots_for(std::pair<int, sslink*>& p, int
-  // bitwidth) {
-  //  int slot = p.first;
-  //  sslink* l = p.second;
-  //  int l_ind = 0;
-  //  if (l) l_ind = l->in_index();
-  //  auto& ret = _routing_memo.at(l_ind * 4 * MAX_SUBNETS + slot * 4 +
-  //                               (31 - __builtin_clz(bitwidth)));
-
-  //  if(links[0].size()!=0 && ret.size() == 0) {
-  //    std::cerr << "ERROR: Link: " << l->name()
-  //              << " has output links, but no routing table\n"
-  //              << "_routing_memo.size() : " << _routing_memo.size() << "\n"
-  //              << "num ins: " << links[1].size() << "\n"
-  //              << "num outs: " << links[0].size() << "\n";
-  //    assert(0 && "bad _routing_memo");
-  //  }
-  //  return ret;
-  //}
-
   virtual ~ssnode(){};
 
   int decomposer{8};
@@ -334,8 +290,6 @@ class ssnode {
   int _max_util = 1;          // Convert from "share_slot_size"
   bool _flow_control = true;  // convert from "flow_control"
   int _bitwidth = 64;         // maximum bitwidth of PE, convert from "bit_width"
-
-  sslink* _cycle_link = nullptr;  // to
 
   std::vector<sslink*> links[2];  // {output, input}
 
@@ -355,6 +309,8 @@ class ssnode {
 class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
+
+  void Accept(adg::Visitor *visitor) override;
 
   ssnode* copy() override {
     auto res = new ssswitch();
@@ -451,22 +407,6 @@ class ssswitch : public ssnode {
     features[8] = _max_util;
   }
 
-  double get_area() {
-    return radix_area(in_links().size(), out_links().size(), decomposer, _flow_control);
-  }
-
-  double sync_area() override {
-    return fifo_area(this->max_fifo_depth = 1);
-  }
-
-  double get_power() {
-    return radix_power(in_links().size(), out_links().size(), decomposer, _flow_control);
-  }
-
-  double sync_power() override {
-    return fifo_power(max_fifo_depth = 1);
-  }
-
   virtual ~ssswitch(){};
 
   void print_features() {
@@ -557,7 +497,9 @@ class ssfu : public ssnode {
     return res;
   }
 
+  void Accept(adg::Visitor *visitor);
   void set_prop(plain::Object & prop) {
+
     set_ssnode_prop(prop);
 
     std::string nodeType = *prop["nodeType"]->As<std::string>();
@@ -673,32 +615,6 @@ class ssfu : public ssnode {
     // print_features();
 
     return features;
-  }
-
-  double get_area() {
-    return fu_type_.area();
-  }
-
-  double nw_area() {
-    return radix_area(links[1].size(), 2, decomposer, _flow_control) +
-	         radix_area(1, links[0].size(), decomposer, _flow_control);
-  }
-
-  double nw_power() {
-    return radix_power(links[1].size(), 2, decomposer, _flow_control) +
-	         radix_power(1, links[0].size(), decomposer, _flow_control);
-  }
-
-  double sync_area() override {
-    return fifo_area(_delay_fifo_depth);
-  }
-
-  double get_power() {
-    return fu_type_.power();
-  }
-
-  double sync_power() override {
-    return fifo_power(_delay_fifo_depth);
   }
 
   virtual ~ssfu(){};
@@ -823,6 +739,8 @@ class ssvport : public ssnode {
     return res;
   }
 
+  void Accept(adg::Visitor *vistor);
+
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
@@ -894,15 +812,9 @@ class ssvport : public ssnode {
 
   int bitwidth_capability() {
     int res = 0;
-    if (is_output()) {
-      //std::cout << "node " << id() << ", this port is output vp\n";
-      for (auto link : links[1]) {
-        res += link->bitwidth();
-      }
-    } else {
-      assert(is_input());
-      //std::cout << "node " << id() << ", this port is input vp\n";
-      for (auto link : links[0]) {
+    CHECK((int) links[0].empty() + (int) links[1].empty() == 1);
+    for (auto &elem : links) {
+      for (auto link : elem) {
         res += link->bitwidth();
       }
     }
@@ -912,26 +824,6 @@ class ssvport : public ssnode {
   void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
   ssnode* convert_port2node(std::string portname) { return port2node[portname]; }
   int port() { return _port; }
-  bool is_input() override { return links[1].size() == 0; }
-  bool is_output() override { return links[0].size() == 0; }
-
-  double get_area() {
-    return radix_area(std::max((int) 1, (int) in_links().size()),
-                      std::max((int) 1, (int) out_links().size()), decomposer, false);
-  }
-
-  double get_power() {
-    return radix_power(std::max((int) 1, (int) in_links().size()),
-                      std::max((int) 1, (int) out_links().size()), decomposer, false);
-  }
-
-  double sync_power() override {
-    return fifo_power(2);
-  }
-
-  double sync_area() override {
-    return fifo_area(2);
-  }
 
   virtual ~ssvport(){};
   void set_port(int port) { _port = port; }
@@ -960,10 +852,11 @@ class SubModel {
 
   SubModel() {}
 
-  SubModel(std::istream& istream, const std::vector<Capability*> &, bool multi_config = true);
+  SubModel(std::istream& istream, const std::vector<Capability*> &);
 
-  SubModel(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2,
-           bool multi_config = true);
+  SubModel(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2);
+
+  void Apply(adg::Visitor *);
 
   void PrintGraphviz(std::ostream& os);
 
@@ -1028,17 +921,7 @@ class SubModel {
         os << ",\n";
       }
     }
-    os << "],\n";  // The End of Nodes
-
-    // Hardware Overhead
-    os  << "\"fu_total_area(um2)\" : " << get_fu_total_area() << ",\n"
-        << "\"fu_total_power(mW)\" : " << get_fu_total_power() << ",\n"
-        << "\"sw_total_area(um2)\" : " << get_sw_total_area() << ",\n"
-        << "\"sw_total_power(mW)\" : " << get_sw_total_power() << ",\n"
-        << "\"sync_total_area(um2)\" : " << get_sync_area() << ",\n"
-        << "\"sync_total_power(mW)\" : " << get_sync_power() << ",\n"
-        << "\"total_area(um2)\" : " << get_fu_total_area() + get_sw_total_area() + get_sync_area() << ",\n"
-        << "\"total_power(mW)\" : " << get_fu_total_power() + get_sw_total_power() + get_sync_power() << "\n";
+    os << "]\n";  // The End of Nodes
 
     os << "}\n";  // End of the JSON file
   }
@@ -1071,96 +954,6 @@ class SubModel {
   std::vector<ssfu*> fu_list() { return node_filter<ssfu*>(); }
 
   std::vector<ssswitch*> switch_list() { return node_filter<ssswitch*>(); }
-
-  double get_fu_total_area() {
-    double total_area = 0.0;
-    for (auto fu : fu_list()) {
-      double area_to_add = fu->get_area();
-
-      static bool printed_bad_fu = false;
-      if (fu->get_area() < 0 && printed_bad_fu == false) {
-        printed_bad_fu = true;
-        std::cout << "FU Area: " << fu->get_area() << "\n";
-        std::cout << "ins/outs:" << fu->in_links().size() << "/" << fu->out_links().size()
-                  << "\n";
-        std::cout << "decomposer:" << fu->decomposer << " gran: " << fu->granularity
-                  << "\n";
-        fu->print_features();
-        std::cout << "\n";
-        area_to_add = abs(area_to_add) + 200;
-        // assert(0 && "neg area");
-      }
-      total_area += area_to_add;
-    }
-    return total_area;
-  }
-
-  double get_fu_total_power() {
-    double total_power = 0.0;
-    std::vector<ssfu*> fus = fu_list();
-    for (auto fu : fus) {
-      total_power += fu->get_power();
-    }
-    return total_power;
-  }
-
-  double get_sw_total_area() {
-    double total_area = 0.0;
-    for (auto sw : switch_list()) {
-      double area_to_add = sw->get_area();
-      total_area += area_to_add;
-    }
-    for (auto sw : vport_list()) {
-      double area_to_add = sw->get_area();
-      total_area += area_to_add;
-    }
-    for (auto sw : fu_list()) {
-      double area_to_add = sw->nw_area();
-      total_area += area_to_add;
-    }
-    return total_area;
-  }
-
-  double get_sw_total_power() {
-    double total_power = 0.0;
-    for (auto sw : switch_list()) {
-      total_power += sw->get_power();
-    }
-    for (auto sw : vport_list()) {
-      total_power += sw->get_power();
-    }
-    for (auto sw : fu_list()) {
-      double area_to_add = sw->nw_power();
-      total_power += area_to_add;
-    }
-    return total_power;
-  }
-
-  double get_sync_area() {
-    double total_area = 0.0;
-    for (auto elem : node_list()) {
-      total_area += elem->sync_area();
-    }
-    return total_area;
-  }
-
-  double get_sync_power() {
-    double total_power = 0.0;
-    for (auto vp : node_list()) {
-      total_power += vp->sync_power();
-    }
-    return total_power;
-  }
-
-  double get_overall_power() {
-    return get_sw_total_power() + get_fu_total_power() + get_sync_power();
-  }
-
-  double get_overall_area() {
-    return get_sw_total_area() + get_fu_total_area() + get_sync_area();
-  }
-
-  bool multi_config() { return _multi_config; }
 
   size_t num_fu() { return fu_list().size(); }
 
@@ -1240,7 +1033,6 @@ class SubModel {
     copy_sub->_sizex = _sizex;
     copy_sub->_sizey = _sizey;
     copy_sub->_ssio_interf = _ssio_interf;
-    copy_sub->_multi_config = _multi_config;
 
     copy_sub->_node_list.resize(_node_list.size());
     copy_sub->_link_list.resize(_link_list.size());
@@ -1311,7 +1103,12 @@ class SubModel {
 
   // External add link -- used by arch. search
   sslink* add_link(ssnode* src, ssnode* dst) {
-    if (src->is_output() || dst->is_input()) return nullptr;
+    if (auto out = dynamic_cast<ssvport*>(src)) {
+      CHECK(!out->out_links().empty());
+    }
+    if (auto in = dynamic_cast<ssvport*>(dst)) {
+      CHECK(!in->in_links().empty());
+    }
 
     sslink* link = src->add_link(dst);
     link->set_id(_link_list.size());
@@ -1340,9 +1137,9 @@ class SubModel {
 
  private:
   void build_substrate(int x, int y);
-  void connect_substrate(int x, int y, PortType pt, int ips, int ops, bool multi_config,
-                         int temp_x, int temp_y, int temp_width, int temp_height,
-                         int skip_hv_dist, int skip_diag_dist, int skip_delay);
+
+  void connect_substrate(int x, int y, PortType pt, int ips, int ops,
+                         int temp_x, int temp_y, int temp_width, int temp_height);
 
   // These are only valid after regroup_vecs()
   std::vector<ssnode*> _node_list;
@@ -1352,9 +1149,6 @@ class SubModel {
   // Temporary Datastructures, only for constructing the mapping
   int _sizex, _sizey;  // size of SS cgra
   std::map<int, ssnode*> _io_map[2];
-
-  // Property that should be deprecated...
-  bool _multi_config;
 
   ssio_interface _ssio_interf;
 };

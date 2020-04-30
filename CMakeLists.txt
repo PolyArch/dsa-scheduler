@@ -21,9 +21,8 @@ else()
 endif()
 
 # Debug/Release
-set(CMAKE_CXX_FLAGS "-O2")
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O2")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()
@@ -77,5 +76,5 @@ target_link_libraries(dsa PRIVATE json ${Boost_LIBRARIES})
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
         DESTINATION ${CMAKE_INSTALL_PREFIX}/include/)
 install(TARGETS dsa DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/)
-add_subdirectory(${CMAKE_SOURCE_DIR}/drivers)
 
+add_subdirectory(${CMAKE_SOURCE_DIR}/drivers)

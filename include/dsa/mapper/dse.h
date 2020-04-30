@@ -4,6 +4,7 @@
 #include "scheduler.h"
 #include "schedule.h"
 #include "dsa/arch/model.h"
+#include "dsa/arch/estimation.h"
 
 // This class contains all info which you might want to remember about
 class WorkloadSchedules {
@@ -99,7 +100,7 @@ class CodesignInstance {
     for (int i = 0, j = 0; i < n_ins && j < n_ins * 10 && n->in_links().size() <= 4; ++i, ++j) {
       int src_node_index = rand() % sub->nodes<ssnode*>().size();
       ssnode* src = sub->node_list()[src_node_index];
-      if (src->is_output() || src == n) {
+      if ((dynamic_cast<ssvport*>(src) && src->out_links().empty()) || src == n) {
         i--;
         continue;
       }
@@ -109,7 +110,7 @@ class CodesignInstance {
     for (int i = 0, j = 0; i < n_outs && j < n_outs * 10 && n->out_links().size() <= 4; ++i, ++j) {
       int dst_node_index = rand() % sub->node_list().size();
       ssnode* dst = sub->node_list()[dst_node_index];
-      if (dst->is_input() || dst == n) {
+      if ((dynamic_cast<ssvport*>(dst) && dst->in_links().empty()) || dst == n) {
         i--;
         continue;
       }
@@ -216,7 +217,13 @@ class CodesignInstance {
         int dst_node_index = rand() % sub->node_list().size();
         ssnode* src = sub->node_list()[src_node_index];
         ssnode* dst = sub->node_list()[dst_node_index];
-        if (src->is_output() || dst->is_input() || src == dst) continue;
+        if (dynamic_cast<ssvport*>(src) && src->out_links().empty()) {
+          continue;
+        }
+        if (dynamic_cast<ssvport*>(dst) && dst->in_links().empty()) {
+          continue;
+        }
+        if (src == dst) continue;
 
         // sslink* link =
         sub->add_link(src, dst);
@@ -338,7 +345,7 @@ class CodesignInstance {
         if (sub->node_list().empty()) continue;
         int node_index = rand() % sub->node_list().size();
         ssnode* node = sub->node_list()[node_index];
-        if (node->is_input() || node->is_output()) continue;
+        if (dynamic_cast<ssvport*>(node)) continue;
 
         node->set_flow_control(!node->flow_control());
         if (!node->flow_control()) {
@@ -642,7 +649,10 @@ class CodesignInstance {
 
     total_score.first = pow(total_score.first, (1.0 / workload_array.size()));
 
-    float area = (_ssModel.subModel()->get_overall_area() + _ssModel.memory_area());
+
+    auto estimated = dsa::adg::estimation::EstimatePowerAera(&_ssModel);
+
+    float area = (estimated.Total<dsa::adg::estimation::Metric::Area>());
     //float obj = total_score.first * 1e6 / area;
     float obj = total_score.first * total_score.first * 1e6 / area;
 
@@ -694,15 +704,8 @@ class CodesignInstance {
   }
 
   void dump_breakdown(bool verbose) {
-    auto sub = this->ss_model()->subModel();
-    std::cout << "FUs: " << sub->fu_list().size() << " " << sub->get_fu_total_area() << "um2 "
-       << sub->get_fu_total_power() << "mw\n"
-       << "Switches: " << sub->switch_list().size() << " " << sub->get_sw_total_area() << "um2 "
-       << sub->get_sw_total_power() << "mw\n"
-       << "Sync: " << sub->vport_list().size() << " " << sub->get_sync_area() << "um2 "
-       << sub->get_sync_power() << "mw\n"
-       << "Memory: " << ss_model()->memory_area() << "um2 "
-       << ss_model()->memory_power() << "mw "  << ss_model()->io_ports << "\n" << std::endl;
+    auto estimated = dsa::adg::estimation::EstimatePowerAera(ss_model());
+    estimated.Dump(std::cout);
     if (verbose) {
       for (int i = 0, n = res.size(); i < n; ++i) {
         if (!res[i]) {

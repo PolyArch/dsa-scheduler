@@ -19,6 +19,7 @@
 #include "dsa/mapper/dse.h"
 #include "../utils/model_parsing.h"
 #include "../utils/color_mapper.h"
+#include "../utils/vector_utils.h"
 
 using namespace std;
 using namespace dsa;
@@ -217,7 +218,6 @@ void Schedule::DumpMappingInJson(std::string& mapping_filename){
             (s.max_util - 1) * 3000 + this->num_passthroughs();
   obj = obj * 100 + this->num_links_mapped();
 
-  int max_delay = this->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
   double performance = this->ssdfg()->estimated_performance(this, false);
 
   // Dump Mapping Statistic
@@ -365,8 +365,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         // config the switch
         if(switch_node != nullptr){
           os << "//   config " << switch_node -> name() << endl;
-          int in_idx = switch_node -> get_link_idx(in_link, switch_node -> in_links());
-          int out_idx = switch_node -> get_link_idx(out_link, switch_node -> out_links());
+          int in_idx = dsa::vector_utils::indexing(in_link, switch_node->in_links());
+          int out_idx = dsa::vector_utils::indexing(out_link, switch_node -> out_links());
           switch_node->route_io(in_idx, out_idx);
           //os << "input size = " << switch_node -> in_links().size()
           //   << ", output size = " << switch_node -> out_links().size()<< endl;
@@ -385,7 +385,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           //int vertex_idx = vertex_pair.second;
           int edge_of_vertex_idx = vertex->get_edge_idx(edge, vertex -> in_edges());
           // which input port does this edge used
-          int input_port_idx = fu_node->get_link_idx(out_link, fu_node -> in_links());
+          int input_port_idx = dsa::vector_utils::indexing(out_link, fu_node -> in_links());
           assert(input_port_idx >=0 && "not found input port ?");
           if(edge_of_vertex_idx >= 0){
             os << "//   config " << fu_node -> name()<<endl
@@ -819,7 +819,7 @@ void Schedule::iterativeFixLatency() {
     // cout << inst->name() << "  min_lat:" << vp.min_lat << " max_lat:"
     //                                    << vp.max_lat << "\n";
     int target = vp.min_lat;
-    ;  // < vp.max_lat ? vp.min_lat :
+    // < vp.max_lat ? vp.min_lat :
     //              (vp.min_lat + vp.max_lat) / 2;
     // cout << "target : " << target << "\n";
 
@@ -983,7 +983,7 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
     ssnode* node = inc_link->dest();
 
     if (ssnode* next_node = dynamic_cast<ssfu*>(node)) {
-      sslink* new_link = next_node->getFirstOutLink();
+      sslink* new_link = next_node->out_links()[0];
       if (lat_edge.count(new_link)) {
         continue;  // skip if we've done it already
       }
