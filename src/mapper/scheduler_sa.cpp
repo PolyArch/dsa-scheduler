@@ -364,7 +364,8 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
       if(dump_mapping_if_improved){
         stringstream mapping_file_str;
-        mapping_file_str << mapping_file << "+iter+" << iter <<".json";
+        std::string mapping_base = mapping_file.substr(0, mapping_file.find_last_of("."));
+        mapping_file_str << mapping_base << "-iter-" << iter <<".json";
         std::string mapping_file_iter = mapping_file_str.str();
         sched -> DumpMappingInJson(mapping_file_iter);
       }
