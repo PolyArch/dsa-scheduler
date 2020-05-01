@@ -251,9 +251,7 @@ class SSDfgNode {
 
   virtual ~SSDfgNode() {}
 
-  SSDfgNode() {
-    //_values.resize(1,new SSDfgValue(this,0,bitwidth()));
-  }
+  SSDfgNode() {}
 
   enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
 

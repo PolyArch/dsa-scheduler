@@ -866,7 +866,7 @@ std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
     ssfu* cand_fu = fus[i];
 
     if (!cand_fu->fu_type_.Capable(inst()) ||
-        (cand_fu->num_non_self_out_links() < (int)this->values().size())) {
+        (cand_fu->out_links().size() < this->values().size())) {
       continue;
     }
 

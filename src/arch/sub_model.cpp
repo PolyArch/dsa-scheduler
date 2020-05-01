@@ -1,5 +1,5 @@
 
-#include <assert.h>
+#include <cassert>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "dsa/arch/visitor.h"
 #include "dsa/debug.h"
 #include "../utils/model_parsing.h"
 #include "dsa/arch/sub_model.h"
@@ -32,17 +33,6 @@ std::string sslink::name() const {
   std::stringstream ss;
   ss << _orig->name() << "_to_" << _dest->name();
   return ss.str();
-}
-
-sslink* sslink::getCycleLink() {
-  ssnode* n = this->dest();
-  for (auto I = n->out_links().begin(), E = n->out_links().end(); I != E; ++I) {
-    sslink* dlink = *I;
-    if (dlink->dest() == this->orig()) {
-      return dlink;
-    }
-  }
-  return NULL;
 }
 
 sslink::~sslink() {
@@ -155,7 +145,7 @@ bool parseInt(std::string param, string value, const char* param_name, int& i) {
 
 // ------------------------ submodel impl -------------------------------------
 
-SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_types, bool multi_config) {
+SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_types) {
   string param, value;
 
   bool should_read = true;
@@ -166,8 +156,6 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
 
   int temp_width = 0, temp_height = 0;  // size of temporal region
   int temp_x = 0, temp_y = 0;           // location of temporal region
-
-  int skip_diag_dist = 0, skip_hv_dist = 0, skip_delay = 1;
 
   PortType portType = PortType::opensp;
 
@@ -186,10 +174,6 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
     parseInt(param, value, "temporal_y", temp_y);
     parseInt(param, value, "temporal_width", temp_width);
     parseInt(param, value, "temporal_height", temp_height);
-
-    parseInt(param, value, "skip_diag_dist", skip_diag_dist);
-    parseInt(param, value, "skip_hv_dist", skip_hv_dist);
-    parseInt(param, value, "skip_delay", skip_delay);
 
     if (ModelParsing::StartsWith(param, "io_layout")) {
       ModelParsing::trim(value);
@@ -250,9 +234,8 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
     }
   }
 
-  connect_substrate(_sizex, _sizey, portType, switch_ins, switch_outs, multi_config,
-                    temp_x, temp_y, temp_width, temp_height, skip_hv_dist, skip_diag_dist,
-                    skip_delay);
+  connect_substrate(_sizex, _sizey, portType, switch_ins, switch_outs,
+                    temp_x, temp_y, temp_width, temp_height);
 }
 
 // Graph of the configuration or substrate
@@ -282,6 +265,12 @@ void SubModel::PrintGraphviz(ostream& os) {
   os << "}\n";
 }
 
+void SubModel::Apply(adg::Visitor *visitor) {
+  for (auto &elem : node_list()) {
+    elem->Accept(visitor);
+  }
+}
+
 void SubModel::clear_all_runtime_vals() {
   for (ssnode* n : _node_list) {
     n->reset_runtime_vals();
@@ -303,9 +292,9 @@ int dist_switch(int x, int y) {
   return dist;
 }
 
-SubModel::SubModel(int x, int y, PortType pt, int ips, int ops, bool multi_config) {
+SubModel::SubModel(int x, int y, PortType pt, int ips, int ops) {
   build_substrate(x, y);
-  connect_substrate(x, y, pt, ips, ops, multi_config, 0, 0, 0, 0, 0, 0, 1);
+  connect_substrate(x, y, pt, ips, ops, 0, 0, 0, 0);
 }
 
 void SubModel::build_substrate(int sizex, int sizey) {
@@ -330,18 +319,7 @@ void SubModel::build_substrate(int sizex, int sizey) {
 
 sslink* ssnode::add_link(ssnode* node) {
   sslink* link = new sslink(this, node);
-  if (this == node) {
-    if (_cycle_link) {
-      DEBUG(CYCLELINK) << "two cycle links :\n"
-                       << "source : " << link->orig()->nodeType() << "_"
-                       << link->orig()->id() << ", "
-                       << "sink : " << link->dest()->nodeType() << "_"
-                       << link->dest()->id() << "\n"
-                       << "[Warning] two cycle links, why?"
-                       << "\n";
-    }
-    _cycle_link = link;
-  }
+  CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
   auto& olinks = links[0];
   olinks.push_back(link);
 
@@ -356,9 +334,8 @@ sslink* ssnode::add_link(ssnode* node) {
 }
 
 void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,
-                                 int ops, bool multi_config, int temp_x, int temp_y,
-                                 int temp_width, int temp_height, int skip_hv_dist,
-                                 int skip_diag_dist, int skip_delay) {
+                                 int ops, int temp_x, int temp_y,
+                                 int temp_width, int temp_height) {
   auto fus = fu_list();
   auto sws = switch_list();
 
@@ -395,8 +372,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
   {
     const int di[] = {-1, 0, 1, 0};
     const int dj[] = {0, -1, 0, 1};
-    const int cx[] = {-1, 1, 1, 1};
-    const int cy[] = {-1, 1, -1, 1};
     for (int i = 0; i < _sizex + 1; i++) {
       for (int j = 0; j < _sizey + 1; j++) {
         for (int k = 0; k < 4; ++k) {
@@ -407,34 +382,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
                 ->add_link(sws[_i * (_sizey + 1) + _j]);
         }
 
-        // crazy diagonals
-        //@Jian, feel free to condense if you want : )
-        ssswitch* startItem = sws[i * (_sizey + 1) + j];
-
-        if (skip_diag_dist > 0) {
-          int d = skip_diag_dist;
-          int l = skip_delay;
-          for (int k = 0; k < 4; ++k) {
-            int x = i + cx[k] * d, y = j + cy[k] * d;
-            int idx = x * (_sizey + 1) + y;
-            if (idx >= 0 && idx < (int) sws.size()) {
-              startItem->add_link(sws[idx])->set_lat(l);
-            }
-          }
-        }
-
-        // Crazy Jumps
-        if (skip_hv_dist > 0) {
-          int d = skip_hv_dist;
-          int l = skip_delay;
-          for (int k = 0; k < 4; ++k) {
-            int x = i + di[k] * d, y = j + dj[k] * d;
-            int idx = x * (_sizey + 1) + y;
-            if (idx >= 0 && idx < (int) sws.size()) {
-              startItem->add_link(sws[idx])->set_lat(l);
-            }
-          }
-        }
       }
     }
   }
@@ -513,12 +460,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     }
   }
 
-  if (multi_config) {
-    printf("USING MULTI CONFIG (NOT REALLY SUPPORTED ANYMORE)\n");
-  }
-
-  _multi_config = multi_config;
-
   // The primitive temporal region that we are going to create just has local
   // connections to surrounding nodes.
   // TODO: FIXME: We need some way of specifying the max util in the config file
@@ -542,16 +483,6 @@ void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int 
     }
   }
 
-  for (int i = 0; i < _sizex; ++i) {
-    for (int j = 0; j < _sizey; ++j) {
-      auto link = fus[i * _sizey + j]->add_link(fus[i * _sizey + j]);
-
-      if (i < temp_x && i >= temp_x + temp_width && j < temp_y &&
-          j >= temp_y + temp_height) {
-        link->set_max_util(64);
-      }
-    }
-  }
 }
 
 void ssio_interface::fill_vec() {
@@ -569,10 +500,23 @@ void ssio_interface::fill_vec() {
 // Group Nodes/Links and Set IDs
 // This should be done after all the links are added
 void SubModel::post_process() {
-  _link_list.clear();
 
-  for (auto elem : _node_list) elem->agg_elem(_link_list);
-  fix_id(_link_list);
+  struct Aggreator : dsa::adg::Visitor {
+    std::vector<sslink*> &links;
+    Aggreator(std::vector<sslink*> &links_) : links(links_) {
+      links.clear();
+    }
+    void Visit(ssnode *node) override {
+      for (auto &elem : node->out_links()) {
+        int x = links.size();
+        links.push_back(elem);
+        links.back()->set_id(x);
+      }
+    }
+  };
+
+  Aggreator aggreator(_link_list);
+  Apply(&aggreator);
 
   _ssio_interf.fill_vec();
 }
@@ -613,8 +557,6 @@ struct JSONModel : json::BaseVisitor{
         ssfu* fu = _subModel->add_fu();
         fu->set_id(id);
         fu->set_prop(cgranode);
-        auto link = fu->add_link(fu);  // For decomposability
-        (void) link;
 
         sym_tab[id] = fu;
         plain::Array insts = *cgranode["instructions"] -> As<plain::Array>();

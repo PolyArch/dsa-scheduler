@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO(@were): Rename this to string utils. Better to make it oo implicit to a std::string.
+
 #include <iostream>
 #include <cstring>
 #include <string>

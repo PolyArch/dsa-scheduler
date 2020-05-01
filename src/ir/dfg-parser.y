@@ -31,13 +31,6 @@ static void yyerror(parse_param*, const char *);
 
 %parse-param {struct parse_param* p}
 
-%token	  EOLN NEW_DFG PRAGMA ARROW
-%token<s> IDENT STRING_LITERAL 
-%token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT
-
-
-
 %union {
     uint64_t i;
     double d;
@@ -53,6 +46,10 @@ static void yyerror(parse_param*, const char *);
     ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
 }
 
+%token	  EOLN NEW_DFG PRAGMA ARROW
+%token<s> IDENT STRING_LITERAL
+%token<d> F_CONST
+%token<i> I_CONST INPUT OUTPUT
 
 %type <io_pair> io_def
 %type <sym_vec> arg_list
@@ -67,10 +64,8 @@ static void yyerror(parse_param*, const char *);
 
 %%
 
-statement_list
-	: statement 
-	| statement_list statement
-	;
+statement_list: statement
+	            | statement_list statement;
 
 statement
     : INPUT ':' io_def  eol {
@@ -88,9 +83,7 @@ statement
         delete $3;
       }
     | value_list '=' rhs eol {
-        ParseResult *s = $3;
         if (auto ne = dynamic_cast<ValueEntry*>($3)) {
-          SSDfgNode* node = ne->value->node();
           assert($1->size()==1);
           std::string name = (*$1)[0];
           p->symbols.set(name, new ValueEntry(ne->value, ne->l, ne->r));
@@ -108,7 +101,7 @@ statement
             assert(o && "Assumption check failure, the first element should be a value entry!");
             assert(dynamic_cast<SSDfgInst*>(o->value->node()) && "Should be a instruction!");
             p->symbols.set((*$1)[0], o->value);
-            for (int i = 1; i < ce->entries.size(); ++i) {
+            for (int i = 1, n = ce->entries.size(); i < n; ++i) {
               if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
                 assert(ve->value->node() == o->value->node() && "Should all from the same node!");
                 p->symbols.set((*$1)[i], ve->value);
@@ -291,13 +284,12 @@ edge_list
 edge
     : IDENT {
         $$ = p->symbols.get_sym(*$1);
-        auto res = p->symbols.get_sym(*$1);
         delete $1;
       }
     | IDENT ':' I_CONST ':' I_CONST {
         auto ne = dynamic_cast<ValueEntry*>(p->symbols.get_sym(*$1));
         assert(ne && "For now only result values supports slicing!");
-        if (ne->l == $3 && ne->r == $5) {
+        if (ne->l == (int) $3 && ne->r == (int) $5) {
           $$ = ne;
         } else {
           std::ostringstream oss;

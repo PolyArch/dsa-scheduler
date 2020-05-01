@@ -382,12 +382,7 @@ class Schedule {
   int link_count(SSDfgEdge* dfgedge) { return _edgeProp[dfgedge->id()].links.size(); }
 
   int edge_latency(SSDfgEdge* pdgedge) {
-    auto& ep = _edgeProp[pdgedge->id()];
-    int total_lat = 0;
-    for (auto& link : ep.links) {
-      total_lat += link.second->lat();
-    }
-    return total_lat;
+    return _edgeProp[pdgedge->id()].links.size();
   }
 
   // Calculate the total possible delay through delay fifos
