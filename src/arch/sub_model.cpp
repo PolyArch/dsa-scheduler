@@ -1,8 +1,6 @@
 
 #include <cassert>
 
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -18,7 +16,6 @@
 #include "json.lex.h"
 #include "json.tab.h"
 
-namespace pt = boost::property_tree;
 
 using namespace dsa;
 using namespace std;

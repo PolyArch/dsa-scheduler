@@ -2,8 +2,6 @@
 #include <assert.h>
 
 #include <boost/foreach.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/xml_parser.hpp>
 #include <exception>
 #include <fstream>
 #include <iomanip>
@@ -23,7 +21,6 @@
 
 using namespace std;
 using namespace dsa;
-namespace pt = boost::property_tree;
 
 // Scheduling Interface
 extern "C" void libssscheduler_is_present() {}
