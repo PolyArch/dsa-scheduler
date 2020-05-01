@@ -83,7 +83,7 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
   bool isJSON = ModelParsing::EndsWith(filename, ".json");
   if (isJSON) {
     //dsa::SubModel * _subModel = new SubModel();
-    _subModel -> parse_json_without_boost(filename);
+    _subModel -> parse_json(filename);
     //parse_json(ifs);
     return;
   }

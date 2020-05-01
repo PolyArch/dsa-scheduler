@@ -1132,7 +1132,7 @@ class SubModel {
       delete n;
     }
   }
-  void parse_json_without_boost(std::string filename);
+  void parse_json(std::string filename);
   void post_process();
 
  private:
