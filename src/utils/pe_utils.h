@@ -3,7 +3,7 @@
 #include <functional>
 
 #include "dsa/arch/ssinst.h"
-#include "dsa/utils/string.h"
+#include "../utils/string_utils.h"
 
 namespace dsa {
 namespace adg {

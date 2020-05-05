@@ -118,7 +118,6 @@ class sslink {
 
   // Right I ignore this because area model doesn't use it anyways
   void set_flow_control(bool v) {
-    _flow_control = v;
     assert(0);
   }
   bool flow_control();
