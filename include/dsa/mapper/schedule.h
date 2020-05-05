@@ -645,22 +645,6 @@ class Schedule {
 
   std::string name() { return _name; }
 
- private:
-  ////called by reconstructSchedule to trace link assignment
-  // void tracePath(ssnode *, SSDfgNode *,
-  //               std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &,
-  //               std::map<ssnode *, SSDfgNode *> &,
-  //               std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &);
-
-  ////helper for reconstructing Schedule
-  ////routemap -- for each ssnode - inlink and outlinks
-  ////dfgnode_for -- ssnode to dfgnode mapping
-  ////posMap -- for each dfgnode, vector of incoming dirs
-  // void reconstructSchedule(
-  //        std::map<ssnode *, std::map<SwitchDir::DIR, SwitchDir::DIR>> &routemap,
-  //        std::map<ssnode *, SSDfgNode *> &dfgnode_for,
-  //        std::map<SSDfgNode *, std::vector<SwitchDir::DIR> > &posMap);
-
  public:
   template <typename T>
   inline bool is_complete();
@@ -695,7 +679,7 @@ class Schedule {
   int num_passthroughs() { return _num_passthroughs; }
 
   // Swaps the nodes from one schedule to another
-  void swap_model(SubModel* copy_sub) {
+  void swap_model(SpatialFabric* copy_sub) {
     for (auto& vp : _vertexProp) {
       if (vp.node) {
         vp.node = copy_sub->node_list()[vp.node->id()];  // bo ya

@@ -8,36 +8,18 @@
 #include <string>
 #include <vector>
 
-#include "fu_model.h"
-#include "sub_model.h"
+#include "dsa/arch/fabric.h"
+#include "dsa/arch/fu_model.h"
+#include "dsa/arch/sub_model.h"
 
 namespace dsa {
 
-const std::map<std::pair<int, int>, std::pair<double, double>> memory_data = {
-  {{4096, 1}, {34125, 2.84}},
-  {{4096, 2}, {94423, 3.81}},
-  {{4096, 3}, {181106, 4.97}},
-  {{4096, 4}, {296494, 6.34}},
-  {{8192, 1}, {39643, 5.33}},
-  {{8192, 2}, {105418, 6.63}},
-  {{8192, 3}, {199273, 8.12}},
-  {{8192, 4}, {323736, 9.82}},
-  {{16384, 1}, {50650, 10.31}},
-  {{16384, 2}, {127253, 12.24}},
-  {{16384, 3}, {235226, 14.34}},
-  {{16384, 4}, {377642, 16.73}},
-  {{32768, 1}, {72545, 20.16}},
-  {{32768, 2}, {170684, 23.42}},
-  {{32768, 3}, {306771, 26.87}},
-  {{32768, 4}, {486511, 30.53}},
-};
-
 class SSModel {
  public:
-  SSModel(const char* filename);
-  SSModel(SubModel* sub);
+  SSModel(const char *filename);
+  SSModel(SpatialFabric* sub);
 
-  SubModel* subModel() { return (_subModel); }
+  SpatialFabric* subModel() { return (_subModel); }
 
   void set_dispatch_inorder(bool d) { _dispatch_inorder = d; }
   bool dispatch_inorder() { return _dispatch_inorder; }
@@ -61,18 +43,6 @@ class SSModel {
     return ind_memory;
   }
 
-  double memory_area() {
-    auto iters = memory_data.find({memory_size, io_ports});
-    assert(iters != memory_data.end());
-    return iters->second.first + (indirect() == 2)* 88800 + 5200;
-  }
-
-  double memory_power() {
-    auto iters = memory_data.find({memory_size, io_ports});
-    assert(iters != memory_data.end());
-    return iters->second.second + (indirect() == 2) * 18.1 + 9.3;
-  }
-
   SSModel(const SSModel& m) {
     fu_types = m.fu_types;
     _subModel = m._subModel->copy();
@@ -89,19 +59,16 @@ class SSModel {
   }
 
   std::vector<Capability*> fu_types;
+
   int memory_size{4096};
   int io_ports{1};
- private:
-  // InstModel *instModel;
-  SubModel* _subModel = new SubModel();
-
-  bool _dispatch_inorder = false;
-  int _dispatch_width = 2;
-  int _maxEdgeDelay = 15;
+  SpatialFabric* _subModel{nullptr};
+  bool _dispatch_inorder{false};
+  int _dispatch_width{2};
+  int _maxEdgeDelay{15};
   int ind_memory{1};
 
   void parse_exec(std::istream& istream);
-  void parse_json(std::istream& istream);
 
 };
 

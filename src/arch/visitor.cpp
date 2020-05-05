@@ -1,9 +1,10 @@
 #include "dsa/arch/visitor.h"
+#include "dsa/arch/fabric.h"
 
 namespace dsa {
 namespace adg {
 
-GraphVisitor::GraphVisitor(SubModel *fabric) : visited(fabric->node_list().size(), false) {}
+GraphVisitor::GraphVisitor(SpatialFabric *fabric) : visited(fabric->node_list().size(), false) {}
 
 void Visitor::Visit(ssnode *node) {}
 void Visitor::Visit(ssfu *node) { Visit(static_cast<ssnode*>(node)); }

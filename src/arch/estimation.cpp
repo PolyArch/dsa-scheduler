@@ -79,10 +79,6 @@ struct Estimator : Visitor {
                                                       std::max((int) 1, (int) vp->in_links().size()),
                                                       std::max((int) 1, (int) vp->out_links().size()),
                                                       vp->decomposer, false);
-      DEBUG(BRKD) << vp->name() << ": " << RadixEst((Metric) i,
-                                                      std::max((int) 1, (int) vp->in_links().size()),
-                                                      std::max((int) 1, (int) vp->out_links().size()),
-                                                      vp->decomposer, false);
       res((Metric) i, Breakdown::Sync) += FIFOEst((Metric) i, 2);
     }
   }

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "dsa/arch/visitor.h"
+#include "dsa/arch/fabric.h"
 #include "dsa/debug.h"
 #include "../utils/model_parsing.h"
 #include "dsa/arch/sub_model.h"
@@ -56,7 +57,7 @@ void parse_list_of_ints(std::istream& istream, std::vector<int>& int_vec) {
   }
 }
 
-void SubModel::parse_io(std::istream& istream) {
+void SpatialFabric::parse_io(std::istream& istream) {
   string param, value, portstring;
 
   while (istream.good()) {
@@ -142,7 +143,7 @@ bool parseInt(std::string param, string value, const char* param_name, int& i) {
 
 // ------------------------ submodel impl -------------------------------------
 
-SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_types) {
+SpatialFabric::SpatialFabric(std::istream& istream, const std::vector<Capability*> &fu_types) {
   string param, value;
 
   bool should_read = true;
@@ -236,7 +237,7 @@ SubModel::SubModel(std::istream& istream, const std::vector<Capability*> &fu_typ
 }
 
 // Graph of the configuration or substrate
-void SubModel::PrintGraphviz(ostream& os) {
+void SpatialFabric::PrintGraphviz(ostream& os) {
   os << "Digraph G { \n";
 
   // switchesnew_sched
@@ -262,39 +263,24 @@ void SubModel::PrintGraphviz(ostream& os) {
   os << "}\n";
 }
 
-void SubModel::Apply(adg::Visitor *visitor) {
+void SpatialFabric::Apply(adg::Visitor *visitor) {
   for (auto &elem : node_list()) {
     elem->Accept(visitor);
   }
 }
 
-void SubModel::clear_all_runtime_vals() {
+void SpatialFabric::clear_all_runtime_vals() {
   for (ssnode* n : _node_list) {
     n->reset_runtime_vals();
   }
 }
 
-int dist_grid(int x, int y) {
-  int dist = abs(x) + abs(y) + 1;
-  if (x < 0) dist += 1;
-  if (y < 0) dist += 1;
-  if (x > 0 && y > 0) dist -= 1;
-  return dist;
-}
-
-int dist_switch(int x, int y) {
-  int dist = abs(x) + abs(y) + 1;
-  if (x < 0) dist -= 1;
-  if (y < 0) dist -= 1;
-  return dist;
-}
-
-SubModel::SubModel(int x, int y, PortType pt, int ips, int ops) {
+SpatialFabric::SpatialFabric(int x, int y, PortType pt, int ips, int ops) {
   build_substrate(x, y);
   connect_substrate(x, y, pt, ips, ops, 0, 0, 0, 0);
 }
 
-void SubModel::build_substrate(int sizex, int sizey) {
+void SpatialFabric::build_substrate(int sizex, int sizey) {
   _sizex = sizex;
   _sizey = sizey;
 
@@ -330,7 +316,7 @@ sslink* ssnode::add_link(ssnode* node) {
   return link;
 }
 
-void SubModel::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,
+void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,
                                  int ops, int temp_x, int temp_y,
                                  int temp_width, int temp_height) {
   auto fus = fu_list();
@@ -496,7 +482,7 @@ void ssio_interface::fill_vec() {
 
 // Group Nodes/Links and Set IDs
 // This should be done after all the links are added
-void SubModel::post_process() {
+void SpatialFabric::post_process() {
 
   struct Aggreator : dsa::adg::Visitor {
     std::vector<sslink*> &links;
@@ -527,8 +513,8 @@ std::map<std::string, std::function<void(json::BaseNode*)>> functor;
 
 struct JSONModel : json::BaseVisitor{
   std::map<int, ssnode*> sym_tab;
-  dsa::SubModel * _subModel;  
-  JSONModel(dsa::SubModel * subModel_) : _subModel(subModel_){}
+  dsa::SpatialFabric * _subModel;  
+  JSONModel(dsa::SpatialFabric * subModel_) : _subModel(subModel_){}
   
   void nodesVisit(json::BaseNode * jsonNodes){
     // Vector Port Parameter
@@ -580,23 +566,19 @@ struct JSONModel : json::BaseVisitor{
           is_input = false;
           port_num = num_ovp++;
           num_outputs += in_vec_width;
-          //std::cout << "node " << id << " is output vector port\n";
         } else if (out_vec_width > 0) {
           is_input = true;
           port_num = num_ivp++;
           num_inputs += out_vec_width;
-          //std::cout << "node " << id << " is input vector port\n";
         } else {
           continue;
-          //assert(0 && "vector port without connection?");
         }
         ssvport* vp = _subModel->add_vport(is_input, port_num);
         vp->set_ssnode_prop(cgranode);
         sym_tab[id] = vp;
         vp->set_id(id);
       }else{
-        std::cerr << id << "has unknown type" << nodeType << "\n";
-        assert(0 && "unknown type");
+        CHECK(false) << id << "has unknown type" << nodeType << "\n";
       }
     }
     assert(num_outputs > 0);
@@ -630,7 +612,7 @@ struct JSONModel : json::BaseVisitor{
   }
 };
 
-void SubModel::parse_json(const std::string filename){
+void SpatialFabric::parse_json_without_boost(const std::string filename){
   FILE *fjson = fopen(filename.c_str(), "r");
   struct params p;
   JSONrestart(fjson);

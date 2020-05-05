@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "../utils/model_parsing.h"
+#include "../utils/string_utils.h"
 #include "dsa/arch/ssinst.h"
 #include "dsa/arch/model.h"
 #include "dsa/debug.h"
@@ -20,7 +21,7 @@
 using namespace std;
 using namespace dsa;
 
-SSModel::SSModel(SubModel* subModel) {
+SSModel::SSModel(SpatialFabric* subModel) {
   CHECK(subModel);
   _subModel = subModel;
 }
@@ -69,8 +70,83 @@ ssnode* if_isVector(ssnode* n, std::string portname) {
   }
 }
 
+void ParseCapabilities(Capability& fu, string& cap_string) {
+  stringstream ss(cap_string);
+  string cur_cap;
+
+  while (getline(ss, cur_cap, ',')) {
+    stringstream pss(cur_cap);
+    string cap;
+    string enc_str;
+
+    getline(pss, cap, ':');
+
+    ModelParsing::trim(cap);
+
+    if (cap.empty()) {
+      return;
+    }
+
+    if (ModelParsing::stricmp(cap, "ALL")) {
+      for (int i = 0; i < SS_NUM_TYPES; ++i) {
+        fu.Add((OpCode) i, i);
+      }
+      return;
+    }
+
+    OpCode ss_inst = inst_from_string(cap.c_str());
+
+    if (ss_inst == SS_NONE || ss_inst == SS_ERR) {
+      continue;
+    }
+
+    if (pss.good()) {  // then there must be an encoding string
+      unsigned encoding;
+      pss >> encoding;
+      fu.Add(ss_inst, encoding);
+    } else {
+      assert(false && "OpCode with no encoding?");
+    }
+  }
+}
+
+std::vector<Capability*> ParseFuType(std::istream& istream) {
+  std::vector<Capability*> res;
+
+  string param, value;
+
+  while (istream.good()) {
+    if (istream.peek() == '[') break;  // break out if done
+
+    // string line;
+    ModelParsing::ReadPair(istream, param, value);
+
+    if (param[0] == '#' || value[0] == '#') continue;  // Not a comment
+
+    if (ModelParsing::StartsWith(param, "FU_TYPE")) {
+      // defining an fu and capabilitty
+
+      string newtype;
+
+      std::stringstream ss(param);
+
+      getline(ss, param, ' ');
+      getline(ss, newtype);
+
+      res.push_back(new Capability(newtype));
+      ParseCapabilities(*res.back(), value);
+
+    } else if (ModelParsing::StartsWith(param, "SWITCH_TYPE")) {
+      // AddCapabilities(*GetFU("SWITCH"), value);
+      assert(0);
+    }
+  }
+
+  return res;
+}
+
 // File constructor
-SSModel::SSModel(const char* filename_) : filename(filename_) {
+SSModel::SSModel(const char *filename_) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
   bool failed_read = ifs.fail();
@@ -80,37 +156,33 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
   }
 
   // Parse the JSON-format IR
-  bool isJSON = ModelParsing::EndsWith(filename, ".json");
-  if (isJSON) {
-    //dsa::SubModel * _subModel = new SubModel();
-    _subModel -> parse_json(filename);
-    //parse_json(ifs);
+  if (string_utils::String(filename).EndsWith(".json")) {
+    _subModel->parse_json_without_boost(filename);
     return;
   }
 
-  char line[512];
+  string_utils::String line;
 
   while (ifs.good()) {
-    ifs.getline(line, 512);
-    // string line;
+    std::getline(ifs, line.operator std::string &());
 
-    if (ModelParsing::StartsWith(line, "[exec-model]")) {
+    if (line.StartsWith("[exec-model]")) {
       parse_exec(ifs);
     }
 
-    if (ModelParsing::StartsWith(line, "[fu-model]")) {
+    if (line.StartsWith("[fu-model]")) {
       this->fu_types = ParseFuType(ifs);
     }
 
-    if (ModelParsing::StartsWith(line, "[sub-model]")) {
+    if (line.StartsWith("[sub-model]")) {
       if (fu_types.empty()) {
         cerr << "No Fu Model Specified\n";
         exit(1);
       }
-      _subModel = new SubModel(ifs, fu_types);
+      _subModel = new SpatialFabric(ifs, fu_types);
     }
 
-    if (ModelParsing::StartsWith(line, "[io-model]")) {
+    if (line.StartsWith("[io-model]")) {
       if (_subModel == nullptr) {
         cerr << "No Sub Model Specified\n";
         exit(1);
@@ -122,5 +194,3 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
 
   _subModel->post_process();
 }
-
-extern "C" void libssconfig_is_present() {}

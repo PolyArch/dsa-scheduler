@@ -15,7 +15,7 @@ struct Visitor {
 /*! \brief A vistor for ADG nodes, which traverses all the nodes by DFS. */
 struct GraphVisitor : Visitor {
   std::vector<bool> visited;
-  GraphVisitor(SubModel *fabric);
+  GraphVisitor(SpatialFabric *fabric);
   virtual void Visit(ssfu *node);
   virtual void Visit(ssswitch *node);
   virtual void Visit(ssvport *node);

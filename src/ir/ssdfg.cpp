@@ -852,11 +852,11 @@ double SSDfg::count_starving_nodes() {
 
 /// }
 
-using dsa::SubModel;
+using dsa::SpatialFabric;
 
 std::vector<std::pair<int, ssnode*>> SSDfgInst::candidates(Schedule* sched,
                                                            SSModel* ssmodel, int n) {
-  SubModel* model = ssmodel->subModel();
+  SpatialFabric* model = ssmodel->subModel();
   std::vector<std::pair<int, ssnode*>> spots;
   std::vector<std::pair<int, ssnode*>> not_chosen_spots;
 

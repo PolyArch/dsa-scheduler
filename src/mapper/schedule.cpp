@@ -616,7 +616,7 @@ void Schedule::printGraphviz(const char* name) {
     std::cerr << name << " not opened!" << std::endl;
   }
 
-  dsa::SubModel* sub = _ssModel->subModel();
+  dsa::SpatialFabric* sub = _ssModel->subModel();
 
   ofs << "digraph sched {\n";
 

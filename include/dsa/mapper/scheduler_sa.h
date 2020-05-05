@@ -1,5 +1,4 @@
-#ifndef __SS__SCHEDULE_SIMULATEDANNEALING_H__
-#define __SS__SCHEDULE_SIMULATEDANNEALING_H__
+#pragma once
 
 #include <iostream>
 
@@ -177,5 +176,3 @@ inline void SchedulerSimulatedAnnealing::unmap_one(SSDfg* dfg, Schedule* sched) 
     }
   }
 }
-
-#endif

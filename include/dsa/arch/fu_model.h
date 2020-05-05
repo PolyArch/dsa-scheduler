@@ -23,7 +23,6 @@ class Capability {
   };
 
   void Add(OpCode op, int encoding, bool count = true) {
-    power_ = area_ = -1;
     for (auto &elem : capability) {
       assert(elem.encoding != encoding && "Op encoding already occupied!");
     }
@@ -37,7 +36,6 @@ class Capability {
   }
 
   void Erase(int j) {
-    power_ = area_ = -1;
     capability.erase(capability.begin() + j);
   }
 
@@ -72,23 +70,9 @@ class Capability {
     return max_num_operand;
   }
 
- private:
-  double power_{-1.0};
-  double area_{-1.0};
- public:
-
   // Area and Power
   double area();
   double power();
-
- private:
-  void determine_inst_accountability();
-  double get_area_from_inst_set();
-  double get_power_from_inst_set();
-  std::set<OpCode> find_all_insts_covered(OpCode source_inst);
-  // this map a instruction's function name (like the function name of FxMul16x2 is Mul)
 };
-
-std::vector<Capability*> ParseFuType(std::istream& istream);
 
 }  // namespace dsa

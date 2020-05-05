@@ -23,7 +23,7 @@
 #include "dsa/arch/ssinst.h"
 #include "dsa/ir/metadata.h"
 
-using dsa::SubModel;
+using dsa::SpatialFabric;
 
 void checked_system(const char* command);
 
