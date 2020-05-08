@@ -157,7 +157,8 @@ SSModel::SSModel(const char *filename_) : filename(filename_) {
 
   // Parse the JSON-format IR
   if (string_utils::String(filename).EndsWith(".json")) {
-    _subModel->parse_json_without_boost(filename);
+    _subModel = new SpatialFabric();
+    _subModel->parse_json(filename);
     return;
   }
 

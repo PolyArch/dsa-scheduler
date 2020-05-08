@@ -47,7 +47,7 @@ target_include_directories(inst_model PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 set(SS_INSTS_H ${CMAKE_SOURCE_DIR}/include/dsa/arch/ssinst.h)
 set(SS_INSTS_CXX ${CMAKE_SOURCE_DIR}/src/insts/ssinst.cpp)
-set(INST_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst")
+set(INST_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.new")
 set(PA_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.power_area.csv")
 
 add_custom_command(

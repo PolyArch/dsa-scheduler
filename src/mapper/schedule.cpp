@@ -234,7 +234,6 @@ void Schedule::DumpSwInJson(std::string & sw_json_filename){
   std::cout << "Software JSON file: " << sw_json_filename << std::endl;
   std::ofstream os(sw_json_filename);
   assert(os.good());
-  int edge_idx = 0;
   SSDfg * ssDFG = ssdfg();
   std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
   std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();

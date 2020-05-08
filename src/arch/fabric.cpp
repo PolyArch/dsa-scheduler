@@ -612,7 +612,7 @@ struct JSONModel : json::BaseVisitor{
   }
 };
 
-void SpatialFabric::parse_json_without_boost(const std::string filename){
+void SpatialFabric::parse_json(const std::string filename){
   FILE *fjson = fopen(filename.c_str(), "r");
   struct params p;
   JSONrestart(fjson);
