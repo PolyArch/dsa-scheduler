@@ -13,7 +13,8 @@
 #include "dsa/arch/estimation.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
+#include "dsa/dfg/utils.h"
 
 using namespace std;
 using sec = chrono::seconds;
@@ -106,6 +107,7 @@ int main(int argc, char* argv[]) {
 
   std::string model_filename = argv[0];
   SSModel ssmodel(model_filename.c_str());
+  DEBUG(MODEL) << "sub: " << ssmodel.subModel();
 
   ssmodel.memory_size = memory_size;
 
@@ -129,18 +131,23 @@ int main(int argc, char* argv[]) {
     scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose, mapping_json_filename, dump_mapping_if_improved);
 
     SSDfg ssdfg(pdg_filename);
+
     Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
     if (est_perf) {
       double est = ssdfg.estimated_performance(sched, true);
       std::cout << "Estimated overall performance: " << est << std::endl;
     }
     // Dump hardware
-    if(hw_json_filename != "")
+    if(hw_json_filename != "") {
       ssmodel.subModel()->DumpHwInJson(hw_json_filename.c_str());
+    }
 
     // Dump software
-    if(sw_json_filename != ""){
-      sched -> DumpSwInJson(sw_json_filename);
+    if(!sw_json_filename.empty()){
+      for (auto edge : ssdfg.edges()) {
+        edge->set_delay(sched->edge_delay(edge));
+      }
+      dfg::Export(&ssdfg, sw_json_filename);
     }
 
     // Dump Final Mapping

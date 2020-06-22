@@ -13,8 +13,12 @@
 
 #include "dsa/mapper/schedule.h"
 #include "dsa/arch/ssinst.h"
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
+#include "dsa/dfg/visitor.h"
+#include "dsa/dfg/utils.h"
 #include "dsa/mapper/dse.h"
+#include "json.tab.h"
+#include "json.lex.h"
 #include "../utils/model_parsing.h"
 #include "../utils/color_mapper.h"
 #include "../utils/vector_utils.h"
@@ -33,288 +37,110 @@ void Schedule::clear_ssdfg() {
 }
 
 void Schedule::reset_simulation_state() {
-  if (_ssDFG) {
-    _ssDFG->reset_simulation_state();
-  }
 }
 
 int Schedule::colorOf(SSDfgValue *v) {
  return cm::ColorOf(v);
 }
 
-std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size,
-                                                                  uint64_t* bits) {
+std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size, uint64_t* bits) {
   // Figure out if this configuration is real or not
   // NOTE: the first 9 characters of the configuration must spell filename
   // for this hack to work!
-  if (strncmp((char*)bits, "filename:", 9) == 0) {
-    char* c_bits = ((char*)bits) + 9;
-    return interpretConfigBitsCheat(c_bits);
-  } else {
-    assert(false && "Hardware configuration not supported yet!");
-  }
+  CHECK(strncmp((char*)bits, "filename:", 9) == 0) << "Hardware configuration not supported yet!";
+  char* c_bits = ((char*) bits) + 9;
+  return interpretConfigBitsCheat(c_bits);
 }
 
 std::map<dsa::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
-  std::map<dsa::OpCode, int> inst_histo;
-
-  ifstream config_file;
-
-  std::string filename = string("sched/") + string(s);
-  config_file.open(filename.c_str());
-  if (!config_file.good()) {
-    filename = string(getenv("DFG_COMMON")) + string("/") + string(s);
-    config_file.open(filename.c_str());
-  }
-
-  if (!config_file.good()) {
-    cout << "Could Not Open:" << s << " at folder sched/ or $DFG_COMMON\n";
-    assert(0);
-  }
-
-  static std::set<string> seen_sched;
-  if (!seen_sched.count(filename)) {
-    seen_sched.insert(filename);
-    cout << "Using Schedule: \"" << filename << "\"\n";
-  }
-
-  boost::archive::text_iarchive ia(config_file);
-
-  // I think this should work okay, its a little kludgey, but w/e
-  Schedule sched2;
-  ia >> BOOST_SERIALIZATION_NVP(sched2);  // magic
-  sched2._ssModel = _ssModel;
-  *this = sched2;
-
-  // Now lets patch up the schedule to get recover
-  // vertex->node and edge->link mappings
-  for (auto& ep : _edgeProp) {
-    for (auto p : ep.links_ser) {
-      int slot = p.first;
-      int id = p.second;
-      sslink* link = _ssModel->subModel()->link_list()[id];
-      ep.links.emplace_back(slot, link);
+  auto filename = std::string("sched/") + s;
+  _ssDFG = dsa::dfg::Import(filename);
+  struct Counter : dfg::Visitor {
+    void Visit(SSDfgInst *inst) {
+      ++inst_histo[inst->inst()];
     }
-    for (auto p : ep.passthroughs_ser) {
-      int slot = p.first;
-      int id = p.second;
-      ssnode* node = _ssModel->subModel()->node_list()[id];
-      ep.passthroughs.emplace_back(slot, node);
-    }
-  }
-
-  for (int i = 0; i < (int)_nodeProp.size(); ++i) {
-    auto& np = _nodeProp[i];
-    ssnode* node = _ssModel->subModel()->node_list()[i];
-    for (int slot = 0; slot < 8; ++slot) {
-      for (auto elem : np.slots[slot].vertices) {
-        _vertexProp[elem.first->id()].node = node;
-      }
-    }
-  }
-
-  for (auto node : _ssDFG->nodes<SSDfgNode*>()) {
-    for (auto& op : node->ops()) {
-      op.fifos.resize(op.edges.size());
-    }
-  }
-
-  for (auto dfg_inst : _ssDFG->nodes<SSDfgInst*>()) {
-    auto inst = dfg_inst->inst();
-    inst_histo[inst] += 1;
-  }
-
-  // Lets also just throw the node id at the dfg for now to make temporal
-  // simulation work
-  for (auto inst : _ssDFG->inst_vec()) {
-    if (locationOf(inst)) {
-      inst->set_node_id(locationOf(inst)->id());
-    }
-  }
-
-  return inst_histo;
+    std::map<dsa::OpCode, int> inst_histo;
+  } counter;
+  _ssDFG->Apply(&counter);
+  return counter.inst_histo;
 }
 
-void Schedule::prepareForSaving() {
-  for (auto& ep : _edgeProp) {
-    ep.links_ser.clear();
-    ep.passthroughs_ser.clear();
-    for (auto& i : ep.links) {
-      ep.links_ser.push_back(std::make_pair(i.first, i.second->id()));
-    }
-    for (auto& i : ep.passthroughs) {
-      ep.passthroughs_ser.push_back(std::make_pair(i.first, i.second->id()));
+void Schedule::LoadMappingInJson(const std::string& mapping_filename){
+  FILE *fjson = fopen(mapping_filename.c_str(), "r");
+  CHECK(fjson) << "Open " << mapping_filename << " failed";
+  JSONrestart(fjson);
+  struct params p;
+  JSONparse(&p);
+
+  auto &json = p.data;
+  auto &instructions = *json->As<plain::Array>();
+
+  SSDfg* dfg = ssdfg();
+  SpatialFabric* fabric = ssModel()->subModel();
+  for (int i = 0, n = instructions.size(); i < n; ++i) {
+    auto &obj = *instructions[i]->As<plain::Object>();
+    auto &op = *obj["op"]->As<std::string>();
+    if (op == "assign_node") {
+      auto dfgnode = *obj["dfgnode"]->As<int64_t>();
+      auto adgnode = *obj["adgnode"]->As<int64_t>();
+      auto adgslot = *obj["adgslot"]->As<int64_t>();
+      this->assign_node(dfg->nodes<SSDfgNode*>()[dfgnode],
+                        {adgslot, fabric->node_list()[adgnode]});
+    } else if (op == "assign_link") {
+      auto dfgedge = *obj["dfgedge"]->As<int64_t>();
+      auto adglink = *obj["adglink"]->As<int64_t>();
+      auto adgslot = *obj["adgslot"]->As<int64_t>();
+      this->assign_edgelink(dfg->edges()[dfgedge],
+                            adgslot, fabric->link_list()[adglink]);
+    } else if (op == "assign_delay") {
+      auto dfgedge = *obj["dfgedge"]->As<int64_t>();
+      auto delay = *obj["delay"]->As<int64_t>();
+      this->set_edge_delay(delay, dfg->edges()[dfgedge]);
     }
   }
+
+
 }
 
-void Schedule::DumpMappingInJson(std::string& mapping_filename){
-  std::cout << "Mapping JSON file: " << mapping_filename << std::endl;
+void Schedule::DumpMappingInJson(const std::string& mapping_filename){
   ofstream os(mapping_filename);
   assert(os.good());
-  int edge_idx = 0;
 
   SSDfg * ssDFG = ssdfg();
-  std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
-  std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
-    os << "{\n";
-  
-  //Software Edge to Hardware Link
-  os << "  \"SwEdge2HwLinks\":[\n";
-  edge_idx = 0;
-  bool not_outfirst = false;
-  for(auto & ep : _edgeProp){
-    if(not_outfirst) os << "    ,\n";
-    os << "    {\n"
-       << "    \"edge_id\": " << edge_idx++ << ", \n"
-       << "    \"extra_latency\": " << ep.extra_lat << ", \n"
-       << "    \"links\": [";
-    bool notfirst = false;
-    for(auto & link : ep.links){
-      if(notfirst) os << "       ," << endl;
-      os << "        {" << endl
-         << "        \"source_hw_node_type\": "
-         << "\"" << link.second->orig()->nodeType() <<"\" , \n"
-         << "        \"sink_hw_node_type\": "
-         << "\"" << link.second->dest()->nodeType() <<"\" , \n"
-         << "        \"source_hw_node_id\": "
-         << "\"" << link.second->orig()->id() <<"\" , \n"
-         << "        \"sink_hw_node_id\": "
-         << "\"" << link.second->dest()->id() <<"\"  \n"
-         << "        }" << endl;
-      notfirst = true;
+  std::vector<SSDfgNode *> nodes = ssDFG->nodes<SSDfgNode *>();
+  std::vector<SSDfgEdge *> edges = ssDFG->edges();
+  plain::Array instructions;
+
+  for (int i = 0, n = nodes.size(); i < n; ++i) {
+    auto loc = location_of(nodes[i]);
+    plain::Object mapping;
+    mapping["op"] = new json::String("assign_node");
+    mapping["dfgnode"] = new json::Int(nodes[i]->id());
+    mapping["adgnode"] = new json::Int(loc.second->id());
+    mapping["adgslot"] = new json::Int(loc.first);
+    instructions.push_back(new json::Object(mapping));
+  }
+
+  for (int i = 0, n = edges.size(); i < n; ++i) {
+    auto links = links_of(edges[i]);
+    for (auto link : links) {
+      plain::Object mapping;
+      mapping["op"] = new json::String("assign_link");
+      mapping["dfgedge"] = new json::Int(edges[i]->id());
+      mapping["adglink"] = new json::Int(link.second->id());
+      mapping["adgslot"] = new json::Int(link.first);
+      instructions.push_back(new json::Object(mapping));
+      plain::Object latency;
+      latency["op"] = new json::String("assign_delay");
+      latency["dfgedge"] = new json::Int(edges[i]->id());
+      latency["delay"] = new json::Int(edge_delay(edges[i]));
+      instructions.push_back(new json::Object(latency));
     }
-    os << "    ]";
-    os << "    }\n";
-    not_outfirst = true;
   }
-  os << "  ],";
 
-  //Software Vertex to Hardware Node
-  os << "  \"SwVertex2HwNode\":[\n";
-  int vertex_idx = 0;
-  not_outfirst = false;
-  for (auto & vp : _vertexProp){
-    if(not_outfirst) os << "    ,\n";
-    os << "    {\n";
-    os << "    \"vertex_id\": " << vertex_idx++ << ", \n";
-    os << "    \"node_id\": " << vp.node->id() << ", \n";
-    os << "    \"node_type\": \"" << vp.node->nodeType() << "\" \n";
-    os << "    }\n";
-    not_outfirst = true;
-  }
-  os << "  ],\n";
-
-  // Get Mapping Statistic
-  SchedStats s;
-  this->get_overprov(s.ovr, s.agg_ovr, s.max_util);
-  this->fixLatency(s.lat, s.latmis);
-
-  int violation = this->violation();
-  int obj = s.agg_ovr * 1000 + violation * 200 + s.latmis * 200 + s.lat +
-            (s.max_util - 1) * 3000 + this->num_passthroughs();
-  obj = obj * 100 + this->num_links_mapped();
-
-  double performance = this->ssdfg()->estimated_performance(this, false);
-
-  // Dump Mapping Statistic
-  os  << "  \"performance\" : " << performance << ", \n"
-      << "  \"agg_overprovision \" : " << s.agg_ovr << ", \n"
-      << "  \"max_util\" : " << s.max_util << ", \n"
-      << "  \"agg_latency_miss\" : " << violation << ", \n"
-      << "  \"latency_miss\" : " << s.latmis << ", \n"
-      << "  \"latency\" : " << s.lat << ", \n"
-      << "  \"passthrough_PEs\" : " << this->num_passthroughs() << ", \n"
-      << "  \"num_links_mapped\" : " << this->num_links_mapped() << ", \n"
-      << "  \"obj\" : " << obj << endl 
-      << "}\n";
-}
-
-void Schedule::DumpSwInJson(std::string & sw_json_filename){
-  std::cout << "Software JSON file: " << sw_json_filename << std::endl;
-  std::ofstream os(sw_json_filename);
-  assert(os.good());
-  SSDfg * ssDFG = ssdfg();
-  std::vector<SSDfgEdge *> edge_list = ssDFG -> edges();
-  std::vector<SSDfgNode *> vertex_list = ssDFG -> nodes<SSDfgNode *>();
-
-  os << "{\n";
-  // software edges
-  os << "  \"edges\":[\n";
-  bool notfirst = false;
-  for(auto & edge : edge_list){
-    if(notfirst) os << "    ,";
-    os << "    {\n";
-    os << "    \"edge_id\": " << edge->id() << " ,\n";
-    // Source Vertex
-    SSDfgInst * source_inst = dynamic_cast<SSDfgInst *>(edge->def());
-    os << "    \"source_name\": \"";
-    if(source_inst != nullptr){
-      os << name_of_inst(source_inst->inst());
-    }else{
-      os << edge->def()->name(); 
-    }os <<  "\" ,\n";
-    os << "    \"source_id\": " << edge->def()->id() << " ,\n";
-    // Sink Vertex
-    SSDfgInst * sink_inst = dynamic_cast<SSDfgInst *>(edge->use());
-    os << "    \"sink_name\": \"";
-    if(sink_inst != nullptr){
-      os << name_of_inst(sink_inst->inst());
-    }else{
-      os << edge->use()->name();
-    }os <<  "\" ,\n";
-    os << "    \"sink_id\": " << edge->use()->id() << " ,\n";
-
-    os << "    \"edge_index\": " << edge->val()->index() << " ,\n";
-    os << "    \"msb\": " << edge->r() << " ,\n";
-    os << "    \"lsb\": " << edge->l() << "\n";
-    os << "    }\n";
-    notfirst = true;
-  }
-  os << "  ],\n";
-
-  // software vertices
-  os << "  \"vertices\":[\n";
-  notfirst = false;
-  for(auto & vertex : vertex_list){
-    if(notfirst) os << "    ,";
-    os << "    {\n";
-    //os << "    \"name\": \"" << vertex->name() << "\" ,\n";
-
-    SSDfgVec * vnode = dynamic_cast<SSDfgVec * >(vertex);
-    SSDfgInst * inst = dynamic_cast<SSDfgInst * >(vertex);
-
-    os << "    \"vertex_id\": " << vertex->id() <<" ,\n";
-
-    if(vnode != nullptr){
-      os << "    \"name\": \"" << vnode->name() << "\" ,\n";
-      SSDfgVecInput * vin = dynamic_cast<SSDfgVecInput *>(vnode);
-      SSDfgVecOutput * vout = dynamic_cast<SSDfgVecOutput *>(vnode);
-      os << "    \"type\": \"vector\" ,\n";
-      if(vin != nullptr){
-        os << "    \"direction\": \"input\" ,\n";
-      }else if(vout != nullptr){
-        os << "    \"direction\": \"output\" ,\n";
-      }else{
-        assert(false && "neither input nor output ?");
-      }
-      os << "    \"width\": "<< vnode->get_port_width() << " ,\n";
-      os << "    \"length\": "<< vnode->get_vp_len() << "\n";
-    }
-
-    if(inst != nullptr){
-      os << "    \"type\": \"instruction\" ,\n";
-      os << "    \"name\": \"" << name_of_inst(inst->inst()) << "\" ,\n";
-      os << "    \"width\": "<< inst->bitwidth() << " ,\n";
-      os << "    \"latency\": "<< inst->lat_of_inst() << "\n";
-    }
-    os << "    }\n";
-    notfirst = true;
-  }
-  os << "  ]\n";
-
-  // end of software
-  os << "}\n";
+  json::Array array(instructions);
+  json::JSONPrinter printer(os);
+  array.Accept(&printer);
 }
 
 // Write to a header file
@@ -379,7 +205,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // TODO: and first vertex
           SSDfgNode * vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
           //int vertex_idx = vertex_pair.second;
-          int edge_of_vertex_idx = vertex->get_edge_idx(edge, vertex -> in_edges());
+          int edge_of_vertex_idx = vector_utils::indexing(edge, vertex->in_edges());
           // which input port does this edge used
           int input_port_idx = dsa::vector_utils::indexing(out_link, fu_node -> in_links());
           assert(input_port_idx >=0 && "not found input port ?");
@@ -454,28 +280,27 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
   // First, print the config to the file
-  std::string file_name = cfg_name + string(".sched");
-  std::string full_file_name = string("sched/") + file_name;
-  std::ofstream sched_file(full_file_name);
-  boost::archive::text_oarchive oa(sched_file);
 
-  oa << BOOST_SERIALIZATION_NVP(*this);
+  std::string dfg_fname = "sched/" + cfg_name + ".dfg.json";
+  dsa::dfg::Export(ssdfg(), dfg_fname);
+  std::string sched_fname = "sched/" + cfg_name + ".sched.json";
+  DumpMappingInJson(sched_fname);
 
-  os << "// CAUTION: This is a Boost::Serialization-based version\n"
+  os << "// CAUTION: This is a serialization-based version\n"
      << "// of the schedule.  (ie. cheating)  It is for simulation only.\n"
-     << "// corresponding dfg is in: " << full_file_name << "\n\n";
+     << "// corresponding dfg is in: " << cfg_name << ".*.json\n\n";
 
   // Approximate number of config words, good enough for now
   int config_words = _ssModel->subModel()->node_list().size();
 
-  config_words = std::max((int)file_name.size(), config_words);
+  config_words = std::max((int)cfg_name.size() + 9, config_words);
   // Negative size indicates funny thing
   os << "#define " << cfg_name << "_size " << config_words << "\n\n";
 
   // NOTE: Filename is necessary here! it is the indicator that we
   // are cheating and not giving the real config bits
   os << "char " << cfg_name << "_config[" << config_words << "] = \"";
-  os << "filename:" << file_name << "\";\n\n";
+  os << "filename:" << cfg_name << "\";\n\n";
 }
 
 void Schedule::printConfigVerif(ostream& os) {}
@@ -495,11 +320,12 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
       ofs << "<tr><td border=\"1\"> " << node->name() << " </td></tr>";
     } else {
       for (auto v : vertices) {
-        ofs << "<tr><td port=\"" << v->name() << "\" border=\"1\" bgcolor=\"#" << std::hex
-            << colorOf(v->values()[0]) << std::dec
-            << "\">"
-            //          << ((node->max_util()!=1) ? "T!" : "")
-            << v->name() << "</td></tr>";
+        if (!v->values().empty()) {
+          ofs << "<tr><td port=\"" << v->name() << "\" border=\"1\" bgcolor=\"#" << std::hex
+              << colorOf(v->values()[0]) << std::dec
+              << "\">"
+              << v->name() << "</td></tr>";
+        }
       }
     }
   }
@@ -513,9 +339,7 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
     std::vector<int> empty_slots;
 
     // show unique values and slices:  Value, l(), r()
-    std::unordered_set<std::tuple<SSDfgValue*, int, int>,
-                       boost::hash<std::tuple<SSDfgValue*, int, int>>>
-        seen_values;
+    std::set<std::tuple<SSDfgValue*, int, int>> seen_values;
 
     auto& lp = _linkProp[link->id()];
     for (int slot = 0; slot < 8; ++slot) {
@@ -633,10 +457,10 @@ void Schedule::printGraphviz(const char* name) {
 }
 
 void Schedule::stat_printOutputLatency() {
-  int n = _ssDFG->num_vec_output();
+  int n = _ssDFG->nodes<SSDfgVecOutput*>().size();
   cout << "** Output Vector Latencies **\n";
   for (int i = 0; i < n; i++) {
-    SSDfgVecOutput* vec_out = _ssDFG->vec_out(i);
+    SSDfgVecOutput* vec_out = _ssDFG->nodes<SSDfgVecOutput*>()[i];
     auto loc = location_of(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.second);
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
@@ -680,16 +504,6 @@ bool Schedule::fixLatency(int& max_lat, int& max_lat_mis) {
   return max_lat_mis == 0;
 }
 
-std::vector<SSDfgNode*> Schedule::ordered_non_temporal() {
-  std::vector<SSDfgNode*> res;
-  for (SSDfgNode* i : _ssDFG->ordered_nodes()) {
-    if (!i->is_temporal() && !dynamic_cast<SSDfgVecInput*>(i)) {
-      res.push_back(i);
-    }
-  }
-  return res;
-}
-
 void Schedule::iterativeFixLatency() {
   bool changed = true;
   reset_lat_bounds();
@@ -702,7 +516,9 @@ void Schedule::iterativeFixLatency() {
 
   int _max_expected_route_latency = 8;
 
-  std::vector<SSDfgNode*> ordered_non_temp = ordered_non_temporal();
+  std::vector<SSDfgNode*> ordered_non_temp;
+  std::copy_if(reversed_topo.begin(), reversed_topo.end(), std::back_inserter(ordered_non_temp),
+               [](SSDfgNode* node) { return !node->is_temporal(); });
 
   while (changed || overflow) {
     changed = false;
@@ -860,7 +676,7 @@ void Schedule::cheapCalcLatency(int& max_lat, int& max_lat_mis) {
   max_lat = 0;
   _groupMismatch.clear();
 
-  for (SSDfgNode* node : _ssDFG->ordered_nodes()) {
+  for (SSDfgNode* node : reversed_topo) {
     calcNodeLatency(node, max_lat, max_lat_mis);
   }
 }
@@ -1024,16 +840,8 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
 
               if (!isPassthrough(0, node)) {
                 SSDfgEdge* edge = origNode->getLinkTowards(next_dfgnode);
-                if (!edge) {
-                  continue;
-                  cout << "Edge: " << origNode->name() << " has no edge towards "
-                       << next_dfgnode->name() << ", for link:" << inlink->name() << "\n";
-                  if (next_dfginst->isDummy()) cout << "dummy!\n";
-
-                  _ssDFG->printGraphviz("viz/remap-fail2.dot");
-                  printGraphviz("viz/remap-fail2.gv");
-                  assert(false);
-                }
+                CHECK(edge) << "Edge: " << origNode->name() << " has no edge towards "
+                            << next_dfgnode->name() << ", for link:" << inlink->name() << "\n";
                 if (edge_delay(edge)) {
                   curLat += edge_delay(edge);
                 }
@@ -1122,12 +930,6 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
   _max_lat_mis = max_lat_mis;
 }
 
-template <typename T>
-int count_unique(std::vector<T>& vec) {
-  sort(vec.begin(), vec.end());
-  return unique(vec.begin(), vec.end()) - vec.begin();
-}
-
 void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   ovr = 0;
   agg_ovr = 0;
@@ -1152,7 +954,7 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
             cnt++;
           }
         }
-        int unique_io = count_unique(io);
+        int unique_io = vector_utils::count_unique(io);
 
         int cur_util = cnt + slot.num_passthroughs + unique_io;
         int cur_ovr = cur_util - v.node->max_util();
@@ -1208,10 +1010,23 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
     //    cout << i->name() << "\n";
     //  }
     //}
-    util = count_unique(values) + count_unique(vecs);
+    util = vector_utils::count_unique(values) + vector_utils::count_unique(vecs);
     int cur_ovr = util - link->max_util();
     ovr = std::max(cur_ovr, ovr);
     agg_ovr += std::max(cur_ovr, 0);
     max_util = std::max(util, max_util);
   }
+}
+
+#include "./pass/reversed_topology.h"
+#include "./pass/collect_redundancy.h"
+#include "./pass/propagate_control.h"
+
+Schedule::Schedule(SSModel* model, SSDfg* dfg) : _ssModel(model), _ssDFG(dfg) {
+  allocate_space();
+  reversed_topo = dsa::dfg::pass::ReversedTopology(dfg);
+  needs_dynamic = dsa::dfg::pass::PropagateControl(reversed_topo);
+  auto redundancy = dsa::dfg::pass::CollectRedundancy(dfg);
+  operands = std::get<0>(redundancy);
+  users = std::get<1>(redundancy);
 }

@@ -1,0 +1,1 @@
+return std::max(ops[0], ops[1]);

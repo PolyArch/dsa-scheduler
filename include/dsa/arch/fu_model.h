@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "ssinst.h"
+#include "dsa/arch/ssinst.h"
+#include "dsa/debug.h"
 
 namespace dsa {
 
@@ -24,7 +25,7 @@ class Capability {
 
   void Add(OpCode op, int encoding, bool count = true) {
     for (auto &elem : capability) {
-      assert(elem.encoding != encoding && "Op encoding already occupied!");
+      CHECK(elem.encoding != encoding) << elem.encoding << ", Op encoding already occupied!";
     }
     for (auto &elem : capability) {
       if (elem.op == op) {

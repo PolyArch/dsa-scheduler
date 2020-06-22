@@ -25,8 +25,10 @@ void GraphVisitor::Visit(ssswitch *node) { Visit(static_cast<ssnode*>(node)); }
 
 }
 
-void ssswitch::Accept(adg::Visitor *vistor) { vistor->Visit(this); }
-void ssvport::Accept(adg::Visitor *vistor) { vistor->Visit(this); }
-void ssfu::Accept(adg::Visitor *vistor) { vistor->Visit(this); }
+#define DEFINE_ACCEPT(TYPE) void TYPE::Accept(adg::Visitor *vistor) { vistor->Visit(this); }
+
+DEFINE_ACCEPT(ssswitch);
+DEFINE_ACCEPT(ssvport);
+DEFINE_ACCEPT(ssfu);
 
 }

@@ -1,12 +1,20 @@
-#ifndef __SS_METADATA_H__
-#define __SS_METADATA_H__
+#pragma once
 
 #include <cassert>
 #include <iostream>
 #include <cassert>
 #include <sstream>
 
-namespace ssdfg {
+namespace dsa {
+namespace dfg {
+
+enum class OperandType { data, ctrl, self, ctrl_true, ctrl_false, unknown };
+
+constexpr char const *OPERAND_TYPE[] = {
+  "data", "ctrl", "self", "pred", "inv_pred", "<unknown>"
+};
+
+OperandType Str2Flag(const std::string& s);
 
 struct MetaPort {
 
@@ -119,6 +127,5 @@ struct MetaPort {
   }
 };
 
-}  // namespace ssdfg
-
-#endif  // __SS_METADATA_H__
+}  // namespace dfg
+}  // namespace dsa

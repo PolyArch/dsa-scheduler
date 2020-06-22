@@ -177,11 +177,9 @@ class SpatialFabric {
 
   ssvport* add_vport(bool is_input, int port_num) {
     ssvport* vport = add_vport(is_input);
-    if (_ssio_interf.vports_map[is_input].count(port_num)) {
-      std::cerr << "Error: Multiple " << (is_input ? "input" : "output")
-                << " ports with port number " << port_num << "created\n\n";
-      assert(false && "port duplication error");
-    }
+    CHECK(!_ssio_interf.vports_map[is_input].count(port_num))
+      << "Error: Multiple " << (is_input ? "input" : "output")
+      << " ports with port number " << port_num << "created\n\n";
     _ssio_interf.vports_map[is_input][port_num] = vport;
     vport->set_port(port_num);
     return vport;

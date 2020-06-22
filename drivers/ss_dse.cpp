@@ -6,13 +6,14 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <string>
-#include <boost/optional.hpp>
 
 #include "dsa/arch/model.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
+#include "dsa/dfg/visitor.h"
 
 using namespace std;
 using sec = chrono::seconds;
@@ -54,7 +55,7 @@ int main(int argc, char* argv[]) {
   int indirect = 0;
   bool from_scratch = false;
   int decomposer = 8;
-  boost::optional<bool> contrl_flow;
+  int contrl_flow = -1;
   int memory_size = 4096;
 
   while ((opt = getopt_long(argc, argv, "vst:fc:d:e:l:r:m:", long_options, nullptr)) != -1) {
@@ -96,8 +97,8 @@ int main(int argc, char* argv[]) {
       elem->decomposer = decomposer;
     }
   }
-  if (contrl_flow == false || contrl_flow == true) {
-    ssmodel.setCtrl(contrl_flow.get());
+  if (contrl_flow != -1) {
+    ssmodel.setCtrl(contrl_flow);
   }
 
   scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose);
@@ -135,7 +136,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Dumping " << sched->ssdfg()->filename << " viz/" << filename << "/ "
               << performance << std::endl;
     std::string path = "viz/" + filename;
-    assert(system(("mkdir -p " + path).c_str()) == 0);
+    ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
     sched->printGraphviz((path + "/graph.gv").c_str());
     std::ofstream ofs(path + "/" + filename + ".dfg.h");
     sched->printConfigHeader(ofs, filename);
@@ -172,8 +173,14 @@ int main(int argc, char* argv[]) {
     std::set<dsa::OpCode> used_insts;
     for (auto& elem : cur_ci->workload_array) {
       for (auto& dfg : elem.sched_array) {
-        std::set<dsa::OpCode> delta = dfg.ssdfg()->insts_used();
-        for (auto inst : delta) {
+        struct InstCounter : dfg::Visitor {
+          void Visit(SSDfgInst *inst) {
+            res.insert(inst->inst());
+          }
+          std::set<dsa::OpCode> res;
+        } counter;
+        dfg.ssdfg()->Apply(&counter);
+        for (auto &inst : counter.res) {
           used_insts.insert(inst);
         }
       }

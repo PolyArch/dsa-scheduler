@@ -1,5 +1,4 @@
-#ifndef __SS_SCHEDULER_H__
-#define __SS_SCHEDULER_H__
+#pragma once
 
 #include <stdlib.h>
 
@@ -17,7 +16,7 @@
 
 #include "dsa/mapper/schedule.h"
 #include "dsa/arch/model.h"
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
 
 #define MAX_ROUTE 100000000
 
@@ -47,8 +46,6 @@ class Scheduler {
       : _ssModel(ssModel), _reslim(timelimit), verbose(verbose_) {}
 
   bool check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose);
-
-  bool vport_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose);
 
   virtual bool schedule(SSDfg* ssDFG, Schedule*& schedule) = 0;
 
@@ -102,5 +99,3 @@ class Scheduler {
 };
 
 void make_directories(const std::string& s);
-
-#endif

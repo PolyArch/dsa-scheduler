@@ -272,7 +272,6 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "#include <vector>\n"
          "#include <complex>\n"
          "#include <algorithm>\n"
-         "#include <xmmintrin.h>\n"
          "#include <math.h>\n"
 
          "#define FIX_MAX ((1 << 15) - 1)\n"

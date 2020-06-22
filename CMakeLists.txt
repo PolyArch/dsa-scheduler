@@ -27,19 +27,21 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()
 
-# Find dependencies: Boost and Parser
-find_package(Boost REQUIRED system serialization)
+# set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+add_compile_options(-fno-strict-aliasing)
+
+# Find dependencies: Parser
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 
 
-FLEX_TARGET(DFG_LEXER ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.l
-  ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.yy.cc
-  DEFINES_FILE ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.h)
+FLEX_TARGET(DFG_LEXER ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.l
+  ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.yy.cc
+  DEFINES_FILE ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.h)
 
-BISON_TARGET(DFG_PARSER ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.y
-  ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.tab.cc
-  DEFINES_FILE ${CMAKE_SOURCE_DIR}/src/ir/dfg-parser.tab.h)
+BISON_TARGET(DFG_PARSER ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.y
+  ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.tab.cc
+  DEFINES_FILE ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.tab.h)
 
 # Generate ssinsts.{cpp/h}
 add_executable(inst_model ${CMAKE_SOURCE_DIR}/src/insts/inst_model.cpp)
@@ -47,7 +49,6 @@ target_include_directories(inst_model PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 set(SS_INSTS_H ${CMAKE_SOURCE_DIR}/include/dsa/arch/ssinst.h)
 set(SS_INSTS_CXX ${CMAKE_SOURCE_DIR}/src/insts/ssinst.cpp)
-set(INST_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.new")
 set(PA_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.power_area.csv")
 
 add_custom_command(
@@ -67,10 +68,9 @@ add_library(dsa
 
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_SOURCE_DIR}/json-parser/include
-  ${Boost_INCLUDE_DIRS})
+  ${CMAKE_SOURCE_DIR}/json-parser/include)
 
-target_link_libraries(dsa PRIVATE json ${Boost_LIBRARIES})
+target_link_libraries(dsa PRIVATE json)
 
 # Install the header files and library
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/

@@ -4,13 +4,14 @@
 #include <tuple>
 #include <algorithm>
 
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
 
 namespace cm {
 
 inline int ColorOf(SSDfgValue *val, bool reset = false) {
   SSDfgNode* node = val->node();
-  if (node->num_inc() == 1 && node->ops()[0].edges.size() == 1) {
+  if (static_cast<int>(node->ops().size()) == 1 &&
+      node->ops()[0].edges.size() == 1) {
     return ColorOf(node->ops()[0].get_first_edge()->val());
   }
   static std::map<SSDfgNode*, std::tuple<int, int, int>> colorMap;

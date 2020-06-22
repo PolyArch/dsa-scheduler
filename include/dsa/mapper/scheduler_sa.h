@@ -146,8 +146,6 @@ class SchedulerSimulatedAnnealing : public Scheduler {
     assert(false);
   }
 
-  template <typename T>
-  inline void unmap_one(SSDfg* ssDFG, Schedule* sched);
   void unmap_some(SSDfg* ssDFG, Schedule* sched);
 
   bool _integrate_timing = true;
@@ -159,20 +157,3 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   bool dump_mapping_if_improved{false};
   int max_iters;
 };
-
-template <typename T>
-inline void SchedulerSimulatedAnnealing::unmap_one(SSDfg* dfg, Schedule* sched) {
-  const auto& nodes = dfg->nodes<T*>();
-  int n = nodes.size();
-  int p = rand() % n;
-  while (true) {
-    for (int i = 0; i < n; ++i) {
-      p = (p + 1) % n;
-      // TODO(@were): add extra estimation to this function...
-      if (sched->is_scheduled(nodes[p])) {
-        sched->unassign_dfgnode(nodes[p]);
-        return;
-      }
-    }
-  }
-}

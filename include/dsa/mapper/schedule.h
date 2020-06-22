@@ -2,9 +2,6 @@
 #define __SS__SCHEDULE_H__
 
 #include <algorithm>
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/functional/hash.hpp>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -15,7 +12,8 @@
 #include "dsa/mapper/config_defs.h"
 #include "dsa/arch/model.h"
 #include "dsa/arch/sub_model.h"
-#include "dsa/ir/ssdfg.h"
+#include "dsa/dfg/ssdfg.h"
+#include "dsa/dfg/visitor.h"
 
 using namespace dsa;
 
@@ -53,11 +51,8 @@ class Schedule {
   Schedule() {}
 
   // Read in schedule (both ssmodel, ssdfg, and schedule from file)
-  Schedule(SSModel* model, SSDfg* dfg) : _ssModel(model), _ssDFG(dfg) {
-    allocate_space();
-  }
+  Schedule(SSModel* model, SSDfg* dfg);
 
-  Schedule(SSModel* model) : _ssModel(model), _ssDFG(nullptr) { allocate_space(); }
 
   constexpr static const float gvsf = 4.0f;
 
@@ -71,11 +66,9 @@ class Schedule {
 
   void printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw);
 
-  void prepareForSaving();
+  void DumpMappingInJson(const std::string& mapping_filename);
 
-  void DumpMappingInJson(std::string& mapping_filename);
-
-  void DumpSwInJson(std::string& sw_filename);
+  void LoadMappingInJson(const std::string& mapping_filename);
 
   void printConfigHeader(std::ostream& os, std::string cfg_name, bool cheat = true);
 
@@ -136,9 +129,19 @@ class Schedule {
   }
 
   void check_all_links_consistency() {
-    for (SSDfgEdge* edge : _ssDFG->edges()) {
-      check_links_consistency(edge);
-    }
+    struct Checker : dfg::Visitor {
+      Checker(Schedule *self) : self(self) {}
+      void Visit(SSDfgNode *node) {
+        for (auto &operand : node->ops()) {
+          for (auto elem : operand.edges) {
+            self->check_links_consistency(elem);
+          }
+        }
+      }
+      Schedule *self;
+    };
+    Checker checker(this);
+    ssdfg()->Apply(&checker);
   }
 
   void check_links_consistency(SSDfgEdge* edge) {
@@ -228,10 +231,7 @@ class Schedule {
 
     assert(dfgnode->type() < SSDfgNode::V_NUM_TYPES);
     _num_mapped[dfgnode->type()]++;
-    assert(_num_mapped[SSDfgNode::V_INST] <= _ssDFG->inst_vec().size());
 
-    // std::cout << "node " << dfgnode->name() << " assigned to "
-    //          << snode->name() << "\n";
     assert(dfgnode);
 
     assert(snode->id() < (int)_nodeProp.size());
@@ -494,7 +494,6 @@ class Schedule {
 
   // find first node for
   SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
-    assert(link);
     auto& vec = _nodeProp[node->id()].slots[slot].vertices;
     if (!vec.empty()) {
       return vec.front().first;
@@ -535,8 +534,6 @@ class Schedule {
   SSModel* ssModel() { return _ssModel; }
 
   void iterativeFixLatency();
-
-  std::vector<SSDfgNode*> ordered_non_temporal();
 
   // Assert error if problem with consistency of schedule
   void validate();
@@ -742,12 +739,6 @@ class Schedule {
     int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
     ssnode* node = nullptr;
     int width = -1, idx = -1;
-
-   private:
-    friend class boost::serialization::access;
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned version);
   };
 
   struct EdgeProp {
@@ -769,12 +760,6 @@ class Schedule {
       links.clear();
       passthroughs.clear();
     }
-
-   private:
-    friend class boost::serialization::access;
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned version);
   };
 
   struct NodeProp {
@@ -785,12 +770,6 @@ class Schedule {
     };
 
     NodeSlot slots[8];
-
-   private:
-    friend class boost::serialization::access;
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned version);
   };
 
   struct LinkProp {
@@ -801,21 +780,17 @@ class Schedule {
     };
 
     LinkSlot slots[8];
-
-   private:
-    friend class boost::serialization::access;
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned version);
   };
 
   std::vector<NodeProp>& node_prop() { return _nodeProp; }
 
- private:
-  friend class boost::serialization::access;
+ public:
+  std::vector<bool> needs_dynamic;
+  std::vector<SSDfgNode*> reversed_topo;
+  std::vector<std::vector<SSDfgEdge*>> operands;
+  std::vector<std::vector<SSDfgEdge*>> users;
 
-  template <class Archive>
-  void serialize(Archive& ar, const unsigned version);
+ private:
 
   std::string _name;
 
@@ -842,6 +817,7 @@ class Schedule {
   int _max_expected_route_latency = 6;
 
   int _num_passthroughs = 0;
+
 };
 
 template <>

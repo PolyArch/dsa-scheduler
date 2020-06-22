@@ -618,7 +618,7 @@ void SpatialFabric::parse_json(const std::string filename){
   JSONrestart(fjson);
   JSONparse(&p);
   JSONModel modeler(this);
-  p.data -> Accept(&modeler);
+  p.data->Accept(&modeler);
   fclose(fjson);
   delete p.data;
 }

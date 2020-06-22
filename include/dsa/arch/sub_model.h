@@ -2,8 +2,6 @@
 #define __SS_SUB_MODEL_H__
 
 #include <algorithm>
-#include <boost/any.hpp>
-#include <boost/utility/binary.hpp>
 #include <bitset>
 #include <climits>
 #include <fstream>
@@ -82,7 +80,7 @@ class ssio_interface {
   ssvport* get(bool is_input, int id) {
     auto& ports = vports(is_input);
     auto iter = ports.find(id);
-    assert(iter != ports.end());
+    CHECK(iter != ports.end());
     return iter->second;
   }
 

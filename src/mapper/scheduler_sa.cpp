@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "dsa/debug.h"
+#include "dsa/dfg/visitor.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
 
@@ -151,7 +152,10 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
   if (s.agg_ovr == 0 && num_left == 0) {
     // cout << "---------------------- attempting creep --------" << "\n";
     accum_vio.clear();  // just clear this
-    std::vector<SSDfgNode*> ordered_non_temp = sched->ordered_non_temporal();
+    std::vector<SSDfgNode*> ordered_non_temp;
+    std::copy_if(sched->reversed_topo.begin(), sched->reversed_topo.end(),
+                 std::back_inserter(ordered_non_temp),
+                 [](SSDfgNode* node) { return !node->is_temporal(); });
 
     // cout << "VIOLATION -----------------------------------\n";
     // for(auto n : ordered_non_temp) {
@@ -253,7 +257,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   auto pdgname = basename(ssDFG->filename);
   auto modelname = basename(_ssModel->filename);
   if (!check_feasible(sched->ssdfg(), sched->ssModel(), false /*silent*/)) {
-    std::cerr << "Cannot be mapped, give up!\n";
+    DEBUG(MAPPING) << "Cannot be mapped, give up!\n";
     return false;
   }
 
@@ -271,8 +275,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   _best_lat = MAX_ROUTE;
   _best_violation = MAX_ROUTE;
 
-  int presize = ssDFG->inst_vec().size();
-  int postsize = presize;
+  int presize = ssDFG->nodes<SSDfgInst*>().size();
 
   int iter = 0;
   int fail_to_route = 0;
@@ -283,12 +286,6 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     bool print_stat = (iter & (256 - 1)) == 0;
 
-    // if ((iter & (4096 - 1)) == 0) {
-    //  // Every so often, lets give up and start over from scratch
-    //  delete cur_sched;
-    //  cur_sched = new Schedule(getSSModel(), ssDFG);
-    //}
-
     // if we don't improve for some time, lets reset
     if (iter - last_improvement_iter > 1024) {
       *cur_sched = *sched;
@@ -296,14 +293,14 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     int status = schedule_internal(ssDFG, cur_sched);
     if (status == 0) {
-      std::cout << "Insufficient candidates!" << std::endl;
+      DEBUG(MAPPING) << "Insufficient candidates!";
       return false;
     }
     if (status == -1) {
       if (++fail_to_route > 32) {
         return false;
       }
-      cout << "Problem with Topology -- Mapping Impossible\n";
+      DEBUG(ROUTING) << "Problem with Topology -- Mapping Impossible";
       continue;
     }
 
@@ -321,12 +318,12 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       ss << "viz/iter/" << iter << ".gv";
       cur_sched->printGraphviz(ss.str().c_str());
 
-      for (int i = 0; i < ssDFG->num_vec_input(); ++i) {
-        cout << cur_sched->vecPortOf(ssDFG->vec_in(i)) << " ";
+      for (auto elem : ssDFG->nodes<SSDfgVecInput*>()) {
+        cout << cur_sched->vecPortOf(elem) << " ";
       }
       cout << "|";
-      for (int i = 0; i < ssDFG->num_vec_output(); ++i) {
-        cout << cur_sched->vecPortOf(ssDFG->vec_out(i)) << " ";
+      for (auto elem : ssDFG->nodes<SSDfgVecInput*>()) {
+        cout << cur_sched->vecPortOf(elem) << " ";
       }
 
       fprintf(
@@ -334,14 +331,14 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
           "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
           "lat: %3d, vio %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
           "obj:%d, ins: %d/%d, outs: %d/%d,"
-          " insts: %d/%d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
+          " insts: %d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
           iter, total_msec() / 1000.f, routing_times / total_msec(),
           cur_sched->num_left(), s.lat, cur_sched->violation(), s.latmis, s.ovr,
           s.agg_ovr, s.max_util, -score.second, cur_sched->num_mapped<SSDfgVecInput>(),
           (int)ssDFG->nodes<SSDfgVecInput*>().size(),
           cur_sched->num_mapped<SSDfgVecOutput>(),
           (int)ssDFG->nodes<SSDfgVecOutput*>().size(), cur_sched->num_mapped<SSDfgInst>(),
-          presize, postsize, cur_sched->num_passthroughs(), cur_sched->num_links_mapped(),
+          presize, cur_sched->num_passthroughs(), cur_sched->num_links_mapped(),
           cur_sched->num_edge_links_mapped(), succeed_sched ? ", all mapped" : "",
           succeed_timing ? ", mismatch == 0" : "");
       if (score > best_score) {
@@ -419,6 +416,18 @@ bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* s
   return true;
 }
 
+struct CandidateFinder : dfg::Visitor {
+  CandidateFinder(Schedule *sched_) : sched(sched_) {
+    CHECK(sched->ssModel()) << "The given schedule should have an underlying spatial architecture!";
+    model = sched->ssModel();
+  }
+  Schedule *sched;
+  SSModel *model;
+
+  void Visit(SSDfgInst *inst) {
+  }
+};
+
 int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
   auto nodes = sched->ssdfg()->nodes<SSDfgNode*>();
   int n = nodes.size();
@@ -468,24 +477,26 @@ void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
   int r = rand() % 1000;  // upper limit defines ratio of input/output scheduling
   int num_to_unmap = (r < 5) ? 10 : (r < 250 ? 4 : 2);
 
-  for (int i = 0; i < num_to_unmap && sched->num_mapped<SSDfgNode>(); ++i) {
-    bool flag = sched->num_mapped<SSDfgNode>() != 0;
-    while (flag) {
-      r = rand() % 10;
-      if (r == 0 && sched->num_mapped<SSDfgVecInput>()) {
-        unmap_one<SSDfgVecInput>(ssDFG, sched);
-        i += 1;
-        flag = false;
-      } else if (r == 1 && sched->num_mapped<SSDfgVecOutput>()) {
-        unmap_one<SSDfgVecOutput>(ssDFG, sched);
-        i += 1;
-        flag = false;
-      } else if (sched->num_mapped<SSDfgInst>()) {
-        unmap_one<SSDfgInst>(ssDFG, sched);
-        flag = false;
+  struct Unmapper : dfg::Visitor {
+    Schedule *sched;
+    int total, to_do;
+
+    Unmapper(Schedule *sched_, int to_do_) :
+      sched(sched_), total(sched->num_mapped<SSDfgNode>()), to_do(to_do_) {}
+
+    void Visit(SSDfgNode *node) override {
+      if (sched->is_scheduled(node) && rand() % total < to_do) {
+        sched->unassign_dfgnode(node);
+        --total;
       }
     }
-  }
+  };
+
+  Unmapper u(sched, num_to_unmap);
+
+  if (sched->num_mapped<SSDfgNode>())
+    ssDFG->Apply(&u);
+
 }
 
 int SchedulerSimulatedAnnealing::schedule_internal(SSDfg* ssDFG, Schedule*& sched) {

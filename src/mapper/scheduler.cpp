@@ -10,6 +10,8 @@
 
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
+#include "dsa/arch/visitor.h"
+#include "dsa/dfg/visitor.h"
 
 using namespace dsa;
 using namespace std;
@@ -22,147 +24,70 @@ int rand_bt(int s, int e) {
 
 int rand_bt_large(int s, int e) { return (rand() * RAND_MAX + rand()) % (e - s) + s; }
 
-bool Scheduler::vport_feasible(SSDfg* dfg, SSModel* ssmodel, bool verbose) {
-  auto* sub = ssmodel->subModel();
+bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
-  // Fast algorithm for checking if there are enough vports
-  std::vector<int> vec_in_sizes;
-  std::vector<int> vec_out_sizes;
-  std::vector<int> dfg_in_sizes;
-  std::vector<int> dfg_out_sizes;
-  for (auto& p : sub->input_list()) vec_in_sizes.push_back(p->bitwidth_capability());
-  for (auto& p : sub->output_list()) vec_out_sizes.push_back(p->bitwidth_capability());
-  for (auto& v : dfg->vec_inputs()) dfg_in_sizes.push_back(v->phys_bitwidth());
-  for (auto& v : dfg->vec_outputs()) dfg_out_sizes.push_back(v->phys_bitwidth());
-
-  if (dfg_in_sizes.size() > vec_in_sizes.size()) {
-    std::cerr << "DFG has in size = " << dfg_in_sizes.size()
-             << ", but input vport has only size = "
-             << vec_in_sizes.size() << std::endl;
-    return false;
-  }
-  if (dfg_out_sizes.size() > vec_out_sizes.size()){
-    std::cerr << "DFG has out size = " << dfg_out_sizes.size()
-             << ", but output vport has only size = "
-             << vec_out_sizes.size() << std::endl;
-    return false;
+  struct DFGCounter : dsa::dfg::Visitor {
+    std::map<std::pair<OpCode, int>, int> inst_required;
+    std::vector<int> ports[2];
+    void Visit(SSDfgInst *node) {
+      inst_required[{node->inst(), (int) node->is_temporal()}]++;
+    }
+    void Visit(SSDfgVecInput *vec) {
+      ports[1].push_back(vec->phys_bitwidth());
+    }
+    void Visit(SSDfgVecOutput *vec) {
+      ports[0].push_back(vec->phys_bitwidth());
+    }
   };
 
-  std::sort(vec_in_sizes.begin(), vec_in_sizes.end(), greater<int>());
-  std::sort(vec_out_sizes.begin(), vec_out_sizes.end(), greater<int>());
-  std::sort(dfg_in_sizes.begin(), dfg_in_sizes.end(), greater<int>());
-  std::sort(dfg_out_sizes.begin(), dfg_out_sizes.end(), greater<int>());
-
-  for (unsigned i = 0; i < dfg_in_sizes.size(); ++i) {
-    if (dfg_in_sizes[i] > vec_in_sizes[i]) {
-      if (true) {
-        std::cerr << "DFG Input Size = " << dfg_in_sizes[i] << "\n"
-                  << "Vector Input Size = " << vec_in_sizes[i] <<"\n"
-                  << "Vector Inputs Insufficient\n";
+  struct SpatialCounter : dsa::adg::Visitor {
+    std::map<std::pair<OpCode, int>, int> inst_exist;
+    std::vector<int> ports[2];
+    void Visit(ssfu *fu) override {
+      for (auto elem : fu->fu_type_.capability) {
+        if (fu->max_util() == 1) {
+          inst_exist[{elem.op, 0}] += 64 / dsa::bitwidth[elem.op];
+        } else {
+          inst_exist[{elem.op, 1}] += fu->max_util();
+        }
       }
+    }
+    void Visit(ssvport *vp) {
+      ports[vp->in_links().empty()].push_back(vp->bitwidth_capability());
+    }
+  };
+
+  DFGCounter dc;
+  SpatialCounter sc;
+  ssDFG->Apply(&dc);
+  _ssModel->subModel()->Apply(&sc);
+
+  for (auto elem : dc.inst_required) {
+    if (sc.inst_exist[elem.first] < elem.second) {
+      DEBUG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
+                   << " FU(s) are required in "
+                   << (elem.first.second ? "temporal" : "dedicated") << " tiles, but only "
+                   << sc.inst_exist[elem.first] << " found";
       return false;
     }
   }
-  for (unsigned i = 0; i < dfg_out_sizes.size(); ++i) {
-    if (dfg_out_sizes[i] > vec_out_sizes[i]) {
-      if (true) {
-        std::cerr << "Vector Outputs Insufficient\n";
-      }
+
+  for (int i = 0; i < 2; ++i) {
+    if (dc.ports[i].size() > sc.ports[i].size()) {
+      DEBUG(COUNT) << "In total, " << dc.ports[i].size() << " port(s) are required, but only have "
+                   << sc.ports[i].size();
       return false;
     }
-  }
-  return true;
-}
-
-bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
-  if (!vport_feasible(ssDFG, ssmodel, verbose)) {
-    return false;
-  }
-  int dedicated_insts = 0;
-  int temporal_insts = 0;
-  for (auto i : ssDFG->inst_vec()) {
-    if (!i->is_temporal()) {
-      dedicated_insts++;
-    } else {
-      temporal_insts++;
-    }
-  }
-
-  int temporal_fus = 0;
-  int temporal_inst_slots = 0;
-  for (auto elem : _ssModel->subModel()->fu_list()) {
-    temporal_inst_slots += elem->max_util();
-    temporal_fus += 1;
-  }
-
-  // int nfus = ssmodel->subModel()->sizex() * ssmodel->subModel()->sizey();
-  // if (dedicated_insts > nfus) {
-  //  cerr << "\n\nError: Too many dedicated instructions ("
-  //       << dedicated_insts << ") in SSDfg for given SSCONFIG (has "
-  //       << nfus << " fus)\n\n";
-  //  return false;
-  //}
-
-  if (temporal_insts > temporal_inst_slots) {
-    cerr << "\n\nError: Too many temporal instructions (" << temporal_insts
-         << ") in SSDfg for given SSCONFIG (has " << temporal_inst_slots
-         << " temporal slots)\n\n";
-    return false;
-  }
-
-  bool failed_count_check = false;
-
-  std::map<OpCode, int> dedicated_count_types, temporal_count_types;
-  for (auto elem : ssDFG->inst_vec()) {
-    if (!elem->is_temporal()) {
-      dedicated_count_types[elem->inst()]++;
-    } else {
-      temporal_count_types[elem->inst()]++;
-    }
-  }
-
-  for (auto& pair : dedicated_count_types) {
-    OpCode ss_inst = pair.first;
-    int dfg_count = pair.second;
-
-    int fu_count = 0;
-    //std::cout << "size of fu list is "<< _ssModel->subModel()->fu_list().size() << endl;
-    for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->fu_type_.Capable(ss_inst)) {
-        fu_count += 64 / dsa::bitwidth[ss_inst];
+    sort(dc.ports[i].begin(), dc.ports[i].end(), std::greater<int>());
+    sort(sc.ports[i].begin(), sc.ports[i].end(), std::greater<int>());
+    for (int j = 0, n = dc.ports[i].size(); j < n; ++j) {
+      if (dc.ports[i][j] > sc.ports[i][j]) {
+        DEBUG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
+                     << sc.ports[i][j];
+        return false;
       }
     }
-    if (fu_count < dfg_count) {
-      failed_count_check = true;
-      cerr << "Error: DFG has " << dfg_count << " " << name_of_inst(ss_inst)
-           << " dedicated insts, but only " << fu_count
-           << " dedicated fus to support them\n";
-    }
   }
-
-  for (auto& pair : temporal_count_types) {
-    OpCode ss_inst = pair.first;
-    int dfg_count = pair.second;
-
-    int fu_count = 0;
-    for (ssfu* cand_fu : _ssModel->subModel()->fu_list()) {
-      if (cand_fu->max_util() > 1 && cand_fu->fu_type_.Capable(ss_inst)) {
-        fu_count += cand_fu->max_util(ss_inst);
-      }
-    }
-    if (fu_count < dfg_count) {
-      failed_count_check = true;
-      cerr << "Error: DFG has " << dfg_count << " " << name_of_inst(ss_inst)
-           << " temporal insts, but only " << fu_count
-           << " temporal fu slots to support them\n";
-    }
-  }
-
-  if (failed_count_check) {
-    cerr << "\n\nError: FAILED Basic FU Count Check\n\n";
-    return false;
-  }
-  // TODO: add code from printPortcompatibility here
 
   return true;
 }
@@ -201,10 +126,10 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   string verif_dir = pdg_dir + "verif/";
   string sched_dir = pdg_dir + "sched/";  // Directory for cheating on the scheduler
 
-  checked_system(("mkdir -p " + viz_dir).c_str());
-  checked_system(("mkdir -p " + iter_dir).c_str());
-  checked_system(("mkdir -p " + verif_dir).c_str());
-  checked_system(("mkdir -p " + sched_dir).c_str());
+  ENFORCED_SYSTEM(("mkdir -p " + viz_dir).c_str());
+  ENFORCED_SYSTEM(("mkdir -p " + iter_dir).c_str());
+  ENFORCED_SYSTEM(("mkdir -p " + verif_dir).c_str());
+  ENFORCED_SYSTEM(("mkdir -p " + sched_dir).c_str());
 
   std::string model_filename = model->filename;
   int lastindex = model_filename.find_last_of(".");
