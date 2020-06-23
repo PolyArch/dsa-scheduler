@@ -7,7 +7,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <boost/optional.hpp>
 
 #include "dsa/arch/model.h"
 #include "dsa/arch/estimation.h"
@@ -65,7 +64,7 @@ int main(int argc, char* argv[]) {
   int memory_size = 4096;
 
   std::string timing;
-  boost::optional<bool> contrl_flow;
+  int contrl_flow = -1;
 
   std::string hw_json_filename = "";
   std::string sw_json_filename = "";
@@ -114,8 +113,8 @@ int main(int argc, char* argv[]) {
   if (max_edge_delay != - 1) {
     ssmodel.setMaxEdgeDelay(max_edge_delay);
   }
-  if (contrl_flow == false || contrl_flow == true) {
-    ssmodel.setCtrl(contrl_flow.get());
+  if (contrl_flow != -1) {
+    ssmodel.setCtrl(contrl_flow);
   }
   if (decomposer != -1) {
     for (auto elem : ssmodel.subModel()->node_list()) {

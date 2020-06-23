@@ -1,7 +1,6 @@
 
 #include <assert.h>
 
-#include <boost/foreach.hpp>
 #include <exception>
 #include <fstream>
 #include <iomanip>

@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 
-#include <boost/functional.hpp>
 #include <chrono>
 #include <fstream>
 #include <functional>
