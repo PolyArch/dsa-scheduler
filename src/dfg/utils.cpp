@@ -131,6 +131,14 @@ SSDfg* Import(const std::string &s) {
       int opcode = *node["op"]->As<int64_t>();
       auto inst = new SSDfgInst(res, static_cast<OpCode>(opcode));
       res->add<SSDfgInst>(inst);
+      if (node.count("ctrl")) {
+        uint64_t ctrl = *node["ctrl"]->As<int64_t>();
+        inst->set_ctrl_bits(CtrlBits(ctrl));
+      }
+      if (node.count("self")) {
+        uint64_t self = *node["self"]->As<int64_t>();
+        inst->set_self_ctrl(CtrlBits(self));
+      }
     }
     auto &operands = *node["inputs"]->As<plain::Array>();
     for (int j = 0, m = operands.size(); j < m; ++j) {

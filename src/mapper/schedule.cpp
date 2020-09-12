@@ -1020,12 +1020,18 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
 #include "./pass/reversed_topology.h"
 #include "./pass/collect_redundancy.h"
 #include "./pass/propagate_control.h"
+//#include "./pass/slice_edges.h"
+#include "./pass/shortest_path.h"
 
 Schedule::Schedule(SSModel* model, SSDfg* dfg) : _ssModel(model), _ssDFG(dfg) {
   allocate_space();
   reversed_topo = dsa::dfg::pass::ReversedTopology(dfg);
   needs_dynamic = dsa::dfg::pass::PropagateControl(reversed_topo);
   auto redundancy = dsa::dfg::pass::CollectRedundancy(dfg);
+  distances = dsa::arch::pass::ShortestPaths(model->subModel());
   operands = std::get<0>(redundancy);
   users = std::get<1>(redundancy);
+  for (auto elem : dfg->nodes<SSDfgNode*>()) {
+    elem->candidates(this, model, 50);
+  }
 }

@@ -789,6 +789,7 @@ class Schedule {
   std::vector<SSDfgNode*> reversed_topo;
   std::vector<std::vector<SSDfgEdge*>> operands;
   std::vector<std::vector<SSDfgEdge*>> users;
+  std::vector<std::vector<int>> distances;
 
  private:
 

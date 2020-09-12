@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 
 #include "dsa/arch/sub_model.h"

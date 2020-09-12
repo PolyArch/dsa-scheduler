@@ -8,6 +8,8 @@
 #include <iostream>
 #include <string>
 
+#include "gperftools/profiler.h"
+
 #include "dsa/arch/model.h"
 #include "dsa/arch/estimation.h"
 #include "dsa/mapper/scheduler.h"

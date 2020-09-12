@@ -418,7 +418,8 @@ bool SchedulerSimulatedAnnealing::map_io_to_completion(SSDfg* ssDFG, Schedule* s
 
 struct CandidateFinder : dfg::Visitor {
   CandidateFinder(Schedule *sched_) : sched(sched_) {
-    CHECK(sched->ssModel()) << "The given schedule should have an underlying spatial architecture!";
+    CHECK(sched->ssModel())
+      << "The given schedule should have an underlying spatial architecture!";
     model = sched->ssModel();
   }
   Schedule *sched;
@@ -794,10 +795,45 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
   if (candidates.empty()) return 0;
 
+  std::vector<int> src, dst, idx, keys;
+
+  for (auto elem : node->ops()) {
+    for (auto edge : elem.edges) {
+      if (auto node = sched->locationOf(edge->def())) {
+        src.push_back(node->id());
+      }
+    }
+  }
+  for (auto value : node->values()) {
+    for (auto edge : value->edges()) {
+      if (auto node = sched->locationOf(edge->use())) {
+        dst.push_back(node->id());
+      }
+    }
+  }
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    idx.push_back(i);
+  }
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    int sum = 0;
+    for (auto elem : src) {
+      sum += sched->distances[elem][candidates[i].second->id()];
+    }
+    for (auto elem : dst) {
+      sum += sched->distances[candidates[i].second->id()][elem];
+    }
+    keys.push_back(sum);
+  }
+  std::sort(idx.begin(), idx.end(), [&keys](int a, int b) {
+    return keys[a] < keys[b];
+  });
+
+
+  int no_imporve = 0;
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
 
-    if (scheduleHere(sched, node, candidates[i])) {
+    if (scheduleHere(sched, node, candidates[idx[i]])) {
       ++candidates_succ;
 
       SchedStats s;
@@ -809,21 +845,29 @@ int SchedulerSimulatedAnnealing::try_candidates(
       }
 
       if (candScore > bestScore) {
-        best_candidate = i;
+        best_candidate = idx[i];
         bestScore = candScore;
         best_path.edges.clear();
         best_path.fill_from(node, sched);
         best_path.fill_paths_from_undo(undo_path, sched);
+        no_imporve = 0;
+      } else {
+        ++no_imporve;
       }
 
       undo_path.apply(sched);  // revert to paths before creep-based path lengthening
       sched->unassign_dfgnode(node);
+      if (no_imporve > 8) {
+        break;
+      }
     }
   }
 
   if (best_candidate != -1) {
     best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
+    DEBUG(MAPPING) << node->name() << " maps to "
+                   << candidates[best_candidate].second->name();
   }
 
   return best_candidate;

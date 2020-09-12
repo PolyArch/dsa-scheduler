@@ -728,6 +728,7 @@ void SSDfgInst::forward(Schedule* sched) {
         _invalid = true;
         reason << "operand " << i << " not valid!";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
+        DEBUG(PRED) << "bits: " << _ctrl_bits.bits() << ", pred: " << _input_vals[i];
         _ctrl_bits.test(_input_vals[i], _back_array, discard, pred, reset);
       }
     }
