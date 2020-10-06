@@ -13,6 +13,8 @@
 #include "dsa/arch/visitor.h"
 #include "dsa/dfg/visitor.h"
 
+#include "./pass/print_graphviz.h"
+
 using namespace dsa;
 using namespace std;
 
@@ -64,7 +66,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
   for (auto elem : dc.inst_required) {
     if (sc.inst_exist[elem.first] < elem.second) {
-      DEBUG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
+      LOG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
                    << " FU(s) are required in "
                    << (elem.first.second ? "temporal" : "dedicated") << " tiles, but only "
                    << sc.inst_exist[elem.first] << " found";
@@ -74,7 +76,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
   for (int i = 0; i < 2; ++i) {
     if (dc.ports[i].size() > sc.ports[i].size()) {
-      DEBUG(COUNT) << "In total, " << dc.ports[i].size() << " port(s) are required, but only have "
+      LOG(COUNT) << "In total, " << dc.ports[i].size() << " port(s) are required, but only have "
                    << sc.ports[i].size();
       return false;
     }
@@ -82,7 +84,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
     sort(sc.ports[i].begin(), sc.ports[i].end(), std::greater<int>());
     for (int j = 0, n = dc.ports[i].size(); j < n; ++j) {
       if (dc.ports[i][j] > sc.ports[i][j]) {
-        DEBUG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
+        LOG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
                      << sc.ports[i][j];
         return false;
       }
@@ -154,7 +156,6 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
     int lat = 0, latmis = 0;
     if (succeed_sched) {
       sched->cheapCalcLatency(lat, latmis);
-      sched->set_decode_lat_mis(latmis);
 
       // ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
       // sched->printConfigText(ctxs); // text form of config fed to gui
@@ -181,13 +182,10 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
         cout << "Scheduling Failed!\n";
       }
       sched->stat_printOutputLatency();
-      dfg->printGraphviz("viz/final.dot", sched);
+      dsa::mapper::pass::print_graphviz("viz/final.dot", dfg, sched);
     }
 
-    ofstream ofs(viz_dir + dfg_base + ".dot", ios::out);
-    assert(ofs.good());
-    dfg->printGraphviz(ofs);
-    ofs.close();
+    dsa::mapper::pass::print_graphviz(viz_dir + dfg_base + ".dot", dfg);
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
     sched->printGraphviz(sched_viz.c_str());
@@ -203,13 +201,6 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
 
   if (!succeed_sched || sched == nullptr) {
     cout << "Cannot be scheduled, try a smaller DFG!\n\n";
-    // This is just a fake schedule!
-    // sched = new Schedule(&ssmodel,&sspdg);
-    SchedulerSimulatedAnnealing* s = new SchedulerSimulatedAnnealing(model);
-    s->set_fake_it();
-
-    s->initialize(dfg, sched);
-    succeed_sched = s->schedule_internal(dfg, sched);
     return nullptr;
   }
 
@@ -217,13 +208,12 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   // string hw_config_filename = model_rawname + ".xml";
   // sched -> printConfigBits_Hw(hw_config_filename);
 
-  sched->set_name(pdg_rawname);
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);
   assert(osh.good());
   sched->printConfigHeader(osh, dfg_base);
   if (verbose) {
-    std::cout << "Performance: " << dfg->estimated_performance(sched, false) << std::endl;
+    std::cout << "Performance: " << sched->estimated_performance() << std::endl;
   }
 
   if (print_bits) {

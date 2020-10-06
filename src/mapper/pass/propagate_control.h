@@ -14,9 +14,8 @@ inline std::vector<bool> PropagateControl(const std::vector<SSDfgNode*> &reverse
     InstFilter(std::vector<bool> &res_) : res(res_) {}
     std::vector<bool> &res;
     void Visit(SSDfgInst *inst) override {
-      if (inst->ctrlBits().is_dynamic || inst->selfBits().is_dynamic) {
-        res[inst->id()] = true;
-      }
+      res[inst->id()] = inst->predicate.is_dynamic ||
+                        inst->self_predicate.is_dynamic;
     }
   } filter(res);
 
@@ -30,7 +29,8 @@ inline std::vector<bool> PropagateControl(const std::vector<SSDfgNode*> &reverse
     void Visit(SSDfgNode *node) override {
       if (res[node->id()]) {
         for (auto &op : node->ops()) {
-          for (auto edge : op.edges) {
+          for (auto eid : op.edges) {
+            auto *edge = &node->ssdfg()->edges[eid];
             res[edge->def()->id()] = true;
           }
         }

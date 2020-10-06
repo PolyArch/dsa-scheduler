@@ -27,7 +27,6 @@ static struct option long_options[] = {
     {"print-bits",     no_argument,       nullptr, 'b',},
     {"no-int-time",    no_argument,       nullptr, 'n',},
     {"design-space",   no_argument,       nullptr, 'f',},
-    {"estmt-perf",     no_argument,       nullptr, 'p',},
     {"indir-mem",      no_argument,       nullptr, 'c',},
     {"print-bit",      no_argument,       nullptr, 'b',},
     {"dump-mapping-if-improved",   no_argument, nullptr, 'u',},
@@ -59,7 +58,6 @@ int main(int argc, char* argv[]) {
   int max_iters = 20000;
   int decomposer = 8;
 
-  bool est_perf = false;
   int indirect = false;
   int memory_size = 4096;
 
@@ -71,10 +69,9 @@ int main(int argc, char* argv[]) {
   std::string mapping_json_filename = "";
   bool dump_mapping_if_improved = false;
 
-  while ((opt = getopt_long(argc, argv, "m:vt:pc:bd:e:l:r:h:s:a:u", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "m:vt:c:bd:e:l:r:h:s:a:u", long_options, nullptr)) != -1) {
     switch (opt) {
       case 'v': verbose = true; break;
-      case 'p': est_perf = true; break;
       case 'c': indirect = atoi(optarg); break;
       case 'b': print_bits = true; break;
       case 't': timeout = atof(optarg); break;
@@ -95,7 +92,7 @@ int main(int argc, char* argv[]) {
   argc -= optind;
   argv += optind;
 
-  if (!est_perf && argc != 2) {
+  if (argc != 2) {
     cerr << "Usage: ss_sched [FLAGS] config.ssmodel [compute.dfg]\n";
     exit(1);
   }
@@ -106,7 +103,6 @@ int main(int argc, char* argv[]) {
 
   std::string model_filename = argv[0];
   SSModel ssmodel(model_filename.c_str());
-  DEBUG(MODEL) << "sub: " << ssmodel.subModel();
 
   ssmodel.memory_size = memory_size;
 
@@ -132,10 +128,6 @@ int main(int argc, char* argv[]) {
     SSDfg ssdfg(pdg_filename);
 
     Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
-    if (est_perf) {
-      double est = ssdfg.estimated_performance(sched, true);
-      std::cout << "Estimated overall performance: " << est << std::endl;
-    }
     // Dump hardware
     if(hw_json_filename != "") {
       ssmodel.subModel()->DumpHwInJson(hw_json_filename.c_str());
@@ -143,8 +135,8 @@ int main(int argc, char* argv[]) {
 
     // Dump software
     if(!sw_json_filename.empty()){
-      for (auto edge : ssdfg.edges()) {
-        edge->set_delay(sched->edge_delay(edge));
+      for (auto &edge : ssdfg.edges) {
+        edge.delay = sched->edge_delay(&edge);
       }
       dfg::Export(&ssdfg, sw_json_filename);
     }
@@ -157,10 +149,8 @@ int main(int argc, char* argv[]) {
 
 
 
-  if (est_perf) {
-    auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
-    res.Dump(std::cout);
-  }
+  auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
+  res.Dump(std::cout);
 
   return 0;
 }

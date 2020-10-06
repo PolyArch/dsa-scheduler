@@ -310,7 +310,7 @@ sslink* ssnode::add_link(ssnode* node) {
   link->subnet[0] = ~0ull >> (64 - link->bitwidth());
   link->subnet[1] = ~0ull >> (64 - link->bitwidth());
 
-  DEBUG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
+  LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
 
   node->links[1].push_back(link);
   return link;

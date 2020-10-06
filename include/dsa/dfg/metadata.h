@@ -14,8 +14,6 @@ constexpr char const *OPERAND_TYPE[] = {
   "data", "ctrl", "self", "pred", "inv_pred", "<unknown>"
 };
 
-OperandType Str2Flag(const std::string& s);
-
 struct MetaPort {
 
   enum class Data {

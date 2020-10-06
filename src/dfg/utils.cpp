@@ -29,14 +29,15 @@ struct Exporter : Visitor {
       } else {
         operand_obj["type"] = (new json::String(OPERAND_TYPE[(int) operand.type]));
         plain::Array edges;
-        for (auto edge : operand.edges) {
+        for (auto eid : operand.edges) {
+          auto *edge = &node->ssdfg()->edges[eid];
           plain::Object edge_obj;
-          edge_obj["id"] = new json::Int(edge->id());
+          edge_obj["id"] = new json::Int(edge->id);
           edge_obj["src_id"] = new json::Int(edge->def()->id());
-          edge_obj["src_val"] = new json::Int(edge->val()->index());
-          edge_obj["delay"] = new json::Int(edge->delay());
-          edge_obj["l"] = new json::Int(edge->l());
-          edge_obj["r"] = new json::Int(edge->r());
+          edge_obj["src_val"] = new json::Int(edge->val()->index);
+          edge_obj["delay"] = new json::Int(edge->delay);
+          edge_obj["l"] = new json::Int(edge->l);
+          edge_obj["r"] = new json::Int(edge->r);
           edges.push_back(new json::Object(edge_obj));
         }
         operand_obj["edges"] = new json::Array(edges);
@@ -50,8 +51,8 @@ struct Exporter : Visitor {
   void Visit(SSDfgInst *inst) override {
     current["op"] = new json::Int(inst->inst());
     current["inst"] = new json::String(name_of_inst(inst->inst()));
-    current["ctrl"] = new json::Int(inst->ctrl_bits());
-    current["self"] = new json::Int(inst->self_bits());
+    current["ctrl"] = new json::Int(inst->predicate.bits());
+    current["self"] = new json::Int(inst->self_predicate.bits());
     Visit(static_cast<SSDfgNode*>(inst));
   }
   void Visit(SSDfgVecInput *in) override {
@@ -121,33 +122,32 @@ SSDfg* Import(const std::string &s) {
       int length = *node["length"]->As<int64_t>();
       int width = *node["width"]->As<int64_t>();
       if (inputs.empty()) {
-        auto vec = new SSDfgVecInput(length, width, name, res->nodes<SSDfgVecInput*>().size(), res, meta);
-        res->add<SSDfgVecInput>(vec);
+        res->emplace_back<SSDfgVecInput>(length, width, name, res, meta);
       } else {
-        auto vec = new SSDfgVecOutput(length, width, name, res->nodes<SSDfgVecInput*>().size(), res, meta);
-        res->add<SSDfgVecOutput>(vec);
+        res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta);
       }
     } else if (node.count("op")) {
       int opcode = *node["op"]->As<int64_t>();
-      auto inst = new SSDfgInst(res, static_cast<OpCode>(opcode));
-      res->add<SSDfgInst>(inst);
+      res->emplace_back<SSDfgInst>(res, static_cast<OpCode>(opcode));
+      auto &inst = res->instructions.back();
       if (node.count("ctrl")) {
         uint64_t ctrl = *node["ctrl"]->As<int64_t>();
-        inst->set_ctrl_bits(CtrlBits(ctrl));
+        inst.predicate = CtrlBits(ctrl);
       }
       if (node.count("self")) {
         uint64_t self = *node["self"]->As<int64_t>();
-        inst->set_self_ctrl(CtrlBits(self));
+        inst.self_predicate = CtrlBits(self);
       }
     }
     auto &operands = *node["inputs"]->As<plain::Array>();
     for (int j = 0, m = operands.size(); j < m; ++j) {
       auto &obj = *operands[j]->As<plain::Object>();
       if (obj.count("imm")) {
-        res->nodes<SSDfgNode*>()[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
+        res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
       } else {
         auto &type = *obj["type"]->As<std::string>();
         auto &edges = *obj["edges"]->As<plain::Array>();
+        std::vector<int> es;
         for (auto edge : edges) {
           auto &edge_obj = *edge->As<plain::Object>();
           int src_id = *edge_obj["src_id"]->As<int64_t>();
@@ -156,12 +156,15 @@ SSDfg* Import(const std::string &s) {
           int l = *edge_obj["l"]->As<int64_t>();
           int r = *edge_obj["r"]->As<int64_t>();
           CHECK(src_id < i);
-          auto connect = res->connect(res->nodes<SSDfgNode*>()[src_id]->values()[src_val],
-                                      res->nodes<SSDfgNode*>()[i], j, Str2Flag(type),
-                                      l, r);
-          connect->set_delay(delay);
-          CHECK(connect->id() == *edge_obj["id"]->As<int64_t>()) << "Edge id violation!";
+          Edge e_instance(res, src_id, src_val, i, l, r);
+          es.push_back(*edge_obj["id"]->As<int64_t>());
+          if (es.back() >= res->edges.size())
+            res->edges.resize(es.back() + 1);
+          e_instance.delay = delay;
+          e_instance.id = es.back();
+          res->edges[es.back()] = e_instance;
         }
+        res->nodes[i]->ops().emplace_back(res, es, Str2Flag(type));
       }
     }
   }

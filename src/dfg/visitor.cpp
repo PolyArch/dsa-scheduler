@@ -1,4 +1,5 @@
 #include "dsa/dfg/visitor.h"
+#include "dsa/dfg/ssdfg.h"
 
 namespace dsa {
 namespace dfg {

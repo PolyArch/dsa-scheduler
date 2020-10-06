@@ -1,5 +1,4 @@
-#ifndef __SS_DSE_H__
-#define __SS_DSE_H__
+#pragma once
 
 #include "scheduler.h"
 #include "schedule.h"
@@ -352,7 +351,7 @@ class CodesignInstance {
           for_each_sched([&](Schedule& sched) {
             for (int slot = 0; slot < sched.num_slots(node); ++slot) {
               for (auto& p : sched.dfg_nodes_of(slot, node)) {
-                if (p.first->needs_ctrl_dep()) {
+                if (sched.needs_dynamic[p.first->id()]) {
                   sched.unassign_dfgnode(p.first);
                 }
               }
@@ -407,11 +406,14 @@ class CodesignInstance {
         for_each_sched([&](Schedule& sched) {
           for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
             for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-              for (auto &elem : p.first->in_edges()) {
-                if (sched.edge_delay(elem) > fu->delay_fifo_depth()) {
-                  std::cout << sched.edge_delay(elem) << " > " << fu->delay_fifo_depth()
-                            << ", unassign " << p.first->name() << std::endl;
-                  sched.unassign_dfgnode(p.first);
+              for (auto &op : p.first->ops()) {
+                for (auto eid : op.edges) {
+                  auto *elem = &sched.ssdfg()->edges[eid];
+                  if (sched.edge_delay(elem) > fu->delay_fifo_depth()) {
+                    std::cout << sched.edge_delay(elem) << " > " << fu->delay_fifo_depth()
+                              << ", unassign " << p.first->name() << std::endl;
+                    sched.unassign_dfgnode(p.first);
+                  }
                 }
               }
             }
@@ -603,11 +605,11 @@ class CodesignInstance {
     int violation = sched->violation();
 
     int obj = s.agg_ovr * 1000 + violation * 200 + s.latmis * 200 + s.lat +
-              (s.max_util - 1) * 3000 + sched->num_passthroughs();
+              (s.max_util - 1) * 3000 + sched->total_passthrough;
     obj = obj * 100 + sched->num_links_mapped();
 
     int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
-    double performance = sched->ssdfg()->estimated_performance(sched, false);
+    double performance = sched->estimated_performance();
     if (succeed_sched) {
       double eval = performance * ((double) max_delay / (max_delay + s.latmis));
       eval /= std::max(1.0 + s.ovr, sqrt(s.agg_ovr));
@@ -679,7 +681,7 @@ class CodesignInstance {
         }
         for (int k = 0; k < 8; ++k) {
           if (!res[i]->node_prop()[j].slots[k].vertices.empty() ||
-              res[i]->node_prop()[j].slots[k].num_passthroughs) {
+              res[i]->node_prop()[j].slots[k].passthrus.size()) {
             unused_nodes[j] = false;
           }
         }
@@ -752,6 +754,3 @@ class CodesignInstance {
   std::vector<int> delete_sw_list;
   std::vector<int> delete_vport_list;
 };
-
-
-#endif

@@ -1,6 +1,10 @@
 #pragma once
 
-#include "dsa/dfg/ssdfg.h"
+class SSDfgNode;
+class SSDfgInst;
+class SSDfgVec;
+class SSDfgVecInput;
+class SSDfgVecOutput;
 
 namespace dsa {
 namespace dfg {

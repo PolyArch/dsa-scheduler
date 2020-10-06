@@ -1,5 +1,4 @@
-#ifndef __SS_SUB_MODEL_H__
-#define __SS_SUB_MODEL_H__
+#pragma once
 
 #include <algorithm>
 #include <bitset>
@@ -106,7 +105,7 @@ class sslink {
 
   std::string name() const;
 
-  int id() { return _ID; }
+  int id() const { return _ID; }
 
   void set_id(int id) { _ID = id; }
 
@@ -840,5 +839,3 @@ class ssvport : public ssnode {
 };
 
 }  // namespace dsa
-
-#endif

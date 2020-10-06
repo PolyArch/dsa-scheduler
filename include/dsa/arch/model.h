@@ -1,5 +1,4 @@
-#ifndef __SS_MODEL_H__
-#define __SS_MODEL_H__
+#pragma once
 
 #include <iostream>
 #include <map>
@@ -73,5 +72,3 @@ class SSModel {
 };
 
 }  // namespace dsa
-
-#endif

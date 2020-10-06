@@ -8,29 +8,40 @@ namespace dfg {
 namespace pass {
 
 inline
-std::tuple<std::vector<std::vector<SSDfgEdge*>>,
-           std::vector<std::vector<SSDfgEdge*>>>
+std::tuple<std::vector<std::vector<Edge*>>,
+           std::vector<std::vector<Edge*>>>
 CollectRedundancy(SSDfg *dfg) {
 
   struct RedundancyCollector : Visitor {
-    std::vector<std::vector<SSDfgEdge*>> operands;
-    std::vector<std::vector<SSDfgEdge*>> users;
+    std::vector<std::vector<Edge*>> operands;
+    std::vector<std::vector<Edge*>> users;
+    SSDfg *dfg;
 
-    RedundancyCollector(int n) : operands(n), users(n) {}
+    RedundancyCollector(SSDfg *dfg) :
+      operands(dfg->nodes.size()), users(dfg->nodes.size()), dfg(dfg) {}
 
     void Visit(SSDfgNode *node) {
-      for (auto op : node->ops()) {
-        for (auto elem : op.edges) {
-          operands[node->id()].push_back(elem);
+      for (auto &op : node->ops()) {
+        for (auto eid : op.edges) {
+          auto *edge = &dfg->edges[eid];
+          operands[node->id()].push_back(edge);
+          LOG(COLLECT) << node->name() << " <- " << eid;
+          LOG(COLLECT) << edge->name();
         }
       }
-      for (auto value : node->values()) {
-        for (auto elem : value->edges()) {
-          users[node->id()].push_back(elem);
+      for (auto &value : node->values) {
+        for (auto eid : value.uses) {
+          auto *edge = &dfg->edges[eid];
+          users[node->id()].push_back(edge);
+          CHECK(edge->parent == node->ssdfg()) << edge->parent << " "
+                                               << node->ssdfg() << " " << dfg;
+          CHECK(edge->def() == node);
+          LOG(COLLECT) << node->name() << " -> " << eid;
+          LOG(COLLECT) << edge->name();
         }
       }
     }
-  } rc(dfg->nodes<SSDfgNode*>().size());
+  } rc(dfg);
 
   dfg->Apply(&rc);
 

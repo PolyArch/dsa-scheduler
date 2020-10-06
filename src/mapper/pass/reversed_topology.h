@@ -13,8 +13,11 @@ inline void Dfs(SSDfgNode *node, std::vector<bool> &visited, std::vector<SSDfgNo
     return;
   }
 
+  visited[node->id()] = true;
+
   for (auto op : node->ops()) {
-    for (auto edge : op.edges) {
+    for (auto eid : op.edges) {
+      auto edge = &node->ssdfg()->edges[eid];
       Dfs(edge->def(), visited, order);
     }
   }
@@ -34,7 +37,7 @@ inline std::vector<SSDfgNode*> ReversedTopology(SSDfg *dfg) {
       Dfs(out, visited, res);
     }
   };
-  Rooter rooter(dfg->nodes<SSDfgNode*>().size());
+  Rooter rooter(dfg->nodes.size());
   dfg->Apply(&rooter);
   return rooter.res;
 }

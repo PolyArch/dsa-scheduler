@@ -27,7 +27,7 @@ double pa_impl(const Capability &cap, std::function<double(OpCode)> f) {
     }
   }
   for (auto &elem : sumup) {
-    DEBUG(PA) << (int) elem.first.first << ", " << elem.first.second << ", " << elem.second;
+    LOG(PA) << (int) elem.first.first << ", " << elem.first.second << ", " << elem.second;
     res += elem.second;
   }
   return res;

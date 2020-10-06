@@ -31,11 +31,15 @@ class LOGGER {
   }
 };
 
-#undef DEBUG
-#undef CHECK
-#undef ENFORCED_SYSTEM
-#define DEBUG(S) if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
-#define CHECK(COND) if (!(COND)) LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND
+#define CHECK(COND) \
+  if (!(COND)) LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
+
+#ifdef DEBUG_MODE
+#define LOG(S) if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
+#else
+#define LOG(S)
+#endif
+
 #define ENFORCED_SYSTEM(CMD)                                          \
   if (int ret = system(CMD))                                          \
     LOGGER("[SHELL]", __FILE__, __LINE__, true) << "Failed command: " \

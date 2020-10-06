@@ -10,7 +10,6 @@
 
 struct SSDfgValue;
 struct SSDfgNode;
-struct SSDfgEdge;
 struct CtrlBits;
 
 
@@ -21,7 +20,7 @@ struct ParseResult {
   virtual ~ParseResult() {}
 };
 
-/* \brief Const data, including literal values and literal tuples. */
+/*! \brief Const data, including literal values and literal tuples. */
 struct ConstDataEntry : ParseResult {
   ConstDataEntry(uint64_t i) : data(i) {}
 
@@ -44,7 +43,8 @@ struct ConstDataEntry : ParseResult {
   };
 };
 
-/* \brief A value of computation or input vector with slices
+/*!
+ * \brief A value of computation or input vector with slices
  * Example 1:
  * A,B = F(C,D)
  * A and B are values.
@@ -54,12 +54,14 @@ struct ConstDataEntry : ParseResult {
  * Here `C:0:63' is a sliced value
  */
 struct ValueEntry : ParseResult {
-  ValueEntry(SSDfgValue* value_, int l_ = 0, int r_ = 63) : value(value_), l(l_), r(r_) {}
-  SSDfgValue* value{nullptr};
+  ValueEntry(int nid_, int vid_, int l_ = 0, int r_ = 63) :
+    nid(nid_), vid(vid_), l(l_), r(r_) {}
+  int nid, vid;
   int l, r;
 };
 
-/* \brief Value concatnation
+/*!
+ * \brief Value concatnation
  * A = B:0:7 C:0:7
  * Here `B:0:7' and `C:0:7' are concatenated and bind to A
  */
@@ -67,9 +69,10 @@ struct ConvergeEntry : ParseResult {
   std::vector<ValueEntry*> entries;
 };
 
-/* \brief The converted predication
- * A = F(B, C, ctrl=D{0:b0, 1:b1})
- * Here `ctrl=xx` will be parsed as control entry
+/*!
+ * \brief The converted predication
+ *  A = F(B, C, ctrl=D{0:b0, 1:b1})
+ *  Here `ctrl=xx` will be parsed as control entry
  */
 struct ControlEntry : ParseResult {
   ControlEntry(const std::string& s, ParseResult* controller_);
@@ -83,7 +86,7 @@ struct ControlEntry : ParseResult {
 };
 
 
-/* \brief The symbol table of the parsed DFG. */
+/*! \brief The symbol table of the parsed DFG. */
 class SymbolTable {
 
  public:

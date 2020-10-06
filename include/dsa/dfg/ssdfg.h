@@ -19,6 +19,8 @@
 #include "dsa/arch/ssinst.h"
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/symbols.h"
+#include "dsa/dfg/node.h"
+#include "dsa/simulation/data.h"
 
 using dsa::SpatialFabric;
 
@@ -37,10 +39,8 @@ using dsa::SpatialFabric;
 // b)  Cyclic dependences within the dataflow graph.  (optionally define initial constant value, or
 //     one-time constant?)
 
-class Schedule;
 class SSDfgNode;
 class SSDfg;
-class SSDfgEdge;
 class SSDfgVecInput;
 class SSDfgVec;
 
@@ -50,7 +50,7 @@ namespace dfg {
 struct CompileMeta : MetaPort {
   SSDfgVec *parent, *destination;
   CompileMeta(const MetaPort&, SSDfgVec*);
-  CompileMeta(){};
+  CompileMeta() {};
 };
 
 struct Visitor;
@@ -58,165 +58,12 @@ struct Visitor;
 }  // namespace ssdfg
 }
 
-namespace simulation {
-
-struct Data {
-  uint64_t available_at;
-  uint64_t value;
-  bool valid;
-  Data(uint64_t aa, uint64_t value, bool valid)
-      : available_at(aa), value(value), valid(valid) {}
-};
-
-struct ComputeStatus {
-  int temporal{0};
-  int dedicated{0};
-  int total() { return temporal + dedicated; }
-};
-
-}  // namespace simulation
-
-// Datastructure describing a value created by an input vector or an instruction
-class SSDfgValue {
- public:
-  friend SSDfgNode;
-  friend SSDfgVecInput;
-  friend SSDfg;
-
-  SSDfgValue() {}  // for serialization
-  SSDfgValue(SSDfgNode* node, int index, int bitwidth) : _node(node), _index(index), _bitwidth(bitwidth) {}
-
-  SSDfgNode* node() const { return _node; }
-
-  int index() const { return _index; }
-  const std::vector<SSDfgEdge*> edges() const { return _uses; }
-
-  int bitwidth() const { return _bitwidth; }
-
-  void addOutEdge(SSDfgEdge* edge);
-  SSDfg* ssdfg();
-  void slice(SSDfgEdge* e1, int bitwidth);
-  void slice_overlapping_edge(SSDfgEdge* e1, SSDfgEdge* e2);
-
-  // This is a performance-non-critical function, so do it in a stupid slow
-  // way that is gauranteed to work
-  void slice_overlapping_edges();
-
-  // For simulation
-  std::queue<simulation::Data> fifo;
-  void push(uint64_t value, bool valid, int delay);
-  bool forward(bool attempt);
-
-  std::string name();
-
- private:
-  SSDfgNode* _node = nullptr;  // This is the node that it belongs to
-  int _index = 0;              // within the node, what index is it in its value list
-  int _bitwidth = 64;
-  std::vector<SSDfgEdge*> _uses;  // storage for all outgoing edges
-};
-
-using EdgeType = dsa::dfg::OperandType;
-
-class SSDfgEdge {
- public:
-  SSDfgEdge() {}
-
-  SSDfgEdge(SSDfgValue* def, SSDfgNode* use, SSDfg* ssdfg, int l = 0, int r = 63);
-
-  /// Source and destination
-  SSDfgNode* def() const;
-  SSDfgValue* val() const;
-  SSDfgNode* use() const;
-  SSDfgNode* get(int) const;
-
-  int id();
-  int buffer_size() { return buf_len; }
-  std::string name();
-
-  void set_delay(int d) { _delay = d; }
-
-  int delay() { return _delay; }
-
-  // Return true if this edges is a subset of the other edge at the given position
-  bool is_subset_at_pos(SSDfgEdge* alt_edge, int pos);
-
-  void set_r(int r) { _r = r; }
-
-  virtual int bitwidth();
-  int l();
-  int r();
-
-  void set_operand_slot(int s) { _op_slot = s; }
-  int operand_slot() { return _op_slot; }
-
-  uint64_t get_value();
-
- private:
-  int _ID = -1;
-  SSDfg* _ssdfg = 0;
-  SSDfgValue* _value = 0;  // value which produces the node
-  SSDfgNode* _use = 0;     // operand which consumes the edge
-  int _l = -1, _r = -1;
-  int _op_slot = -1;
-
-  // using 2 since 1st entry is used for bp
-  unsigned int buf_len = 9;
-
-  int _delay = 0;
-};
-
 class SSDfgInst;
-
-// Datastructure describing the operand
-struct SSDfgOperand {
-  SSDfgOperand() {}
-
-  SSDfgOperand(SSDfgEdge* e);
-
-  SSDfgOperand(std::vector<SSDfgEdge*> es);
-
-  SSDfgOperand(uint64_t);
-
-  // Helper functions
-  SSDfgEdge* get_first_edge() const;
-
-  dsa::dfg::OperandType type;
-
-  bool is_imm();
-
-  // An Operand is valid as long as ALL of its edges are valid
-  bool valid();
-
-  // Edges concatenated in bit order from least to most significant
-  std::vector<SSDfgEdge*> edges;
-  uint64_t imm = 0;
-  // Simulation stuff.
-  std::vector<std::queue<simulation::Data>> fifos;
-
-  bool ready();
-
-  uint64_t poll();
-
-  bool predicate() {
-    CHECK(ready());
-    for (int i = fifos.size() - 1; i >= 0; --i) {
-      if (!fifos[i].front().valid) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void pop();
-};
 
 // DFG Node -- abstract base class
 // DFG Nodes are intended to be the scheduling unit
 class SSDfgNode {
  public:
-  friend SSDfgOperand;
-  friend SSDfgValue;
 
   virtual ~SSDfgNode() {}
 
@@ -226,69 +73,36 @@ class SSDfgNode {
 
   enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
 
-  virtual void printGraphviz(std::ostream& os, Schedule* sched = nullptr);
-
-  virtual std::vector<std::pair<int, dsa::ssnode*>> candidates(Schedule*,
-                                                               dsa::SSModel*,
-                                                               int n) = 0;
-
   // Get the slot corresponding to this edge
-  virtual int slot_for_use(SSDfgEdge* edge, int node_slot) {
-    int slot = node_slot + edge->l() / 8;
+  virtual int slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
+    int slot = node_slot + edge->l / 8;
     assert(slot < 8);
     return slot;
   }
-  virtual int slot_for_op(SSDfgEdge* edge, int node_slot) { return node_slot; }
-
-  // This is a preprocessing function that backwards marks nodes as requiring
-  // dynanmic scheduling
-  virtual void backprop_ctrl_dep();
+  virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) { return node_slot; }
 
   // some issue with this function
   virtual uint64_t invalid();
 
-  SSDfgNode(SSDfg* ssdfg, V_TYPE v);
-  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name);
-
-  // Add edge to operand in least to most significant bit order
-  void addOperand(unsigned pos, SSDfgEdge* e, int pos_within_op);
-  void addOutEdge(SSDfgEdge* edge);
-
-  virtual int maxThroughput();
+  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
 
   virtual int lat_of_inst() { return 0; }
 
   virtual std::string name() = 0;  // pure func
 
-  SSDfgEdge* getLinkTowards(SSDfgNode* to);
-
-  size_t num_out() const { return _uses.size(); }
+  dsa::dfg::Edge* getLinkTowards(SSDfgNode* to);
 
   bool has_name() { return !_name.empty(); }
 
   void set_name(std::string name) { _name = name; }
 
-  std::vector<SSDfgOperand>& ops() { return _ops; }
-
-  const std::vector<SSDfgEdge*>& in_edges() { return _inc_edge_list; }
-
-  std::vector<SSDfgValue*>& values() { return _values; }
-
-  const std::vector<SSDfgEdge*>& uses() { return _uses; }
+  std::vector<dsa::dfg::Operand>& ops() { return _ops; }
 
   int id() { return _ID; }
 
-  virtual void forward(Schedule*) = 0;
+  virtual void forward() = 0;
 
   //--------------------------------------------
-
-  int min_lat() { return _min_lat; }
-
-  void set_min_lat(int i) { _min_lat = i; }
-
-  int sched_lat() { return _sched_lat; }
-
-  void set_sched_lat(int i) { _sched_lat = i; }
 
   bool is_temporal();
 
@@ -304,14 +118,18 @@ class SSDfgNode {
 
   void set_group_id(int id) { _group_id = id; }
 
-  int num_inc_edges() { return _inc_edge_list.size(); }
+  int num_inc_edges() {
+    int res = 0;
+    for (auto &op : ops()) {
+      res += op.edges.size();
+    }
+    return res;
+  }
 
-  SSDfg* ssdfg() { return _ssdfg; }
+  SSDfg*& ssdfg() { return _ssdfg; }
 
-  bool needs_ctrl_dep() { return _needs_ctrl_dep; }
-
-  int candidates_cnt() { return candidates_cnt_; }
-
+  /*! \brief The values produced by this node. */
+  std::vector<dsa::dfg::Value> values;
  protected:
   SSDfg* _ssdfg = 0;  // sometimes this is just nice to have : )
 
@@ -322,22 +140,14 @@ class SSDfgNode {
   // Static Stuff
   int _ID;
   std::string _name;
-  std::vector<SSDfgOperand> _ops;          // in edges
-  std::vector<SSDfgEdge*> _inc_edge_list;  // in edges in flat form
-
-  std::vector<SSDfgValue*> _values;  // out edges by index
-  std::vector<SSDfgEdge*> _uses;     // out edges in flat form
-
-  bool _needs_ctrl_dep = false;
+  std::vector<dsa::dfg::Operand> _ops;          // in edges
 
   int _min_lat = 0;
-  int _sched_lat = 0;
   int _max_thr = 0;
   int _group_id = 0;  // which group do I belong to
 
   V_TYPE _vtype;
 
-  int candidates_cnt_{-1};
 };
 
 typedef std::vector<std::string> string_vec_t;
@@ -381,80 +191,69 @@ struct CtrlBits {
   }
 };
 
-// Instruction
+/*! \brief IR node for the instructions in the DFG. */
 class SSDfgInst : public SSDfgNode {
  public:
   static const int KindValue = V_INST;
 
-  SSDfgInst() {}
-
-  std::vector<std::pair<int, dsa::ssnode*>> candidates(Schedule*,
-                                                       dsa::SSModel*,
-                                                       int n) override;
-
+  /*! \brief The entrance function for the visitor pattern. */
   void Accept(dsa::dfg::Visitor *) final;
 
-  SSDfgInst(SSDfg* ssdfg, dsa::OpCode inst) : SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
-    // DFG Node makes a value by default, so start at 1
-    for (int i = _values.size(); i < dsa::num_values(opcode); ++i) {
-      _values.push_back(new SSDfgValue(this, i, bitwidth()));
+  /*! \brief The default constructor. */
+  SSDfgInst() {}
+
+  /*!
+   * \brief The constructor with instruction opcode.
+   * \param ssdfg The DFG this instruciton belongs to.
+   * \param inst The instruction opcode.
+   */
+  SSDfgInst(SSDfg* ssdfg, dsa::OpCode inst = dsa::SS_NONE) :
+    SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
+    CHECK(values.empty());
+    int n = dsa::num_values(opcode);
+    for (int i = 0; i < n; ++i) {
+      values.emplace_back(ssdfg, id(), i);
     }
   }
 
-  SSDfgInst(SSDfg* ssdfg) : SSDfgNode(ssdfg, V_INST), _reg(8, 0) {}
+  /*!
+   * \brief The latency of the instruction execution.
+   * \return The latency of the instruction execution.
+   */
+  int lat_of_inst() override { return inst_lat(inst()); }
 
-  int last_execution{-1};
-
-  void forward(Schedule*) override;
-
-  virtual int lat_of_inst() override { return inst_lat(inst()); }
-
+  /*!
+   * \brief The instruction opcode.
+   * \return The instruction opcode.
+   */
   dsa::OpCode inst() { return opcode; }
 
-  virtual int maxThroughput() override;
-
+  /*! \brief The name of this instruction. */
+  // TODO(@were): Do we want to rename this to ToString?
   virtual std::string name() override;
 
+  /*! \brief The predication affected by an upstream operand. */
+  CtrlBits predicate;
+  /*! \brief The predication affected by itself. */
+  CtrlBits self_predicate;
+
+  int bitwidth() override;
+
+  // TODO(@were): Move these to simulation.
+  // @{
+  int last_execution{-1};
+  void forward() override;
   uint64_t do_compute(bool& discard);
-
-  void print_output(std::ostream& os);
-
-  virtual uint64_t invalid() override { return _invalid; }
-
-  /// Control signal, either controlled by an dependent inst or itself
-  /// {
-  void set_ctrl_bits(const CtrlBits& c) {
-    _ctrl_bits = c;
-    if (_ctrl_bits.needs_ctrl_dep()) backprop_ctrl_dep();
-  }
-  uint64_t ctrl_bits() { return _ctrl_bits.bits(); }
-  CtrlBits ctrlBits() { return _ctrl_bits; }
-
-  void set_self_ctrl(const CtrlBits& c) {
-    _self_bits = c;
-    if (_self_bits.needs_ctrl_dep()) backprop_ctrl_dep();
-  }
-  CtrlBits selfBits() { return _self_bits; }
-  uint64_t self_bits() { return _self_bits.bits(); }
-  /// }
-
-  virtual int bitwidth() override { return dsa::bitwidth[opcode]; }
-
-  uint64_t getout(int i) { return _output_vals[i]; }
-
+  uint64_t invalid() override { return _invalid; }
+  // @}
  private:
 
-  void resize_vals(int n);
-
+  // TODO(@were): These are data structures for simulation. Move them out later.
   std::vector<uint64_t> _input_vals;
   std::vector<uint64_t> _output_vals;
-
-  CtrlBits _ctrl_bits;
-  CtrlBits _self_bits;
-
   std::vector<uint64_t> _reg;
 
-  dsa::OpCode opcode;
+  dsa::OpCode opcode{dsa::OpCode::SS_NONE};
 };
 
 // vector class
@@ -464,7 +263,7 @@ class SSDfgVec : public SSDfgNode {
 
   SSDfgVec() {}
 
-  SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, int id, SSDfg* ssdfg,
+  SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
            const dsa::dfg::MetaPort& meta);
 
   virtual void Accept(dsa::dfg::Visitor *);
@@ -485,12 +284,13 @@ class SSDfgVec : public SSDfgNode {
 
   virtual int bitwidth() override { return _bitwidth; }
 
-  int phys_bitwidth() { return is_temporal() ? 64 : (_values.size() * bitwidth()); }
+  int phys_bitwidth() { return is_temporal() ? 64 : (values.size() * bitwidth()); }
 
  protected:
   int _bitwidth;  // element bitwidth
   int _port_width;
   int _vp_len;
+ public:
   dsa::dfg::CompileMeta meta;
 };
 
@@ -505,18 +305,11 @@ class SSDfgVecInput : public SSDfgVec {
 
   SSDfgVecInput() {}
 
-  SSDfgVecInput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
-                const dsa::dfg::MetaPort& meta)
-      : SSDfgVec(V_INPUT, len, width, name, id, ssdfg, meta) {
-    for (int i = 0; i < std::max(1, len / (64 / width)); ++i) {
-      _values.push_back(new SSDfgValue(this, i, width));
-    }
-  }
-
-  std::vector<std::pair<int, dsa::ssnode*>> candidates(Schedule*, dsa::SSModel*, int n) override;
+  SSDfgVecInput(int len, int width, const std::string& name, SSDfg* ssdfg,
+                const dsa::dfg::MetaPort& meta);
 
   int current_{0};
-  void forward(Schedule*) override;
+  void forward() override;
   bool can_push();
 };
 
@@ -529,32 +322,15 @@ class SSDfgVecOutput : public SSDfgVec {
 
   SSDfgVecOutput() {}
 
-  SSDfgVecOutput(int len, int width, const std::string& name, int id, SSDfg* ssdfg,
+  SSDfgVecOutput(int len, int width, const std::string& name, SSDfg* ssdfg,
                  const dsa::dfg::MetaPort& meta)
-      : SSDfgVec(V_OUTPUT, len, width, name, id, ssdfg, meta) {}
+      : SSDfgVec(V_OUTPUT, len, width, name, ssdfg, meta) {}
 
   void Accept(dsa::dfg::Visitor *) override;
 
-  std::vector<std::pair<int, dsa::ssnode*>> candidates(Schedule*, dsa::SSModel*, int n) override;
+  virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) override;
 
-  // SSDfgNode *at(int i) {
-  //  return _ops[i]->node();
-  //}
-
-  virtual int slot_for_op(SSDfgEdge* edge, int node_slot) override {
-    // need to figure out which operand, then count bits within that operand
-    for (SSDfgOperand& op : _ops) {
-      int slot = 0;
-      for (SSDfgEdge* cur_edge : op.edges) {
-        if (cur_edge == edge) return slot;
-        slot += cur_edge->bitwidth() / 8;
-      }
-    }
-    assert(0 && "edge not present in any operands");
-    return -1;
-  }
-
-  void forward(Schedule*) override {}
+  void forward() override {}
   bool can_pop();
   void pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid);
 };
@@ -565,56 +341,42 @@ struct GroupProp {
   int64_t unroll{1};
 };
 
+/*! \brief The data structure for the dataflow graph. */
 class SSDfg {
  public:
+  /*! \brief The file name this DFG is loaded. */
   const std::string filename;
 
+  /*! \brief The default consturctor. */
   SSDfg();
 
+  /*! \brief Copy the given DFG*/
+  SSDfg(const SSDfg &);
+
+  /*! \brief Parse a DFG from the given file. */
   SSDfg(std::string filename);
 
-  ~SSDfg() {}
-
+  /*! \brief The entrance for the visitor pattern. */
   void Apply(dsa::dfg::Visitor *);
 
-  void printGraphviz(std::ostream& os, Schedule* sched = nullptr);
-
-  void printGraphviz(const char* fname, Schedule* sched = nullptr);
-
+  /*! \brief Start a new sub-dfg. */
   void start_new_dfg_group();
 
   void set_pragma(const std::string& c, const std::string& s);
 
+  template <typename T, typename... Args>
+  inline T &emplace_back(Args&&... args);
 
   template <typename T>
-  inline void add(T*);
-
-  SSDfgEdge* connect(SSDfgValue* orig, SSDfgNode* dest, int slot,
-                     EdgeType etype, int l = 0, int r = 63,
-                     int operand_pos = -1);
-
-  template <typename T>
-  inline std::vector<T>& nodes();
-
-  const std::vector<SSDfgInst*>& inst_vec() { return _insts; }
+  inline std::vector<T>& type_filter();
 
   GroupProp& group_prop(int i) { return _groupProps[i]; }
 
   int num_groups() { return _groupProps.size(); }
 
-  int maxGroupThroughput(int group);
-
-  int cycle(bool print, bool verif);
-
-  int forward(bool asap, Schedule*);
-
-  double estimated_performance(Schedule*, bool);
+  int forward(bool asap);
 
   // ---------------------------------------------------------------------------
-
-  void preprocess_graph();
-
-  void calc_minLats();
 
   void check_for_errors();
 
@@ -624,55 +386,45 @@ class SSDfg {
 
   void clear_issued() { memset(dyn_issued, 0, sizeof dyn_issued); }
 
-  int get_max_lat() { return MAX_LAT; }
-
-  int num_node_ids() { return _num_node_ids; }
-
-  std::vector<SSDfgEdge*>& edges() { return _edges; }
-
-  int num_edge_ids() { return _num_edge_ids; }
-
-  int inc_node_id() { return _num_node_ids++; }
-
-  int inc_edge_id() { return _num_edge_ids++; }
-
   uint64_t cur_cycle() { return _cur_cycle; }
 
+  /*! \brief The instances of the instructions. */
+  std::vector<SSDfgInst> instructions;
+  /*! \brief The instances of the vector inputs. */
+  std::vector<SSDfgVecInput> vins;
+  /*! \brief The instances of the vector outputs. */
+  std::vector<SSDfgVecOutput> vouts;
+  /*! \brief The summary vector of all the nodes above. */
+  std::vector<SSDfgNode*> nodes;
+  /*! \brief The instances of all the edges. */
+  std::vector<dsa::dfg::Edge> edges;
+
  private:
-  static constexpr int MAX_LAT = 1000;
-  // to keep track of number of cycles---------------------
-  int cur_node_ptr = 0;
-  int cur_buf_ptr = 0;
+  // @{
+  // TODO(@were): These are for simulation. Move them out later!
   uint64_t _cur_cycle = 0;
-
-  std::unordered_map<int, uint64_t> _complex_fu_free_cycle;
-
-  // stats
   int dyn_issued[2] = {0, 0};
+  // @}
 
-  std::vector<SSDfgNode*> _nodes;
+  void normalize();
 
-  // redundant storage:
-  std::vector<SSDfgInst*> _insts;
-  std::vector<SSDfgVecInput*> _vecInputs;
-  std::vector<SSDfgVecOutput*> _vecOutputs;
-
-  std::vector<SSDfgEdge*> _edges;
-
+  /*! \brief The property information of each sub DFG. */
   std::vector<GroupProp> _groupProps;
-
-  int _num_node_ids = 0;
-  int _num_edge_ids = 0;
 };
 
-template <> inline std::vector<SSDfgNode*>& SSDfg::nodes() { return _nodes; }
-template <> inline std::vector<SSDfgInst*>& SSDfg::nodes() { return _insts; }
-template <> inline std::vector<SSDfgVecInput*>& SSDfg::nodes() { return _vecInputs; }
-template <> inline std::vector<SSDfgVecOutput*>& SSDfg::nodes() { return _vecOutputs; }
+template <> inline std::vector<SSDfgNode>& SSDfg::type_filter() { CHECK(false) << "Should not be called!"; throw; }
+template <> inline std::vector<SSDfgNode*>& SSDfg::type_filter() { return nodes; }
+template <> inline std::vector<SSDfgInst>& SSDfg::type_filter() { return instructions; }
+template <> inline std::vector<SSDfgVecInput>& SSDfg::type_filter() { return vins; }
+template <> inline std::vector<SSDfgVecOutput>& SSDfg::type_filter() { return vouts; }
 
-// TODO(@were): add enable_if!
-template <typename T>
-inline void SSDfg::add(T* node) {
-  nodes<T*>().push_back(node);
-  _nodes.push_back(node);
+template <typename T, typename... Args>
+inline T &SSDfg::emplace_back(Args&&... args) {
+  auto &vec = type_filter<T>();
+  auto capacity = vec.capacity();
+  vec.emplace_back(args...);
+  nodes.push_back(&vec.back());
+  if (vec.capacity() != capacity) {
+    normalize();
+  }
 }

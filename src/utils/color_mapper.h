@@ -8,11 +8,12 @@
 
 namespace cm {
 
-inline int ColorOf(SSDfgValue *val, bool reset = false) {
+inline int ColorOf(dsa::dfg::Value *val, bool reset = false) {
   SSDfgNode* node = val->node();
   if (static_cast<int>(node->ops().size()) == 1 &&
       node->ops()[0].edges.size() == 1) {
-    return ColorOf(node->ops()[0].get_first_edge()->val());
+    auto res = val->parent->edges[node->ops()[0].edges[0]].val();
+    return ColorOf(res);
   }
   static std::map<SSDfgNode*, std::tuple<int, int, int>> colorMap;
   if (colorMap.count(node) == 0 || reset) {
@@ -29,9 +30,9 @@ inline int ColorOf(SSDfgValue *val, bool reset = false) {
     colorMap[node] = {x, y, z};
   }
   auto rgb = colorMap[node];
-  int r = std::max(std::get<0>(rgb) - val->index() * 15, 0);
-  int g = std::max(std::get<1>(rgb) - val->index() * 10, 0);
-  int b = std::max(std::get<2>(rgb) - val->index() * 20, 0);
+  int r = std::max(std::get<0>(rgb) - val->index * 15, 0);
+  int g = std::max(std::get<1>(rgb) - val->index * 10, 0);
+  int b = std::max(std::get<2>(rgb) - val->index * 20, 0);
   return r | (g << 8) | (b << 16);
 }
 

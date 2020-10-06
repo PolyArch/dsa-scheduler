@@ -1,6 +1,8 @@
 #pragma once
 
 #include <iostream>
+#include <utility>
+#include <map>
 
 #include "scheduler.h"
 #include "dse.h"
@@ -9,18 +11,28 @@
 
 struct CandidateRoute {
   struct EdgeProp {
-    std::list<std::pair<int, ssnode*>> thrus;
-    std::list<std::pair<int, sslink*>> links;
+    std::vector<std::pair<int, ssnode*>> thrus;
+    std::vector<std::pair<int, sslink*>> links;
   };
 
   // record an edge from the schedule
-  void fill_edge(SSDfgEdge* edge, Schedule* sched) {
+  void fill_edge(dsa::dfg::Edge* edge, Schedule* sched) {
     edges[edge].links = sched->links_of(edge);
     edges[edge].thrus = sched->thrus_of(edge);
   }
   void fill_from(SSDfgNode* node, Schedule* sched) {
-    for (SSDfgEdge* e : node->in_edges()) fill_edge(e, sched);
-    for (SSDfgEdge* e : node->uses()) fill_edge(e, sched);
+    for (auto &op : node->ops()) {
+      for (int eid : op.edges) {
+        dsa::dfg::Edge *e = &node->ssdfg()->edges[eid];
+        fill_edge(e, sched);
+      }
+    }
+    for (auto &value : node->values) {
+      for (int eid : value.uses) {
+        dsa::dfg::Edge *e = &node->ssdfg()->edges[eid];
+        fill_edge(e, sched);
+      }
+    }
   }
 
   // Fill paths that were recorded to later undo them
@@ -30,19 +42,9 @@ struct CandidateRoute {
     }
   }
 
-  void apply(Schedule* sched) {
-    for (auto edge_prop : edges) {
-      sched->unassign_edge(edge_prop.first);  // for partial routes
-      for (auto elem : edge_prop.second.thrus) {
-        sched->assign_edge_pt(edge_prop.first, elem);
-      }
-      for (auto elem : edge_prop.second.links) {
-        sched->assign_edgelink(edge_prop.first, elem.first, elem.second);
-      }
-    }
-  }
+  void apply(Schedule* sched);
 
-  std::unordered_map<SSDfgEdge*, EdgeProp> edges;
+  std::unordered_map<dsa::dfg::Edge*, EdgeProp> edges;
 };
 
 class SchedulerSimulatedAnnealing : public Scheduler {
@@ -68,8 +70,6 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   virtual bool incrementalSchedule(CodesignInstance& incr_table) override;
 
-  void set_fake_it() { _fake_it = true; }
-
   int schedule_internal(SSDfg* ssDFG, Schedule*& sched);
 
  protected:
@@ -78,7 +78,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s,
                                 CandidateRoute& undo_path);
 
-  bool length_creep(Schedule* sched, SSDfgEdge* edge, int& num, CandidateRoute& cand);
+  bool length_creep(Schedule* sched, dsa::dfg::Edge* edge, int& num, CandidateRoute& cand);
 
   template <typename T>
   bool scheduleHere(Schedule* sched, const std::vector<T>& nodes,
@@ -97,12 +97,12 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   bool scheduleHere(Schedule*, SSDfgNode*, std::pair<int, dsa::ssnode*>);
 
-  int route(Schedule* sched, SSDfgEdge* dfgnode,
+  int route(Schedule* sched, dsa::dfg::Edge* dfgnode,
             std::pair<int, dsa::ssnode*> source,
             std::pair<int, dsa::ssnode*> dest,
-            std::list<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen);
+            std::vector<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen);
 
-  int routing_cost(SSDfgEdge*, int, int, sslink*, Schedule*,
+  int routing_cost(dsa::dfg::Edge*, int, int, sslink*, Schedule*,
                    const std::pair<int, ssnode*>&);
 
   bool timingIsStillGood(Schedule* sched);
@@ -112,39 +112,8 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   // 1: Success
   int map_to_completion(SSDfg* ssDFG, Schedule* sched);
 
-  bool map_io_to_completion(SSDfg* ssDFG, Schedule* sched);
-
   inline int try_candidates(const std::vector<std::pair<int, ssnode*>>& candidates,
                             Schedule*, SSDfgNode* node);
-
-  template <typename T>
-  static bool schedule_vec_impl(SchedulerSimulatedAnnealing* engine, T* vec, SSDfg* dfg,
-                                Schedule* sched);
-
-  // 0: No candidates
-  // -1: Failed to route
-  // other: Successfully mapped one
-  template <typename T>
-  inline int map_one(SSDfg* ssDFG, Schedule* sched) {
-    auto& nodes = ssDFG->nodes<T*>();
-    int n = nodes.size();
-    int p = rand() % n;
-    for (int i = 0; i < n; ++i) {
-      p = (p + 1) % n;
-      T* node = nodes[p];
-      if (!sched->is_scheduled(node)) {
-        auto candidates = node->candidates(sched, _ssModel, 50);
-
-        if (candidates.empty()) {
-          return 0;
-        }
-
-        int best_candidate = try_candidates(candidates, sched, node);
-        return best_candidate == -1 ? -1 : 1;
-      }
-    }
-    assert(false);
-  }
 
   void unmap_some(SSDfg* ssDFG, Schedule* sched);
 
@@ -152,7 +121,6 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   int _best_latmis, _best_lat, _best_violation;
   bool _strict_timing = true;
 
-  bool _fake_it = false;
   std::string mapping_file{""};
   bool dump_mapping_if_improved{false};
   int max_iters;
