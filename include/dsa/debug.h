@@ -37,7 +37,7 @@ class LOGGER {
 #ifdef DEBUG_MODE
 #define LOG(S) if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #else
-#define LOG(S)
+#define LOG(S) if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #endif
 
 #define ENFORCED_SYSTEM(CMD)                                          \
