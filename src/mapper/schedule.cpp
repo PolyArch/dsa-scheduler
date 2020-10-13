@@ -90,7 +90,7 @@ void Schedule::LoadMappingInJson(const std::string& mapping_filename){
 
 void Schedule::DumpMappingInJson(const std::string& mapping_filename){
   ofstream os(mapping_filename);
-  assert(os.good());
+  CHECK(os.good());
 
   SSDfg * ssDFG = ssdfg();
   std::vector<SSDfgNode*> &nodes = ssDFG->nodes;
@@ -172,7 +172,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         ssswitch * switch_node = dynamic_cast<ssswitch*>(in_link -> dest());
         ssfu * fu_node = dynamic_cast<ssfu*>(out_link -> dest());
         // config the switch
-        if(switch_node != nullptr){
+        CHECK(switch_node) << "edge can only be routed by switch";
+        // TODO(@sihao): Support passthru.
+        {
           os << "//   config " << switch_node -> name() << endl;
           int in_idx = dsa::vector_utils::indexing(in_link, switch_node->in_links());
           int out_idx = dsa::vector_utils::indexing(out_link, switch_node -> out_links());
@@ -181,8 +183,6 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           //   << ", output size = " << switch_node -> out_links().size()<< endl;
           os << "//     route input port "<< in_idx 
              <<" to output port "<< out_idx << endl;
-        }else{
-          assert(false && "edge can only be routed by switch");
         }
         // config the fu
         if(fu_node != nullptr){
@@ -195,8 +195,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           int edge_of_vertex_idx = vector_utils::indexing(edge, operands[vertex->id()]);
           // which input port does this edge used
           int input_port_idx = dsa::vector_utils::indexing(out_link, fu_node -> in_links());
-          assert(input_port_idx >=0 && "not found input port ?");
-          if(edge_of_vertex_idx >= 0){
+          CHECK(input_port_idx >= 0) << "not found input port";
+          CHECK(edge_of_vertex_idx >= 0) << "This edge's destination is fu but not used?";
+          {
             os << "//   config " << fu_node -> name()<<endl
                << "//     add extra delay " << ep.extra_lat
                << " for operand " << edge_of_vertex_idx << endl
@@ -204,18 +205,13 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
                << " to operand " << edge_of_vertex_idx <<endl;
             fu_node -> add_delay(edge_of_vertex_idx, ep.extra_lat);
             fu_node -> add_operand_sel(edge_of_vertex_idx, input_port_idx);
-          }else{
-            assert(false && "This edge's destination is fu but not used?");
           }
           SSDfgInst * inst_node = dynamic_cast<SSDfgInst *>(vertex);
-          if(inst_node != nullptr){
-            int local_opcode = fu_node ->fu_type_.get_encoding(inst_node -> inst());
-            fu_node -> set_curr_opcode(local_opcode);
-            os << "//     set current opcode to " << local_opcode
-               << " means " << name_of_inst(inst_node -> inst()) << endl;
-          }else{
-            assert(false && "why a non-instruction node will be mapped to fu");
-          }
+          CHECK(inst_node) << "why a non-instruction node will be mapped to fu";
+          int local_opcode = fu_node ->fu_type_.get_encoding(inst_node -> inst());
+          fu_node -> set_curr_opcode(local_opcode);
+          os << "//     set current opcode to " << local_opcode
+             << " means " << name_of_inst(inst_node -> inst()) << endl;
         }
       }
       edge_idx++;
@@ -688,7 +684,7 @@ void Schedule::calcNodeLatency(SSDfgNode* node, int& max_lat, int& max_lat_mis) 
 
     if (origNode != nullptr) {
       int edge_lat = edge_delay(edge) + routing_latency - 1;
-      assert(edge_lat >= 0);
+      CHECK(edge_lat >= 0);
       int lat = latOf(origNode) + edge_lat;
 
       if (lat > up_lat) up_lat = lat;
@@ -741,19 +737,19 @@ void Schedule::validate() {
     for (auto& linkp : links) {
       sslink* link = linkp.second;
       if (i == 0) {
-        assert(link->orig() == def_node);
+        CHECK(link->orig() == def_node);
       }
       if (i > 0) {
-        assert(prev_link->dest() == link->orig());
+        CHECK(prev_link->dest() == link->orig());
       }
       if (i + 1 < (int) links.size()) {
-        assert(dynamic_cast<ssvport*>(link->dest()) == 0);
+        CHECK(dynamic_cast<ssvport*>(link->dest()) == 0);
       }
       ++i;
       prev_link = link;
     }
-    assert(prev_link);
-    assert(prev_link->dest() == use_node);
+    CHECK(prev_link);
+    CHECK(prev_link->dest() == use_node);
   }
 }
 
@@ -794,15 +790,11 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
       }
 
       SSDfgNode* next_dfgnode = dfgNodeOf(0, node);
-      if (!next_dfgnode && !isPassthrough(0, node)) {
-        assert(false && "problem with latency calculation!\n");
-        max_lat = -1;
-        max_lat_mis = -1;
-        return;
-      }
+      CHECK(next_dfgnode || isPassthrough(0, node))
+        << "problem with latency calculation!";
 
       SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode);
-      assert(next_dfginst || isPassthrough(0, node));
+      CHECK(next_dfginst || isPassthrough(0, node));
 
       bool everyone_is_here = true;
 

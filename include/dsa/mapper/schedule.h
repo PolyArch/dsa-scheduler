@@ -181,10 +181,7 @@ class Schedule {
     ssnode* n = locationOf(vec);
     if (n) {
       auto vport = dynamic_cast<ssvport*>(n);
-      if (!vport) {
-        std::cerr << vec->name() << " " << n->name() << std::endl;
-        assert(false);
-      }
+	  CHECK(vport) << vec->name() << " " << n->name();
       return vport->port();
     } else {
       return -1;

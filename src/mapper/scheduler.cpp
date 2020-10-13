@@ -18,14 +18,6 @@
 using namespace dsa;
 using namespace std;
 
-// Utility functions
-int rand_bt(int s, int e) {
-  assert(e > s && "bad range for rand_bt");
-  return rand() % (e - s) + s;
-}
-
-int rand_bt_large(int s, int e) { return (rand() * RAND_MAX + rand()) % (e - s) + s; }
-
 bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
 
   struct DFGCounter : dsa::dfg::Visitor {
@@ -192,7 +184,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
 
     std::string verif_header = verif_dir + dfg_base + ".configbits";
     std::ofstream vsh(verif_header);
-    assert(vsh.good());
+    CHECK(vsh.good());
     sched->printConfigVerif(vsh);
   }
 
@@ -210,7 +202,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
 
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);
-  assert(osh.good());
+  CHECK(osh.good());
   sched->printConfigHeader(osh, dfg_base);
   if (verbose) {
     std::cout << "Performance: " << sched->estimated_performance() << std::endl;
@@ -219,7 +211,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   if (print_bits) {
     std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
     std::ofstream oshb(config_header_bits);
-    assert(oshb.good());
+    CHECK(oshb.good());
     sched->printConfigHeader(oshb, dfg_base, true);
   }
 
