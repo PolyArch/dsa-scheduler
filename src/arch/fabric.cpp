@@ -535,7 +535,7 @@ struct JSONModel : json::BaseVisitor{
         sw -> set_id(id);
         sw -> set_prop(cgranode);
         sym_tab[id] = sw;
-      }else if(nodeType == "function unit"){
+      }else if(nodeType == "processing element"){
         // Set Possible x,y for visualization
         ssfu* fu = _subModel->add_fu();
         fu->set_id(id);
