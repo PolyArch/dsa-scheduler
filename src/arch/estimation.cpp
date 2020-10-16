@@ -69,7 +69,7 @@ struct Estimator : Visitor {
       res((Metric) i, Breakdown::Network) += RadixEst((Metric) i, sw->in_links().size(),
                                                       sw->out_links().size(),
                                                       sw->decomposer, sw->flow_control());
-      res((Metric) i, Breakdown::Sync) += FIFOEst((Metric) i, 1);
+      res((Metric) i, Breakdown::Sync) += FIFOEst((Metric) i, sw->delay_fifo_depth());
     }
   }
 

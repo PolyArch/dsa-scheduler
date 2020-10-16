@@ -221,6 +221,7 @@ class ssnode {
   void set_ssnode_prop(plain::Object &prop) {
     node_type = *prop["nodeType"] -> As<std::string>();
     data_width = *prop["data_width"] -> As<int64_t>();
+    _max_util = get_prop_attr(prop, "max_util", static_cast<int64_t>(1));
 
     // Parse Decomposer
     if (node_type != "vector port") {
@@ -314,6 +315,8 @@ class ssswitch : public ssnode {
     return res;
   }
 
+  int delay_fifo_depth() override { return max_fifo_depth; }
+
   virtual std::string name() const override {
     std::stringstream ss;
     if (_x != -1 && _y != -1) {
@@ -378,7 +381,7 @@ class ssswitch : public ssnode {
   void set_prop(plain::Object & prop) {
     set_ssnode_prop(prop);
     // max output fifo depth
-    max_fifo_depth = get_prop_attr(prop, "max_fifo_depth", static_cast<int64_t>(max_fifo_depth));
+    max_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(max_fifo_depth));
   }
 
   void collect_features() {

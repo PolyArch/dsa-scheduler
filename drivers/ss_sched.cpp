@@ -93,6 +93,13 @@ int main(int argc, char* argv[]) {
   argv += optind;
 
   if (argc != 2) {
+    if (argc == 1) {
+      std::string model_filename = argv[0];
+      SSModel ssmodel(model_filename.c_str());
+      auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
+      res.Dump(std::cout);
+      return 0;
+    }
     cerr << "Usage: ss_sched [FLAGS] config.ssmodel [compute.dfg]\n";
     exit(1);
   }
