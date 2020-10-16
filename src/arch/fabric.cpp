@@ -535,7 +535,7 @@ struct JSONModel : json::BaseVisitor{
         sw -> set_id(id);
         sw -> set_prop(cgranode);
         sym_tab[id] = sw;
-      }else if(nodeType == "processing element"){
+      }else if(nodeType == "processing element" || nodeType == "function unit"){
         // Set Possible x,y for visualization
         ssfu* fu = _subModel->add_fu();
         fu->set_id(id);
@@ -603,12 +603,10 @@ struct JSONModel : json::BaseVisitor{
   }
 
   void Visit(json::Object * cgraNodes) override {
-    std::cout << "start parse cgra json" << std::endl;
     auto cgra = *cgraNodes->As<plain::Object>();
     nodesVisit(cgra["nodes"]);
     linksVisit(cgra["links"]);
     _subModel -> post_process();
-    std::cout << "JSON Parsed" << std::endl;
   }
 };
 
