@@ -529,17 +529,20 @@ struct JSONModel : json::BaseVisitor{
       // Type and ID
       std::string nodeType = *cgranode["nodeType"]->As<std::string>();
       int id = *cgranode["id"]->As<int64_t>();
+      int max_util = *cgranode["max_util"]->As<int64_t>();
       // Initialize Different Module
       if(nodeType == "switch"){
         ssswitch * sw = _subModel -> add_switch();
         sw -> set_id(id);
         sw -> set_prop(cgranode);
         sym_tab[id] = sw;
+        sw->set_max_util(max_util);
       }else if(nodeType == "processing element" || nodeType == "function unit"){
         // Set Possible x,y for visualization
         ssfu* fu = _subModel->add_fu();
         fu->set_id(id);
         fu->set_prop(cgranode);
+        fu->set_max_util(max_util);
 
         sym_tab[id] = fu;
         plain::Array insts = *cgranode["instructions"] -> As<plain::Array>();
@@ -577,7 +580,8 @@ struct JSONModel : json::BaseVisitor{
         vp->set_ssnode_prop(cgranode);
         sym_tab[id] = vp;
         vp->set_id(id);
-      }else{
+        vp->set_max_util(max_util);
+      } else {
         CHECK(false) << id << "has unknown type" << nodeType << "\n";
       }
     }
