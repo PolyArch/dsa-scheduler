@@ -29,7 +29,7 @@ class Capability {
     }
     for (auto &elem : capability) {
       if (elem.op == op) {
-        std::cerr << "Warning: " << name_of_inst(op) << " already added to " << name << std::endl;
+        // std::cerr << "Warning: " << name_of_inst(op) << " already added to " << name << std::endl;
         return;
       }
     }

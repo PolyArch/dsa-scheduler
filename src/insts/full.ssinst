@@ -23,6 +23,7 @@ ICmpEq16                16           2              1              1           1
 ReLU16                  16           2              1              1           1            
 ICmpNE16                16           2              1              1           1            
 Select16                16           3              1              1           1            
+Compare16               16           2              1              1           1            
                                                                                             
 # 32-Bit Instructions                                                                       
 FMul32                  32           2              1              1           1            
