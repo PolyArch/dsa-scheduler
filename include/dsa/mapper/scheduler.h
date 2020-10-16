@@ -22,9 +22,6 @@
 using usec = std::chrono::microseconds;
 using get_time = std::chrono::steady_clock;
 
-int rand_bt(int s, int e);
-int rand_bt_large(int s, int e);
-
 std::string basename(const std::string& filename);
 
 template <typename T, typename U>

@@ -573,10 +573,8 @@ int SchedulerSimulatedAnnealing::route(
   // if(!path_lengthen) sched->edge_prop()[edge->id()].sched_index.clear();
   // sched->edge_prop()[edge->id()].sched_index.push_back(_route_times);
 
-  if ((!path_lengthen) && (sched->link_count(edge) != 0)) {
-    cerr << "Edge: " << edge->name() << " is already routed!\n";
-    assert(0);
-  }
+  CHECK(path_lengthen || sched->link_count(edge) == 0)
+    << "Edge: " << edge->name() << " is already routed!";
 
   // Distance, random priority, slot, node
   set<std::tuple<int, int, int, ssnode*>> openset;
@@ -709,15 +707,13 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, SSDfgNode* node,
     int n = edge_.size();                                             \
     for (int i = 0; i < n; ++i) {                                     \
       auto edge = edges[i];                                           \
-      if (sched->link_count(edge) != 0) {                             \
-        cerr << "Edge: " << edge->name() << " is already routed!\n";  \
-        assert(0);                                                    \
-      }                                                               \
+      CHECK(sched->link_count(edge) == 0)                             \
+        << "Edge: " << edge->name() << " is already routed!\n";       \
       auto node = edge->node_();                                      \
       if (sched->is_scheduled(node)) {                                \
         auto loc = sched->location_of(node);                          \
         if (!route(sched, edge, src, dest, nullptr, 0)) {             \
-          LOG(ROUTE) << "Cannot route " << edge->name() << "\n";    \
+          LOG(ROUTE) << "Cannot route " << edge->name() << "\n";      \
           for (auto revert : to_revert) sched->unassign_edge(revert); \
           for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]); \
           return false;                                               \

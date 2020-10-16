@@ -273,6 +273,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "#include <complex>\n"
          "#include <algorithm>\n"
          "#include <math.h>\n"
+         "\n"
+         "#include \"dsa/debug.h\"\n"
 
          "#define FIX_MAX ((1 << 15) - 1)\n"
          "#define FIX_MIN (-FIX_MAX)\n"
@@ -445,9 +447,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         << "\";\n";
   }
   ofs << "  case SS_NONE: return \"NONE\";\n";
-  ofs << "  case SS_ERR:  assert(0); return \"ERR\";\n";
-  ofs << "  case SS_NUM_TYPES:  assert(0); return \"ERR\";\n";
-  ofs << "    default: assert(0 && \"unknown inst\"); return \"DEFAULT\";\n";
+  ofs << "  case SS_ERR:  CHECK(false) << \"Error opcode!\"; throw;\n";
+  ofs << "  case SS_NUM_TYPES:  CHECK(false) << \"Opcode exceeds.\";\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n";
   ofs << "}\n\n";
 
@@ -460,7 +462,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->latency()
         << ";\n";
   }
-  ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
@@ -472,7 +474,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->throughput()
         << ";\n";
   }
-  ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
@@ -483,7 +485,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofs << "    case "
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->area() << ";\n";
   }
-  ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
@@ -494,7 +496,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofs << "    case "
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->power() << ";\n";
   }
-  ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
@@ -506,7 +508,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
     ofs << "  else if(strcmp(str,\"" << _fuTypeList[i]->name() << "\")==0) return "
         << _fuTypeList[i]->name() << ";\n";
   }
-  ofs << "  else {return NON_PREDEFINED_FU_TYPE;}\n";
+  ofs << "  else { return NON_PREDEFINED_FU_TYPE; }\n";
   ofs << "}\n\n";
 
   // name of fu type
@@ -552,7 +554,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->numValues()
         << ";\n";
   }
-  ofs << "    default: assert(0 && \"unknown inst\"); return 1;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
 
@@ -595,8 +597,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
     ofs << "  " << dtype << "& accum = reg[0];\n"
            "  (void) accum;\n"
-           "  assert(ops.size() <= 4);\n"
-           "  assert(ops.size() <=  (unsigned)(num_ops[inst]+1));\n"
+           "  CHECK(ops.size() <= 4);\n"
+           "  CHECK(ops.size() <=  (unsigned)(num_ops[inst]+1));\n"
            "  switch(inst) {\n" <<
            "    case SS_NONE: { return ops[0]; }\n";
     for (unsigned i = 0; i < _instList.size(); ++i) {
@@ -619,11 +621,11 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         }
         ofs << "    };\n";
       } else {
-        ofs << "assert(0 && \"Instruction Not Implemented, add it to insts folder\");";
+        ofs << "CHECK(false) << \"Instruction Not Implemented, add it to insts folder\";";
         ofs << "};\n";
       }
     }
-    ofs << "    default: assert(0 && \"Instruction not defined (for this bitwidth)\"); "
+    ofs << "    default: CHECK(false) << \"Instruction not defined (for this bitwidth)\";"
            "return 1;\n";
     ofs << "  }\n\n";
     ofs << "}\n\n";

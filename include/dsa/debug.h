@@ -40,7 +40,7 @@ class LOGGER {
 #define LOG(S) if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #endif
 
-#define ENFORCED_SYSTEM(CMD)                                          \
-  if (int ret = system(CMD))                                          \
-    LOGGER("[SHELL]", __FILE__, __LINE__, true) << "Failed command: " \
-                                                << (CMD) << ", code" << ret
+#define ENFORCED_SYSTEM(CMD)                    \
+  if (int ret = system(CMD))                    \
+    LOGGER("[SHELL]", __FILE__, __LINE__, true) \
+      << "Failed command: " << (CMD) << ", code" << ret

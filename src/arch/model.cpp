@@ -47,13 +47,8 @@ void SSModel::parse_exec(std::istream& istream) {
     }
 
     if (param == string("CMD_DISPATCH")) {
-      if (value == string("INORDER")) {
-        set_dispatch_inorder(true);
-      } else if (value == string("OOO")) {
-        set_dispatch_inorder(false);
-      } else {
-        assert(0 && "Dispatch was not INORDER or OOO");
-      }
+      CHECK(value == "INORDER" || value == "OOO");
+      set_dispatch_inorder(value == "INORDER");
     } else if (param == string("CMD_DISPATCH_WIDTH")) {
       istringstream(value) >> _dispatch_width;
     }
@@ -100,13 +95,10 @@ void ParseCapabilities(Capability& fu, string& cap_string) {
       continue;
     }
 
-    if (pss.good()) {  // then there must be an encoding string
-      unsigned encoding;
-      pss >> encoding;
-      fu.Add(ss_inst, encoding);
-    } else {
-      assert(false && "OpCode with no encoding?");
-    }
+    CHECK(pss.good()) << "Opcode with no encoding!";
+    unsigned encoding;
+    pss >> encoding;
+    fu.Add(ss_inst, encoding);
   }
 }
 
@@ -137,8 +129,7 @@ std::vector<Capability*> ParseFuType(std::istream& istream) {
       ParseCapabilities(*res.back(), value);
 
     } else if (ModelParsing::StartsWith(param, "SWITCH_TYPE")) {
-      // AddCapabilities(*GetFU("SWITCH"), value);
-      assert(0);
+      CHECK(false);
     }
   }
 
