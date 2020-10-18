@@ -97,6 +97,10 @@ int main(int argc, char* argv[]) {
       std::string model_filename = argv[0];
       SSModel ssmodel(model_filename.c_str());
       auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
+      std::string model_visual_filename = model_filename + ".gv";
+      ofstream os(model_visual_filename.c_str());
+      cout << "Hardware GV file is " << model_visual_filename << std::endl;
+      ssmodel.subModel() -> PrintGraphviz(os);
       res.Dump(std::cout);
       return 0;
     }
