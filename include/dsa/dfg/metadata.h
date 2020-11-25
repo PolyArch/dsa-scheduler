@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <iostream>
-#include <cassert>
 #include <sstream>
 
 namespace dsa {
@@ -10,12 +9,10 @@ namespace dfg {
 
 enum class OperandType { data, ctrl, self, ctrl_true, ctrl_false, unknown };
 
-constexpr char const *OPERAND_TYPE[] = {
-  "data", "ctrl", "self", "pred", "inv_pred", "<unknown>"
-};
+constexpr char const* OPERAND_TYPE[] = {"data", "ctrl",     "self",
+                                        "pred", "inv_pred", "<unknown>"};
 
 struct MetaPort {
-
   enum class Data {
     Memory,
     SPad,

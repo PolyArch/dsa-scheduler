@@ -3,8 +3,8 @@
 #include <queue>
 
 #include "dsa/debug.h"
-#include "dsa/simulation/data.h"
 #include "dsa/dfg/metadata.h"
+#include "dsa/simulation/data.h"
 
 class SSDfg;
 class SSDfgNode;
@@ -17,7 +17,6 @@ OperandType Str2Flag(const std::string& s);
 
 /*! \brief The data structure of the values produced by a node. */
 struct Value {
-
   /*!  \brief The default constructor. */
   Value() {}
 
@@ -28,8 +27,7 @@ struct Value {
    * \brief The value index in the node to which this value belongs.
    * \param bitwidth The bitwidth of this value.
    */
-  Value(SSDfg *parent, int nid, int index) :
-    parent(parent), nid(nid), index(index) {}
+  Value(SSDfg* parent, int nid, int index) : parent(parent), nid(nid), index(index) {}
 
   /*!
    * \brief The helper function translates the node id to node pointer.
@@ -48,7 +46,7 @@ struct Value {
 
   // TODO(@were): Do we want to over engineer it to make all these const?
   /*! \brief The DFG this value belongs to. */
-  SSDfg *parent;
+  SSDfg* parent;
   /*! \brief The IR node this value belongs to. */
   int nid{-1};
   /*! \brief The value index in the node to which this value belongs. */
@@ -59,7 +57,7 @@ struct Value {
 
 struct Operand {
   /*! \brief Connect this operand to an list of edges and concatenate their values. */
-  Operand(SSDfg *parent, const std::vector<int> &es, OperandType type);
+  Operand(SSDfg* parent, const std::vector<int>& es, OperandType type);
 
   /*! \brief The constant constructor. */
   Operand(uint64_t);
@@ -68,7 +66,7 @@ struct Operand {
   bool is_imm();
 
   /*! \brief The DFG this edge belongs to. */
-  SSDfg *parent{nullptr};
+  SSDfg* parent{nullptr};
   /*! \brief The edges from upstream values. */
   std::vector<int> edges;
   /*! \brief The constant operand. */
@@ -93,7 +91,6 @@ struct Operand {
 };
 
 struct Edge {
-
   /*! \brief A default constructor for serialized load. */
   Edge() {}
 
@@ -137,5 +134,5 @@ struct Edge {
   int delay{0};
 };
 
-}
-}
+}  // namespace dfg
+}  // namespace dsa

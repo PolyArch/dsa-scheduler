@@ -4,18 +4,18 @@ namespace dsa {
 namespace dfg {
 namespace pass {
 
-void split_edge(const std::vector<int> &v, SSDfg *dfg, int eid) {
-  std::vector<Edge> &edges = dfg->edges;
+void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
+  std::vector<Edge>& edges = dfg->edges;
   int l = edges[eid].l;
   int r = edges[eid].r;
-  auto &uses = dfg->nodes[edges[eid].sid]->values[edges[eid].vid].uses;
+  auto& uses = dfg->nodes[edges[eid].sid]->values[edges[eid].vid].uses;
   auto use_idx = std::find(uses.begin(), uses.end(), eid) - uses.begin();
   CHECK(use_idx != uses.size());
 
-  Operand *op = nullptr;
+  Operand* op = nullptr;
   int op_idx = -1;
   {
-    for (auto &elem : dfg->nodes[edges[eid].uid]->ops()) {
+    for (auto& elem : dfg->nodes[edges[eid].uid]->ops()) {
       auto iter = std::find(elem.edges.begin(), elem.edges.end(), eid);
       if (iter != elem.edges.end()) {
         op = &elem;
@@ -26,7 +26,7 @@ void split_edge(const std::vector<int> &v, SSDfg *dfg, int eid) {
     CHECK(op && op_idx != -1);
   }
 
-  auto &edge = edges[eid];
+  auto& edge = edges[eid];
   for (int i = 0, n = v.size(); i < n; i += 2) {
     if (i == 0) {
       edge.l = v[i];
@@ -41,9 +41,9 @@ void split_edge(const std::vector<int> &v, SSDfg *dfg, int eid) {
   }
 }
 
-inline void SliceOverlappedEdges(SSDfg *dfg) {
-  auto &edges = dfg->edges;
-  auto &nodes = dfg->nodes;
+inline void SliceOverlappedEdges(SSDfg* dfg) {
+  auto& edges = dfg->edges;
+  auto& nodes = dfg->nodes;
   for (int i = 0, n = edges.size(); i < n; ++i) {
     for (int j = i + 1; j < n; ++j) {
       if (edges[i].sid == edges[j].sid && edges[j].vid == edges[j].vid) {
@@ -91,12 +91,11 @@ inline void SliceOverlappedEdges(SSDfg *dfg) {
     }
   }
 
-  for (auto &edge : dfg->edges) {
+  for (auto& edge : dfg->edges) {
     LOG(SLICE) << edge.name();
   }
 }
 
-
-}
-}
-}
+}  // namespace pass
+}  // namespace dfg
+}  // namespace dsa

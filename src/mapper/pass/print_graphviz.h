@@ -8,9 +8,9 @@ namespace mapper {
 namespace pass {
 
 struct GPNode : dfg::Visitor {
-  GPNode(Schedule *sched_, std::ostream &os_) : sched(sched_), os(os_) {}
+  GPNode(Schedule* sched_, std::ostream& os_) : sched(sched_), os(os_) {}
   ~GPNode() {}
-  void Visit(SSDfgNode *node) override {
+  void Visit(SSDfgNode* node) override {
     std::string ncolor = "black";
     os << "N" << node->id() << " [ label = \"" << node->name();
     if (node->is_temporal()) {
@@ -37,7 +37,7 @@ struct GPNode : dfg::Visitor {
     os << "\n";
 
     // print edges
-    for (auto &v : node->values) {
+    for (auto& v : node->values) {
       for (auto eid : v.uses) {
         auto e = &node->ssdfg()->edges[eid];
         ncolor = "black";
@@ -59,26 +59,22 @@ struct GPNode : dfg::Visitor {
     }
     os << "\n";
   }
-  Schedule *sched;
-  std::ostream &os;
+  Schedule* sched;
+  std::ostream& os;
 };
 
-template<typename T>
+template <typename T>
 struct GPVec : dfg::Visitor {
-  GPVec(Schedule *sched_, std::ostream &os_) : sched(sched_), os(os_) {
+  GPVec(Schedule* sched_, std::ostream& os_) : sched(sched_), os(os_) {
     os << "\t{ rank = same; ";
   }
-  ~GPVec() {
-    os << "}\n";
-  }
-  void Visit(T *node) override {
-    os << "N" << node->id() << " ";
-  }
-  Schedule *sched;
-  std::ostream &os;
+  ~GPVec() { os << "}\n"; }
+  void Visit(T* node) override { os << "N" << node->id() << " "; }
+  Schedule* sched;
+  std::ostream& os;
 };
 
-void print_graphviz(const std::string &name, SSDfg *dfg, Schedule *sched = nullptr) {
+void print_graphviz(const std::string& name, SSDfg* dfg, Schedule* sched = nullptr) {
   ofstream ofs(name);
   ofs << "Digraph G { \nnewrank=true;\n ";
   GPNode gpn(sched, ofs);
@@ -90,6 +86,6 @@ void print_graphviz(const std::string &name, SSDfg *dfg, Schedule *sched = nullp
   ofs << "}";
 }
 
-}
-}
-}
+}  // namespace pass
+}  // namespace mapper
+}  // namespace dsa

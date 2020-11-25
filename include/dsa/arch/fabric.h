@@ -16,11 +16,11 @@ class SpatialFabric {
 
   SpatialFabric() {}
 
-  SpatialFabric(std::istream& istream, const std::vector<Capability*> &);
+  SpatialFabric(std::istream& istream, const std::vector<Capability*>&);
 
   SpatialFabric(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2);
 
-  void Apply(adg::Visitor *);
+  void Apply(adg::Visitor*);
 
   void PrintGraphviz(std::ostream& os);
 
@@ -39,7 +39,7 @@ class SpatialFabric {
     for (ssnode* node : node_list()) {
       ssfu* fu_node = dynamic_cast<ssfu*>(node);
       if (fu_node != nullptr) {
-        for (auto &elem: fu_node->fu_type_.capability) {
+        for (auto& elem : fu_node->fu_type_.capability) {
           ss_inst_set.insert(elem.op);
         }
       }
@@ -180,8 +180,8 @@ class SpatialFabric {
   ssvport* add_vport(bool is_input, int port_num) {
     ssvport* vport = add_vport(is_input);
     CHECK(!_ssio_interf.vports_map[is_input].count(port_num))
-      << "Error: Multiple " << (is_input ? "input" : "output")
-      << " ports with port number " << port_num << "created\n\n";
+        << "Error: Multiple " << (is_input ? "input" : "output")
+        << " ports with port number " << port_num << "created\n\n";
     _ssio_interf.vports_map[is_input][port_num] = vport;
     vport->set_port(port_num);
     return vport;
@@ -300,8 +300,8 @@ class SpatialFabric {
  private:
   void build_substrate(int x, int y);
 
-  void connect_substrate(int x, int y, PortType pt, int ips, int ops,
-                         int temp_x, int temp_y, int temp_width, int temp_height);
+  void connect_substrate(int x, int y, PortType pt, int ips, int ops, int temp_x,
+                         int temp_y, int temp_width, int temp_height);
 
   // These are only valid after regroup_vecs()
   std::vector<ssnode*> _node_list;
@@ -328,4 +328,4 @@ inline std::vector<ssvport*> SpatialFabric::nodes() {
   return vport_list();
 }
 
-}
+}  // namespace dsa

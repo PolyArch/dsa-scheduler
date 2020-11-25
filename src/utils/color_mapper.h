@@ -1,17 +1,16 @@
 #pragma once
 
+#include <algorithm>
 #include <map>
 #include <tuple>
-#include <algorithm>
 
 #include "dsa/dfg/ssdfg.h"
 
 namespace cm {
 
-inline int ColorOf(dsa::dfg::Value *val, bool reset = false) {
+inline int ColorOf(dsa::dfg::Value* val, bool reset = false) {
   SSDfgNode* node = val->node();
-  if (static_cast<int>(node->ops().size()) == 1 &&
-      node->ops()[0].edges.size() == 1) {
+  if (static_cast<int>(node->ops().size()) == 1 && node->ops()[0].edges.size() == 1) {
     auto res = val->parent->edges[node->ops()[0].edges[0]].val();
     return ColorOf(res);
   }
@@ -36,4 +35,4 @@ inline int ColorOf(dsa::dfg::Value *val, bool reset = false) {
   return r | (g << 8) | (b << 16);
 }
 
-}
+}  // namespace cm

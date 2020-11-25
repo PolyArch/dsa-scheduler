@@ -1,7 +1,7 @@
 #pragma once
 
-#include <string>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -11,7 +11,6 @@
 struct SSDfgValue;
 struct SSDfgNode;
 struct CtrlBits;
-
 
 namespace dsa {
 namespace dfg {
@@ -48,14 +47,14 @@ struct ConstDataEntry : ParseResult {
  * Example 1:
  * A,B = F(C,D)
  * A and B are values.
- * 
+ *
  * Example 2:
  * A = C:0:63
  * Here `C:0:63' is a sliced value
  */
 struct ValueEntry : ParseResult {
-  ValueEntry(int nid_, int vid_, int l_ = 0, int r_ = 63) :
-    nid(nid_), vid(vid_), l(l_), r(r_) {}
+  ValueEntry(int nid_, int vid_, int l_ = 0, int r_ = 63)
+      : nid(nid_), vid(vid_), l(l_), r(r_) {}
   int nid, vid;
   int l, r;
 };
@@ -85,10 +84,8 @@ struct ControlEntry : ParseResult {
   uint64_t bits;
 };
 
-
 /*! \brief The symbol table of the parsed DFG. */
 class SymbolTable {
-
  public:
   void Set(const std::string& s, ParseResult* pr) {
     CHECK(!Has(s)) << "Duplicated Symbol: " << s;
@@ -106,6 +103,5 @@ class SymbolTable {
   std::unordered_map<std::string, ParseResult*> table_;
 };
 
-
-}
-}
+}  // namespace dfg
+}  // namespace dsa

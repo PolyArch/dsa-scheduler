@@ -6,8 +6,7 @@ namespace dsa {
 namespace arch {
 namespace pass {
 
-inline std::vector<std::vector<int>>
-ShortestPaths(SpatialFabric *fabric) {
+inline std::vector<std::vector<int>> ShortestPaths(SpatialFabric* fabric) {
   int n = fabric->node_list().size();
   std::vector<std::vector<int>> res(n, std::vector<int>(n, 1e6));
   for (auto elem : fabric->node_list()) {
@@ -28,7 +27,6 @@ ShortestPaths(SpatialFabric *fabric) {
   return res;
 }
 
-
-}
-}
-}
+}  // namespace pass
+}  // namespace arch
+}  // namespace dsa

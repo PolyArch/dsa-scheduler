@@ -18,25 +18,28 @@
 #include "dsa/arch/model.h"
 #include "dsa/arch/ssinst.h"
 #include "dsa/dfg/metadata.h"
-#include "dsa/dfg/symbols.h"
 #include "dsa/dfg/node.h"
+#include "dsa/dfg/symbols.h"
 #include "dsa/simulation/data.h"
 
 using dsa::SpatialFabric;
 
 // Feature Possibilities
-// 1. Commutative Instruction Groups.  Be able to mark a group of instructions as commutative.  
-//    All of their inputs may be processed in any order.  Scheduler is free to re-order arbitrarily.
-//    This will prevent the compiler from having to reason about whether chains of instructions or 
-//    trees are better for a given architecture/topology.
+// 1. Commutative Instruction Groups.  Be able to mark a group of instructions as
+// commutative.
+//    All of their inputs may be processed in any order.  Scheduler is free to re-order
+//    arbitrarily. This will prevent the compiler from having to reason about whether
+//    chains of instructions or trees are better for a given architecture/topology.
 // 2. Allow temporal reasoning within dataflow graphs.
-// a)  Instance offset dependences.  Ie. enable operands to cross computation instance boundaries.
+// a)  Instance offset dependences.  Ie. enable operands to cross computation instance
+// boundaries.
 //     One Possible syntax:
 //     A = op(B<2>,C<1>)
 //     This would enable specification of systolic arrays
-//     Scheduler needs to be updated to enforce constraint that delayed inputs arrive later than expected,
-//     according to the II of the region.
-// b)  Cyclic dependences within the dataflow graph.  (optionally define initial constant value, or
+//     Scheduler needs to be updated to enforce constraint that delayed inputs arrive
+//     later than expected, according to the II of the region.
+// b)  Cyclic dependences within the dataflow graph.  (optionally define initial constant
+// value, or
 //     one-time constant?)
 
 class SSDfgNode;
@@ -50,13 +53,13 @@ namespace dfg {
 struct CompileMeta : MetaPort {
   SSDfgVec *parent, *destination;
   CompileMeta(const MetaPort&, SSDfgVec*);
-  CompileMeta() {};
+  CompileMeta(){};
 };
 
 struct Visitor;
 
-}  // namespace ssdfg
-}
+}  // namespace dfg
+}  // namespace dsa
 
 class SSDfgInst;
 
@@ -64,10 +67,9 @@ class SSDfgInst;
 // DFG Nodes are intended to be the scheduling unit
 class SSDfgNode {
  public:
-
   virtual ~SSDfgNode() {}
 
-  virtual void Accept(dsa::dfg::Visitor *);
+  virtual void Accept(dsa::dfg::Visitor*);
 
   SSDfgNode() {}
 
@@ -120,7 +122,7 @@ class SSDfgNode {
 
   int num_inc_edges() {
     int res = 0;
-    for (auto &op : ops()) {
+    for (auto& op : ops()) {
       res += op.edges.size();
     }
     return res;
@@ -130,6 +132,7 @@ class SSDfgNode {
 
   /*! \brief The values produced by this node. */
   std::vector<dsa::dfg::Value> values;
+
  protected:
   SSDfg* _ssdfg = 0;  // sometimes this is just nice to have : )
 
@@ -140,14 +143,13 @@ class SSDfgNode {
   // Static Stuff
   int _ID;
   std::string _name;
-  std::vector<dsa::dfg::Operand> _ops;          // in edges
+  std::vector<dsa::dfg::Operand> _ops;  // in edges
 
   int _min_lat = 0;
   int _max_thr = 0;
   int _group_id = 0;  // which group do I belong to
 
   V_TYPE _vtype;
-
 };
 
 typedef std::vector<std::string> string_vec_t;
@@ -166,7 +168,7 @@ struct CtrlBits {
   bool test(uint64_t val, Control b);
   void test(uint64_t val, std::vector<bool>& back_array, bool& discard, bool& predicate,
             bool& reset);
-  CtrlBits &operator=(const CtrlBits &b) {
+  CtrlBits& operator=(const CtrlBits& b) {
     mask = b.mask;
     const_cast<bool&>(is_dynamic) = b.is_dynamic;
     return *this;
@@ -197,7 +199,7 @@ class SSDfgInst : public SSDfgNode {
   static const int KindValue = V_INST;
 
   /*! \brief The entrance function for the visitor pattern. */
-  void Accept(dsa::dfg::Visitor *) final;
+  void Accept(dsa::dfg::Visitor*) final;
 
   /*! \brief The default constructor. */
   SSDfgInst() {}
@@ -207,8 +209,8 @@ class SSDfgInst : public SSDfgNode {
    * \param ssdfg The DFG this instruciton belongs to.
    * \param inst The instruction opcode.
    */
-  SSDfgInst(SSDfg* ssdfg, dsa::OpCode inst = dsa::SS_NONE) :
-    SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
+  SSDfgInst(SSDfg* ssdfg, dsa::OpCode inst = dsa::SS_NONE)
+      : SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
     CHECK(values.empty());
     int n = dsa::num_values(opcode);
     for (int i = 0; i < n; ++i) {
@@ -247,7 +249,6 @@ class SSDfgInst : public SSDfgNode {
   uint64_t invalid() override { return _invalid; }
   // @}
  private:
-
   // TODO(@were): These are data structures for simulation. Move them out later.
   std::vector<uint64_t> _input_vals;
   std::vector<uint64_t> _output_vals;
@@ -266,7 +267,7 @@ class SSDfgVec : public SSDfgNode {
   SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
            const dsa::dfg::MetaPort& meta);
 
-  virtual void Accept(dsa::dfg::Visitor *);
+  virtual void Accept(dsa::dfg::Visitor*);
 
   void set_port_width(int n) { _port_width = n; }
 
@@ -290,6 +291,7 @@ class SSDfgVec : public SSDfgNode {
   int _bitwidth;  // element bitwidth
   int _port_width;
   int _vp_len;
+
  public:
   dsa::dfg::CompileMeta meta;
 };
@@ -301,7 +303,7 @@ class SSDfgVecInput : public SSDfgVec {
 
   static const int KindValue = V_INPUT;
 
-  void Accept(dsa::dfg::Visitor *) final;
+  void Accept(dsa::dfg::Visitor*) final;
 
   SSDfgVecInput() {}
 
@@ -326,7 +328,7 @@ class SSDfgVecOutput : public SSDfgVec {
                  const dsa::dfg::MetaPort& meta)
       : SSDfgVec(V_OUTPUT, len, width, name, ssdfg, meta) {}
 
-  void Accept(dsa::dfg::Visitor *) override;
+  void Accept(dsa::dfg::Visitor*) override;
 
   virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) override;
 
@@ -351,13 +353,13 @@ class SSDfg {
   SSDfg();
 
   /*! \brief Copy the given DFG*/
-  SSDfg(const SSDfg &);
+  SSDfg(const SSDfg&);
 
   /*! \brief Parse a DFG from the given file. */
   SSDfg(std::string filename);
 
   /*! \brief The entrance for the visitor pattern. */
-  void Apply(dsa::dfg::Visitor *);
+  void Apply(dsa::dfg::Visitor*);
 
   /*! \brief Start a new sub-dfg. */
   void start_new_dfg_group();
@@ -365,7 +367,7 @@ class SSDfg {
   void set_pragma(const std::string& c, const std::string& s);
 
   template <typename T, typename... Args>
-  inline T &emplace_back(Args&&... args);
+  inline T& emplace_back(Args&&... args);
 
   template <typename T>
   inline std::vector<T>& type_filter();
@@ -412,15 +414,31 @@ class SSDfg {
   std::vector<GroupProp> _groupProps;
 };
 
-template <> inline std::vector<SSDfgNode>& SSDfg::type_filter() { CHECK(false) << "Should not be called!"; throw; }
-template <> inline std::vector<SSDfgNode*>& SSDfg::type_filter() { return nodes; }
-template <> inline std::vector<SSDfgInst>& SSDfg::type_filter() { return instructions; }
-template <> inline std::vector<SSDfgVecInput>& SSDfg::type_filter() { return vins; }
-template <> inline std::vector<SSDfgVecOutput>& SSDfg::type_filter() { return vouts; }
+template <>
+inline std::vector<SSDfgNode>& SSDfg::type_filter() {
+  CHECK(false) << "Should not be called!";
+  throw;
+}
+template <>
+inline std::vector<SSDfgNode*>& SSDfg::type_filter() {
+  return nodes;
+}
+template <>
+inline std::vector<SSDfgInst>& SSDfg::type_filter() {
+  return instructions;
+}
+template <>
+inline std::vector<SSDfgVecInput>& SSDfg::type_filter() {
+  return vins;
+}
+template <>
+inline std::vector<SSDfgVecOutput>& SSDfg::type_filter() {
+  return vouts;
+}
 
 template <typename T, typename... Args>
-inline T &SSDfg::emplace_back(Args&&... args) {
-  auto &vec = type_filter<T>();
+inline T& SSDfg::emplace_back(Args&&... args) {
+  auto& vec = type_filter<T>();
   auto capacity = vec.capacity();
   vec.emplace_back(args...);
   nodes.push_back(&vec.back());

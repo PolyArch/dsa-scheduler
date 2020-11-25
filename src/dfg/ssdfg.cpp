@@ -1,16 +1,17 @@
+#include "dsa/dfg/ssdfg.h"
+
 #include <iomanip>
 #include <list>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "dsa/dfg/utils.h"
-#include "dsa/dfg/visitor.h"
-#include "dsa/dfg/ssdfg.h"
-#include "dfg-parser.tab.h"
-#include "dsa/mapper/schedule.h"
 #include "../utils/model_parsing.h"
 #include "../utils/vector_utils.h"
+#include "dfg-parser.tab.h"
+#include "dsa/dfg/utils.h"
+#include "dsa/dfg/visitor.h"
+#include "dsa/mapper/schedule.h"
 
 using namespace std;
 using namespace dsa;
@@ -29,11 +30,10 @@ SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name)
 
 dsa::dfg::Edge* SSDfgNode::getLinkTowards(SSDfgNode* to) {
   auto pred = [this, to](int eid) -> bool { return ssdfg()->edges[eid].use() == to; };
-  for (auto &value : values) {
-    auto &uses = value.uses;
+  for (auto& value : values) {
+    auto& uses = value.uses;
     auto res = std::find_if(uses.begin(), uses.end(), pred);
-    if (res != uses.end())
-      return &ssdfg()->edges[*res];
+    if (res != uses.end()) return &ssdfg()->edges[*res];
   }
   return nullptr;
 }
@@ -89,27 +89,27 @@ std::string SSDfgInst::name() {
 
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
-    bool HasUse(SSDfgNode *node) {
+    bool HasUse(SSDfgNode* node) {
       bool ok = false;
-      for (auto &elem : node->values) {
+      for (auto& elem : node->values) {
         ok |= !elem.uses.empty();
       }
       return ok;
     }
-    bool HasOperands(SSDfgNode *node) {
+    bool HasOperands(SSDfgNode* node) {
       bool ok = false;
-      for (auto &elem : node->ops()) {
+      for (auto& elem : node->ops()) {
         ok |= !elem.edges.empty();
       }
       return ok;
     }
-    void Visit(SSDfgVecInput *vi) {
+    void Visit(SSDfgVecInput* vi) {
       CHECK(HasUse(vi)) << "No user on input " << vi->name();
     }
-    void Visit(SSDfgVecOutput *vi) {
+    void Visit(SSDfgVecOutput* vi) {
       CHECK(HasOperands(vi)) << "No operand on output " << vi->name();
     }
-    void Visit(SSDfgInst *inst) {
+    void Visit(SSDfgInst* inst) {
       CHECK(HasUse(inst)) << "No user on instruction " << inst->name();
       CHECK(HasOperands(inst)) << "No operand on instruction " << inst->name();
     }
@@ -122,16 +122,15 @@ void SSDfg::normalize() {
   nodes.resize(instructions.size() + vins.size() + vouts.size());
 #define NORMALIZE_IMPL(a)       \
   do {                          \
-    for (auto &elem : a) {      \
+    for (auto& elem : a) {      \
       nodes[elem.id()] = &elem; \
     }                           \
   } while (false)
-    NORMALIZE_IMPL(instructions);
-    NORMALIZE_IMPL(vins);
-    NORMALIZE_IMPL(vouts);
+  NORMALIZE_IMPL(instructions);
+  NORMALIZE_IMPL(vins);
+  NORMALIZE_IMPL(vouts);
 #undef NORMALIZE_IMPL
 }
-
 
 SSDfg::SSDfg() {}
 
@@ -162,8 +161,8 @@ SSDfg::SSDfg(string filename_) : filename(filename_) {
   check_for_errors();
 }
 
-SSDfgVec::SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name,
-                   SSDfg* ssdfg, const dsa::dfg::MetaPort& meta_)
+SSDfgVec::SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
+                   const dsa::dfg::MetaPort& meta_)
     : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
   _port_width = _bitwidth;
 }
@@ -174,12 +173,12 @@ uint64_t SSDfgInst::do_compute(bool& discard) {
 #define EXECUTE(bw)                                                                     \
   case bw: {                                                                            \
     std::vector<uint##bw##_t> input =                                                   \
-      vector_utils::cast_vector<uint64_t, uint##bw##_t>(_input_vals);                   \
+        vector_utils::cast_vector<uint64_t, uint##bw##_t>(_input_vals);                 \
     std::vector<uint##bw##_t> outputs(values.size());                                   \
-    output = dsa::execute##bw(opcode, input, outputs, (uint##bw##_t*)&_reg[0],          \
-                              discard, _back_array);                                    \
+    output = dsa::execute##bw(opcode, input, outputs, (uint##bw##_t*)&_reg[0], discard, \
+                              _back_array);                                             \
     outputs[0] = output;                                                                \
-    _output_vals = vector_utils::cast_vector<uint##bw##_t, uint64_t>(outputs);                        \
+    _output_vals = vector_utils::cast_vector<uint##bw##_t, uint64_t>(outputs);          \
     return output;                                                                      \
   }
 
@@ -201,7 +200,7 @@ uint64_t SSDfgInst::do_compute(bool& discard) {
 
 using dsa::SpatialFabric;
 
-void SSDfg::Apply(dsa::dfg::Visitor *visitor) {
+void SSDfg::Apply(dsa::dfg::Visitor* visitor) {
   for (auto elem : nodes) {
     elem->Accept(visitor);
   }
@@ -209,14 +208,14 @@ void SSDfg::Apply(dsa::dfg::Visitor *visitor) {
 
 SSDfgVecInput::SSDfgVecInput(int len, int width, const std::string& name, SSDfg* ssdfg,
                              const dsa::dfg::MetaPort& meta)
-      : SSDfgVec(V_INPUT, len, width, name, ssdfg, meta) {
+    : SSDfgVec(V_INPUT, len, width, name, ssdfg, meta) {
   int n = std::max(1, len / (64 / width));
   for (int i = 0; i < n; ++i) {
     values.emplace_back(ssdfg, id(), i);
   }
 }
 
-int SSDfgInst::bitwidth(){
+int SSDfgInst::bitwidth() {
   if (opcode != dsa::SS_NONE) {
     return dsa::bitwidth[opcode];
   }
@@ -224,25 +223,24 @@ int SSDfgInst::bitwidth(){
 }
 
 void SSDfgInst::forward() {
-
   int inst_throughput = inst_thr(inst());
-  if (_ssdfg->cur_cycle() - last_execution < (uint64_t) inst_throughput) {
-    LOG(COMP) << "Throughput: " <<  _ssdfg->cur_cycle() << ", "
-              << last_execution << ", " << inst_throughput;
+  if (_ssdfg->cur_cycle() - last_execution < (uint64_t)inst_throughput) {
+    LOG(COMP) << "Throughput: " << _ssdfg->cur_cycle() << ", " << last_execution << ", "
+              << inst_throughput;
     return;
   }
 
   // Check the avaiability of output buffer
   if (!values.front().fifo.empty()) {
-    for (auto &elem : values) {
+    for (auto& elem : values) {
       CHECK(!elem.fifo.empty());
       if (!elem.forward(true)) {
-        LOG(FORWARD) << _ssdfg->cur_cycle() << ": "
-                       << name() << " Cannot forward because of " << elem.name();
+        LOG(FORWARD) << _ssdfg->cur_cycle() << ": " << name()
+                     << " Cannot forward because of " << elem.name();
         return;
       }
     }
-    for (auto &elem : values) {
+    for (auto& elem : values) {
       CHECK(elem.forward(false));
     }
     return;
@@ -256,7 +254,8 @@ void SSDfgInst::forward() {
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
     if (!_ops[i].ready()) {
-      LOG(FORWARD) << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since " << (i + 1) << " th op not ready ";
+      LOG(FORWARD) << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since "
+                   << (i + 1) << " th op not ready ";
       return;
     }
   }
@@ -271,7 +270,6 @@ void SSDfgInst::forward() {
   _invalid = false;
 
   _input_vals.resize(_ops.size(), 0);
-
 
   for (unsigned i = 0; i < _ops.size(); ++i) {
     if (_ops[i].is_imm()) {
@@ -316,9 +314,8 @@ void SSDfgInst::forward() {
     for (size_t i = 0; i < _reg.size(); ++i) _reg[i] = 0;
   }
 
-  LOG(COMP) << compute_dump.str()
-              << (_invalid ? " invalid " : " valid ") << reason.str() << " "
-              << (discard ? " and output discard!" : "");
+  LOG(COMP) << compute_dump.str() << (_invalid ? " invalid " : " valid ") << reason.str()
+            << " " << (discard ? " and output discard!" : "");
 
   for (size_t i = 0; i < _back_array.size(); ++i) {
     if (_back_array[i]) {
@@ -339,15 +336,14 @@ void SSDfgInst::forward() {
   // std::cerr << _ssdfg->cur_cycle() << ": " << name() << " (" << loc.first << ", " <<
   // loc.second << ") issued!" << std::endl;
 
-  for (auto &elem : values) {
+  for (auto& elem : values) {
     if (!elem.forward(true)) return;
   }
 
-  for (auto &elem : values) {
+  for (auto& elem : values) {
     assert(elem.forward(false));
   }
 }
-
 
 void SSDfgVecInput::forward() {
   if (is_temporal()) {
@@ -372,13 +368,13 @@ int SSDfg::forward(bool asap) {
   std::vector<bool> group_ready(true, num_groups());
   int old[2] = {dyn_issued[0], dyn_issued[1]};
   if (!asap) {
-    for (auto &node : nodes) {
+    for (auto& node : nodes) {
       if (!group_ready[node->group_id()]) {
         continue;
       }
       if (auto vi = dynamic_cast<SSDfgVecInput*>(node)) {
         bool ready = true;
-        for (auto &value : vi->values) {
+        for (auto& value : vi->values) {
           if (!value.forward(true)) {
             ready = false;
             break;
@@ -404,7 +400,7 @@ int SSDfg::forward(bool asap) {
 }
 
 bool SSDfgVecInput::can_push() {
-  for (auto &elem : values) {
+  for (auto& elem : values) {
     if (!elem.fifo.empty()) {
       return false;
     }
@@ -419,7 +415,6 @@ void SSDfgVecOutput::pop(std::vector<uint64_t>& data, std::vector<bool>& data_va
     operand.pop();
   }
 }
-
 
 int SSDfgVecOutput::slot_for_op(dsa::dfg::Edge* edge, int node_slot) {
   // need to figure out which operand, then count bits within that operand
@@ -446,28 +441,30 @@ bool SSDfgVecOutput::can_pop() {
   return true;
 }
 
-SSDfg::SSDfg(const SSDfg &dfg) :
-  filename(dfg.filename), instructions(dfg.instructions),
-  vins(dfg.vins), vouts(dfg.vouts), edges(dfg.edges),
-  _groupProps(dfg._groupProps) {
+SSDfg::SSDfg(const SSDfg& dfg)
+    : filename(dfg.filename),
+      instructions(dfg.instructions),
+      vins(dfg.vins),
+      vouts(dfg.vouts),
+      edges(dfg.edges),
+      _groupProps(dfg._groupProps) {
   normalize();
   for (auto node : nodes) {
     node->ssdfg() = this;
-    for (auto &value : node->values) {
+    for (auto& value : node->values) {
       value.parent = this;
     }
-    for (auto &op : node->ops()) {
+    for (auto& op : node->ops()) {
       op.parent = this;
     }
   }
-  for (auto &edge : edges) {
+  for (auto& edge : edges) {
     edge.parent = this;
   }
 }
 
 namespace dsa {
 namespace dfg {
-
 
 const char* MetaPort::DataText[] = {
     "memory",
@@ -498,4 +495,4 @@ CompileMeta::CompileMeta(const MetaPort& meta, SSDfgVec* parent)
 }
 
 }  // namespace dfg
-}
+}  // namespace dsa

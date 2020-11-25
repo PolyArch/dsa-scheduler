@@ -1,3 +1,5 @@
+#include "dsa/mapper/scheduler.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,36 +10,29 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "dsa/mapper/scheduler.h"
-#include "dsa/mapper/scheduler_sa.h"
+#include "./pass/print_graphviz.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/dfg/visitor.h"
-
-#include "./pass/print_graphviz.h"
+#include "dsa/mapper/scheduler_sa.h"
 
 using namespace dsa;
 using namespace std;
 
 bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
-
   struct DFGCounter : dsa::dfg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_required;
     std::vector<int> ports[2];
-    void Visit(SSDfgInst *node) {
-      inst_required[{node->inst(), (int) node->is_temporal()}]++;
+    void Visit(SSDfgInst* node) {
+      inst_required[{node->inst(), (int)node->is_temporal()}]++;
     }
-    void Visit(SSDfgVecInput *vec) {
-      ports[1].push_back(vec->phys_bitwidth());
-    }
-    void Visit(SSDfgVecOutput *vec) {
-      ports[0].push_back(vec->phys_bitwidth());
-    }
+    void Visit(SSDfgVecInput* vec) { ports[1].push_back(vec->phys_bitwidth()); }
+    void Visit(SSDfgVecOutput* vec) { ports[0].push_back(vec->phys_bitwidth()); }
   };
 
   struct SpatialCounter : dsa::adg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_exist;
     std::vector<int> ports[2];
-    void Visit(ssfu *fu) override {
+    void Visit(ssfu* fu) override {
       for (auto elem : fu->fu_type_.capability) {
         if (fu->max_util() == 1) {
           inst_exist[{elem.op, 0}] += 64 / dsa::bitwidth[elem.op];
@@ -46,7 +41,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
         }
       }
     }
-    void Visit(ssvport *vp) {
+    void Visit(ssvport* vp) {
       ports[vp->in_links().empty()].push_back(vp->bitwidth_capability());
     }
   };
@@ -59,17 +54,17 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   for (auto elem : dc.inst_required) {
     if (sc.inst_exist[elem.first] < elem.second) {
       LOG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
-                   << " FU(s) are required in "
-                   << (elem.first.second ? "temporal" : "dedicated") << " tiles, but only "
-                   << sc.inst_exist[elem.first] << " found";
+                 << " FU(s) are required in "
+                 << (elem.first.second ? "temporal" : "dedicated") << " tiles, but only "
+                 << sc.inst_exist[elem.first] << " found";
       return false;
     }
   }
 
   for (int i = 0; i < 2; ++i) {
     if (dc.ports[i].size() > sc.ports[i].size()) {
-      LOG(COUNT) << "In total, " << dc.ports[i].size() << " port(s) are required, but only have "
-                   << sc.ports[i].size();
+      LOG(COUNT) << "In total, " << dc.ports[i].size()
+                 << " port(s) are required, but only have " << sc.ports[i].size();
       return false;
     }
     sort(dc.ports[i].begin(), dc.ports[i].end(), std::greater<int>());
@@ -77,7 +72,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
     for (int j = 0, n = dc.ports[i].size(); j < n; ++j) {
       if (dc.ports[i][j] > sc.ports[i][j]) {
         LOG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
-                     << sc.ports[i][j];
+                   << sc.ports[i][j];
         return false;
       }
     }
@@ -142,7 +137,6 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
 
-    
     succeed_sched = schedule_timed(dfg, sched);
 
     int lat = 0, latmis = 0;

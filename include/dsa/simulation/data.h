@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "dsa/arch/ssinst.h"
 
@@ -16,5 +16,5 @@ struct Data {
       : available_at(aa), value(value), valid(valid) {}
 };
 
-}
-}
+}  // namespace simulation
+}  // namespace dsa

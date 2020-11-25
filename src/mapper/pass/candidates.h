@@ -1,14 +1,13 @@
 #pragma once
 #include "dsa/mapper/schedule.h"
 
-namespace dsa{
-namespace mapper{
+namespace dsa {
+namespace mapper {
 
 struct CandidateSpotVisitor : dfg::Visitor {
-
-  void Visit(SSDfgInst *inst) override {
+  void Visit(SSDfgInst* inst) override {
     auto fabric = sched->ssModel()->subModel();
-    auto *model = fabric;
+    auto* model = fabric;
     std::vector<std::pair<int, ssnode*>> spots;
     std::vector<std::pair<int, ssnode*>> not_chosen_spots;
 
@@ -62,21 +61,21 @@ struct CandidateSpotVisitor : dfg::Visitor {
       spots = not_chosen_spots;
     }
 
-    std::random_shuffle(spots.begin(), spots.end());  
+    std::random_shuffle(spots.begin(), spots.end());
 
     int n = spots.size();
-    if (n > max_candidates)
-      n = max_candidates;
+    if (n > max_candidates) n = max_candidates;
 
     cnt[inst->id()] = n;
-    candidates[inst->id()] = std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
+    candidates[inst->id()] =
+        std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
   }
 
-  void Visit(SSDfgVecInput *input) override {
+  void Visit(SSDfgVecInput* input) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->input_list();
     // Lets write size in units of bits
-    std::vector<std::pair<int, ssnode*>> &spots = candidates[input->id()];
+    std::vector<std::pair<int, ssnode*>>& spots = candidates[input->id()];
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
@@ -87,11 +86,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
     cnt[input->id()] = spots.size();
   }
 
-  void Visit(SSDfgVecOutput *output) override {
+  void Visit(SSDfgVecOutput* output) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->output_list();
     // Lets write size in units of bits
-    std::vector<std::pair<int, ssnode*>> &spots = candidates[output->id()];
+    std::vector<std::pair<int, ssnode*>>& spots = candidates[output->id()];
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
@@ -102,16 +101,17 @@ struct CandidateSpotVisitor : dfg::Visitor {
     cnt[output->id()] = spots.size();
   }
 
-  CandidateSpotVisitor(Schedule *sched_, int max_candidates_) :
-    sched(sched_), max_candidates(max_candidates_), cnt(sched_->ssdfg()->nodes.size()),
-    candidates(sched_->ssdfg()->nodes.size()) {}
+  CandidateSpotVisitor(Schedule* sched_, int max_candidates_)
+      : sched(sched_),
+        max_candidates(max_candidates_),
+        cnt(sched_->ssdfg()->nodes.size()),
+        candidates(sched_->ssdfg()->nodes.size()) {}
 
-  Schedule *sched{nullptr};
+  Schedule* sched{nullptr};
   int max_candidates;
   std::vector<int> cnt;
   std::vector<std::vector<std::pair<int, ssnode*>>> candidates;
 };
 
-
-}
-}
+}  // namespace mapper
+}  // namespace dsa

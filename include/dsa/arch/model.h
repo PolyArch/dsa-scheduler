@@ -15,7 +15,7 @@ namespace dsa {
 
 class SSModel {
  public:
-  SSModel(const char *filename);
+  SSModel(const char* filename);
   SSModel(SpatialFabric* sub);
 
   SpatialFabric* subModel() { return (_subModel); }
@@ -68,7 +68,6 @@ class SSModel {
   int ind_memory{1};
 
   void parse_exec(std::istream& istream);
-
 };
 
 }  // namespace dsa

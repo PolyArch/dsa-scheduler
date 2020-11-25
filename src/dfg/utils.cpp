@@ -1,12 +1,13 @@
+#include "dsa/dfg/utils.h"
+
 #include <string>
 
 #include "dsa/dfg/metadata.h"
-#include "dsa/dfg/utils.h"
 #include "dsa/dfg/visitor.h"
+#include "json.lex.h"
+#include "json.tab.h"
 #include "json/data.h"
 #include "json/visitor.h"
-#include "json.tab.h"
-#include "json.lex.h"
 
 namespace dsa {
 namespace dfg {
@@ -15,7 +16,7 @@ struct Exporter : Visitor {
   plain::Object current;
   plain::Array nodes;
 
-  void Visit(SSDfgNode *node) override {
+  void Visit(SSDfgNode* node) override {
     current["id"] = new json::Int(node->id());
     current["temporal"] = new json::Int(node->is_temporal());
     current["group"] = new json::Int(node->group_id());
@@ -27,10 +28,10 @@ struct Exporter : Visitor {
       if (operand.edges.empty()) {
         operand_obj["imm"] = new json::Int(operand.imm);
       } else {
-        operand_obj["type"] = (new json::String(OPERAND_TYPE[(int) operand.type]));
+        operand_obj["type"] = (new json::String(OPERAND_TYPE[(int)operand.type]));
         plain::Array edges;
         for (auto eid : operand.edges) {
-          auto *edge = &node->ssdfg()->edges[eid];
+          auto* edge = &node->ssdfg()->edges[eid];
           plain::Object edge_obj;
           edge_obj["id"] = new json::Int(edge->id);
           edge_obj["src_id"] = new json::Int(edge->def()->id());
@@ -48,29 +49,29 @@ struct Exporter : Visitor {
     nodes.push_back(new json::Object(current));
     current.clear();
   }
-  void Visit(SSDfgInst *inst) override {
+  void Visit(SSDfgInst* inst) override {
     current["op"] = new json::Int(inst->inst());
     current["inst"] = new json::String(name_of_inst(inst->inst()));
     current["ctrl"] = new json::Int(inst->predicate.bits());
     current["self"] = new json::Int(inst->self_predicate.bits());
     Visit(static_cast<SSDfgNode*>(inst));
   }
-  void Visit(SSDfgVecInput *in) override {
+  void Visit(SSDfgVecInput* in) override {
     current["width"] = new json::Int(in->get_port_width());
     current["length"] = new json::Int(in->get_vp_len());
     Visit(static_cast<SSDfgNode*>(in));
   }
-  void Visit(SSDfgVecOutput *out) override {
+  void Visit(SSDfgVecOutput* out) override {
     current["width"] = new json::Int(out->get_port_width());
     current["length"] = new json::Int(out->get_vp_len());
     Visit(static_cast<SSDfgNode*>(out));
   }
 };
 
-void Export(SSDfg *dfg, const std::string &fname) {
+void Export(SSDfg* dfg, const std::string& fname) {
   Exporter exporter;
   dfg->Apply(&exporter);
-  auto fcompare = [](json::BaseNode *a, json::BaseNode *b) {
+  auto fcompare = [](json::BaseNode* a, json::BaseNode* b) {
     auto oa = a->As<plain::Object>();
     auto ob = b->As<plain::Object>();
     CHECK(oa->count("id")) << "a has no id!";
@@ -81,7 +82,7 @@ void Export(SSDfg *dfg, const std::string &fname) {
     CHECK(idb) << "The is of b is not an int!";
     return *ida < *idb;
   };
-  auto &nodes = exporter.nodes;
+  auto& nodes = exporter.nodes;
   std::sort(nodes.begin(), nodes.end(), fcompare);
   for (int i = 0, n = nodes.size(); i < n; ++i) {
     auto elem_id = *nodes[i]->As<plain::Object>()->operator[]("id")->As<int64_t>();
@@ -94,11 +95,11 @@ void Export(SSDfg *dfg, const std::string &fname) {
   json_array.Accept(&printer);
 }
 
-SSDfg* Import(const std::string &s) {
+SSDfg* Import(const std::string& s) {
   SSDfg* res = new SSDfg();
   MetaPort meta;
 
-  FILE *fjson = fopen(s.c_str(), "r");
+  FILE* fjson = fopen(s.c_str(), "r");
   struct params p;
   JSONrestart(fjson);
   JSONparse(&p);
@@ -109,10 +110,10 @@ SSDfg* Import(const std::string &s) {
   for (int i = 0, n = nodes->size(); i < n; ++i) {
     auto node_ptr = (*nodes)[i]->As<plain::Object>();
     CHECK(node_ptr);
-    auto &node = *node_ptr;
-    auto &inputs = *node["inputs"]->As<plain::Array>();
-    auto &group_id = *node["group"]->As<int64_t>();
-    auto &name = *node["name"]->As<std::string>();
+    auto& node = *node_ptr;
+    auto& inputs = *node["inputs"]->As<plain::Array>();
+    auto& group_id = *node["group"]->As<int64_t>();
+    auto& name = *node["name"]->As<std::string>();
     if (group_id != last_group) {
       res->start_new_dfg_group();
       res->group_prop(group_id).is_temporal = *node["temporal"]->As<int64_t>();
@@ -129,7 +130,7 @@ SSDfg* Import(const std::string &s) {
     } else if (node.count("op")) {
       int opcode = *node["op"]->As<int64_t>();
       res->emplace_back<SSDfgInst>(res, static_cast<OpCode>(opcode));
-      auto &inst = res->instructions.back();
+      auto& inst = res->instructions.back();
       if (node.count("ctrl")) {
         uint64_t ctrl = *node["ctrl"]->As<int64_t>();
         inst.predicate = CtrlBits(ctrl);
@@ -139,17 +140,17 @@ SSDfg* Import(const std::string &s) {
         inst.self_predicate = CtrlBits(self);
       }
     }
-    auto &operands = *node["inputs"]->As<plain::Array>();
+    auto& operands = *node["inputs"]->As<plain::Array>();
     for (int j = 0, m = operands.size(); j < m; ++j) {
-      auto &obj = *operands[j]->As<plain::Object>();
+      auto& obj = *operands[j]->As<plain::Object>();
       if (obj.count("imm")) {
         res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
       } else {
-        auto &type = *obj["type"]->As<std::string>();
-        auto &edges = *obj["edges"]->As<plain::Array>();
+        auto& type = *obj["type"]->As<std::string>();
+        auto& edges = *obj["edges"]->As<plain::Array>();
         std::vector<int> es;
         for (auto edge : edges) {
-          auto &edge_obj = *edge->As<plain::Object>();
+          auto& edge_obj = *edge->As<plain::Object>();
           int src_id = *edge_obj["src_id"]->As<int64_t>();
           int src_val = *edge_obj["src_val"]->As<int64_t>();
           int delay = *edge_obj["delay"]->As<int64_t>();
@@ -158,8 +159,7 @@ SSDfg* Import(const std::string &s) {
           CHECK(src_id < i);
           Edge e_instance(res, src_id, src_val, i, l, r);
           es.push_back(*edge_obj["id"]->As<int64_t>());
-          if (es.back() >= res->edges.size())
-            res->edges.resize(es.back() + 1);
+          if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
           e_instance.delay = delay;
           e_instance.id = es.back();
           res->edges[es.back()] = e_instance;
@@ -173,8 +173,8 @@ SSDfg* Import(const std::string &s) {
   delete p.data;
 
   struct FIFOAllocator : Visitor {
-    void Visit(SSDfgNode *node) {
-      for (auto &op : node->ops()) {
+    void Visit(SSDfgNode* node) {
+      for (auto& op : node->ops()) {
         op.fifos.resize(op.edges.size());
       }
     }
@@ -184,5 +184,5 @@ SSDfg* Import(const std::string &s) {
   return res;
 }
 
-}
-}
+}  // namespace dfg
+}  // namespace dsa

@@ -8,12 +8,12 @@
 #include <iostream>
 #include <string>
 
-#include "dsa/arch/model.h"
 #include "dsa/arch/estimation.h"
-#include "dsa/mapper/scheduler.h"
-#include "dsa/mapper/scheduler_sa.h"
+#include "dsa/arch/model.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/dfg/utils.h"
+#include "dsa/mapper/scheduler.h"
+#include "dsa/mapper/scheduler_sa.h"
 
 using namespace std;
 using sec = chrono::seconds;
@@ -69,7 +69,8 @@ int main(int argc, char* argv[]) {
   std::string mapping_json_filename = "";
   bool dump_mapping_if_improved = false;
 
-  while ((opt = getopt_long(argc, argv, "m:vt:c:bd:e:l:r:h:s:a:u", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "m:vt:c:bd:e:l:r:h:s:a:u", long_options,
+                            nullptr)) != -1) {
     switch (opt) {
       case 'v': verbose = true; break;
       case 'c': indirect = atoi(optarg); break;
@@ -100,7 +101,7 @@ int main(int argc, char* argv[]) {
       std::string model_visual_filename = model_filename + ".gv";
       ofstream os(model_visual_filename.c_str());
       cout << "Hardware GV file is " << model_visual_filename << std::endl;
-      ssmodel.subModel() -> PrintGraphviz(os);
+      ssmodel.subModel()->PrintGraphviz(os);
       res.Dump(std::cout);
       return 0;
     }
@@ -110,14 +111,12 @@ int main(int argc, char* argv[]) {
 
   srand(seed);
 
-
-
   std::string model_filename = argv[0];
   SSModel ssmodel(model_filename.c_str());
 
   ssmodel.memory_size = memory_size;
 
-  if (max_edge_delay != - 1) {
+  if (max_edge_delay != -1) {
     ssmodel.setMaxEdgeDelay(max_edge_delay);
   }
   if (contrl_flow != -1) {
@@ -134,31 +133,31 @@ int main(int argc, char* argv[]) {
   if (argc == 2) {
     std::string pdg_filename = argv[1];
 
-    scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose, mapping_json_filename, dump_mapping_if_improved);
+    scheduler =
+        new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose,
+                                        mapping_json_filename, dump_mapping_if_improved);
 
     SSDfg ssdfg(pdg_filename);
 
     Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
     // Dump hardware
-    if(hw_json_filename != "") {
+    if (hw_json_filename != "") {
       ssmodel.subModel()->DumpHwInJson(hw_json_filename.c_str());
     }
 
     // Dump software
-    if(!sw_json_filename.empty()){
-      for (auto &edge : ssdfg.edges) {
+    if (!sw_json_filename.empty()) {
+      for (auto& edge : ssdfg.edges) {
         edge.delay = sched->edge_delay(&edge);
       }
       dfg::Export(&ssdfg, sw_json_filename);
     }
 
     // Dump Final Mapping
-    if(mapping_json_filename != ""){
+    if (mapping_json_filename != "") {
       sched->DumpMappingInJson(mapping_json_filename);
     }
   }
-
-
 
   auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
   res.Dump(std::cout);

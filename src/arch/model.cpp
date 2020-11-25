@@ -1,4 +1,6 @@
 
+#include "dsa/arch/model.h"
+
 #include <assert.h>
 #include <math.h>
 
@@ -10,13 +12,10 @@
 #include "../utils/model_parsing.h"
 #include "../utils/string_utils.h"
 #include "dsa/arch/ssinst.h"
-#include "dsa/arch/model.h"
 #include "dsa/debug.h"
-
 #include "json.lex.h"
 #include "json.tab.h"
 #include "json/visitor.h"
-
 
 using namespace std;
 using namespace dsa;
@@ -84,7 +83,7 @@ void ParseCapabilities(Capability& fu, string& cap_string) {
 
     if (ModelParsing::stricmp(cap, "ALL")) {
       for (int i = 0; i < SS_NUM_TYPES; ++i) {
-        fu.Add((OpCode) i, i);
+        fu.Add((OpCode)i, i);
       }
       return;
     }
@@ -137,7 +136,7 @@ std::vector<Capability*> ParseFuType(std::istream& istream) {
 }
 
 // File constructor
-SSModel::SSModel(const char *filename_) : filename(filename_) {
+SSModel::SSModel(const char* filename_) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
   bool failed_read = ifs.fail();
@@ -156,7 +155,7 @@ SSModel::SSModel(const char *filename_) : filename(filename_) {
   string_utils::String line;
 
   while (ifs.good()) {
-    std::getline(ifs, line.operator std::string &());
+    std::getline(ifs, line.operator std::string&());
 
     if (line.StartsWith("[exec-model]")) {
       parse_exec(ifs);

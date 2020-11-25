@@ -14,7 +14,7 @@ uint32_t b1 = (ops[1] & 0xFFFFFFFF00000000) >> 32;
 
 int fm1 = 0;
 int fm2 = 0;
-(void) fm2;
+(void)fm2;
 
 if (a0 == b0) {
   fm1 = 1;

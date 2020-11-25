@@ -13,9 +13,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "dsa/mapper/schedule.h"
 #include "dsa/arch/model.h"
 #include "dsa/dfg/ssdfg.h"
+#include "dsa/mapper/schedule.h"
 
 #define MAX_ROUTE 100000000
 

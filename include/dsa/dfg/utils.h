@@ -13,16 +13,14 @@ namespace dfg {
  * \param dfg The DFG to dump.
  * \param fname The json filename.
  */
-void Export(SSDfg *dfg, const std::string &fname);
+void Export(SSDfg* dfg, const std::string& fname);
 
 /*!
  * \brief Load the json into DFG data structure.
  * \param fname The filename to load
  * \return The DFG loaded.
  */
-SSDfg* Import(const std::string &fname);
+SSDfg* Import(const std::string& fname);
 
-
-
-}
-}
+}  // namespace dfg
+}  // namespace dsa

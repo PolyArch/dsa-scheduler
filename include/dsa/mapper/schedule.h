@@ -1,18 +1,17 @@
 #pragma once
 
 #include <algorithm>
+#include <climits>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <unordered_set>
 
-#include <climits>
-
-#include "dsa/mapper/config_defs.h"
 #include "dsa/arch/model.h"
 #include "dsa/arch/sub_model.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/dfg/visitor.h"
+#include "dsa/mapper/config_defs.h"
 
 using namespace dsa;
 
@@ -20,7 +19,6 @@ using namespace dsa;
 
 class Schedule {
  public:
-
   /*!
    * \brief Constructor for the hardware/software pair
    * \param model The hardware.
@@ -29,7 +27,7 @@ class Schedule {
   Schedule(SSModel* model, SSDfg* dfg);
 
   /*! \brief Deep copy a schedule. */
-  Schedule(const Schedule &, bool dup_dfg);
+  Schedule(const Schedule&, bool dup_dfg);
 
   constexpr static const float gvsf = 4.0f;
 
@@ -108,15 +106,15 @@ class Schedule {
 
   void check_all_links_consistency() {
     struct Checker : dfg::Visitor {
-      Checker(Schedule *self) : self(self) {}
-      void Visit(SSDfgNode *node) {
-        for (auto &operand : node->ops()) {
+      Checker(Schedule* self) : self(self) {}
+      void Visit(SSDfgNode* node) {
+        for (auto& operand : node->ops()) {
           for (auto eid : operand.edges) {
             self->check_links_consistency(&self->ssdfg()->edges[eid]);
           }
         }
       }
-      Schedule *self;
+      Schedule* self;
     };
     Checker checker(this);
     ssdfg()->Apply(&checker);
@@ -181,7 +179,7 @@ class Schedule {
     ssnode* n = locationOf(vec);
     if (n) {
       auto vport = dynamic_cast<ssvport*>(n);
-	  CHECK(vport) << vec->name() << " " << n->name();
+      CHECK(vport) << vec->name() << " " << n->name();
       return vport->port();
     } else {
       return -1;
@@ -247,7 +245,7 @@ class Schedule {
     // Remove all passthroughs associated with this edge
     for (auto& pt : ep.passthroughs) {
       auto& np = _nodeProp[pt.second->id()];
-      auto &passthrus = np.slots[pt.first].passthrus;
+      auto& passthrus = np.slots[pt.first].passthrus;
       bool erased = false;
       for (auto iter = passthrus.begin(), end = passthrus.end(); iter != end; ++iter) {
         if (*iter == edge) {
@@ -266,15 +264,15 @@ class Schedule {
   // Delete all scheduling data associated with dfgnode, including its
   // mapped locations, and mapping information and metadata for edges
   void unassign_dfgnode(SSDfgNode* dfgnode) {
-    for (auto &op : dfgnode->ops()) {
+    for (auto& op : dfgnode->ops()) {
       for (auto eid : op.edges) {
-        auto *edge = &ssdfg()->edges[eid];
+        auto* edge = &ssdfg()->edges[eid];
         unassign_edge(edge);
       }
     }
-    for (auto &value : dfgnode->values) {
+    for (auto& value : dfgnode->values) {
       for (auto eid : value.uses) {
-        auto *edge = &ssdfg()->edges[eid];
+        auto* edge = &ssdfg()->edges[eid];
         unassign_edge(edge);
       }
     }
@@ -349,7 +347,7 @@ class Schedule {
                        std::vector<std::pair<int, sslink*>>::iterator it) {
     assign_link_to_edge(dfgedge, slot, slink);
     int idx = it - _edgeProp[dfgedge->id].links.begin();
-    CHECK(idx >= 0 && idx <= (int) _edgeProp[dfgedge->id].links.size()) << idx;
+    CHECK(idx >= 0 && idx <= (int)_edgeProp[dfgedge->id].links.size()) << idx;
     _edgeProp[dfgedge->id].links.insert(it, std::make_pair(slot, slink));
   }
 
@@ -366,9 +364,7 @@ class Schedule {
   //  cout << "\n";
   //}
 
-  int link_count(dsa::dfg::Edge* dfgedge) {
-    return _edgeProp[dfgedge->id].links.size();
-  }
+  int link_count(dsa::dfg::Edge* dfgedge) { return _edgeProp[dfgedge->id].links.size(); }
 
   int edge_latency(dsa::dfg::Edge* pdgedge) {
     return _edgeProp[pdgedge->id].links.size();
@@ -588,7 +584,9 @@ class Schedule {
 
   std::vector<EdgeProp>& edge_prop() { return _edgeProp; }
 
-  size_t num_passthroughs(dsa::dfg::Edge* e) { return _edgeProp[e->id].passthroughs.size(); }
+  size_t num_passthroughs(dsa::dfg::Edge* e) {
+    return _edgeProp[e->id].passthroughs.size();
+  }
 
   int max_lat() {
     assert(_max_lat != -1);
@@ -598,17 +596,17 @@ class Schedule {
   int max_lat_mis() { return _max_lat_mis; }
 
   void reset_lat_bounds() {
-    for (auto &elem : _ssDFG->type_filter<SSDfgVecInput>()) {
+    for (auto& elem : _ssDFG->type_filter<SSDfgVecInput>()) {
       auto& vp = _vertexProp[elem.id()];
       vp.min_lat = 0;
       vp.max_lat = 0;
     }
-    for (auto &elem : _ssDFG->type_filter<SSDfgInst>()) {
+    for (auto& elem : _ssDFG->type_filter<SSDfgInst>()) {
       auto& vp = _vertexProp[elem.id()];
       vp.min_lat = 0;
       vp.max_lat = INT_MAX - 1000;
     }
-    for (auto &elem : _ssDFG->type_filter<SSDfgVecOutput>()) {
+    for (auto& elem : _ssDFG->type_filter<SSDfgVecOutput>()) {
       auto& vecp = _vertexProp[elem.id()];
       vecp.min_lat = 0;
       vecp.max_lat = INT_MAX - 1000;
@@ -781,7 +779,6 @@ class Schedule {
   void normalize();
 
  private:
-
   /*! \brief The pointer to the spatial architecture. */
   SSModel* _ssModel;
   /*! \brief The pointer to the DFG. */
@@ -813,7 +810,6 @@ class Schedule {
   // TODO(@were): Move these two to some constants.
   int _min_expected_route_latency = 2;
   int _max_expected_route_latency = 6;
-
 };
 
 template <>

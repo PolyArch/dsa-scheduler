@@ -1,9 +1,9 @@
-#include <sstream>
-#include <map>
 #include <functional>
+#include <map>
+#include <sstream>
 
-#include "dsa/arch/ssinst.h"
 #include "../utils/string_utils.h"
+#include "dsa/arch/ssinst.h"
 
 namespace dsa {
 namespace adg {
@@ -21,11 +21,12 @@ struct InstInfo {
 
   InstInfo(OpCode opcode_) {
     String opname(name_of_inst(opcode_));
-    LOG(STR) << std::string(opname) << " " << opname.StartsWith("F") << " " << !opname.StartsWith("Fx");
+    LOG(STR) << std::string(opname) << " " << opname.StartsWith("F") << " "
+             << !opname.StartsWith("Fx");
     if (opname.StartsWith("F") && !opname.StartsWith("Fx")) {
       is_float = true;
     }
-    auto f = [&opname, this](const String &s, Operation op) {
+    auto f = [&opname, this](const String& s, Operation op) {
       if (opname.Index(s) != -1) {
         opcode = op;
       }
@@ -52,18 +53,17 @@ struct InstInfo {
       }
     }
   }
-
 };
 
 auto MAX = [](double a, double b) { return std::max(a, b); };
 
 std::map<std::pair<Operation, int>, std::function<double(double, double)>> COMBINER = {
-  {{Operation::Add, false}, MAX},
-  {{Operation::Mul, false}, MAX},
-  {{Operation::Cmp, false}, MAX},
-  {{Operation::Shift, false}, MAX},
+    {{Operation::Add, false}, MAX},
+    {{Operation::Mul, false}, MAX},
+    {{Operation::Cmp, false}, MAX},
+    {{Operation::Shift, false}, MAX},
 };
 
-}
-}
-}
+}  // namespace pe_utils
+}  // namespace adg
+}  // namespace dsa

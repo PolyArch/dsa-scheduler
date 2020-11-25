@@ -1,11 +1,11 @@
 #pragma once
 
 #include <iostream>
-#include <utility>
 #include <map>
+#include <utility>
 
-#include "scheduler.h"
 #include "dse.h"
+#include "scheduler.h"
 
 #define DEBUG_SCHED (false)
 
@@ -21,15 +21,15 @@ struct CandidateRoute {
     edges[edge].thrus = sched->thrus_of(edge);
   }
   void fill_from(SSDfgNode* node, Schedule* sched) {
-    for (auto &op : node->ops()) {
+    for (auto& op : node->ops()) {
       for (int eid : op.edges) {
-        dsa::dfg::Edge *e = &node->ssdfg()->edges[eid];
+        dsa::dfg::Edge* e = &node->ssdfg()->edges[eid];
         fill_edge(e, sched);
       }
     }
-    for (auto &value : node->values) {
+    for (auto& value : node->values) {
       for (int eid : value.uses) {
-        dsa::dfg::Edge *e = &node->ssdfg()->edges[eid];
+        dsa::dfg::Edge* e = &node->ssdfg()->edges[eid];
         fill_edge(e, sched);
       }
     }
@@ -58,13 +58,13 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   void initialize(SSDfg*, Schedule*&);
 
   SchedulerSimulatedAnnealing(dsa::SSModel* ssModel, double timeout = 1000000.,
-                              int max_iters_ = 20000,
-                              bool verbose = false,
+                              int max_iters_ = 20000, bool verbose = false,
                               std::string mapping_file_ = "",
-                              bool dump_mapping_if_improved_ = false) : Scheduler(ssModel, timeout, verbose), 
-                                                                        mapping_file(mapping_file_),
-                                                                        dump_mapping_if_improved(dump_mapping_if_improved_),
-                                                                        max_iters(max_iters_) {}
+                              bool dump_mapping_if_improved_ = false)
+      : Scheduler(ssModel, timeout, verbose),
+        mapping_file(mapping_file_),
+        dump_mapping_if_improved(dump_mapping_if_improved_),
+        max_iters(max_iters_) {}
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
@@ -78,7 +78,8 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s,
                                 CandidateRoute& undo_path);
 
-  bool length_creep(Schedule* sched, dsa::dfg::Edge* edge, int& num, CandidateRoute& cand);
+  bool length_creep(Schedule* sched, dsa::dfg::Edge* edge, int& num,
+                    CandidateRoute& cand);
 
   template <typename T>
   bool scheduleHere(Schedule* sched, const std::vector<T>& nodes,
@@ -97,10 +98,10 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   bool scheduleHere(Schedule*, SSDfgNode*, std::pair<int, dsa::ssnode*>);
 
-  int route(Schedule* sched, dsa::dfg::Edge* dfgnode,
-            std::pair<int, dsa::ssnode*> source,
+  int route(Schedule* sched, dsa::dfg::Edge* dfgnode, std::pair<int, dsa::ssnode*> source,
             std::pair<int, dsa::ssnode*> dest,
-            std::vector<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen);
+            std::vector<std::pair<int, sslink*>>::iterator* ins_it,
+            int max_path_lengthen);
 
   int routing_cost(dsa::dfg::Edge*, int, int, sslink*, Schedule*,
                    const std::pair<int, ssnode*>&);

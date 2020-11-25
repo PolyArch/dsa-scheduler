@@ -1,3 +1,5 @@
+#include "inst_model.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -5,9 +7,7 @@
 #include <set>
 #include <sstream>
 
-#include "inst_model.h"
 #include "../utils/model_parsing.h"
-
 #include "dsa/debug.h"
 
 using namespace dsa;
@@ -156,13 +156,13 @@ void InstModel::PowerAreaModel(char* filename) {
         inst_to_power_area.insert(
             pair<std::string, pair<double, double>>(sign_inst_ss.str(), power_area));
         LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
-                        << prefix << " : deal with the add sign bit to fixed point\n";
+                      << prefix << " : deal with the add sign bit to fixed point\n";
       }
       // Add power area to decomposed instruction
       char last_char = inst_name.back();
       if (last_char == '8' || last_two_str == "16" || last_two_str == "32") {
         LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
-                        << "deal with the decomposed instructions\n";
+                      << "deal with the decomposed instructions\n";
         if (last_char == '8') {
           string func_name = inst_name.substr(0, inst_name.length() - 1);
           int decomposers[3] = {2, 4, 8};
@@ -284,7 +284,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "#define DELTA (((double)1.0) / (1 << FRAC_BITS))\n"
          "#define FLOAT_MAX (FIX_MAX * DELTA)\n"
          "#define FLOAT_MIN (FIX_MIN * DELTA)\n"
-         "#define FLOAT_TRUNC(x) (x > FLOAT_MAX ? FLOAT_MAX : (x < FLOAT_MIN ? FLOAT_MIN : x))\n"
+         "#define FLOAT_TRUNC(x) (x > FLOAT_MAX ? FLOAT_MAX : (x < FLOAT_MIN ? FLOAT_MIN "
+         ": x))\n"
          "\n"
          "#define DOUBLE_TO_FIX(x) ((int)(FLOAT_TRUNC(x) / DELTA))\n"
          "#define FIX_TO_DOUBLE(x) (x * DELTA)\n"
@@ -547,8 +548,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
   // FUNCTION: num_values
   ofs << "int dsa::num_values(OpCode inst) {\n"
-         "  switch(inst) {\n" <<
-         "    case SS_NONE: return 1;\n";
+         "  switch(inst) {\n"
+      << "    case SS_NONE: return 1;\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
         << "SS_" << _instList[i]->name() << ": return " << _instList[i]->numValues()
@@ -595,12 +596,13 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
 
     // somwhere below is an implementation of pass through, is it though? (tony, 2018)
 
-    ofs << "  " << dtype << "& accum = reg[0];\n"
+    ofs << "  " << dtype
+        << "& accum = reg[0];\n"
            "  (void) accum;\n"
            "  CHECK(ops.size() <= 4);\n"
            "  CHECK(ops.size() <=  (unsigned)(num_ops[inst]+1));\n"
-           "  switch(inst) {\n" <<
-           "    case SS_NONE: { return ops[0]; }\n";
+           "  switch(inst) {\n"
+        << "    case SS_NONE: { return ops[0]; }\n";
     for (unsigned i = 0; i < _instList.size(); ++i) {
       ConfigInst* inst = _instList[i];
 

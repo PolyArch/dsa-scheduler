@@ -8,7 +8,6 @@
 #include <utility>
 
 class LOGGER {
-
   bool abort;
 
  public:
@@ -19,7 +18,8 @@ class LOGGER {
   ~LOGGER() noexcept(false) {
     std::cerr << std::endl;
     if (abort) {
-      // TODO(@were): This is great for debugging backtrace but confuses user when reading the logs.
+      // TODO(@were): This is great for debugging backtrace but confuses user when reading
+      // the logs.
       throw;
     }
   }
@@ -35,12 +35,14 @@ class LOGGER {
   if (!(COND)) LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
 
 #ifdef DEBUG_MODE
-#define LOG(S) if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
+#define LOG(S) \
+  if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #else
-#define LOG(S) if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
+#define LOG(S) \
+  if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #endif
 
-#define ENFORCED_SYSTEM(CMD)                    \
-  if (int ret = system(CMD))                    \
-    LOGGER("[SHELL]", __FILE__, __LINE__, true) \
+#define ENFORCED_SYSTEM(CMD)                  \
+  if (int ret = system(CMD))                  \
+  LOGGER("[SHELL]", __FILE__, __LINE__, true) \
       << "Failed command: " << (CMD) << ", code" << ret

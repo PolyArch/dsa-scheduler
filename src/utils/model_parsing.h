@@ -1,13 +1,13 @@
 #pragma once
 
-// TODO(@were): Rename this to string utils. Better to make it oo implicit to a std::string.
+// TODO(@were): Rename this to string utils. Better to make it oo implicit to a
+// std::string.
 
-#include <iostream>
-#include <cstring>
-#include <string>
 #include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <string>
 #include <vector>
-
 
 namespace dsa {
 namespace ModelParsing {
@@ -84,7 +84,7 @@ inline bool stricmp(const std::string& str1, const std::string& str2) {
 }
 
 inline void split(const std::string& s, const char delim,
-                         std::vector<std::string>& elems) {
+                  std::vector<std::string>& elems) {
   std::stringstream ss(s);
   std::string item;
   while (std::getline(ss, item, delim)) {
@@ -97,5 +97,5 @@ inline bool is_number(const std::string& s) {
   return sscanf(s.c_str(), "%lf", &val) == 1;
 }
 
-}
+}  // namespace ModelParsing
 }  // namespace dsa

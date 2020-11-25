@@ -5,15 +5,15 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <string>
 
 #include "dsa/arch/model.h"
-#include "dsa/mapper/scheduler.h"
-#include "dsa/mapper/scheduler_sa.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/dfg/visitor.h"
+#include "dsa/mapper/scheduler.h"
+#include "dsa/mapper/scheduler_sa.h"
 
 using namespace std;
 using sec = chrono::seconds;
@@ -58,7 +58,8 @@ int main(int argc, char* argv[]) {
   int contrl_flow = -1;
   int memory_size = 4096;
 
-  while ((opt = getopt_long(argc, argv, "vst:fc:d:e:l:r:m:", long_options, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "vst:fc:d:e:l:r:m:", long_options, nullptr)) !=
+         -1) {
     switch (opt) {
       case 's': from_scratch = true; break;
       case 'v': verbose = true; break;
@@ -163,32 +164,31 @@ int main(int argc, char* argv[]) {
 
   std::cout << " ### Begin DSE Iteration " << i << " ### \n"
             << "DSE OBJ: " << cur_ci->weight_obj() << std::endl
-            << "Execution Time: " << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
+            << "Execution Time: "
+            << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
   cur_ci->dump_breakdown(verbose);
   ++i;
 
   {
-    auto &ssmodel = *cur_ci->ss_model();
+    auto& ssmodel = *cur_ci->ss_model();
     // Filter out useless fu models.
     std::set<dsa::OpCode> used_insts;
     for (auto& elem : cur_ci->workload_array) {
       for (auto& dfg : elem.sched_array) {
         struct InstCounter : dfg::Visitor {
-          void Visit(SSDfgInst *inst) {
-            res.insert(inst->inst());
-          }
+          void Visit(SSDfgInst* inst) { res.insert(inst->inst()); }
           std::set<dsa::OpCode> res;
         } counter;
         dfg.ssdfg()->Apply(&counter);
-        for (auto &inst : counter.res) {
+        for (auto& inst : counter.res) {
           used_insts.insert(inst);
         }
       }
     }
 
-    for (int i = 0; i < (int) ssmodel.fu_types.size(); ++i) {
+    for (int i = 0; i < (int)ssmodel.fu_types.size(); ++i) {
       auto& fudef = ssmodel.fu_types[i];
-      for (int j = 0; j < (int) fudef->capability.size(); ++j) {
+      for (int j = 0; j < (int)fudef->capability.size(); ++j) {
         if (used_insts.find(fudef->capability[j].op) == used_insts.end()) {
           fudef->Erase(j);
           --j;
@@ -196,9 +196,9 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    for (int i = 0; i < (int) ssmodel.subModel()->fu_list().size(); ++i) {
-      auto *fu = ssmodel.subModel()->fu_list()[i];
-      for (int j = 0; j < (int) fu->fu_type_.capability.size(); ++j) {
+    for (int i = 0; i < (int)ssmodel.subModel()->fu_list().size(); ++i) {
+      auto* fu = ssmodel.subModel()->fu_list()[i];
+      for (int j = 0; j < (int)fu->fu_type_.capability.size(); ++j) {
         if (used_insts.find(fu->fu_type_.capability[j].op) == used_insts.end()) {
           fu->fu_type_.Erase(j);
           --j;
@@ -208,7 +208,8 @@ int main(int argc, char* argv[]) {
   }
   std::cout << " ### Begin DSE Iteration " << ++i << " ### \n"
             << "DSE OBJ: " << cur_ci->weight_obj() << std::endl
-            << "Execution Time: " << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
+            << "Execution Time: "
+            << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
   cur_ci->dump_breakdown(verbose);
   {
     // dump the new hw json
@@ -217,9 +218,7 @@ int main(int argc, char* argv[]) {
     cur_ci->ss_model()->subModel()->DumpHwInJson(hw_ss.str().c_str());
   }
 
-
   while (i - last_improve <= 750) {
-
     clock_t StartChange = clock();
     std::cout << " ### Begin DSE Iteration " << i << " ### \n";
     cur_ci->verify();
@@ -230,7 +229,8 @@ int main(int argc, char* argv[]) {
     cand_ci->make_random_modification(temperature);
     cand_ci->verify();
     std::cout << "dse modification: "
-              << static_cast<double>(clock() - StartChange) / CLOCKS_PER_SEC << "s" << std::endl;
+              << static_cast<double>(clock() - StartChange) / CLOCKS_PER_SEC << "s"
+              << std::endl;
 
     clock_t StartSchedule = clock();
     scheduler->incrementalSchedule(*cand_ci);
@@ -241,12 +241,13 @@ int main(int argc, char* argv[]) {
     double best_obj = best_ci->weight_obj();
     double init_obj = cur_ci->weight_obj();
 
-    std::cout << "DSE OBJ: " << obj_func << "(" << best_obj << ") (" << init_obj << ")" << std::endl;
+    std::cout << "DSE OBJ: " << obj_func << "(" << best_obj << ") (" << init_obj << ")"
+              << std::endl;
     auto util = cand_ci->utilization();
     std::cout << std::setprecision(2)
               << "Utilization ratio overall: " << std::get<0>(util)
-              << ", nodes: " << std::get<1>(util)
-              << ", links: " << std::get<2>(util) << "\n"
+              << ", nodes: " << std::get<1>(util) << ", links: " << std::get<2>(util)
+              << "\n"
               << std::setprecision(7);
 
     if (obj_func < (1.0 + 1e-3)) {
@@ -261,9 +262,8 @@ int main(int argc, char* argv[]) {
       best_ci = cur_ci = cand_ci;
       std::cout << "----------------- IMPROVED OBJ! --------------------\n";
       std::cout << "Execution Time: " << std::setprecision(6)
-                << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC
-                << ", " << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC
-                << std::endl;
+                << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << ", "
+                << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC << std::endl;
 
       for (int x = 0, ew = best_ci->workload_array.size(); x < ew; ++x) {
         ostringstream oss;
@@ -284,8 +284,9 @@ int main(int argc, char* argv[]) {
         temperature *= 0.99;
         cur_ci = best_ci;
       } else {
-        double p = (double) rand() / RAND_MAX;
-        double target = exp(-(best_ci->weight_obj() - cand_ci->weight_obj()) / temperature);
+        double p = (double)rand() / RAND_MAX;
+        double target =
+            exp(-(best_ci->weight_obj() - cand_ci->weight_obj()) / temperature);
         if (p < target) {
           std::cout << p << " < " << target << ", accept a worse point!" << std::endl;
           if (cur_ci != best_ci) {
@@ -310,10 +311,9 @@ int main(int argc, char* argv[]) {
   double best_obj = cur_ci->weight_obj();
   std::cout << "FINAL DSE OBJ: " << best_obj << "\n";
   auto util = cur_ci->utilization();
-  std::cout << std::setprecision(2)
-            << "Utilization ratio overall: " << std::get<0>(util)
-            << ", nodes: " << std::get<1>(util)
-            << ", links: " << std::get<2>(util) << "\n"
+  std::cout << std::setprecision(2) << "Utilization ratio overall: " << std::get<0>(util)
+            << ", nodes: " << std::get<1>(util) << ", links: " << std::get<2>(util)
+            << "\n"
             << std::setprecision(7);
 
   cur_ci->dump_breakdown(verbose);

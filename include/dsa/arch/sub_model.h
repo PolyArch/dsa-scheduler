@@ -4,19 +4,18 @@
 #include <bitset>
 #include <climits>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <functional>
 
 #include "dsa/debug.h"
 #include "fu_model.h"
-#include "predict.h"
 #include "json/visitor.h"
-
+#include "predict.h"
 
 #define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x)) + 1)
 
@@ -114,9 +113,7 @@ class sslink {
   int set_max_util(int m) { return _max_util = m; }
 
   // Right I ignore this because area model doesn't use it anyways
-  void set_flow_control(bool v) {
-    assert(0);
-  }
+  void set_flow_control(bool v) { assert(0); }
   bool flow_control();
 
   int bitwidth() { return _bitwidth; }
@@ -190,7 +187,7 @@ class ssnode {
   // TODO(@were): Deprecate this in the visitor pattern.
   virtual ssnode* copy() = 0;
 
-  virtual void Accept(adg::Visitor *visitor) = 0;
+  virtual void Accept(adg::Visitor* visitor) = 0;
 
   sslink* add_link(ssnode* node);
 
@@ -218,9 +215,9 @@ class ssnode {
 
   int id() { return _ID; }
 
-  void set_ssnode_prop(plain::Object &prop) {
-    node_type = *prop["nodeType"] -> As<std::string>();
-    data_width = *prop["data_width"] -> As<int64_t>();
+  void set_ssnode_prop(plain::Object& prop) {
+    node_type = *prop["nodeType"]->As<std::string>();
+    data_width = *prop["data_width"]->As<int64_t>();
     _max_util = get_prop_attr(prop, "max_util", static_cast<int64_t>(1));
 
     // Parse Decomposer
@@ -257,16 +254,14 @@ class ssnode {
 
   int max_util() { return _max_util; }
 
-  int max_util(dsa::OpCode inst) {
-    return _max_util * 64 / dsa::bitwidth[inst];
-  }
+  int max_util(dsa::OpCode inst) { return _max_util * 64 / dsa::bitwidth[inst]; }
 
   int set_max_util(int m) { return _max_util = m; }
 
   bool is_shared() { return _max_util > 1; }  // TODO: max_util > 1
 
   void set_flow_control(bool v) { _flow_control = v; }
-  bool &flow_control() { return _flow_control; }
+  bool& flow_control() { return _flow_control; }
 
   int bitwidth() { return _bitwidth; }
 
@@ -279,7 +274,7 @@ class ssnode {
 
  protected:
   std::string node_type = "empty";
-  SpatialFabric *parent{nullptr};
+  SpatialFabric* parent{nullptr};
   int num_node();
   int _ID = -1;
   int _x = -1, _y = -1;  // just for visualization
@@ -307,7 +302,7 @@ class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
 
-  void Accept(adg::Visitor *visitor) override;
+  void Accept(adg::Visitor* visitor) override;
 
   ssnode* copy() override {
     auto res = new ssswitch();
@@ -378,10 +373,11 @@ class ssswitch : public ssnode {
     os << "}\n";
   }
 
-  void set_prop(plain::Object & prop) {
+  void set_prop(plain::Object& prop) {
     set_ssnode_prop(prop);
     // max output fifo depth
-    max_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(max_fifo_depth));
+    max_fifo_depth =
+        get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(max_fifo_depth));
   }
 
   void collect_features() {
@@ -429,24 +425,21 @@ class ssswitch : public ssnode {
     std::cout << "\n";
   }
 
-  void route_io(int in_idx, int out_idx){
-    routing_lookup[out_idx] = in_idx;
-  }
-
+  void route_io(int in_idx, int out_idx) { routing_lookup[out_idx] = in_idx; }
 
   uint64_t get_config_bits() override {
     uint64_t left_bits = 64;
     // TODO: add shared config bits
     uint64_t num_config_index_bit = log2ceil(_max_util);
     // -- configure which configuration to write
-    if(_max_util > 1){ 
+    if (_max_util > 1) {
       // dedicated dont need to have this field
       config_bits = config_bits << num_config_index_bit;
       left_bits -= num_config_index_bit;
       // config_bits += `config_index`;
     }
     // -- configure the current utility
-    if(_max_util > 1){
+    if (_max_util > 1) {
       // dedicated dont need to have this field
       config_bits = config_bits << num_config_index_bit;
       left_bits -= num_config_index_bit;
@@ -459,18 +452,18 @@ class ssswitch : public ssnode {
     left_bits -= num_id_bit;
     config_bits += id();
     // -- config source select
-    uint64_t num_source_sel_bit  = log2ceil(in_links().size()+1);
+    uint64_t num_source_sel_bit = log2ceil(in_links().size() + 1);
     // + 1 is because zero means connect to ground
-    for(uint output_idx = 0; output_idx < out_links().size(); output_idx++){
+    for (uint output_idx = 0; output_idx < out_links().size(); output_idx++) {
       config_bits = config_bits << num_source_sel_bit;
       left_bits -= num_source_sel_bit;
-      if(routing_lookup.count(output_idx)){
+      if (routing_lookup.count(output_idx)) {
         config_bits += routing_lookup[output_idx] + 1;
       }
     }
     // -- config offset for decomposability //TODO
     config_bits = config_bits << left_bits;
-    
+
     return config_bits;
   }
 
@@ -496,18 +489,19 @@ class ssfu : public ssnode {
     return res;
   }
 
-  void Accept(adg::Visitor *visitor);
-  void set_prop(plain::Object & prop) {
-
+  void Accept(adg::Visitor* visitor);
+  void set_prop(plain::Object& prop) {
     set_ssnode_prop(prop);
 
     std::string nodeType = *prop["nodeType"]->As<std::string>();
 
     // delay_fifo_depth
-    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(_delay_fifo_depth));
+    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth",
+                                      static_cast<int64_t>(_delay_fifo_depth));
 
     // register_file_size
-    register_file_size = get_prop_attr(prop, "register_file_size", static_cast<int64_t>(register_file_size));
+    register_file_size = get_prop_attr(prop, "register_file_size",
+                                       static_cast<int64_t>(register_file_size));
   }
 
   void dumpIdentifier(ostream& os) override {
@@ -544,7 +538,7 @@ class ssfu : public ssnode {
     os << "\"instructions\" : [";
     int idx_inst = 0;
     int num_inst = fu_type_.capability.size();
-    for (auto &elem : fu_type_.capability) {
+    for (auto& elem : fu_type_.capability) {
       os << "\"" << dsa::name_of_inst(elem.op) << "\"";
       if (idx_inst < num_inst - 1) {
         os << ", ";
@@ -588,8 +582,7 @@ class ssfu : public ssnode {
   }
 
   double* collect_features() {
-    if (decomposer == 0)
-      decomposer = mf_decomposer;
+    if (decomposer == 0) decomposer = mf_decomposer;
 
     features[0] = _max_util > 1 ? 0.0 : 1.0;
     features[1] = _max_util > 1 ? 1.0 : 0.0;
@@ -648,29 +641,27 @@ class ssfu : public ssnode {
 
   virtual int delay_fifo_depth() override { return _delay_fifo_depth; }
 
-  void add_delay(int operand_idx, int delay_cycle){
+  void add_delay(int operand_idx, int delay_cycle) {
     delay_map[operand_idx] = delay_cycle;
   }
-  void add_operand_sel(int operand_idx, int input_port_idx){
+  void add_operand_sel(int operand_idx, int input_port_idx) {
     operand_sel[operand_idx] = input_port_idx;
   }
-  void set_curr_opcode(int local_opcode){
-    curr_opcode = local_opcode;
-  }
+  void set_curr_opcode(int local_opcode) { curr_opcode = local_opcode; }
 
   uint64_t get_config_bits() override {
     uint64_t left_bits = 64;
     // TODO: add shared config bits
     uint64_t num_config_index_bit = log2ceil(_max_util);
     // -- configure which configuration to write
-    if(_max_util > 1){ 
+    if (_max_util > 1) {
       // dedicated dont need to have this field
       config_bits = config_bits << num_config_index_bit;
       left_bits -= num_config_index_bit;
       // config_bits += `config_index`;
     }
     // -- configure the current utility
-    if(_max_util > 1){
+    if (_max_util > 1) {
       // dedicated dont need to have this field
       config_bits = config_bits << num_config_index_bit;
       left_bits -= num_config_index_bit;
@@ -686,10 +677,10 @@ class ssfu : public ssnode {
     uint64_t num_operand_sel_bit = log2ceil(in_links().size() + 1);
     uint max_num_operand = fu_type_.get_max_num_operand();
     // + 1 is because zero connect to ground
-    for(uint operand_idx = 0; operand_idx < max_num_operand; operand_idx ++){
+    for (uint operand_idx = 0; operand_idx < max_num_operand; operand_idx++) {
       config_bits = config_bits << num_operand_sel_bit;
       left_bits -= num_operand_sel_bit;
-      if(operand_sel.count(operand_idx)){
+      if (operand_sel.count(operand_idx)) {
         config_bits += operand_sel[operand_idx] + 1;
       }
     }
@@ -697,10 +688,10 @@ class ssfu : public ssnode {
     uint64_t num_delay_sel_bit = log2ceil(_delay_fifo_depth + 1);
     std::cout << "delay fifo depth = " << _delay_fifo_depth << std::endl;
     // + 1 mean we allow zero cycle delay
-    for(uint operand_idx = 0; operand_idx < max_num_operand; operand_idx ++){
+    for (uint operand_idx = 0; operand_idx < max_num_operand; operand_idx++) {
       config_bits = config_bits << num_delay_sel_bit;
       left_bits -= num_delay_sel_bit;
-      if(delay_map.count(operand_idx)){
+      if (delay_map.count(operand_idx)) {
         config_bits += delay_map[operand_idx];
       }
     }
@@ -721,10 +712,11 @@ class ssfu : public ssnode {
   double features[12];
   int _delay_fifo_depth = 8;
   int register_file_size = 4;
-  std::map<int,int> delay_map;
-  std::map<int,int> operand_sel;
+  std::map<int, int> delay_map;
+  std::map<int, int> operand_sel;
   int curr_opcode = -1;
   uint64_t config_bits = 0;
+
  private:
   friend class SpatialFabric;
 };
@@ -738,7 +730,7 @@ class ssvport : public ssnode {
     return res;
   }
 
-  void Accept(adg::Visitor *vistor);
+  void Accept(adg::Visitor* vistor);
 
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
@@ -811,8 +803,8 @@ class ssvport : public ssnode {
 
   int bitwidth_capability() {
     int res = 0;
-    CHECK((int) links[0].empty() + (int) links[1].empty() == 1);
-    for (auto &elem : links) {
+    CHECK((int)links[0].empty() + (int)links[1].empty() == 1);
+    for (auto& elem : links) {
       for (auto link : elem) {
         res += link->bitwidth();
       }
@@ -829,9 +821,7 @@ class ssvport : public ssnode {
 
   bool is_hanger() override { return in_links().empty() && out_links().empty(); }
 
-  uint64_t get_config_bits() override {
-    return 0;
-  }
+  uint64_t get_config_bits() override { return 0; }
 
  private:
   int _port = -1;

@@ -8,7 +8,8 @@ namespace dsa {
 namespace dfg {
 namespace pass {
 
-inline void Dfs(SSDfgNode *node, std::vector<bool> &visited, std::vector<SSDfgNode*> &order) {
+inline void Dfs(SSDfgNode* node, std::vector<bool>& visited,
+                std::vector<SSDfgNode*>& order) {
   if (visited[node->id()]) {
     return;
   }
@@ -26,22 +27,18 @@ inline void Dfs(SSDfgNode *node, std::vector<bool> &visited, std::vector<SSDfgNo
 }
 
 /* \brief Return the reversed topological order of the dataflow graph */
-inline std::vector<SSDfgNode*> ReversedTopology(SSDfg *dfg) {
+inline std::vector<SSDfgNode*> ReversedTopology(SSDfg* dfg) {
   struct Rooter : Visitor {
-    Rooter(int n) : visited(n, false) {
-      res.reserve(n);
-    }
+    Rooter(int n) : visited(n, false) { res.reserve(n); }
     std::vector<bool> visited;
     std::vector<SSDfgNode*> res;
-    void Visit(SSDfgVecOutput *out) override {
-      Dfs(out, visited, res);
-    }
+    void Visit(SSDfgVecOutput* out) override { Dfs(out, visited, res); }
   };
   Rooter rooter(dfg->nodes.size());
   dfg->Apply(&rooter);
   return rooter.res;
 }
 
-}
-}
-}
+}  // namespace pass
+}  // namespace dfg
+}  // namespace dsa

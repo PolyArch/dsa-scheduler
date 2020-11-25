@@ -1,9 +1,9 @@
 #pragma once
 
-#include "scheduler.h"
-#include "schedule.h"
-#include "dsa/arch/model.h"
 #include "dsa/arch/estimation.h"
+#include "dsa/arch/model.h"
+#include "schedule.h"
+#include "scheduler.h"
 
 // This class contains all info which you might want to remember about
 class WorkloadSchedules {
@@ -27,9 +27,9 @@ class SchedStats {
 // 1. Explore full design space with randomness
 // 2.
 
-template<typename T>
-inline int non_uniform_random(const std::vector<T> &nodes, const std::vector<bool> &vec) {
-  for (int res = rand() % nodes.size(); ;res = rand() % nodes.size()) {
+template <typename T>
+inline int non_uniform_random(const std::vector<T>& nodes, const std::vector<bool>& vec) {
+  for (int res = rand() % nodes.size();; res = rand() % nodes.size()) {
     if (vec[nodes[res]->id()]) {
       return res;
     }
@@ -57,8 +57,7 @@ class CodesignInstance {
 
   // Check that everything is okay
   void verify() {
-    if (!sanity_check)
-      return;
+    if (!sanity_check) return;
 
     for_each_sched([&](Schedule& sched) {
       sched.validate();
@@ -96,7 +95,8 @@ class CodesignInstance {
     if (sub->node_list().empty()) return;
 
     int n_ins = rand() % (max_in - min_in) + min_in;
-    for (int i = 0, j = 0; i < n_ins && j < n_ins * 10 && n->in_links().size() <= 4; ++i, ++j) {
+    for (int i = 0, j = 0; i < n_ins && j < n_ins * 10 && n->in_links().size() <= 4;
+         ++i, ++j) {
       int src_node_index = rand() % sub->nodes<ssnode*>().size();
       ssnode* src = sub->node_list()[src_node_index];
       if ((dynamic_cast<ssvport*>(src) && src->out_links().empty()) || src == n) {
@@ -106,7 +106,8 @@ class CodesignInstance {
       sub->add_link(src, n);
     }
     int n_outs = rand() % (max_out - min_out) + min_out;
-    for (int i = 0, j = 0; i < n_outs && j < n_outs * 10 && n->out_links().size() <= 4; ++i, ++j) {
+    for (int i = 0, j = 0; i < n_outs && j < n_outs * 10 && n->out_links().size() <= 4;
+         ++i, ++j) {
       int dst_node_index = rand() % sub->node_list().size();
       ssnode* dst = sub->node_list()[dst_node_index];
       if ((dynamic_cast<ssvport*>(dst) && dst->in_links().empty()) || dst == n) {
@@ -164,24 +165,19 @@ class CodesignInstance {
     auto* sub = _ssModel.subModel();
 
     for (int j = 0, n = sub->link_list().size(); j < n; ++j) {
-      if (unused_links[j])
-        delete_link(sub->link_list()[j]);
+      if (unused_links[j]) delete_link(sub->link_list()[j]);
     }
     for (int j = 0, n = sub->switch_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->switch_list()[j]->id()])
-        delete_hw(sub->switch_list()[j]);
+      if (unused_nodes[sub->switch_list()[j]->id()]) delete_hw(sub->switch_list()[j]);
     }
     for (int j = 0, n = sub->fu_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->fu_list()[j]->id()])
-        delete_hw(sub->fu_list()[j]);
+      if (unused_nodes[sub->fu_list()[j]->id()]) delete_hw(sub->fu_list()[j]);
     }
     for (int j = 0, n = sub->input_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->input_list()[j]->id()])
-        delete_hw(sub->input_list()[j]);
+      if (unused_nodes[sub->input_list()[j]->id()]) delete_hw(sub->input_list()[j]);
     }
     for (int j = 0, n = sub->output_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->output_list()[j]->id()])
-        delete_hw(sub->output_list()[j]);
+      if (unused_nodes[sub->output_list()[j]->id()]) delete_hw(sub->output_list()[j]);
     }
     finalize_delete();
 
@@ -192,16 +188,16 @@ class CodesignInstance {
 
   void make_random_modification(double temperature) {
     switch (rand() % 3) {
-    case 0: add_something(temperature); break;
-    case 1: remove_something(temperature); break;
-    case 2: change_parameters_of_nodes(temperature);
+      case 0: add_something(temperature); break;
+      case 1: remove_something(temperature); break;
+      case 2: change_parameters_of_nodes(temperature);
     }
   }
 
   void add_something(int cnt) {
     if (rand() % 100 <= cnt * cnt)
       _ssModel.io_ports += rand() % (4 - _ssModel.io_ports + 1);
-    
+
     auto* sub = _ssModel.subModel();
 
     verify_strong();
@@ -307,7 +303,7 @@ class CodesignInstance {
         ssvport* vport = sub->input_list()[index];
         if (delete_nodep_list.count(vport)) continue;  // don't double delete
         delete_hw(vport);
-      } else { 
+      } else {
         // delete an VPort
         if (sub->output_list().size() == 0) continue;
         int index = non_uniform_random(sub->output_list(), unused_nodes);
@@ -406,9 +402,9 @@ class CodesignInstance {
         for_each_sched([&](Schedule& sched) {
           for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
             for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-              for (auto &op : p.first->ops()) {
+              for (auto& op : p.first->ops()) {
                 for (auto eid : op.edges) {
-                  auto *elem = &sched.ssdfg()->edges[eid];
+                  auto* elem = &sched.ssdfg()->edges[eid];
                   if (sched.edge_delay(elem) > fu->delay_fifo_depth()) {
                     std::cout << sched.edge_delay(elem) << " > " << fu->delay_fifo_depth()
                               << ", unassign " << p.first->name() << std::endl;
@@ -456,14 +452,12 @@ class CodesignInstance {
           for_each_sched([&](Schedule& sched) {
             for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
               for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-                if (p.first->bitwidth() < new_one * 8)
-                  sched.unassign_dfgnode(p.first);
+                if (p.first->bitwidth() < new_one * 8) sched.unassign_dfgnode(p.first);
               }
             }
           });
         }
-        std::cout << "decomposer changed from "
-                  << fu->decomposer << " to " << new_one
+        std::cout << "decomposer changed from " << fu->decomposer << " to " << new_one
                   << std::endl;
         fu->decomposer = new_one;
         assert(fu->decomposer);
@@ -490,9 +484,9 @@ class CodesignInstance {
     weight = c.weight;
 
     if (from_scratch) {
-      for (auto &work: c.workload_array) {
+      for (auto& work : c.workload_array) {
         workload_array.emplace_back();
-        for (auto &elem : work.sched_array) {
+        for (auto& elem : work.sched_array) {
           workload_array.back().sched_array.emplace_back(ss_model(), elem.ssdfg());
         }
       }
@@ -611,7 +605,7 @@ class CodesignInstance {
     int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
     double performance = sched->estimated_performance();
     if (succeed_sched) {
-      double eval = performance * ((double) max_delay / (max_delay + s.latmis));
+      double eval = performance * ((double)max_delay / (max_delay + s.latmis));
       eval /= std::max(1.0 + s.ovr, sqrt(s.agg_ovr));
       return {eval, -obj};
     }
@@ -651,26 +645,25 @@ class CodesignInstance {
 
     total_score.first = pow(total_score.first, (1.0 / workload_array.size()));
 
-
     auto estimated = dsa::adg::estimation::EstimatePowerAera(&_ssModel);
 
     float area = (estimated.Total<dsa::adg::estimation::Metric::Area>());
-    //float obj = total_score.first * 1e6 / area;
+    // float obj = total_score.first * 1e6 / area;
     float obj = total_score.first * total_score.first * 1e6 / area;
 
     return obj;
   }
 
-  float weight_obj() {
-    return dse_obj();
-  }
+  float weight_obj() { return dse_obj(); }
 
   std::tuple<float, float, float> utilization() {
     if (abs(dse_obj()) < (1.0 + 1e-3) || !res[0]) {
       return {0, 0, 0};
     }
-    unused_nodes = std::vector<bool>(res[0]->ssModel()->subModel()->node_list().size(), true);
-    unused_links = std::vector<bool>(res[0]->ssModel()->subModel()->link_list().size(), true);
+    unused_nodes =
+        std::vector<bool>(res[0]->ssModel()->subModel()->node_list().size(), true);
+    unused_links =
+        std::vector<bool>(res[0]->ssModel()->subModel()->link_list().size(), true);
     for (size_t i = 0; i < res.size(); ++i) {
       if (!res[i]) {
         return {0, 0, 0};
@@ -689,8 +682,10 @@ class CodesignInstance {
       for (size_t j = 0; j < res[i]->link_prop().size(); ++j) {
         for (int k = 0; k < 8; ++k) {
           if (!res[i]->link_prop()[j].slots[k].edges.empty()) {
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->orig()->id()] = false;
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->dest()->id()] = false;
+            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->orig()->id()] =
+                false;
+            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->dest()->id()] =
+                false;
             unused_links[j] = false;
           }
         }
@@ -699,7 +694,8 @@ class CodesignInstance {
     int cnt_nodes = 0, cnt_links = 0;
     for (auto elem : unused_nodes) cnt_nodes += elem;
     for (auto elem : unused_links) cnt_links += elem;
-    float overall = (float)(cnt_nodes + cnt_links) / (unused_nodes.size() + unused_links.size());
+    float overall =
+        (float)(cnt_nodes + cnt_links) / (unused_nodes.size() + unused_links.size());
     float nodes_ratio = (float)(cnt_nodes) / (unused_nodes.size());
     float links_ratio = (float)(cnt_links) / (unused_links.size());
     return {overall, nodes_ratio, links_ratio};
