@@ -1,15 +1,24 @@
 #include "dsa/dfg/visitor.h"
 
 #include "dsa/dfg/ssdfg.h"
+#include "dsa/dfg/instruction.h"
 
 namespace dsa {
 namespace dfg {
 
 void Visitor::Visit(SSDfgNode* node) {}
 void Visitor::Visit(SSDfgInst* node) { Visit(static_cast<SSDfgNode*>(node)); }
+void Visitor::Visit(Instruction* node) { Visit(static_cast<SSDfgNode*>(node)); }
 void Visitor::Visit(SSDfgVec* node) { Visit(static_cast<SSDfgNode*>(node)); }
 void Visitor::Visit(SSDfgVecInput* node) { Visit(static_cast<SSDfgVec*>(node)); }
 void Visitor::Visit(SSDfgVecOutput* node) { Visit(static_cast<SSDfgVec*>(node)); }
+
+#define DEFINE_VISITOR(TYPE) \
+  void TYPE::Accept(Visitor* visitor) { visitor->Visit(this); }
+
+DEFINE_VISITOR(Instruction)
+
+#undef DEFINE_VISITOR
 
 }  // namespace dfg
 }  // namespace dsa
