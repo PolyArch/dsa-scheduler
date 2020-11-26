@@ -79,9 +79,9 @@ void print_graphviz(const std::string& name, SSDfg* dfg, Schedule* sched = nullp
   ofs << "Digraph G { \nnewrank=true;\n ";
   GPNode gpn(sched, ofs);
   dfg->Apply(&gpn);
-  GPVec<SSDfgVecInput> gpvi(sched, ofs);
+  GPVec<dfg::InputPort> gpvi(sched, ofs);
   dfg->Apply(&gpvi);
-  GPVec<SSDfgVecOutput> gpvo(sched, ofs);
+  GPVec<dfg::OutputPort> gpvo(sched, ofs);
   dfg->Apply(&gpvo);
   ofs << "}";
 }

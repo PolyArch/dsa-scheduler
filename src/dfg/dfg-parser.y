@@ -86,7 +86,7 @@ statement: INPUT ':' io_def  eol {
   int width = $1;
   int n = std::max(1, len);
   int slice = 64 / width;
-  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
   LOG(PARSE) << p->dfg->vins.back().id() << " " << p->dfg->vins.back().name();
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; i += slice) {
@@ -106,7 +106,7 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | OUTPUT ':' io_def eol {
-  using T = SSDfgVecOutput;
+  using T = dsa::dfg::OutputPort;
   auto name = $3->first;
   int len = $3->second;
   int width = $1;
@@ -168,7 +168,7 @@ statement: INPUT ':' io_def  eol {
     } else if ($1->size() == ce->entries.size()) {
       auto o = dynamic_cast<ValueEntry*>(ce->entries[0]);
       assert(o && "Assumption check failure, the first element should be a value entry!");
-      assert(dynamic_cast<SSDfgInst*>(p->dfg->nodes[o->nid]) && "Should be a instruction!");
+      assert(dynamic_cast<dsa::dfg::Instruction*>(p->dfg->nodes[o->nid]) && "Should be a instruction!");
       p->symbols.Set((*$1)[0], new ValueEntry(o->nid, o->vid));
       for (int i = 1, n = ce->entries.size(); i < n; ++i) {
         if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
@@ -259,8 +259,8 @@ expr: I_CONST {
   auto &args = *$3;
 
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
-  p->dfg->emplace_back<SSDfgInst>(p->dfg, op);
-  auto *inst = &p->dfg->type_filter<SSDfgInst>().back();
+  p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
+  auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
   int iid = inst->id();
   for (unsigned i = 0; i < args.size(); ++i) {
     if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {

@@ -431,7 +431,7 @@ class CodesignInstance {
         for_each_sched([&](Schedule& sched) {
           for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
             for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-              if (auto inst = dynamic_cast<SSDfgInst*>(p.first)) {
+              if (auto inst = dynamic_cast<dsa::dfg::Instruction*>(p.first)) {
                 if (!fu->fu_type_.Capable(inst->inst())) {
                   sched.unassign_dfgnode(p.first);
                 }

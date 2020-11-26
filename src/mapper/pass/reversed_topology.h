@@ -32,7 +32,7 @@ inline std::vector<SSDfgNode*> ReversedTopology(SSDfg* dfg) {
     Rooter(int n) : visited(n, false) { res.reserve(n); }
     std::vector<bool> visited;
     std::vector<SSDfgNode*> res;
-    void Visit(SSDfgVecOutput* out) override { Dfs(out, visited, res); }
+    void Visit(OutputPort* out) override { Dfs(out, visited, res); }
   };
   Rooter rooter(dfg->nodes.size());
   dfg->Apply(&rooter);

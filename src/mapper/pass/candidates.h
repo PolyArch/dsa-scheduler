@@ -5,7 +5,7 @@ namespace dsa {
 namespace mapper {
 
 struct CandidateSpotVisitor : dfg::Visitor {
-  void Visit(SSDfgInst* inst) override {
+  void Visit(dfg::Instruction* inst) override {
     auto fabric = sched->ssModel()->subModel();
     auto* model = fabric;
     std::vector<std::pair<int, ssnode*>> spots;
@@ -71,7 +71,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
         std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
   }
 
-  void Visit(SSDfgVecInput* input) override {
+  void Visit(dfg::InputPort* input) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->input_list();
     // Lets write size in units of bits
@@ -86,7 +86,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
     cnt[input->id()] = spots.size();
   }
 
-  void Visit(SSDfgVecOutput* output) override {
+  void Visit(dfg::OutputPort* output) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->output_list();
     // Lets write size in units of bits

@@ -12,6 +12,7 @@
 
 #include "./pass/print_graphviz.h"
 #include "dsa/arch/visitor.h"
+#include "dsa/dfg/instruction.h"
 #include "dsa/dfg/visitor.h"
 #include "dsa/mapper/scheduler_sa.h"
 
@@ -22,11 +23,11 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
   struct DFGCounter : dsa::dfg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_required;
     std::vector<int> ports[2];
-    void Visit(SSDfgInst* node) {
+    void Visit(dfg::Instruction* node) {
       inst_required[{node->inst(), (int)node->is_temporal()}]++;
     }
-    void Visit(SSDfgVecInput* vec) { ports[1].push_back(vec->phys_bitwidth()); }
-    void Visit(SSDfgVecOutput* vec) { ports[0].push_back(vec->phys_bitwidth()); }
+    void Visit(dfg::InputPort* vec) { ports[1].push_back(vec->phys_bitwidth()); }
+    void Visit(dfg::OutputPort* vec) { ports[0].push_back(vec->phys_bitwidth()); }
   };
 
   struct SpatialCounter : dsa::adg::Visitor {

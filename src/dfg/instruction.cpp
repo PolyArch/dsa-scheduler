@@ -1,10 +1,41 @@
 #include "dsa/dfg/instruction.h"
-#include "dsa/dfg/ssdfg.h"
 
 #include "../utils/vector_utils.h"
+#include "dsa/dfg/ssdfg.h"
 
 namespace dsa {
 namespace dfg {
+
+void CtrlBits::set(uint64_t val, Control b) {
+  if (b == CtrlBits::B1 || b == CtrlBits::B2) {
+    const_cast<bool&>(is_dynamic) = true;
+  }
+
+  int loc = val * Total + b;
+  assert(loc >= 0 && loc < 64);
+  mask |= (1 << loc);
+}
+
+bool CtrlBits::test(uint64_t val, Control b) {
+  int loc = val * Total + b;
+  assert(loc >= 0 && loc < 64);
+  return (mask >> loc) & 1;
+}
+
+void CtrlBits::test(uint64_t val, std::vector<bool>& back_array, bool& discard,
+                    bool& predicate, bool& reset) {
+  if (!mask) return;
+  back_array[0] = back_array[0] || test(val, CtrlBits::B1);
+  back_array[1] = back_array[1] || test(val, CtrlBits::B2);
+  discard = discard || test(val, CtrlBits::Discard);
+  predicate = predicate && !(test(val, CtrlBits::Abstain));
+  reset = reset || test(val, CtrlBits::Reset);
+}
+
+CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw) {
+  for (auto& elem : raw)
+    for (auto& s : elem.second) set(elem.first, str_to_enum(s));
+}
 
 Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
     : SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
@@ -180,5 +211,5 @@ uint64_t Instruction::do_compute(bool& discard) {
   throw;
 }
 
-}
-}
+}  // namespace dfg
+}  // namespace dsa

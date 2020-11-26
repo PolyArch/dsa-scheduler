@@ -1,12 +1,74 @@
 #pragma once
 
-#include "dsa/dfg/ssdfg.h"
+#include <map>
+
+#include "dsa/dfg/node.h"
 #include "dsa/dfg/visitor.h"
 
 class SSDfg;
 
 namespace dsa {
 namespace dfg {
+
+/*!
+ * \brief The control predication LUT. In the MICRO architecture,
+ *        it is a \lfloor 64 / Total \rfloor-LUT, each the result
+ *        is a Total-bit vector.
+ */
+struct CtrlBits {
+  /*! \brief The predicated behaviors. */
+  enum Control {
+    B1,       // Backpressure on the first operand FIFO.
+    B2,       // Backpressure on the second operand FIFO.
+    Discard,  // Predication off the produced value.
+    Reset,    // Reset the register file to all zeros.
+    Abstain,  // Avoid instruction execution.
+    Total     // Placeholder for the last behavior. Used by declaration.
+  };
+
+  /*!
+   * \brief Construct a new CtrlBits with a parsed raw map.
+   * \param raw The parsed raw map from the control list.
+   */
+  CtrlBits(const std::map<int, std::vector<std::string>>& raw);
+
+  /*!
+   * \brief Construct a new CtrlBits object with an existing LUT buffer.
+   * \param mask_ The LUT buffer.
+   */
+  CtrlBits(uint64_t mask_) : mask(mask_) {}
+
+  /*! \brief Construct an empty CtrlBits object. */
+  CtrlBits() : mask(0) {}
+
+  void set(uint64_t val, Control b);
+  bool test(uint64_t val, Control b);
+  void test(uint64_t val, std::vector<bool>& back_array, bool& discard, bool& predicate,
+            bool& reset);
+  CtrlBits& operator=(const CtrlBits& b) {
+    mask = b.mask;
+    const_cast<bool&>(is_dynamic) = b.is_dynamic;
+    return *this;
+  }
+
+  uint64_t bits() { return mask; }
+
+  bool needs_ctrl_dep() { return is_dynamic; }
+
+  const bool is_dynamic{false};
+
+ private:
+  uint64_t mask{0};
+
+  static Control str_to_enum(const std::string& s) {
+    if (s == "b1") return B1;
+    if (s == "b2") return B2;
+    if (s == "d") return Discard;
+    if (s == "r") return Reset;
+    if (s == "a") return Abstain;
+    assert(false && "Not a valid command");
+  }
+};
 
 /*! \brief IR node for the instructions in the DFG. */
 class Instruction : public SSDfgNode {
@@ -65,5 +127,5 @@ class Instruction : public SSDfgNode {
   dsa::OpCode opcode{dsa::OpCode::SS_NONE};
 };
 
-}
-}
+}  // namespace dfg
+}  // namespace dsa

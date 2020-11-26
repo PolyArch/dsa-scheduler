@@ -176,7 +176,7 @@ int main(int argc, char* argv[]) {
     for (auto& elem : cur_ci->workload_array) {
       for (auto& dfg : elem.sched_array) {
         struct InstCounter : dfg::Visitor {
-          void Visit(SSDfgInst* inst) { res.insert(inst->inst()); }
+          void Visit(dfg::Instruction* inst) { res.insert(inst->inst()); }
           std::set<dsa::OpCode> res;
         } counter;
         dfg.ssdfg()->Apply(&counter);

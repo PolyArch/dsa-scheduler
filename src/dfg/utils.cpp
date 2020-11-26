@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "dsa/dfg/instruction.h"
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/visitor.h"
 #include "json.lex.h"
@@ -49,19 +50,20 @@ struct Exporter : Visitor {
     nodes.push_back(new json::Object(current));
     current.clear();
   }
-  void Visit(SSDfgInst* inst) override {
+  void Visit(Instruction* inst) override {
+    int opcode = inst->inst();
     current["op"] = new json::Int(inst->inst());
     current["inst"] = new json::String(name_of_inst(inst->inst()));
     current["ctrl"] = new json::Int(inst->predicate.bits());
     current["self"] = new json::Int(inst->self_predicate.bits());
     Visit(static_cast<SSDfgNode*>(inst));
   }
-  void Visit(SSDfgVecInput* in) override {
+  void Visit(InputPort* in) override {
     current["width"] = new json::Int(in->get_port_width());
     current["length"] = new json::Int(in->get_vp_len());
     Visit(static_cast<SSDfgNode*>(in));
   }
-  void Visit(SSDfgVecOutput* out) override {
+  void Visit(OutputPort* out) override {
     current["width"] = new json::Int(out->get_port_width());
     current["length"] = new json::Int(out->get_vp_len());
     Visit(static_cast<SSDfgNode*>(out));
@@ -123,14 +125,17 @@ SSDfg* Import(const std::string& s) {
       int length = *node["length"]->As<int64_t>();
       int width = *node["width"]->As<int64_t>();
       if (inputs.empty()) {
-        res->emplace_back<SSDfgVecInput>(length, width, name, res, meta);
+        res->emplace_back<InputPort>(length, width, name, res, meta);
       } else {
-        res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta);
+        res->emplace_back<OutputPort>(length, width, name, res, meta);
       }
     } else if (node.count("op")) {
       int opcode = *node["op"]->As<int64_t>();
-      res->emplace_back<SSDfgInst>(res, static_cast<OpCode>(opcode));
+      res->emplace_back<Instruction>(res, static_cast<OpCode>(opcode));
       auto& inst = res->instructions.back();
+      auto& opname = *node["inst"]->As<std::string>();
+      CHECK(std::string(name_of_inst(inst.inst())) == opname)
+          << name_of_inst(inst.inst()) << " != " << opname;
       if (node.count("ctrl")) {
         uint64_t ctrl = *node["ctrl"]->As<int64_t>();
         inst.predicate = CtrlBits(ctrl);

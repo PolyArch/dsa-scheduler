@@ -1,5 +1,7 @@
 #include "dsa/mapper/dse.h"
 
+#include "dsa/dfg/node.h"
+
 CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
   verify();
   unused_nodes = std::vector<bool>(model->subModel()->node_list().size(), true);

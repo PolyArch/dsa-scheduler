@@ -11,7 +11,7 @@ namespace dsa {
 namespace dfg {
 namespace pass {
 
-inline void inject_noop_impl(SSDfg* dfg, int eid, SSDfgInst* inst) {
+inline void inject_noop_impl(SSDfg* dfg, int eid, Instruction* inst) {
   /* If inst is null:
    * before: def -[eid]-> use
    * after:  def -[new edge]-> noop -[eid]-> use
@@ -40,7 +40,7 @@ inline void inject_noop_impl(SSDfg* dfg, int eid, SSDfgInst* inst) {
     CHECK(inst->values.size() == 1);
   } else {
     // Create a noop instruction.
-    dfg->emplace_back<SSDfgInst>(dfg, SS_NONE);
+    dfg->emplace_back<Instruction>(dfg, SS_NONE);
     inst = &dfg->instructions.back();
     // Create a edge from source to noop
     dfg->edges.emplace_back(dfg, dfg->edges[eid].sid, dfg->edges[eid].vid, inst->id(),
@@ -100,7 +100,7 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
             mapping[iid] = {ep.links[j].first, pass->id()};
           }
         } else {
-          auto inst = dynamic_cast<SSDfgInst*>(dfg->nodes[iter->second]);
+          auto inst = dynamic_cast<Instruction*>(dfg->nodes[iter->second]);
           CHECK(inst);
           inject_noop_impl(dfg, i, inst);
         }
@@ -117,7 +117,7 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
   }
 }
 
-inline void dfg_impl(SSDfgNode* node, std::vector<bool>& visited,
+inline void dfs_impl(SSDfgNode* node, std::vector<bool>& visited,
                      std::vector<SSDfgNode*>& order) {
   if (visited[node->id()]) {
     return;
@@ -128,7 +128,7 @@ inline void dfg_impl(SSDfgNode* node, std::vector<bool>& visited,
   for (auto& value : node->values) {
     for (auto eid : value.uses) {
       auto edge = &node->ssdfg()->edges[eid];
-      dfg_impl(edge->use(), visited, order);
+      dfs_impl(edge->use(), visited, order);
     }
   }
 
@@ -141,7 +141,7 @@ inline std::vector<SSDfgNode*> reversed_topology(SSDfg* dfg) {
     Rooter(int n) : visited(n, false) { res.reserve(n); }
     std::vector<bool> visited;
     std::vector<SSDfgNode*> res;
-    void Visit(SSDfgVecInput* input) override { dfg_impl(input, visited, res); }
+    void Visit(InputPort* input) override { dfs_impl(input, visited, res); }
   };
   Rooter rooter(dfg->nodes.size());
   dfg->Apply(&rooter);
@@ -160,17 +160,15 @@ struct Bounds {
 
 struct ResetBoundVisitor : Visitor {
   ResetBoundVisitor(std::vector<Bounds>& b) : bounds(b) {}
-  void Visit(SSDfgInst* inst) {
+  void Visit(Instruction* inst) {
     bounds[inst->id()].min = 0;
     bounds[inst->id()].max = INT_MAX - 10000;
   }
-  void Visit(SSDfgVecOutput* output) {
+  void Visit(OutputPort* output) {
     bounds[output->id()].min = 0;
     bounds[output->id()].max = INT_MAX - 10000;
   }
-  void Visit(SSDfgVecInput* input) {
-    bounds[input->id()].min = bounds[input->id()].max = 0;
-  }
+  void Visit(InputPort* input) { bounds[input->id()].min = bounds[input->id()].max = 0; }
   std::vector<Bounds>& bounds;
 };
 

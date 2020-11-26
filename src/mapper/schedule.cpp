@@ -42,7 +42,7 @@ std::map<dsa::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
   auto filename = std::string("sched/") + s;
   _ssDFG = dsa::dfg::Import(filename);
   struct Counter : dfg::Visitor {
-    void Visit(SSDfgInst* inst) { ++inst_histo[inst->inst()]; }
+    void Visit(dsa::dfg::Instruction* inst) { ++inst_histo[inst->inst()]; }
     std::map<dsa::OpCode, int> inst_histo;
   } counter;
   _ssDFG->Apply(&counter);
@@ -134,12 +134,12 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   os << "#define "
      << "__" << cfg_name << "_H__\n";
 
-  for (auto& pv : _ssDFG->type_filter<SSDfgVecInput>()) {
+  for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
     os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
   }
   os << "\n";
-  for (auto& pv : _ssDFG->type_filter<SSDfgVecOutput>()) {
+  for (auto& pv : _ssDFG->type_filter<dsa::dfg::OutputPort>()) {
     int pn = vecPortOf(&pv);
     os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
   }
@@ -199,7 +199,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
             fu_node->add_delay(edge_of_vertex_idx, ep.extra_lat);
             fu_node->add_operand_sel(edge_of_vertex_idx, input_port_idx);
           }
-          SSDfgInst* inst_node = dynamic_cast<SSDfgInst*>(vertex);
+          auto* inst_node = dynamic_cast<dsa::dfg::Instruction*>(vertex);
           CHECK(inst_node) << "why a non-instruction node will be mapped to fu";
           int local_opcode = fu_node->fu_type_.get_encoding(inst_node->inst());
           fu_node->set_curr_opcode(local_opcode);
@@ -425,10 +425,10 @@ void Schedule::printGraphviz(const char* name) {
 }
 
 void Schedule::stat_printOutputLatency() {
-  int n = _ssDFG->type_filter<SSDfgVecOutput>().size();
+  int n = _ssDFG->type_filter<dsa::dfg::OutputPort>().size();
   cout << "** Output Vector Latencies **\n";
   for (int i = 0; i < n; i++) {
-    SSDfgVecOutput* vec_out = &_ssDFG->type_filter<SSDfgVecOutput>()[i];
+    auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
     auto loc = location_of(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.second);
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
@@ -565,10 +565,6 @@ void Schedule::iterativeFixLatency() {
         int routing_latency = edge_latency(edge);
         int edge_lat = routing_latency - 1 + node->lat_of_inst();
 
-        // int my_max_ed = max_ed;
-        // if (dynamic_cast<SSDfgVecOutput*>(useNode)) {
-        //  my_max_ed = 0;
-        //}
         int max_ed = max_edge_delay(edge);
 
         if (routing_latency != 0) {
@@ -779,7 +775,7 @@ void Schedule::calcLatency(int& max_lat, int& max_lat_mis, bool warnMismatch) {
       CHECK(next_dfgnode || isPassthrough(0, node))
           << "problem with latency calculation!";
 
-      SSDfgInst* next_dfginst = dynamic_cast<SSDfgInst*>(next_dfgnode);
+      auto* next_dfginst = dynamic_cast<dsa::dfg::Instruction*>(next_dfgnode);
       CHECK(next_dfginst || isPassthrough(0, node));
 
       bool everyone_is_here = true;
@@ -949,7 +945,7 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
     auto& lp = _linkProp[link->id()];
     int util = 0;
 
-    std::vector<SSDfgVec*> vecs;
+    std::vector<dsa::dfg::VectorPort*> vecs;
     std::vector<std::pair<dsa::dfg::Value*, int>> values;
 
     for (auto& it : lp.slots[slot].edges) {
@@ -957,11 +953,11 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
       auto v = edge->def();
       auto d = edge->use();
       if (v->is_temporal() || d->is_temporal()) {
-        if (auto input = dynamic_cast<SSDfgVecInput*>(v)) {
+        if (auto input = dynamic_cast<dsa::dfg::OutputPort*>(v)) {
           vecs.push_back(input);
           continue;
         }
-        if (auto* out = dynamic_cast<SSDfgVecOutput*>(d)) {
+        if (auto* out = dynamic_cast<dsa::dfg::OutputPort*>(d)) {
           vecs.push_back(out);
           continue;
         }
@@ -1071,7 +1067,7 @@ double Schedule::estimated_performance() {
   std::vector<std::vector<double>> bw(dfg->num_groups(), std::vector<double>(2, 0));
   std::vector<double> coef(dfg->num_groups(), (double)2.0);
 
-  for (auto& elem : dfg->type_filter<SSDfgVecInput>()) {
+  for (auto& elem : dfg->type_filter<dsa::dfg::InputPort>()) {
     if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&
         elem.meta.source != dsa::dfg::MetaPort::Data::Unknown) {
       bw[elem.group_id()][elem.meta.source == dsa::dfg::MetaPort::Data::SPad] +=
@@ -1090,7 +1086,7 @@ double Schedule::estimated_performance() {
   }
 
   std::vector<int> inst_cnt(dfg->num_groups(), 0);
-  for (auto& elem : dfg->type_filter<SSDfgInst>()) {
+  for (auto& elem : dfg->type_filter<dsa::dfg::Instruction>()) {
     ++inst_cnt[elem.group_id()];
   }
 
@@ -1116,7 +1112,7 @@ double Schedule::estimated_performance() {
 
   std::vector<double> rec_lat(dfg->num_groups(), 0.0);
   std::vector<double> rec_hide(dfg->num_groups(), 0.0);
-  for (auto& elem : dfg->type_filter<SSDfgVecOutput>()) {
+  for (auto& elem : dfg->type_filter<dsa::dfg::OutputPort>()) {
     if (elem.meta.dest == dsa::dfg::MetaPort::Data::LocalPort) {
       double lat = this->latOf(&elem);
       double hide = elem.meta.conc / dfg->group_prop(elem.group_id()).unroll;

@@ -175,7 +175,7 @@ class Schedule {
     }
   }
 
-  int vecPortOf(SSDfgVec* vec) {
+  int vecPortOf(dsa::dfg::VectorPort* vec) {
     ssnode* n = locationOf(vec);
     if (n) {
       auto vport = dynamic_cast<ssvport*>(n);
@@ -442,7 +442,7 @@ class Schedule {
   }
 
   // Routing cost for inputs, but based on nodes instead of values
-  int routing_cost_temporal_in(sslink* link, SSDfgVecInput* in_v) {
+  int routing_cost_temporal_in(sslink* link, dsa::dfg::InputPort* in_v) {
     assert(link);
     auto& vec = _linkProp[link->id()].slots[0].edges;
     if (vec.empty()) return 1;
@@ -455,7 +455,7 @@ class Schedule {
 
   // Routing cost for outputs, but based on nodes instead of values
   int routing_cost_temporal_out(std::pair<int, sslink*> link, SSDfgNode* node,
-                                SSDfgVecOutput* out_v) {
+                                dsa::dfg::OutputPort* out_v) {
     assert(link.second);
     auto& vec = _linkProp[link.second->id()].slots[link.first].edges;
     if (vec.empty()) return 1;
@@ -596,17 +596,17 @@ class Schedule {
   int max_lat_mis() { return _max_lat_mis; }
 
   void reset_lat_bounds() {
-    for (auto& elem : _ssDFG->type_filter<SSDfgVecInput>()) {
+    for (auto& elem : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
       auto& vp = _vertexProp[elem.id()];
       vp.min_lat = 0;
       vp.max_lat = 0;
     }
-    for (auto& elem : _ssDFG->type_filter<SSDfgInst>()) {
+    for (auto& elem : _ssDFG->type_filter<dsa::dfg::Instruction>()) {
       auto& vp = _vertexProp[elem.id()];
       vp.min_lat = 0;
       vp.max_lat = INT_MAX - 1000;
     }
-    for (auto& elem : _ssDFG->type_filter<SSDfgVecOutput>()) {
+    for (auto& elem : _ssDFG->type_filter<dsa::dfg::OutputPort>()) {
       auto& vecp = _vertexProp[elem.id()];
       vecp.min_lat = 0;
       vecp.max_lat = INT_MAX - 1000;

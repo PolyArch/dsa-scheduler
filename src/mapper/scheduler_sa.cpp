@@ -268,7 +268,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   _best_lat = MAX_ROUTE;
   _best_violation = MAX_ROUTE;
 
-  int presize = ssDFG->type_filter<SSDfgInst>().size();
+  int presize = ssDFG->type_filter<dsa::dfg::Instruction>().size();
 
   int iter = 0;
   int fail_to_route = 0;
@@ -311,29 +311,30 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       ss << "viz/iter/" << iter << ".gv";
       cur_sched->printGraphviz(ss.str().c_str());
 
-      for (auto& elem : ssDFG->type_filter<SSDfgVecInput>()) {
+      for (auto& elem : ssDFG->type_filter<dsa::dfg::InputPort>()) {
         std::cout << cur_sched->vecPortOf(&elem) << " ";
       }
       std::cout << "|";
-      for (auto& elem : ssDFG->type_filter<SSDfgVecInput>()) {
+      for (auto& elem : ssDFG->type_filter<dsa::dfg::OutputPort>()) {
         std::cout << cur_sched->vecPortOf(&elem) << " ";
       }
 
-      fprintf(
-          stdout,
-          "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
-          "lat: %3d, vio: %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
-          "obj:%d, ins: %d/%d, outs: %d/%d,"
-          " insts: %d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
-          iter, total_msec() / 1000.f, routing_times / total_msec(),
-          cur_sched->num_left(), s.lat, cur_sched->violation(), s.latmis, s.ovr,
-          s.agg_ovr, s.max_util, -score.second, cur_sched->num_mapped<SSDfgVecInput>(),
-          (int)ssDFG->type_filter<SSDfgVecInput>().size(),
-          cur_sched->num_mapped<SSDfgVecOutput>(),
-          (int)ssDFG->type_filter<SSDfgVecOutput>().size(),
-          cur_sched->num_mapped<SSDfgInst>(), presize, cur_sched->total_passthrough,
-          cur_sched->num_links_mapped(), cur_sched->num_edge_links_mapped(),
-          succeed_sched ? ", all mapped" : "", succeed_timing ? ", mismatch == 0" : "");
+      fprintf(stdout,
+              "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
+              "lat: %3d, vio: %d, mis: %d, ovr: %d, agg_ovr: %d, util: %d, "
+              "obj:%d, ins: %d/%d, outs: %d/%d,"
+              " insts: %d,%d, pts:%d, links:%d, edge-links:%d  %s%s",
+              iter, total_msec() / 1000.f, routing_times / total_msec(),
+              cur_sched->num_left(), s.lat, cur_sched->violation(), s.latmis, s.ovr,
+              s.agg_ovr, s.max_util, -score.second,
+              cur_sched->num_mapped<dsa::dfg::InputPort>(),
+              (int)ssDFG->type_filter<dsa::dfg::InputPort>().size(),
+              cur_sched->num_mapped<dsa::dfg::OutputPort>(),
+              (int)ssDFG->type_filter<dsa::dfg::OutputPort>().size(),
+              cur_sched->num_mapped<dsa::dfg::Instruction>(), presize,
+              cur_sched->total_passthrough, cur_sched->num_links_mapped(),
+              cur_sched->num_edge_links_mapped(), succeed_sched ? ", all mapped" : "",
+              succeed_timing ? ", mismatch == 0" : "");
       if (score > best_score) {
         std::cout << std::endl;
       } else {
@@ -392,7 +393,7 @@ struct CandidateFinder : dfg::Visitor {
   Schedule* sched;
   SSModel* model;
 
-  void Visit(SSDfgInst* inst) {}
+  void Visit(dsa::dfg::Instruction* inst) {}
 };
 
 #include "./pass/candidates.h"
@@ -509,11 +510,12 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
   // FIXME(@were): Move these to a virtual method!
   int t_cost;
   if (is_temporal_in) {
-    t_cost =
-        sched->routing_cost_temporal_in(link, dynamic_cast<SSDfgVecInput*>(def_dfgnode));
+    t_cost = sched->routing_cost_temporal_in(
+        link, dynamic_cast<dsa::dfg::InputPort*>(def_dfgnode));
   } else if (is_temporal_out) {
-    t_cost = sched->routing_cost_temporal_out(make_pair(from_slot, link), def_dfgnode,
-                                              dynamic_cast<SSDfgVecOutput*>(use_dfgnode));
+    t_cost = sched->routing_cost_temporal_out(
+        make_pair(from_slot, link), def_dfgnode,
+        dynamic_cast<dsa::dfg::OutputPort*>(use_dfgnode));
   } else {  // NORMAL CASE!
     t_cost = sched->routing_cost(make_pair(from_slot, link), edge);
   }

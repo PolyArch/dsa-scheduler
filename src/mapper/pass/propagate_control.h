@@ -13,7 +13,7 @@ inline std::vector<bool> PropagateControl(const std::vector<SSDfgNode*>& reverse
   struct InstFilter : Visitor {
     InstFilter(std::vector<bool>& res_) : res(res_) {}
     std::vector<bool>& res;
-    void Visit(SSDfgInst* inst) override {
+    void Visit(Instruction* inst) override {
       res[inst->id()] = inst->predicate.is_dynamic || inst->self_predicate.is_dynamic;
     }
   } filter(res);

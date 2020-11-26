@@ -4,10 +4,10 @@
 
 #include "dsa/debug.h"
 #include "dsa/dfg/metadata.h"
+#include "dsa/dfg/visitor.h"
 #include "dsa/simulation/data.h"
 
 class SSDfg;
-class SSDfgNode;
 class SSDfgValue;
 
 namespace dsa {
@@ -136,3 +136,82 @@ struct Edge {
 
 }  // namespace dfg
 }  // namespace dsa
+
+// DFG Node -- abstract base class
+// DFG Nodes are intended to be the scheduling unit
+class SSDfgNode {
+ public:
+  virtual ~SSDfgNode() {}
+
+  virtual void Accept(dsa::dfg::Visitor*);
+
+  SSDfgNode() {}
+
+  enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
+
+  virtual int slot_for_use(dsa::dfg::Edge* edge, int node_slot);
+
+  virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) { return node_slot; }
+
+  // some issue with this function
+  virtual uint64_t invalid();
+
+  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
+
+  virtual int lat_of_inst() { return 0; }
+
+  virtual std::string name() = 0;  // pure func
+
+  dsa::dfg::Edge* getLinkTowards(SSDfgNode* to);
+
+  bool has_name() { return !_name.empty(); }
+
+  void set_name(std::string name) { _name = name; }
+
+  std::vector<dsa::dfg::Operand>& ops() { return _ops; }
+
+  int id() { return _ID; }
+
+  virtual void forward() = 0;
+
+  //--------------------------------------------
+
+  bool is_temporal();
+
+  virtual int bitwidth() = 0;
+  //---------------------------------------------------------------------------
+
+  V_TYPE type() {
+    assert(_vtype != V_INVALID);
+    return _vtype;
+  }
+
+  int group_id() { return _group_id; }
+
+  void set_group_id(int id) { _group_id = id; }
+
+  int num_inc_edges();
+
+  SSDfg*& ssdfg() { return _ssdfg; }
+
+  /*! \brief The values produced by this node. */
+  std::vector<dsa::dfg::Value> values;
+
+ protected:
+  SSDfg* _ssdfg = 0;  // sometimes this is just nice to have : )
+
+  // Dynamic stuff
+  bool _invalid = false;
+  std::vector<bool> _back_array;  // in edges
+
+  // Static Stuff
+  int _ID;
+  std::string _name;
+  std::vector<dsa::dfg::Operand> _ops;  // in edges
+
+  int _min_lat = 0;
+  int _max_thr = 0;
+  int _group_id = 0;  // which group do I belong to
+
+  V_TYPE _vtype;
+};

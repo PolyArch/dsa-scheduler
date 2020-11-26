@@ -1,23 +1,21 @@
 #pragma once
 
 class SSDfgNode;
-class SSDfgInst;
-class SSDfgVec;
-class SSDfgVecInput;
-class SSDfgVecOutput;
 
 namespace dsa {
 namespace dfg {
 
 class Instruction;
+class VectorPort;
+class InputPort;
+class OutputPort;
 
 struct Visitor {
   virtual void Visit(SSDfgNode*);
-  virtual void Visit(SSDfgInst*);
   virtual void Visit(Instruction*);
-  virtual void Visit(SSDfgVec*);
-  virtual void Visit(SSDfgVecInput*);
-  virtual void Visit(SSDfgVecOutput*);
+  virtual void Visit(VectorPort*);
+  virtual void Visit(InputPort*);
+  virtual void Visit(OutputPort*);
 };
 
 }  // namespace dfg
