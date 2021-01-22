@@ -7,10 +7,7 @@
 
 #include "dsa/debug.h"
 #include "dsa/dfg/metadata.h"
-
-struct SSDfgValue;
-struct SSDfgNode;
-struct CtrlBits;
+#include "dsa/dfg/node.h"
 
 namespace dsa {
 namespace dfg {
@@ -60,6 +57,22 @@ struct ValueEntry : ParseResult {
 };
 
 /*!
+ * \brief A node(?vertex) of the DFG.
+ *
+ * Example 1:
+ * A = F(B, C)
+ * F(B, C) the whole is the node entry.
+ *
+ * Example 2:
+ * A, B = F<Add:1, Sub:1>(C, D)
+ * F<Add:1, Sub:1>(C, D) the whole is the node entry
+ */
+struct NodeEntry : ParseResult {
+  int nid;
+  NodeEntry(int nid_) : nid(nid_) {}
+};
+
+/*!
  * \brief Value concatnation
  * A = B:0:7 C:0:7
  * Here `B:0:7' and `C:0:7' are concatenated and bind to A
@@ -102,6 +115,13 @@ class SymbolTable {
  private:
   std::unordered_map<std::string, ParseResult*> table_;
 };
+
+/*!
+ * \brief Update the properties of a DFG node by the arguments
+ * \param node The DFG node to be updated
+ * \param args The arguments of the instruction or operation
+ */
+void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args);
 
 }  // namespace dfg
 }  // namespace dsa

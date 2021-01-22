@@ -62,10 +62,10 @@ class SpatialFabric {
     for (auto link : link_list()) {
       os << "{\n";
       os << "\"source\":";
-      link->orig()->dumpIdentifier(os);
+      link->source()->dumpIdentifier(os);
       os << ",\n";
       os << "\"sink\":";
-      link->dest()->dumpIdentifier(os);
+      link->sink()->dumpIdentifier(os);
       os << "}";
       if (idx_link < size_links - 1) {
         idx_link++;
@@ -155,7 +155,8 @@ class SpatialFabric {
 
   ssfu* add_fu(int x, int y) {
     auto* fu = add_fu();
-    fu->setXY(x, y);
+    fu->x(x);
+    fu->y(y);
     return fu;
   }
 
@@ -167,7 +168,8 @@ class SpatialFabric {
 
   ssswitch* add_switch(int x, int y) {
     auto* sw = add_switch();
-    sw->setXY(x, y);
+    sw->x(x);
+    sw->y(y);
     return sw;
   }
 
@@ -183,7 +185,7 @@ class SpatialFabric {
         << "Error: Multiple " << (is_input ? "input" : "output")
         << " ports with port number " << port_num << "created\n\n";
     _ssio_interf.vports_map[is_input][port_num] = vport;
-    vport->set_port(port_num);
+    vport->port(port_num);
     return vport;
   }
 
@@ -211,8 +213,8 @@ class SpatialFabric {
       copy_sub->_link_list[i] = copy_link;
 
       // make the links point to the new nodes
-      copy_link->_orig = copy_sub->_node_list[link->orig()->id()];
-      copy_link->_dest = copy_sub->_node_list[link->dest()->id()];
+      copy_link->source_ = copy_sub->_node_list[link->source()->id()];
+      copy_link->sink_ = copy_sub->_node_list[link->sink()->id()];
     }
 
     // make the nodes point to the new links
@@ -273,7 +275,7 @@ class SpatialFabric {
     }
 
     sslink* link = src->add_link(dst);
-    link->set_id(_link_list.size());
+    link->id(_link_list.size());
     _link_list.push_back(link);
 
     return link;
@@ -281,7 +283,7 @@ class SpatialFabric {
 
   // add node
   void add_node(ssnode* n) {
-    n->set_id(_node_list.size());
+    n->id(_node_list.size());
     n->parent = this;
     _node_list.push_back(n);
   }
@@ -294,24 +296,20 @@ class SpatialFabric {
       delete n;
     }
   }
-  void parse_json(std::string filename);
+
   void post_process();
 
  private:
-  void build_substrate(int x, int y);
-
-  void connect_substrate(int x, int y, PortType pt, int ips, int ops, int temp_x,
-                         int temp_y, int temp_width, int temp_height);
-
   // These are only valid after regroup_vecs()
   std::vector<ssnode*> _node_list;
-  std::vector<ssfu*> _fu_list;
   std::vector<sslink*> _link_list;
 
-  // Temporary Datastructures, only for constructing the mapping
+  // TODO(@were): Deprecate these data structure after moving to JSON DSL.
+  void build_substrate(int x, int y);
+  void connect_substrate(int x, int y, PortType pt, int ips, int ops, int temp_x,
+                         int temp_y, int temp_width, int temp_height);
   int _sizex, _sizey;  // size of SS cgra
   std::map<int, ssnode*> _io_map[2];
-
   ssio_interface _ssio_interf;
 };
 

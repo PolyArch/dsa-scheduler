@@ -46,7 +46,7 @@ class Scheduler {
   virtual bool schedule(SSDfg* ssDFG, Schedule*& schedule) = 0;
 
   virtual bool incrementalSchedule(CodesignInstance& incr_table) {
-    assert(0 && "not supported");
+    CHECK(0) << "not supported";
   }
 
   bool suppress_timing_print = false;

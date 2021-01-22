@@ -1,4 +1,3 @@
-
 #include "dsa/arch/model.h"
 
 #include <assert.h>
@@ -12,6 +11,7 @@
 #include "../utils/model_parsing.h"
 #include "../utils/string_utils.h"
 #include "dsa/arch/ssinst.h"
+#include "dsa/arch/utils.h"
 #include "dsa/debug.h"
 #include "json.lex.h"
 #include "json.tab.h"
@@ -27,7 +27,7 @@ SSModel::SSModel(SpatialFabric* subModel) {
 
 void SSModel::setMaxEdgeDelay(int d) {
   for (auto* fu : _subModel->fu_list()) {
-    fu->set_delay_fifo_depth(d);
+    fu->max_delay(d);
   }
 }
 
@@ -83,7 +83,7 @@ void ParseCapabilities(Capability& fu, string& cap_string) {
 
     if (ModelParsing::stricmp(cap, "ALL")) {
       for (int i = 0; i < SS_NUM_TYPES; ++i) {
-        fu.Add((OpCode)i, i);
+        fu.Add((OpCode)i, 1);
       }
       return;
     }
@@ -147,8 +147,7 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
 
   // Parse the JSON-format IR
   if (string_utils::String(filename).EndsWith(".json")) {
-    _subModel = new SpatialFabric();
-    _subModel->parse_json(filename);
+    _subModel = dsa::adg::Import(filename_);
     return;
   }
 

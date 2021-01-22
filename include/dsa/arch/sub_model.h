@@ -17,7 +17,9 @@
 #include "json/visitor.h"
 #include "predict.h"
 
-#define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x)) + 1)
+#define DEF_ATTR(attr)                         \
+  decltype(attr##_) attr() { return attr##_; } \
+  void attr(const decltype(attr##_) & new_value) { attr##_ = new_value; }
 
 namespace dsa {
 
@@ -50,7 +52,7 @@ T get_prop_attr(plain::Object& prop, const std::string& name, T dft) {
 template <typename T>
 void fix_id(std::vector<T>& vec) {
   for (int i = 0, n = vec.size(); i < n; ++i) {
-    vec[i]->set_id(i);
+    vec[i]->id(i);
   }
 }
 
@@ -78,7 +80,7 @@ class ssio_interface {
   ssvport* get(bool is_input, int id) {
     auto& ports = vports(is_input);
     auto iter = ports.find(id);
-    CHECK(iter != ports.end());
+    CHECK(iter != ports.end()) << is_input << " " << id;
     return iter->second;
   }
 
@@ -91,91 +93,55 @@ class sslink {
 
   ~sslink();
 
-  ssnode* orig() const { return _orig; }
+  /*!
+   * \brief Construct a link with a pair of source and sink.
+   */
+  sslink(ssnode* source, ssnode* sink) : source_(source), sink_(sink) {}
 
-  ssnode* dest() const { return _dest; }
-
-  // Constructor
-  sslink(ssnode* orig, ssnode* dest) {
-    _orig = orig;
-    _dest = dest;
-    _ID = -1;
-  }
-
+  /*!
+   * \brief The text format of this link for the purpose of logging.
+   */
   std::string name() const;
 
-  int id() const { return _ID; }
-
-  void set_id(int id) { _ID = id; }
-
-  int max_util() { return _max_util; }
-
-  int set_max_util(int m) { return _max_util = m; }
-
-  // Right I ignore this because area model doesn't use it anyways
-  void set_flow_control(bool v) { assert(0); }
+  /*!
+   * \brief If the timing of this link is dynamic.
+   */
   bool flow_control();
 
-  int bitwidth() { return _bitwidth; }
+  /*!
+   * \brief The bitwidth of this connection.
+   */
+  int bitwidth();
 
-  int decomp_bitwidth() { return _decomp_bitwidth; }
-
-  /* To check the connectivity in O(1), here we apply a tricky idea:
-   * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
-   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we
-   * want to go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1),
-   * which is O(w).
-   *
-   * Here we first transform the meaning of subnet[i][delta], which means
-   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity
-   * between `i' and `j', under width `w', where delta=j-i, the check becomes:
-   * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
-   *
-   * Then two tricks together enables O(1) check:
-   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access
-   * continuous.
-   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can
-   * check the one's in O(1) by bit operation.
-   * */
+  /*!
+   * \brief The connectivity of the sub-network lanes. Refer the method
+   *        below for more details.
+   */
+  // TODO(@were): Extend this to bitset for wider decomposability.
   std::vector<int64_t> subnet;
 
-  int slots(int slot, int width) {
-    uint64_t res = 0;
-    int n = subnet.size();
-    auto f = [](int64_t a, int bits) {
-      int full_mask = ~0ull >> (64 - bits);
-      return (a & full_mask) == full_mask;
-    };
-    for (int i = 0; i < n; ++i) {
-      if (slot + width <= n) {
-        if (f(subnet[i] >> slot, width)) {
-          res |= 1 << (i + slot) % n;
-        }
-      } else {
-        int high = n - slot;
-        int low = width - high;
-        if (f(subnet[i] >> slot, high) && f(subnet[i], low)) {
-          res |= 1 << (i + slot) % n;
-        }
-      }
-    }
-    return res;
-  }
+  /*!
+   * \brief Giving a starting lane, and the required width, return the
+   *        connected lanes.
+   * \param slot The starting lane.
+   * \param width The width of lanes on the subnetwork.
+   * \return int The bitmask of feasible lanes.
+   */
+  int slots(int slot, int width);
 
  protected:
-  int _ID = -1;
+  int id_{-1};
+  int max_util_{1};
+  ssnode* source_{nullptr};
+  ssnode* sink_{nullptr};
 
-  // By default, assume single-flopped, dedicated, and flow-control, 64-bit
-  int _max_util = 1;          // max instructions can map to this link
-  bool _flow_control = true;  // whether link supports backpressure
-  int _bitwidth = 64;         // bitwidth of link
-  int _decomp_bitwidth = 8;   // minimum bitwidth the link may be decomposed into
-
-  ssnode* _orig;
-  ssnode* _dest;
-
- private:
   friend class SpatialFabric;
+
+ public:
+  DEF_ATTR(id)
+  DEF_ATTR(max_util)
+  DEF_ATTR(source)
+  DEF_ATTR(sink)
 };
 
 class ssnode {
@@ -184,123 +150,152 @@ class ssnode {
 
   ssnode() {}
 
+  ssnode(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : datawidth_(datawidth),
+        granularity_(granularity),
+        max_util_(util),
+        flow_control_(dynamic_timing),
+        max_delay_(fifo) {}
+
   // TODO(@were): Deprecate this in the visitor pattern.
   virtual ssnode* copy() = 0;
 
+  /*!
+   * \brief The entrance for visitor pattern.
+   */
   virtual void Accept(adg::Visitor* visitor) = 0;
 
+  /*!
+   * \brief Connect this and the given node with a link.
+   */
   sslink* add_link(ssnode* node);
 
+  /*!
+   * \brief The textformat of this node for the purpose of logging.
+   */
   virtual std::string name() const = 0;
 
-  virtual int delay_fifo_depth() { return 0; }
+  /*!
+   * \brief The size of the timing delay buffer.
+   */
+  int delay_fifo_depth() { return max_delay_; }
 
-  // just for visualization
-  void setXY(int x, int y) {
-    _x = x;
-    _y = y;
-  }
+  /*!
+   * \brief In degrees of this node.
+   */
+  std::vector<sslink*>& in_links() { return links[1]; }
 
-  int x() const { return _x; }
+  /*!
+   * \brief Out degrees of this node.
+   */
+  std::vector<sslink*>& out_links() { return links[0]; }
 
-  int y() const { return _y; }
-
-  const std::vector<sslink*>& in_links() { return links[1]; }
-
-  const std::vector<sslink*>& out_links() { return links[0]; }
-
+  /*!
+   * \brief The method of checking hanger node in the ADG used by DSE.
+   */
   virtual bool is_hanger() { return false; }
 
-  std::string nodeType() { return node_type; }
+  /*!
+   * \brief The number of lanes available in this node.
+   */
+  int lanes() { return datawidth() / granularity(); }
 
-  int id() { return _ID; }
-
-  void set_ssnode_prop(plain::Object& prop) {
-    node_type = *prop["nodeType"]->As<std::string>();
-    data_width = *prop["data_width"]->As<int64_t>();
-    _max_util = get_prop_attr(prop, "max_util", static_cast<int64_t>(1));
-
-    // Parse Decomposer
-    if (node_type != "vector port") {
-      granularity = get_prop_attr(prop, "granularity", static_cast<int64_t>(granularity));
-    }
-    decomposer = data_width / granularity;
-  }
-
-  void set_id(int id) { _ID = id; }
+  // TODO(@were): Can we move these to visitor pattern?
   virtual void dumpIdentifier(ostream& os) = 0;
   virtual void dumpFeatures(ostream& os) = 0;
-  virtual uint64_t get_config_bits() = 0;
 
+  /*!
+   * \brief Scheduling runtime, for the purpose of routing.
+   */
   int node_dist(int slot) { return _node_dist[slot]; }
-
   std::pair<int, sslink*> came_from(int slot) { return _came_from[slot]; }
-
   int done(int slot) { return _done[slot]; }
   void set_done(int slot, int n) { _done[slot] = n; }
-
   void update_dist_only(int slot, int dist) { _node_dist[slot] = dist; }
-
   void update_dist(int slot, int dist, int from_slot, sslink* from) {
     _node_dist[slot] = dist;
     _came_from[slot] = std::make_pair(from_slot, from);
   }
-
   void reset_runtime_vals() {
     memset(_node_dist, -1, sizeof _node_dist);
     memset(_came_from, 0, sizeof _came_from);
     memset(_done, 0, sizeof _done);
   }
 
-  int max_util() { return _max_util; }
+  bool is_shared() { return max_util_ > 1; }
 
-  int max_util(dsa::OpCode inst) { return _max_util * 64 / dsa::bitwidth[inst]; }
+  virtual ~ssnode() {}
 
-  int set_max_util(int m) { return _max_util = m; }
-
-  bool is_shared() { return _max_util > 1; }  // TODO: max_util > 1
-
-  void set_flow_control(bool v) { _flow_control = v; }
-  bool& flow_control() { return _flow_control; }
-
-  int bitwidth() { return _bitwidth; }
-
-  virtual ~ssnode(){};
-
-  int decomposer{8};
-  int granularity{8};
-  int mf_decomposer{8};
-  int data_width{64};
+  /*!
+   * \brief The spatial fabric to which this node belongs to.
+   */
+  SpatialFabric* parent{nullptr};
 
  protected:
-  std::string node_type = "empty";
-  SpatialFabric* parent{nullptr};
-  int num_node();
-  int _ID = -1;
-  int _x = -1, _y = -1;  // just for visualization
-
-  int _max_util = 1;          // Convert from "share_slot_size"
-  bool _flow_control = true;  // convert from "flow_control"
-  int _bitwidth = 64;         // maximum bitwidth of PE, convert from "bit_width"
-
+  /*!
+   * \brief The identifier of this node.
+   */
+  int id_{-1};
+  /*!
+   * \brief The coordination of this node in a mesh. If the topology is
+   *        irregular, these two numbers are set to -1.
+   */
+  int x_{-1};
+  int y_{-1};
+  /*!
+   * \brief The width of the datapath of this node.
+   */
+  int datawidth_{64};
+  /*!
+   * \brief The bit width of the decomposability.
+   */
+  int granularity_{8};
+  /*!
+   * \brief =1 indicates dedicated, and >1 means shared.
+   */
+  int max_util_{1};
+  /*!
+   * \brief If the timing of execution is determined when compilation.
+   */
+  bool flow_control_{true};
+  /*!
+   * \brief The size of the local FIFO buffer to delay the timing.
+   */
+  int max_delay_{15};
+  /*!
+   * \brief The output, and input of this node.
+   */
   std::vector<sslink*> links[2];  // {output, input}
 
-  // Variables used for scheduling -- these should be moved out at some point (TODO)
+  // TODO(@were): Separate this out.
   int _node_dist[8];
   int _done[8];
   std::pair<int, sslink*> _came_from[8];
 
-  // convert from decomposer // to be integrate with subnet_table
-  // TODO: most-fine-grain decomposer, to be removed or need to be defined by user
-
- private:
   friend class SpatialFabric;
   friend class sslink;
+  friend class CodesignInstance;
+
+ public:
+  /*!
+   * \brief Get set/attributes
+   */
+  DEF_ATTR(id)
+  DEF_ATTR(x)
+  DEF_ATTR(y)
+  DEF_ATTR(datawidth)
+  DEF_ATTR(granularity)
+  DEF_ATTR(max_util)
+  DEF_ATTR(flow_control)
+  DEF_ATTR(max_delay)
 };
 
 class ssswitch : public ssnode {
  public:
   ssswitch() : ssnode() {}
+
+  ssswitch(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
 
   void Accept(adg::Visitor* visitor) override;
 
@@ -310,20 +305,18 @@ class ssswitch : public ssnode {
     return res;
   }
 
-  int delay_fifo_depth() override { return max_fifo_depth; }
-
   virtual std::string name() const override {
     std::stringstream ss;
-    if (_x != -1 && _y != -1) {
-      ss << "SW"
-         << "_" << _x << "_" << _y;
+    ss << "SW_";
+    if (x_ != -1 && y_ != -1) {
+      ss << x_ << "_" << y_;
     } else {
-      ss << "SW" << _ID;
+      ss << id_;
     }
     return ss.str();
   }
   void dumpIdentifier(ostream& os) override {
-    os << "[" + to_string(_ID) + ",\"switch\"" + "]";
+    os << "[" + to_string(id_) + ",\"switch\"" + "]";
   }
   void dumpFeatures(ostream& os) override {
     os << "{\n";
@@ -334,9 +327,9 @@ class ssswitch : public ssnode {
        << "\"switch\""
        << ",\n";
     // data width
-    os << "\"data_width\" : " << data_width << ",\n";
+    os << "\"data_width\" : " << datawidth() << ",\n";
     // granularity
-    os << "\"granularity\" : " << granularity << ",\n";
+    os << "\"granularity\" : " << granularity_ << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -351,7 +344,7 @@ class ssswitch : public ssnode {
     os << "\"input_nodes\" : [";
     int idx_link = 0;
     for (auto in_link : in_links()) {
-      in_link->orig()->dumpIdentifier(os);
+      in_link->source()->dumpIdentifier(os);
       if (idx_link < num_input - 1) {
         idx_link++;
         os << ", ";
@@ -362,7 +355,7 @@ class ssswitch : public ssnode {
     os << "\"output_nodes\" : [";
     idx_link = 0;
     for (auto out_link : out_links()) {
-      out_link->dest()->dumpIdentifier(os);
+      out_link->sink()->dumpIdentifier(os);
       if (idx_link < num_output - 1) {
         idx_link++;
         os << ", ";
@@ -373,36 +366,22 @@ class ssswitch : public ssnode {
     os << "}\n";
   }
 
-  void set_prop(plain::Object& prop) {
-    set_ssnode_prop(prop);
-    // max output fifo depth
-    max_fifo_depth =
-        get_prop_attr(prop, "max_delay_fifo_depth", static_cast<int64_t>(max_fifo_depth));
-  }
-
   void collect_features() {
-    if (decomposer == 0) decomposer = mf_decomposer;
-    features[0] = _max_util > 1 ? 0.0 : 1.0;
-    features[1] = _max_util > 1 ? 1.0 : 0.0;
+    features[0] = max_util_ > 1 ? 0.0 : 1.0;
+    features[1] = max_util_ > 1 ? 1.0 : 0.0;
 
-    assert(features[0] || features[1]);
-    features[2] = _flow_control ? 0.0 : 1.0;
-    features[3] = _flow_control ? 1.0 : 0.0;
-    assert((features[2] || features[3]) &&
-           "Either Data(Static) or DataValidReady(Dynamic)");
-    features[4] = decomposer;
-    if (decomposer == 0 && (decomposer & (decomposer - 1))) {
-      std::cout << "Problem: Decomposer for node " << name() << " is: " << decomposer
-                << "\n";
-      assert(0 && "Decomposer need to be power of two");
-    }
-    features[5] = max_fifo_depth;
+    CHECK(features[0] || features[1]);
+    features[2] = flow_control_ ? 0.0 : 1.0;
+    features[3] = flow_control_ ? 1.0 : 0.0;
+    CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    features[4] = lanes();
+    features[5] = max_delay();
     features[6] = links[1].size();
     features[7] = links[0].size();
-    features[8] = _max_util;
+    features[8] = max_util_;
   }
 
-  virtual ~ssswitch(){};
+  virtual ~ssswitch() {}
 
   void print_features() {
     std::cout << "------ Features : >>>>>> ";
@@ -425,53 +404,8 @@ class ssswitch : public ssnode {
     std::cout << "\n";
   }
 
-  void route_io(int in_idx, int out_idx) { routing_lookup[out_idx] = in_idx; }
-
-  uint64_t get_config_bits() override {
-    uint64_t left_bits = 64;
-    // TODO: add shared config bits
-    uint64_t num_config_index_bit = log2ceil(_max_util);
-    // -- configure which configuration to write
-    if (_max_util > 1) {
-      // dedicated dont need to have this field
-      config_bits = config_bits << num_config_index_bit;
-      left_bits -= num_config_index_bit;
-      // config_bits += `config_index`;
-    }
-    // -- configure the current utility
-    if (_max_util > 1) {
-      // dedicated dont need to have this field
-      config_bits = config_bits << num_config_index_bit;
-      left_bits -= num_config_index_bit;
-      // config_bits += `curr_util`;
-    }
-    // -- config the ID
-    assert(num_node() > 0 && "number of node not parsed?");
-    uint64_t num_id_bit = log2ceil(num_node());
-    config_bits = config_bits << num_id_bit;
-    left_bits -= num_id_bit;
-    config_bits += id();
-    // -- config source select
-    uint64_t num_source_sel_bit = log2ceil(in_links().size() + 1);
-    // + 1 is because zero means connect to ground
-    for (uint output_idx = 0; output_idx < out_links().size(); output_idx++) {
-      config_bits = config_bits << num_source_sel_bit;
-      left_bits -= num_source_sel_bit;
-      if (routing_lookup.count(output_idx)) {
-        config_bits += routing_lookup[output_idx] + 1;
-      }
-    }
-    // -- config offset for decomposability //TODO
-    config_bits = config_bits << left_bits;
-
-    return config_bits;
-  }
-
  protected:
   double features[9];
-  int max_fifo_depth = 2;
-  std::map<int, int> routing_lookup;
-  uint64_t config_bits = 0;
   // Sihao: routing_lookup = {0->3, 1->4, 3->1}
   // means output0 receive input3
   //       output1 receive input4
@@ -483,6 +417,10 @@ class ssfu : public ssnode {
  public:
   ssfu() : ssnode() {}
 
+  ssfu(int datawidth, int granularity, int util, bool dynamic_timing, int fifo,
+       const Capability& fu_type)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
+
   ssnode* copy() override {
     auto res = new ssfu();
     *res = *this;
@@ -490,22 +428,9 @@ class ssfu : public ssnode {
   }
 
   void Accept(adg::Visitor* visitor);
-  void set_prop(plain::Object& prop) {
-    set_ssnode_prop(prop);
-
-    std::string nodeType = *prop["nodeType"]->As<std::string>();
-
-    // delay_fifo_depth
-    _delay_fifo_depth = get_prop_attr(prop, "max_delay_fifo_depth",
-                                      static_cast<int64_t>(_delay_fifo_depth));
-
-    // register_file_size
-    register_file_size = get_prop_attr(prop, "register_file_size",
-                                       static_cast<int64_t>(register_file_size));
-  }
 
   void dumpIdentifier(ostream& os) override {
-    os << "[" + to_string(_ID) + ",\"function unit\"" + "]";
+    os << "[" + to_string(id_) + ",\"function unit\"" + "]";
   }
 
   void dumpFeatures(ostream& os) override {
@@ -517,9 +442,9 @@ class ssfu : public ssnode {
        << "\"function unit\""
        << ",\n";
     // data width
-    os << "\"data_width\" : " << data_width << ",\n";
+    os << "\"data_width\" : " << datawidth() << ",\n";
     // granularity
-    os << "\"granularity\" : " << granularity << ",\n";
+    os << "\"granularity\" : " << granularity_ << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -531,7 +456,7 @@ class ssfu : public ssnode {
     // max util
     os << "\"max_util\" : " << max_util() << ",\n";
     // max delay fifo depth
-    os << "\"max_delay_fifo_depth\" : " << _delay_fifo_depth << ",\n";
+    os << "\"max_delay_fifo_depth\" : " << max_delay_ << ",\n";
     // number of register
     os << "\"num_register\" : " << register_file_size << ",\n";
     // Instructions
@@ -550,7 +475,7 @@ class ssfu : public ssnode {
     os << "\"input_nodes\" : [";
     int idx_link = 0;
     for (auto in_link : in_links()) {
-      in_link->orig()->dumpIdentifier(os);
+      in_link->source()->dumpIdentifier(os);
       if (idx_link < num_input - 1) {
         idx_link++;
         os << ", ";
@@ -561,7 +486,7 @@ class ssfu : public ssnode {
     os << "\"output_nodes\" : [";
     idx_link = 0;
     for (auto out_link : out_links()) {
-      out_link->dest()->dumpIdentifier(os);
+      out_link->sink()->dumpIdentifier(os);
       if (idx_link < num_output - 1) {
         idx_link++;
         os << ", ";
@@ -573,43 +498,35 @@ class ssfu : public ssnode {
 
   std::string name() const override {
     std::stringstream ss;
-    if (_x != -1 && _y != -1) {
-      ss << "FU" << _x << "_" << _y;
+    if (x_ != -1 && y_ != -1) {
+      ss << "FU" << x_ << "_" << y_;
     } else {
-      ss << "FU" << _ID;
+      ss << "FU" << id_;
     }
     return ss.str();
   }
 
   double* collect_features() {
-    if (decomposer == 0) decomposer = mf_decomposer;
+    features[0] = max_util_ > 1 ? 0.0 : 1.0;
+    features[1] = max_util_ > 1 ? 1.0 : 0.0;
 
-    features[0] = _max_util > 1 ? 0.0 : 1.0;
-    features[1] = _max_util > 1 ? 1.0 : 0.0;
-
-    assert(features[0] || features[1]);
-    features[2] = !_flow_control ? 1.0 : 0.0;
-    features[3] = _flow_control ? 1.0 : 0.0;
-    assert((features[2] || features[3]) &&
-           "Either Data(Static) or DataValidReady(Dynamic)");
-    features[6] = decomposer;
-    if (decomposer == 0 && (decomposer & (decomposer - 1))) {
-      std::cout << "Problem: Decomposer for node " << name() << " is: " << decomposer
-                << "\n";
-      assert(0 && "Decomposer need to be power of two");
-    }
-    features[7] = _delay_fifo_depth;
+    CHECK(features[0] || features[1]);
+    features[2] = !flow_control_ ? 1.0 : 0.0;
+    features[3] = flow_control_ ? 1.0 : 0.0;
+    CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    features[6] = lanes();
+    features[7] = max_delay_;
     features[8] = links[1].size();
     features[9] = links[0].size();
     features[10] = register_file_size;
-    features[11] = _max_util;
+    features[11] = max_util_;
 
     // print_features();
 
     return features;
   }
 
-  virtual ~ssfu(){};
+  virtual ~ssfu() {}
 
   void print_features() {
     std::cout << " ------ Features : >>>>>> ";
@@ -637,85 +554,11 @@ class ssfu : public ssnode {
 
   bool is_hanger() override { return in_links().size() <= 1 || out_links().size() < 1; }
 
-  void set_delay_fifo_depth(int d) { _delay_fifo_depth = d; }
-
-  virtual int delay_fifo_depth() override { return _delay_fifo_depth; }
-
-  void add_delay(int operand_idx, int delay_cycle) {
-    delay_map[operand_idx] = delay_cycle;
-  }
-  void add_operand_sel(int operand_idx, int input_port_idx) {
-    operand_sel[operand_idx] = input_port_idx;
-  }
-  void set_curr_opcode(int local_opcode) { curr_opcode = local_opcode; }
-
-  uint64_t get_config_bits() override {
-    uint64_t left_bits = 64;
-    // TODO: add shared config bits
-    uint64_t num_config_index_bit = log2ceil(_max_util);
-    // -- configure which configuration to write
-    if (_max_util > 1) {
-      // dedicated dont need to have this field
-      config_bits = config_bits << num_config_index_bit;
-      left_bits -= num_config_index_bit;
-      // config_bits += `config_index`;
-    }
-    // -- configure the current utility
-    if (_max_util > 1) {
-      // dedicated dont need to have this field
-      config_bits = config_bits << num_config_index_bit;
-      left_bits -= num_config_index_bit;
-      // config_bits += `curr_util`;
-    }
-    // -- config the ID
-    assert(num_node() > 0 && "number of node not parsed?");
-    uint64_t num_id_bit = log2ceil(num_node());
-    config_bits = config_bits << num_id_bit;
-    left_bits -= num_id_bit;
-    config_bits += id();
-    // -- config the operand source
-    uint64_t num_operand_sel_bit = log2ceil(in_links().size() + 1);
-    uint max_num_operand = fu_type_.get_max_num_operand();
-    // + 1 is because zero connect to ground
-    for (uint operand_idx = 0; operand_idx < max_num_operand; operand_idx++) {
-      config_bits = config_bits << num_operand_sel_bit;
-      left_bits -= num_operand_sel_bit;
-      if (operand_sel.count(operand_idx)) {
-        config_bits += operand_sel[operand_idx] + 1;
-      }
-    }
-    // -- config the delay cycle
-    uint64_t num_delay_sel_bit = log2ceil(_delay_fifo_depth + 1);
-    std::cout << "delay fifo depth = " << _delay_fifo_depth << std::endl;
-    // + 1 mean we allow zero cycle delay
-    for (uint operand_idx = 0; operand_idx < max_num_operand; operand_idx++) {
-      config_bits = config_bits << num_delay_sel_bit;
-      left_bits -= num_delay_sel_bit;
-      if (delay_map.count(operand_idx)) {
-        config_bits += delay_map[operand_idx];
-      }
-    }
-    // -- config opcode
-    uint64_t num_opcode_bit = log2ceil(static_cast<uint64_t>(fu_type_.capability.size()));
-    config_bits = config_bits << num_opcode_bit;
-    left_bits -= num_opcode_bit;
-    config_bits += curr_opcode;
-    // -- config offset for decomposability //TODO
-    // -- config output mode for power saving and shared mode
-    config_bits = config_bits << left_bits;
-    return config_bits;
-  }
-
   Capability fu_type_;
 
  protected:
   double features[12];
-  int _delay_fifo_depth = 8;
   int register_file_size = 4;
-  std::map<int, int> delay_map;
-  std::map<int, int> operand_sel;
-  int curr_opcode = -1;
-  uint64_t config_bits = 0;
 
  private:
   friend class SpatialFabric;
@@ -730,6 +573,11 @@ class ssvport : public ssnode {
     return res;
   }
 
+  ssvport() {}
+
+  ssvport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
   void Accept(adg::Visitor* vistor);
 
   std::vector<int>& port_vec() { return _port_vec; }
@@ -737,20 +585,17 @@ class ssvport : public ssnode {
   size_t size() { return _port_vec.size(); }
   std::string name() const override {
     std::stringstream ss;
-    if (links[0].size() > 0)
-      ss << "I";
-    else
-      ss << "O";
-    if (_port != -1) {
-      ss << "P" << _port;
+    ss << "OI"[links[0].size() > 0];
+    if (port_ != -1) {
+      ss << "P" << port_;
     } else {
-      ss << _ID;
+      ss << id_;
     }
     return ss.str();
   }
 
   void dumpIdentifier(ostream& os) override {
-    os << "[" + std::to_string(_ID) + ",\"vector port\"" + "]";
+    os << "[" + std::to_string(id_) + ",\"vector port\"" + "]";
   }
   void dumpFeatures(ostream& os) override {
     os << "{\n";
@@ -763,9 +608,9 @@ class ssvport : public ssnode {
        << "\"vector port\""
        << ",\n";
     // data width
-    os << "\"data_width\" : " << data_width << ",\n";
+    os << "\"data_width\" : " << datawidth() << ",\n";
     // granularity
-    os << "\"granularity\" : " << granularity << ",\n";
+    os << "\"granularity\" : " << granularity_ << ",\n";
     // number of input
     int num_input = in_links().size();
     os << "\"num_input\" : " << num_input << ",\n";
@@ -780,7 +625,7 @@ class ssvport : public ssnode {
     os << "\"input_nodes\" : [";
     int idx_link = 0;
     for (auto in_link : in_links()) {
-      in_link->orig()->dumpIdentifier(os);
+      in_link->source()->dumpIdentifier(os);
       if (idx_link < num_input - 1) {
         idx_link++;
         os << ", ";
@@ -791,7 +636,7 @@ class ssvport : public ssnode {
     os << "\"output_nodes\" : [";
     idx_link = 0;
     for (auto out_link : out_links()) {
-      out_link->dest()->dumpIdentifier(os);
+      out_link->sink()->dumpIdentifier(os);
       if (idx_link < num_output - 1) {
         idx_link++;
         os << ", ";
@@ -814,21 +659,22 @@ class ssvport : public ssnode {
 
   void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
   ssnode* convert_port2node(std::string portname) { return port2node[portname]; }
-  int port() { return _port; }
 
   virtual ~ssvport(){};
-  void set_port(int port) { _port = port; }
 
   bool is_hanger() override { return in_links().empty() && out_links().empty(); }
 
-  uint64_t get_config_bits() override { return 0; }
-
  private:
-  int _port = -1;
+  int port_ = -1;
   std::vector<int> _port_vec;
   std::string io_type;
   int channel_buffer;
   std::map<std::string, ssnode*> port2node;
+
+ public:
+  DEF_ATTR(port)
 };
 
 }  // namespace dsa
+
+#undef DEF_ATTR

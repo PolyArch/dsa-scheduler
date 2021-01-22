@@ -66,12 +66,12 @@ struct CtrlBits {
     if (s == "d") return Discard;
     if (s == "r") return Reset;
     if (s == "a") return Abstain;
-    assert(false && "Not a valid command");
+    CHECK(false) << "Not a valid command";
   }
 };
 
 /*! \brief IR node for the instructions in the DFG. */
-class Instruction : public SSDfgNode {
+class Instruction : public Node {
  public:
   static const int KindValue = V_INST;
 
@@ -102,7 +102,7 @@ class Instruction : public SSDfgNode {
 
   /*! \brief The name of this instruction. */
   // TODO(@were): Do we want to rename this to ToString?
-  virtual std::string name() override;
+  std::string name() override;
 
   /*! \brief The predication affected by an upstream operand. */
   CtrlBits predicate;
@@ -125,6 +125,50 @@ class Instruction : public SSDfgNode {
   std::vector<uint64_t> _reg;
 
   dsa::OpCode opcode{dsa::OpCode::SS_NONE};
+};
+
+/*!
+ * \brief IR node for the instructions occupies multiple compute resources.
+ */
+class Operation : public Node {
+ public:
+  static const int KindValue = V_INST;
+
+  /*! \brief The entrance function for the visitor pattern. */
+  void Accept(dsa::dfg::Visitor*) final;
+
+  /*! \brief The default constructor. */
+  Operation() {}
+
+  /*!
+   * \brief Construct a new Operation object.
+   * \param ssdfg The parent dfg.
+   * \param ops The compute resources required.
+   * \param cnt The number of each compute resource.
+   */
+  Operation(SSDfg* ssdfg, const std::vector<OpCode>& ops_, const std::vector<int>& cnt_)
+      : Node(ssdfg, V_INST), opcodes(ops_), cnt(cnt_) {}
+
+  /*! \brief The name of this instruction. */
+  // TODO(@were): Do we want to rename this to ToString?
+  std::string name() override;
+
+  // TODO(@were): Do we want any dynamic timing or predications?
+  // TODO(@were): Do we want any decomposability?
+
+  int bitwidth() override;
+
+  /*! \brief Since it is no longer a single instruction, we allow users to customize the
+   * latency. */
+  int latency{-1};
+
+  /*! \brief The compute resources required. */
+  std::vector<OpCode> opcodes;
+
+  /*! \brief The number of compute resources required. */
+  std::vector<int> cnt;
+
+  void forward() { CHECK(false) << "Operation node is for scheduling only!"; }
 };
 
 }  // namespace dfg

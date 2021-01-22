@@ -11,7 +11,7 @@ namespace pass {
 
 /* \brief Return the throughput of each group. */
 inline std::vector<int> GroupThroughput(SSDfg* dfg,
-                                        const std::vector<SSDfgNode*>& reversed_topo) {
+                                        const std::vector<Node*>& reversed_topo) {
   std::vector<int> throughput(dfg->nodes.size(), 1);
   std::vector<int> res(dfg->num_groups(), 1);
   for (auto& inst : dfg->instructions) {

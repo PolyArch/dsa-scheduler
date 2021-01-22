@@ -4,6 +4,8 @@
 #include <iostream>
 #include <sstream>
 
+#include "dsa/debug.h"
+
 namespace dsa {
 namespace dfg {
 
@@ -85,7 +87,7 @@ struct MetaPort {
       }
     } else if (key == "conc") {
       std::istringstream iss(val);
-      assert(iss >> conc);
+      CHECK(iss >> conc) << "Cannot read: " << val;
       success = true;
     } else if (key == "repeat" || key == "cmd") {
       std::istringstream iss(val);
@@ -93,10 +95,7 @@ struct MetaPort {
       iss >> ref;
       success = true;
     }
-    if (!success) {
-      std::cout << key << " " << val << std::endl;
-      assert(false);
-    }
+    CHECK(success) << key << " " << val;
   }
 
   void to_pragma(std::ostream& os) const {

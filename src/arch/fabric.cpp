@@ -1,7 +1,5 @@
-
 #include "dsa/arch/fabric.h"
 
-#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -13,30 +11,69 @@
 #include "dsa/arch/sub_model.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/debug.h"
-#include "json.lex.h"
-#include "json.tab.h"
 
 using namespace dsa;
 using namespace std;
 
 // ----------------------- sslink ---------------------------------------------
 
-bool sslink::flow_control() { return _dest->flow_control(); }
+bool sslink::flow_control() { return sink_->flow_control(); }
+int sslink::bitwidth() { return sink_->datawidth(); }
 
 std::string sslink::name() const {
   std::stringstream ss;
-  ss << _orig->name() << "_to_" << _dest->name();
+  ss << source_->name() << "_to_" << sink_->name();
   return ss.str();
+}
+
+int sslink::slots(int slot, int width) {
+  /* To check the connectivity in O(1), here we apply a tricky idea:
+   * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
+   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we
+   * want to go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1),
+   * which is O(w).
+   *
+   * Here we first transform the meaning of subnet[i][delta], which means
+   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity
+   * between `i' and `j', under width `w', where delta=j-i, the check becomes:
+   * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
+   *
+   * Then two tricks together enables O(1) check:
+   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access
+   * continuous.
+   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can
+   * check the one's in O(1) by bit operation.
+   * */
+  uint64_t res = 0;
+  int n = subnet.size();
+  auto f = [](int64_t a, int bits) {
+    int full_mask = ~0ull >> (64 - bits);
+    return (a & full_mask) == full_mask;
+  };
+  for (int i = 0; i < n; ++i) {
+    if (slot + width <= n) {
+      if (f(subnet[i] >> slot, width)) {
+        res |= 1 << (i + slot) % n;
+      }
+    } else {
+      int high = n - slot;
+      int low = width - high;
+      if (f(subnet[i] >> slot, high) && f(subnet[i], low)) {
+        res |= 1 << (i + slot) % n;
+      }
+    }
+  }
+  return res;
 }
 
 sslink::~sslink() {
   auto f = [this](std::vector<sslink*>& links) {
     auto iter = std::find(links.begin(), links.end(), this);
-    assert(iter != links.end() && "Cannot find this link!");
+    CHECK(iter != links.end()) << "Cannot find this link!";
     links.erase(iter);
   };
-  f(orig()->links[0]);
-  f(dest()->links[1]);
+  f(source()->links[0]);
+  f(sink()->links[1]);
 }
 
 // ---------------------- ssswitch --------------------------------------------
@@ -73,9 +110,8 @@ void SpatialFabric::parse_io(std::istream& istream) {
 
     int is_input = -1;
     if (ModelParsing::StartsWith(param, "VPORT")) {
-      assert(0 &&
-             "VPORT_IN/VPORT_OUT Depricated, switch to PORT_IN/PORT_OUT\n"
-             "delete \":0\" \":1\" from port descriptions");
+      CHECK(0) << "VPORT_IN/VPORT_OUT Depricated, switch to PORT_IN/PORT_OUT\n"
+               << "delete \":0\" \":1\" from port descriptions";
     }
     if (ModelParsing::StartsWith(param, "PORT_IN")) {
       parse_list_of_ints(ssv, int_vec);
@@ -91,11 +127,8 @@ void SpatialFabric::parse_io(std::istream& istream) {
       int avgx = 0;
       int avgy = 0;
       for (int i : int_vec) {
-        if (_io_map[is_input].count(i) == 0) {
-          cout << "Error: " << (is_input ? "Input" : "Output") << " port " << i
-               << " is not available!\n";
-          assert(0);
-        }
+        CHECK(_io_map[is_input].count(i)) << "Error: " << (is_input ? "Input" : "Output")
+                                          << " port " << i << " is not available!\n";
         ssnode* n = _io_map[is_input][i];
         if (is_input)
           nvp->add_link(n);
@@ -124,7 +157,8 @@ void SpatialFabric::parse_io(std::istream& istream) {
           }
         }
       }
-      nvp->setXY(avgx, avgy);
+      nvp->x(avgx);
+      nvp->y(avgy);
     }
   }
 }
@@ -181,8 +215,7 @@ SpatialFabric::SpatialFabric(std::istream& istream,
       } else if (ModelParsing::StartsWith(value, "three_in_two_out")) {
         portType = PortType::threetwo;
       } else {
-        cerr << "io_layout parameter: \"" << value << "\" not recognized\n";
-        assert(0);
+        CHECK(false) << "io_layout parameter: \"" << value << "\" not recognized";
       }
     } else if (ModelParsing::StartsWith(param, "bw_extra")) {
       istringstream(value) >> bwmfrac;
@@ -244,7 +277,7 @@ void SpatialFabric::PrintGraphviz(ostream& os) {
 
     // output links
     for (auto& elem : sw->out_links()) {
-      const ssnode* dest_node = elem->dest();  // FUs and output nodes
+      const ssnode* dest_node = elem->sink();  // FUs and output nodes
       os << sw->name() << " -> " << dest_node->name() << ";\n";
     }
   }
@@ -252,7 +285,7 @@ void SpatialFabric::PrintGraphviz(ostream& os) {
   // fus
   for (auto* fu : fu_list()) {
     for (auto& elem : fu->out_links()) {
-      const ssnode* dest_node = elem->dest();  // Output link of each FU
+      const ssnode* dest_node = elem->sink();  // Output link of each FU
       os << fu->name() << " -> " << dest_node->name() << ";\n";
     }
   }
@@ -285,7 +318,8 @@ void SpatialFabric::build_substrate(int sizex, int sizey) {
   for (int x = 0; x < sizex; x++) {
     for (int y = 0; y < _sizey; ++y) {
       auto fu = add_fu();
-      fu->setXY(x, y);
+      fu->x(x);
+      fu->y(y);
     }
   }
 
@@ -391,8 +425,6 @@ void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType,
       // cout << "bonus inputs: ";
       for (int sw = 0; sw < _sizex; sw++) {
         for (int p = 0; p < ips; p++) {
-          // cout << in_index << " ";
-          // assert((unsigned)in_index < _inputs.size());
           add_input(in_index++, sws[(sw + 1) * (_sizey + 1) + _sizey]);
         }
       }
@@ -444,7 +476,7 @@ void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType,
 
   for (int i = temp_x; i < temp_x + temp_width; i++) {
     for (int j = temp_y; j < temp_y + temp_height; j++) {
-      fus[i * _sizey + j]->set_max_util(64);
+      fus[i * _sizey + j]->max_util(64);
 
       const int di[] = {-1, 1, 0, 0};
       const int dj[] = {0, 0, 1, -1};
@@ -455,7 +487,7 @@ void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType,
         if (temp_x <= x && x < temp_x + temp_width && temp_y <= y &&
             y < temp_y + temp_height) {
           sslink* link = fus[i * _sizey + j]->add_link(fus[x * _sizey + y]);
-          link->set_max_util(1 << 7);
+          link->max_util(1 << 7);
         }
       }
     }
@@ -484,7 +516,7 @@ void SpatialFabric::post_process() {
       for (auto& elem : node->out_links()) {
         int x = links.size();
         links.push_back(elem);
-        links.back()->set_id(x);
+        links.back()->id(x);
       }
     }
   };
@@ -493,118 +525,4 @@ void SpatialFabric::post_process() {
   Apply(&aggreator);
 
   _ssio_interf.fill_vec();
-}
-
-int ssnode::num_node() { return parent->node_list().size(); }
-
-std::map<std::string, std::function<void(json::BaseNode*)>> functor;
-
-struct JSONModel : json::BaseVisitor {
-  std::map<int, ssnode*> sym_tab;
-  dsa::SpatialFabric* _subModel;
-  JSONModel(dsa::SpatialFabric* subModel_) : _subModel(subModel_) {}
-
-  void nodesVisit(json::BaseNode* jsonNodes) {
-    // Vector Port Parameter
-    int num_ivp = 0;
-    int num_ovp = 0;  // Count the number of vector port
-    int num_inputs = 0;
-    int num_outputs = 0;  // Calculate the num of Input and Output in the fabric
-
-    // Go over all nodes
-    for (auto& jsonNode : *jsonNodes->As<plain::Array>()) {
-      plain::Object cgranode = *jsonNode->As<plain::Object>();
-      // Type and ID
-      std::string nodeType = *cgranode["nodeType"]->As<std::string>();
-      int id = *cgranode["id"]->As<int64_t>();
-      // Initialize Different Module
-      if (nodeType == "switch") {
-        ssswitch* sw = _subModel->add_switch();
-        sw->set_id(id);
-        sw->set_prop(cgranode);
-        sym_tab[id] = sw;
-      } else if (nodeType == "processing element" || nodeType == "function unit") {
-        // Set Possible x,y for visualization
-        ssfu* fu = _subModel->add_fu();
-        fu->set_id(id);
-        fu->set_prop(cgranode);
-
-        sym_tab[id] = fu;
-        plain::Array insts = *cgranode["instructions"]->As<plain::Array>();
-
-        stringstream fudef_name;
-        fudef_name << "function unit_" << id;
-        auto fu_type = new Capability(fudef_name.str());
-
-        int enc = 2;  // the initial encoding for opcode is 0 (usual for PASS)
-        for (auto& inst : insts) {
-          std::string inst_name = *inst->As<std::string>();
-          OpCode ss_inst = dsa::inst_from_string(inst_name.c_str());
-          fu_type->Add(ss_inst, enc++);
-        }
-        fu->fu_type_ = *fu_type;
-      } else if (nodeType == "vector port") {
-        bool is_input = false;
-        int in_vec_width = *cgranode["num_input"]->As<int64_t>();
-        int out_vec_width = *cgranode["num_output"]->As<int64_t>();
-        int port_num = -1;
-
-        // whether is a input/output vector port
-        if (in_vec_width > 0) {
-          is_input = false;
-          port_num = num_ovp++;
-          num_outputs += in_vec_width;
-        } else if (out_vec_width > 0) {
-          is_input = true;
-          port_num = num_ivp++;
-          num_inputs += out_vec_width;
-        } else {
-          continue;
-        }
-        ssvport* vp = _subModel->add_vport(is_input, port_num);
-        vp->set_ssnode_prop(cgranode);
-        sym_tab[id] = vp;
-        vp->set_id(id);
-      } else {
-        CHECK(false) << id << "has unknown type" << nodeType << "\n";
-      }
-    }
-    assert(num_outputs > 0);
-    assert(num_inputs > 0);
-  }
-
-  void linksVisit(json::BaseNode* jsonNodes) {
-    // Go over all links
-    for (auto& jsonNode : *jsonNodes->As<plain::Array>()) {
-      plain::Object cgralink = *jsonNode->As<plain::Object>();
-      auto source = *cgralink["source"]->As<plain::Array>();
-      auto sink = *cgralink["sink"]->As<plain::Array>();
-      int source_id = *source[0]->As<int64_t>();
-      int sink_id = *sink[0]->As<int64_t>();
-
-      ssnode* from_module = sym_tab[source_id];
-      ssnode* to_module = sym_tab[sink_id];
-      assert(from_module && to_module);
-      // connect
-      from_module->add_link(to_module);
-    }
-  }
-
-  void Visit(json::Object* cgraNodes) override {
-    auto cgra = *cgraNodes->As<plain::Object>();
-    nodesVisit(cgra["nodes"]);
-    linksVisit(cgra["links"]);
-    _subModel->post_process();
-  }
-};
-
-void SpatialFabric::parse_json(const std::string filename) {
-  FILE* fjson = fopen(filename.c_str(), "r");
-  struct params p;
-  JSONrestart(fjson);
-  JSONparse(&p);
-  JSONModel modeler(this);
-  p.data->Accept(&modeler);
-  fclose(fjson);
-  delete p.data;
 }

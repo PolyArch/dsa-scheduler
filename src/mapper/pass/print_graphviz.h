@@ -10,7 +10,7 @@ namespace pass {
 struct GPNode : dfg::Visitor {
   GPNode(Schedule* sched_, std::ostream& os_) : sched(sched_), os(os_) {}
   ~GPNode() {}
-  void Visit(SSDfgNode* node) override {
+  void Visit(dfg::Node* node) override {
     std::string ncolor = "black";
     os << "N" << node->id() << " [ label = \"" << node->name();
     if (node->is_temporal()) {
@@ -42,7 +42,7 @@ struct GPNode : dfg::Visitor {
         auto e = &node->ssdfg()->edges[eid];
         ncolor = "black";
 
-        SSDfgNode* n = e->use();
+        auto* n = e->use();
         os << "N" << node->id() << " -> N" << n->id() << "[ color=";
         os << ncolor;
         os << " label = \"";

@@ -141,23 +141,14 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
     succeed_sched = schedule_timed(dfg, sched);
 
     int lat = 0, latmis = 0;
-    if (succeed_sched) {
-      sched->cheapCalcLatency(lat, latmis);
-
-      // ofstream ctxs(viz_dir + dfg_base + ".config", ios::out);
-      // sched->printConfigText(ctxs); // text form of config fed to gui
-    }
 
     if (verbose) {
-      sched->cheapCalcLatency(lat, latmis);
       int ovr = 0, agg_ovr = 0, max_util = 0;
       sched->get_overprov(ovr, agg_ovr, max_util);
       int violation = sched->violation();
 
-      // sched->checkOutputMatch(latmis);
       if (succeed_sched) {
         // Also check final latency
-
         cout << "latency: " << lat << "\n";
         cout << "lat-mismatch-max: " << latmis << "\n";
         cout << "lat-mismatch-sum: " << violation << "\n";

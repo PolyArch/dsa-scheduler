@@ -18,7 +18,7 @@ const char* MetaPort::OperationText[] = {
 
 CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
     : MetaPort(meta), parent(parent) {
-  assert(parent);
+  CHECK(parent);
   if (dest == Data::LocalPort && !dest_port.empty()) {
     bool found = false;
     for (auto iv : parent->ssdfg()->type_filter<dsa::dfg::InputPort>()) {
@@ -35,7 +35,7 @@ CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
 
 VectorPort::VectorPort(V_TYPE v, int len, int bitwidth, const std::string& name,
                        SSDfg* ssdfg, const MetaPort& meta_)
-    : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
+    : Node(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
   _port_width = _bitwidth;
 }
 
@@ -62,7 +62,7 @@ void InputPort::forward() {
     if (!elem.forward(true)) return;
   }
   for (auto& elem : values) {
-    assert(elem.forward(false));
+    CHECK(elem.forward(false));
   }
 }
 

@@ -62,25 +62,25 @@ class CodesignInstance {
     for_each_sched([&](Schedule& sched) {
       sched.validate();
 
-      assert(&_ssModel == sched.ssModel());
-      assert(_ssModel.subModel()->node_list().size() >= sched.node_prop().size());
-      assert(_ssModel.subModel()->link_list().size() >= sched.link_prop().size());
+      CHECK(&_ssModel == sched.ssModel());
+      CHECK(_ssModel.subModel()->node_list().size() >= sched.node_prop().size());
+      CHECK(_ssModel.subModel()->link_list().size() >= sched.link_prop().size());
 
       for (auto& ep : sched.edge_prop()) {
         for (auto& p : ep.links) {
-          assert(p.second->id() < (int)_ssModel.subModel()->link_list().size());
-          assert(p.second->id() < (int)sched.link_prop().size());
-          assert(_ssModel.subModel()->link_list()[p.second->id()] == p.second);
+          CHECK(p.second->id() < (int)_ssModel.subModel()->link_list().size());
+          CHECK(p.second->id() < (int)sched.link_prop().size());
+          CHECK(_ssModel.subModel()->link_list()[p.second->id()] == p.second);
         }
       }
     });
     for (auto& node : _ssModel.subModel()->node_list()) {
       if (auto fu = dynamic_cast<ssfu*>(node)) {
-        assert(!fu->fu_type_.capability.empty());
+        CHECK(!fu->fu_type_.capability.empty());
       }
     }
     for (unsigned i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
-      assert(_ssModel.subModel()->link_list()[i]->id() == (int)i);
+      CHECK(_ssModel.subModel()->link_list()[i]->id() == (int)i);
     }
   }
 
@@ -342,7 +342,7 @@ class CodesignInstance {
         ssnode* node = sub->node_list()[node_index];
         if (dynamic_cast<ssvport*>(node)) continue;
 
-        node->set_flow_control(!node->flow_control());
+        node->flow_control(!node->flow_control());
         if (!node->flow_control()) {
           for_each_sched([&](Schedule& sched) {
             for (int slot = 0; slot < sched.num_slots(node); ++slot) {
@@ -371,10 +371,10 @@ class CodesignInstance {
         if (diff < -4) new_util = 1;
 
         if (old_util == 1 && new_util > 1) {
-          fu->set_flow_control(true);
+          fu->flow_control(true);
         }
 
-        fu->set_max_util(new_util);
+        fu->max_util(new_util);
 
         // if we are constraining the problem, then lets re-assign anything
         // mapped to this FU
@@ -395,7 +395,7 @@ class CodesignInstance {
         int fu_index = rand() % sub->fu_list().size();
         ssfu* fu = sub->fu_list()[fu_index];
         int new_delay_fifo_depth = std::max(1, fu->delay_fifo_depth() + diff);
-        fu->set_delay_fifo_depth(new_delay_fifo_depth);
+        fu->max_delay(new_delay_fifo_depth);
 
         // if we are constraining the problem, then lets re-assign anything
         // mapped to this FU
@@ -445,10 +445,10 @@ class CodesignInstance {
         auto fu = sub->node_list()[index];
         static const int candidates[] = {1, 2, 4, 8};
         int new_one = candidates[rand() % 4];
-        while (new_one == fu->decomposer) {
+        while (new_one == fu->granularity()) {
           new_one = candidates[rand() % 4];
         }
-        if (new_one < fu->decomposer) {
+        if (new_one > fu->granularity()) {
           for_each_sched([&](Schedule& sched) {
             for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
               for (auto& p : sched.dfg_nodes_of(slot, fu)) {
@@ -457,11 +457,7 @@ class CodesignInstance {
             }
           });
         }
-        std::cout << "decomposer changed from " << fu->decomposer << " to " << new_one
-                  << std::endl;
-        fu->decomposer = new_one;
-        assert(fu->decomposer);
-        fu->granularity = fu->mf_decomposer = fu->bitwidth() / fu->decomposer;
+        fu->granularity(new_one);
       }
     }
   }
@@ -515,8 +511,8 @@ class CodesignInstance {
           // TODO: consider just deleteting the edge, and having the scheduler
           // try to repair the edge schedule -- this might save some time
           // sched.unassign_edge(p.first);
-          sched.unassign_dfgnode(p.first->def());
-          sched.unassign_dfgnode(p.first->use());
+          sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].def());
+          sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].use());
         }
       }
     });
@@ -682,9 +678,9 @@ class CodesignInstance {
       for (size_t j = 0; j < res[i]->link_prop().size(); ++j) {
         for (int k = 0; k < 8; ++k) {
           if (!res[i]->link_prop()[j].slots[k].edges.empty()) {
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->orig()->id()] =
+            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->source()->id()] =
                 false;
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->dest()->id()] =
+            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->sink()->id()] =
                 false;
             unused_links[j] = false;
           }

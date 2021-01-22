@@ -19,40 +19,20 @@ using namespace dsa;
 
 /// { SSDfgNode
 
-uint64_t SSDfgNode::invalid() { return _invalid; }
-
-bool SSDfgNode::is_temporal() { return _ssdfg->group_prop(_group_id).is_temporal; }
-
-SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name)
-    : _ssdfg(ssdfg), _name(name), _vtype(v) {
-  _ID = ssdfg->instructions.size() + ssdfg->vins.size() + ssdfg->vouts.size();
-  _group_id = _ssdfg->num_groups() - 1;
-}
-
-dsa::dfg::Edge* SSDfgNode::getLinkTowards(SSDfgNode* to) {
-  auto pred = [this, to](int eid) -> bool { return ssdfg()->edges[eid].use() == to; };
-  for (auto& value : values) {
-    auto& uses = value.uses;
-    auto res = std::find_if(uses.begin(), uses.end(), pred);
-    if (res != uses.end()) return &ssdfg()->edges[*res];
-  }
-  return nullptr;
-}
-
 /// }
 
 /// { SSDfg
 
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
-    bool HasUse(SSDfgNode* node) {
+    bool HasUse(dsa::dfg::Node* node) {
       bool ok = false;
       for (auto& elem : node->values) {
         ok |= !elem.uses.empty();
       }
       return ok;
     }
-    bool HasOperands(SSDfgNode* node) {
+    bool HasOperands(dsa::dfg::Node* node) {
       bool ok = false;
       for (auto& elem : node->ops()) {
         ok |= !elem.edges.empty();
@@ -75,7 +55,7 @@ void SSDfg::check_for_errors() {
 }
 
 void SSDfg::normalize() {
-  nodes.resize(instructions.size() + vins.size() + vouts.size());
+  nodes.resize(instructions.size() + vins.size() + vouts.size() + operations.size());
 #define NORMALIZE_IMPL(a)       \
   do {                          \
     for (auto& elem : a) {      \
@@ -83,6 +63,7 @@ void SSDfg::normalize() {
     }                           \
   } while (false)
   NORMALIZE_IMPL(instructions);
+  NORMALIZE_IMPL(operations);
   NORMALIZE_IMPL(vins);
   NORMALIZE_IMPL(vouts);
 #undef NORMALIZE_IMPL
@@ -95,8 +76,8 @@ void SSDfg::set_pragma(const std::string& c, const std::string& s) {
     cout << "No pragmas yet for dfg\n";
   } else if (c == string("group")) {
     if (s == "temporal") {
-      assert(!_groupProps.empty());
-      _groupProps[_groupProps.size() - 1].is_temporal = true;
+      CHECK(!_groupProps.empty());
+      _groupProps.back().is_temporal = true;
     }
   } else if (c == "frequency" || c == "unroll") {
     std::istringstream iss(s);
@@ -150,7 +131,7 @@ int SSDfg::forward(bool asap) {
       }
     }
   }
-  for (auto elem : type_filter<SSDfgNode*>()) {
+  for (auto elem : nodes) {
     if (auto vec = dynamic_cast<dsa::dfg::VectorPort*>(elem)) {
       if (asap || group_ready[elem->group_id()]) {
         elem->forward();
@@ -166,6 +147,7 @@ int SSDfg::forward(bool asap) {
 SSDfg::SSDfg(const SSDfg& dfg)
     : filename(dfg.filename),
       instructions(dfg.instructions),
+      operations(dfg.operations),
       vins(dfg.vins),
       vouts(dfg.vouts),
       edges(dfg.edges),

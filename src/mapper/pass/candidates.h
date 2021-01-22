@@ -1,4 +1,6 @@
 #pragma once
+#include "dsa/arch/fu_model.h"
+#include "dsa/debug.h"
 #include "dsa/mapper/schedule.h"
 
 namespace dsa {
@@ -16,8 +18,13 @@ struct CandidateSpotVisitor : dfg::Visitor {
     for (size_t i = 0; i < fus.size(); ++i) {
       ssfu* cand_fu = fus[i];
 
-      if (!cand_fu->fu_type_.Capable(inst->inst()) ||
-          (cand_fu->out_links().size() < inst->values.size())) {
+      if (!cand_fu->fu_type_.Capable(inst->inst())) {
+        LOG(CAND) << "Not capable!";
+        continue;
+      }
+      if (cand_fu->out_links().size() < inst->values.size()) {
+        LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
+                  << cand_fu->out_links().size() << " < " << inst->values.size();
         continue;
       }
 
@@ -69,6 +76,59 @@ struct CandidateSpotVisitor : dfg::Visitor {
     cnt[inst->id()] = n;
     candidates[inst->id()] =
         std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
+  }
+
+  void Visit(dfg::Operation* op) {
+    auto fabric = sched->ssModel()->subModel();
+    for (int i = 0, n = fabric->fu_list().size(); i < n; ++i) {
+      auto* fu = fabric->fu_list()[i];
+      auto& capability = fu->fu_type_.capability;
+      std::vector<int> cnt(fu->fu_type_.capability.size(), 0);
+      for (int j = 0, m = capability.size(); j < m; ++j) {
+        cnt[j] = capability[j].count;
+      }
+      // TODO(@were): For now, I assume that decomposability cannot happen on Operation
+      // mapping.
+      //              We actually need better data structure representation on
+      //              decomposability, but I do not have a clear plan in my brain.
+      // TODO(@were): For now, I assume all the instruction on this node should be
+      // spatially shared.
+      //              We later need a attribute on the adg node to indicate the sharing
+      //              strategy.
+      // TODO(@were): For the purpose of performance, we move this cnt to a schedule
+      // redundant data structure.
+      for (auto elem : sched->dfg_nodes_of(0, fabric->fu_list()[i])) {
+        if (auto tmp = dynamic_cast<dfg::Operation*>(elem.first)) {
+          for (int j = 0, m = tmp->opcodes.size(); j < m; ++j) {
+            auto opcode = tmp->opcodes[j];
+            auto iter = std::find_if(
+                capability.begin(), capability.end(),
+                [opcode](const Capability::Entry& entry) { return entry.op == opcode; });
+            CHECK(iter != capability.end());
+            cnt[iter - capability.begin()] -= tmp->cnt[j];
+          }
+        }
+      }
+      bool ok = true;
+      for (int j = 0, m = op->opcodes.size(); j < m; ++j) {
+        auto opcode = op->opcodes[j];
+        auto iter = std::find_if(
+            capability.begin(), capability.end(),
+            [opcode](const Capability::Entry& entry) { return entry.op == opcode; });
+        if (iter == capability.end()) {
+          ok = false;
+          break;
+        }
+        if (cnt[iter - capability.begin()] < op->cnt[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        candidates[op->id()].emplace_back(0, static_cast<ssnode*>(fu));
+        ++this->cnt[op->id()];
+      }
+    }
   }
 
   void Visit(dfg::InputPort* input) override {

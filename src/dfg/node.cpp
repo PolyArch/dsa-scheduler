@@ -3,7 +3,10 @@
 #include "dsa/debug.h"
 #include "dsa/dfg/ssdfg.h"
 
-int SSDfgNode::num_inc_edges() {
+namespace dsa {
+namespace dfg {
+
+int Node::num_inc_edges() {
   int res = 0;
   for (auto& op : ops()) {
     res += op.edges.size();
@@ -11,14 +14,31 @@ int SSDfgNode::num_inc_edges() {
   return res;
 }
 
-int SSDfgNode::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
+int Node::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
   int slot = node_slot + edge->l / 8;
-  assert(slot < 8);
+  CHECK(slot < 8);
   return slot;
 }
 
-namespace dsa {
-namespace dfg {
+uint64_t Node::invalid() { return _invalid; }
+
+bool Node::is_temporal() { return _ssdfg->group_prop(_group_id).is_temporal; }
+
+Node::Node(SSDfg* ssdfg, V_TYPE v, const std::string& name)
+    : _ssdfg(ssdfg), _name(name), _vtype(v) {
+  _ID = ssdfg->nodes.size();
+  _group_id = _ssdfg->num_groups() - 1;
+}
+
+dsa::dfg::Edge* Node::getLinkTowards(Node* to) {
+  auto pred = [this, to](int eid) -> bool { return ssdfg()->edges[eid].use() == to; };
+  for (auto& value : values) {
+    auto& uses = value.uses;
+    auto res = std::find_if(uses.begin(), uses.end(), pred);
+    if (res != uses.end()) return &ssdfg()->edges[*res];
+  }
+  return nullptr;
+}
 
 Operand::Operand(SSDfg* parent, const std::vector<int>& es, OperandType type_)
     : parent(parent), edges(es), type(type_), fifos(es.size()) {
@@ -35,7 +55,7 @@ bool Operand::is_imm() { return edges.empty(); }
 bool Operand::valid() {
   for (auto eid : edges) {
     auto* e = &parent->edges[eid];
-    SSDfgNode* n = e->def();
+    auto* n = e->def();
     if (n->invalid()) return false;
   }
   return true;
@@ -61,7 +81,7 @@ bool Operand::ready() {
 }
 
 uint64_t Operand::poll() {
-  assert(ready());
+  CHECK(ready());
   uint64_t res = 0;
   for (int i = fifos.size() - 1; i >= 0; --i) {
     auto* e = &parent->edges[edges[i]];
@@ -94,13 +114,13 @@ Edge::Edge(SSDfg* parent, int sid, int vid, int uid, int l, int r)
   id = parent->edges.size();
 }
 
-SSDfgNode* Edge::def() const { return parent->nodes[sid]; }
+Node* Edge::def() const { return parent->nodes[sid]; }
 
 Value* Edge::val() const { return &parent->nodes[sid]->values[vid]; }
 
-SSDfgNode* Edge::use() const { return parent->nodes[uid]; }
+Node* Edge::use() const { return parent->nodes[uid]; }
 
-SSDfgNode* Edge::get(int x) const {
+Node* Edge::get(int x) const {
   if (x == 0) return def();
   if (x == 1) return use();
   CHECK(false);
@@ -113,7 +133,7 @@ std::string Edge::name() const {
   return ss.str();
 }
 
-SSDfgNode* Value::node() const { return parent->nodes[nid]; }
+dsa::dfg::Node* Value::node() const { return parent->nodes[nid]; }
 
 void Value::push(uint64_t val, bool valid, int delay) {
   // TODO: Support FIFO length backpressure.

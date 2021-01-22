@@ -20,7 +20,7 @@ struct CandidateRoute {
     edges[edge].links = sched->links_of(edge);
     edges[edge].thrus = sched->thrus_of(edge);
   }
-  void fill_from(SSDfgNode* node, Schedule* sched) {
+  void fill_from(dsa::dfg::Node* node, Schedule* sched) {
     for (auto& op : node->ops()) {
       for (int eid : op.edges) {
         dsa::dfg::Edge* e = &node->ssdfg()->edges[eid];
@@ -84,7 +84,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   template <typename T>
   bool scheduleHere(Schedule* sched, const std::vector<T>& nodes,
                     const std::vector<std::pair<int, dsa::ssnode*>>& cand) {
-    assert(cand.size() == nodes.size());
+    CHECK(cand.size() == nodes.size());
     for (int i = 0; i < (int)nodes.size(); ++i) {
       if (!scheduleHere(sched, nodes[i], cand[i])) {
         for (int j = 0; j < i; ++j) {
@@ -96,7 +96,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
     return true;
   }
 
-  bool scheduleHere(Schedule*, SSDfgNode*, std::pair<int, dsa::ssnode*>);
+  bool scheduleHere(Schedule*, dsa::dfg::Node*, std::pair<int, dsa::ssnode*>);
 
   int route(Schedule* sched, dsa::dfg::Edge* dfgnode, std::pair<int, dsa::ssnode*> source,
             std::pair<int, dsa::ssnode*> dest,
@@ -106,15 +106,13 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   int routing_cost(dsa::dfg::Edge*, int, int, sslink*, Schedule*,
                    const std::pair<int, ssnode*>&);
 
-  bool timingIsStillGood(Schedule* sched);
-
   // 0: Lack of candidates
   // -1: Cannot route
   // 1: Success
   int map_to_completion(SSDfg* ssDFG, Schedule* sched);
 
   inline int try_candidates(const std::vector<std::pair<int, ssnode*>>& candidates,
-                            Schedule*, SSDfgNode* node);
+                            Schedule*, dsa::dfg::Node* node);
 
   void unmap_some(SSDfg* ssDFG, Schedule* sched);
 

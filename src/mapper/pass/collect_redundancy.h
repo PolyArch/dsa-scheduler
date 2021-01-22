@@ -17,7 +17,7 @@ CollectRedundancy(SSDfg* dfg) {
     RedundancyCollector(SSDfg* dfg)
         : operands(dfg->nodes.size()), users(dfg->nodes.size()), dfg(dfg) {}
 
-    void Visit(SSDfgNode* node) {
+    void Visit(Node* node) {
       for (auto& op : node->ops()) {
         for (auto eid : op.edges) {
           auto* edge = &dfg->edges[eid];

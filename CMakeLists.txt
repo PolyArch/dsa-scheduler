@@ -2,7 +2,12 @@ cmake_minimum_required(VERSION 3.12)
 
 project(SpatialScheduler)
 
-# Use config.cmake file
+execute_process(
+  COMMAND git rev-parse --show-toplevel
+  OUTPUT_VARIABLE REPO_PREFIX)
+
+string(REGEX REPLACE "\n$" "" REPO_PREFIX "${REPO_PREFIX}")
+
 if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
   include(${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
   message(STATUS "Using ${CMAKE_CURRENT_BINARY_DIR}/config.cmake")
@@ -26,6 +31,8 @@ endif()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()
+
+add_definitions(-DREPO_PREFIX="${REPO_PREFIX}")
 
 # set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_options(-fno-strict-aliasing)

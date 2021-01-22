@@ -7,12 +7,17 @@
 #include <string>
 #include <utility>
 
+#ifndef REPO_PREFIX
+#define REPO_PREFIX ""
+#endif
+
 class LOGGER {
   bool abort;
 
  public:
   LOGGER(std::string reason, std::string file, int lineno, bool abort) : abort(abort) {
-    std::cerr << reason << " " << file << ":" << lineno << ": ";
+    std::cerr << reason << " " << file.substr(std::string(REPO_PREFIX).size() + 1) << ":"
+              << lineno << ": ";
   }
 
   ~LOGGER() noexcept(false) {
@@ -34,9 +39,11 @@ class LOGGER {
 #define CHECK(COND) \
   if (!(COND)) LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
 
+#define WARNING LOGGER("[WARNING]", __FILE__, __LINE__, false)
+
 #ifdef DEBUG_MODE
 #define LOG(S) \
-  if (getenv(#S)) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
+  if (getenv(#S)) LOGGER("[" #S "]", __FILE__, __LINE__, false)
 #else
 #define LOG(S) \
   if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)

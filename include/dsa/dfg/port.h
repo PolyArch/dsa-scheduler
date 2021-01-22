@@ -16,7 +16,7 @@ struct CompileMeta : MetaPort {
   CompileMeta(){};
 };
 
-class VectorPort : public SSDfgNode {
+class VectorPort : public Node {
  public:
   friend class SSDfg;
 

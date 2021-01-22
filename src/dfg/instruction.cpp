@@ -12,13 +12,13 @@ void CtrlBits::set(uint64_t val, Control b) {
   }
 
   int loc = val * Total + b;
-  assert(loc >= 0 && loc < 64);
+  CHECK(loc >= 0 && loc < 64);
   mask |= (1 << loc);
 }
 
 bool CtrlBits::test(uint64_t val, Control b) {
   int loc = val * Total + b;
-  assert(loc >= 0 && loc < 64);
+  CHECK(loc >= 0 && loc < 64);
   return (mask >> loc) & 1;
 }
 
@@ -38,7 +38,7 @@ CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw) {
 }
 
 Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
-    : SSDfgNode(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
+    : Node(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
   CHECK(values.empty());
   int n = dsa::num_values(opcode);
   for (int i = 0; i < n; ++i) {
@@ -164,15 +164,13 @@ void Instruction::forward() {
       values[i].push(_output_vals[i], !_invalid, lat_of_inst());
     }
   }
-  // std::cerr << _ssdfg->cur_cycle() << ": " << name() << " (" << loc.first << ", " <<
-  // loc.second << ") issued!" << std::endl;
 
   for (auto& elem : values) {
     if (!elem.forward(true)) return;
   }
 
   for (auto& elem : values) {
-    assert(elem.forward(false));
+    CHECK(elem.forward(false));
   }
 }
 
@@ -209,6 +207,25 @@ uint64_t Instruction::do_compute(bool& discard) {
 
   CHECK(false) << "Weird bitwidth: " << bitwidth() << "\n";
   throw;
+}
+
+std::string Operation::name() {
+  std::ostringstream oss;
+  oss << "Operation<";
+  for (int i = 0, n = opcodes.size(); i < n; ++i) {
+    if (i) oss << ", ";
+    oss << name_of_inst(opcodes[i]) << ":" << cnt[i];
+  }
+  oss << "> " << id();
+  return oss.str();
+}
+
+int Operation::bitwidth() {
+  int res = 0;
+  for (int i = 0, n = opcodes.size(); i < n; ++i) {
+    res = std::max(res, dsa::bitwidth[opcodes[i]]);
+  }
+  return res;
 }
 
 }  // namespace dfg

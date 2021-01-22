@@ -17,7 +17,7 @@ struct Exporter : Visitor {
   plain::Object current;
   plain::Array nodes;
 
-  void Visit(SSDfgNode* node) override {
+  void Visit(Node* node) override {
     current["id"] = new json::Int(node->id());
     current["temporal"] = new json::Int(node->is_temporal());
     current["group"] = new json::Int(node->group_id());
@@ -56,17 +56,17 @@ struct Exporter : Visitor {
     current["inst"] = new json::String(name_of_inst(inst->inst()));
     current["ctrl"] = new json::Int(inst->predicate.bits());
     current["self"] = new json::Int(inst->self_predicate.bits());
-    Visit(static_cast<SSDfgNode*>(inst));
+    Visit(static_cast<Node*>(inst));
   }
   void Visit(InputPort* in) override {
     current["width"] = new json::Int(in->get_port_width());
     current["length"] = new json::Int(in->get_vp_len());
-    Visit(static_cast<SSDfgNode*>(in));
+    Visit(static_cast<Node*>(in));
   }
   void Visit(OutputPort* out) override {
     current["width"] = new json::Int(out->get_port_width());
     current["length"] = new json::Int(out->get_vp_len());
-    Visit(static_cast<SSDfgNode*>(out));
+    Visit(static_cast<Node*>(out));
   }
 };
 
@@ -178,7 +178,7 @@ SSDfg* Import(const std::string& s) {
   delete p.data;
 
   struct FIFOAllocator : Visitor {
-    void Visit(SSDfgNode* node) {
+    void Visit(Node* node) {
       for (auto& op : node->ops()) {
         op.fifos.resize(op.edges.size());
       }

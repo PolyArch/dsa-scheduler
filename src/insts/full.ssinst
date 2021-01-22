@@ -403,3 +403,8 @@ ZeroExt16FanOut8x4   64     1       1       1     1
 ZeroExt32FanOut8x2   64     1       1       1     1
 ZeroExt32FanOut16x2  64     1       1       1     1
 SignExt8x2to32       64     1       1       1     1
+
+
+Object               64     1       1       1     1
+Body                 64     1       1       1     1
+Aggregate            64     1       1       1     1

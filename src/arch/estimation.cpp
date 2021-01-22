@@ -26,7 +26,7 @@ const std::map<std::pair<int, int>, std::pair<double, double>> MEMORY_DATA = {
 };
 
 double DecomposeCoef(int x) {
-  assert(x == (x & -x));
+  CHECK(x == (x & -x)) << "Only power of 2 supported!";
   if (x == 1 || x == 2) {
     x -= 1;
   } else if (x == 4) {
@@ -34,7 +34,7 @@ double DecomposeCoef(int x) {
   } else if (x == 8) {
     x = 3;
   } else {
-    assert(false && "unsupported yet!");
+    CHECK(false) << "Unsupported yet!";
   }
   // std::cout << x << ": " << pow(1.1, x) << std::endl;
   return pow(DECOMP_COEF, x);
@@ -60,8 +60,8 @@ struct Estimator : Visitor {
   void Visit(ssswitch* sw) {
     for (int i = 0; i < 2; ++i) {
       res((Metric)i, Breakdown::Network) +=
-          RadixEst((Metric)i, sw->in_links().size(), sw->out_links().size(),
-                   sw->decomposer, sw->flow_control());
+          RadixEst((Metric)i, sw->in_links().size(), sw->out_links().size(), sw->lanes(),
+                   sw->flow_control());
       res((Metric)i, Breakdown::Sync) += FIFOEst((Metric)i, sw->delay_fifo_depth());
     }
   }
@@ -70,7 +70,7 @@ struct Estimator : Visitor {
     for (int i = 0; i < 2; ++i) {
       res((Metric)i, Breakdown::Network) +=
           RadixEst((Metric)i, std::max((int)1, (int)vp->in_links().size()),
-                   std::max((int)1, (int)vp->out_links().size()), vp->decomposer, false);
+                   std::max((int)1, (int)vp->out_links().size()), vp->lanes(), false);
       res((Metric)i, Breakdown::Sync) += FIFOEst((Metric)i, 2);
     }
   }
@@ -79,10 +79,10 @@ struct Estimator : Visitor {
     res(Metric::Area, Breakdown::FU) += fu->fu_type_.area();
     res(Metric::Power, Breakdown::FU) += fu->fu_type_.power();
     for (int i = 0; i < 2; ++i) {
-      res((Metric)i, Breakdown::Network) += RadixEst((Metric)i, 2, fu->in_links().size(),
-                                                     fu->decomposer, fu->flow_control());
-      res((Metric)i, Breakdown::Network) += RadixEst((Metric)i, 1, fu->out_links().size(),
-                                                     fu->decomposer, fu->flow_control());
+      res((Metric)i, Breakdown::Network) +=
+          RadixEst((Metric)i, 2, fu->in_links().size(), fu->lanes(), fu->flow_control());
+      res((Metric)i, Breakdown::Network) +=
+          RadixEst((Metric)i, 1, fu->out_links().size(), fu->lanes(), fu->flow_control());
       res((Metric)i, Breakdown::Sync) += FIFOEst((Metric)i, fu->delay_fifo_depth());
     }
   }

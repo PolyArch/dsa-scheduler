@@ -7,7 +7,7 @@ namespace dsa {
 namespace dfg {
 namespace pass {
 
-inline std::vector<bool> PropagateControl(const std::vector<SSDfgNode*>& reversed_topo) {
+inline std::vector<bool> PropagateControl(const std::vector<Node*>& reversed_topo) {
   std::vector<bool> res(reversed_topo.size(), false);
 
   struct InstFilter : Visitor {
@@ -25,7 +25,7 @@ inline std::vector<bool> PropagateControl(const std::vector<SSDfgNode*>& reverse
   struct ControlPropagate : Visitor {
     ControlPropagate(std::vector<bool>& res_) : res(res_) {}
     std::vector<bool>& res;
-    void Visit(SSDfgNode* node) override {
+    void Visit(Node* node) override {
       if (res[node->id()]) {
         for (auto& op : node->ops()) {
           for (auto eid : op.edges) {

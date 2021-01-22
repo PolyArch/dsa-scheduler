@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
   }
   if (decomposer != -1) {
     for (auto elem : ssmodel.subModel()->node_list()) {
-      elem->decomposer = decomposer;
+      elem->granularity(elem->datawidth() / decomposer);
     }
   }
 

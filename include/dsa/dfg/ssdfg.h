@@ -44,7 +44,6 @@ using dsa::SpatialFabric;
 // value, or
 //     one-time constant?)
 
-class SSDfgNode;
 class SSDfg;
 
 namespace dsa {
@@ -115,12 +114,14 @@ class SSDfg {
 
   /*! \brief The instances of the instructions. */
   std::vector<dsa::dfg::Instruction> instructions;
+  /*! \brief The instances of the FU-occupy instructions. */
+  std::vector<dsa::dfg::Operation> operations;
   /*! \brief The instances of the vector inputs. */
   std::vector<dsa::dfg::InputPort> vins;
   /*! \brief The instances of the vector outputs. */
   std::vector<dsa::dfg::OutputPort> vouts;
   /*! \brief The summary vector of all the nodes above. */
-  std::vector<SSDfgNode*> nodes;
+  std::vector<dsa::dfg::Node*> nodes;
   /*! \brief The instances of all the edges. */
   std::vector<dsa::dfg::Edge> edges;
 
@@ -138,17 +139,21 @@ class SSDfg {
 };
 
 template <>
-inline std::vector<SSDfgNode>& SSDfg::type_filter() {
+inline std::vector<dsa::dfg::Node>& SSDfg::type_filter() {
   CHECK(false) << "Should not be called!";
   throw;
 }
 template <>
-inline std::vector<SSDfgNode*>& SSDfg::type_filter() {
+inline std::vector<dsa::dfg::Node*>& SSDfg::type_filter() {
   return nodes;
 }
 template <>
 inline std::vector<dsa::dfg::Instruction>& SSDfg::type_filter() {
   return instructions;
+}
+template <>
+inline std::vector<dsa::dfg::Operation>& SSDfg::type_filter() {
+  return operations;
 }
 template <>
 inline std::vector<dsa::dfg::InputPort>& SSDfg::type_filter() {

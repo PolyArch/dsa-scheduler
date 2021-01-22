@@ -8,10 +8,11 @@
 #include "dsa/simulation/data.h"
 
 class SSDfg;
-class SSDfgValue;
 
 namespace dsa {
 namespace dfg {
+
+class Node;
 
 OperandType Str2Flag(const std::string& s);
 
@@ -33,7 +34,7 @@ struct Value {
    * \brief The helper function translates the node id to node pointer.
    *        We adopt this design for the purpose of shallow copy.
    */
-  SSDfgNode* node() const;
+  Node* node() const;
 
   // @{
   std::queue<dsa::simulation::Data> fifo;
@@ -106,13 +107,13 @@ struct Edge {
   Edge(SSDfg* parent, int sid, int vid, int uid, int l = 0, int r = 63);
 
   /*! \brief Helper function to get the source node. */
-  SSDfgNode* def() const;
+  Node* def() const;
   /*! \brief Helper function to get the source value. */
   Value* val() const;
   /*! \brief Helper function to get the consumer node. */
-  SSDfgNode* use() const;
+  Node* use() const;
   /*! \brief Helper function to get either source or consumer. */
-  SSDfgNode* get(int) const;
+  Node* get(int) const;
   /*! \brief For debug. The text representative of this edge. */
   std::string name() const;
   /*! \brief The bitwidth of this data path. */
@@ -134,18 +135,14 @@ struct Edge {
   int delay{0};
 };
 
-}  // namespace dfg
-}  // namespace dsa
-
-// DFG Node -- abstract base class
-// DFG Nodes are intended to be the scheduling unit
-class SSDfgNode {
+/*! \brief The abstract class for all DFG nodes. */
+class Node {
  public:
-  virtual ~SSDfgNode() {}
+  virtual ~Node() {}
 
   virtual void Accept(dsa::dfg::Visitor*);
 
-  SSDfgNode() {}
+  Node() {}
 
   enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
 
@@ -156,13 +153,13 @@ class SSDfgNode {
   // some issue with this function
   virtual uint64_t invalid();
 
-  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
+  Node(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
 
   virtual int lat_of_inst() { return 0; }
 
   virtual std::string name() = 0;  // pure func
 
-  dsa::dfg::Edge* getLinkTowards(SSDfgNode* to);
+  dsa::dfg::Edge* getLinkTowards(Node* to);
 
   bool has_name() { return !_name.empty(); }
 
@@ -182,7 +179,7 @@ class SSDfgNode {
   //---------------------------------------------------------------------------
 
   V_TYPE type() {
-    assert(_vtype != V_INVALID);
+    CHECK(_vtype != V_INVALID);
     return _vtype;
   }
 
@@ -215,3 +212,6 @@ class SSDfgNode {
 
   V_TYPE _vtype;
 };
+
+}  // namespace dfg
+}  // namespace dsa

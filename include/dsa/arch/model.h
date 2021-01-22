@@ -30,10 +30,10 @@ class SSModel {
 
   void setCtrl(bool ctrl) {
     for (auto elem : this->subModel()->fu_list()) {
-      elem->flow_control() = ctrl;
+      elem->flow_control(ctrl);
     }
     for (auto elem : this->subModel()->switch_list()) {
-      elem->flow_control() = ctrl;
+      elem->flow_control(ctrl);
     }
   }
 

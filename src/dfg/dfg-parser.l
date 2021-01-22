@@ -91,6 +91,8 @@ M   [-]
 ")"					{ return ')'; }
 ("[")					{ return '['; }
 ("]")					{ return ']'; }
+("<")					{ return '<'; }
+(">")					{ return '>'; }
 
 {WS}+					{ /* whitespace separates tokens */ }
 

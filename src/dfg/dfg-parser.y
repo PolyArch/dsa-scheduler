@@ -1,6 +1,7 @@
 %code requires {
 
 #include <stdint.h>
+#include "dsa/debug.h"
 #include "dsa/dfg/node.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/dfg/symbols.h"
@@ -13,6 +14,7 @@ using ControlEntry = dsa::dfg::ControlEntry;
 using ConvergeEntry = dsa::dfg::ConvergeEntry;
 using ConstDataEntry = dsa::dfg::ConstDataEntry;
 using ValueEntry = dsa::dfg::ValueEntry;
+using NodeEntry = dsa::dfg::NodeEntry;
 using EdgeType = dsa::dfg::OperandType;
 
 }
@@ -53,6 +55,7 @@ static void yyerror(parse_param*, const char *);
   dsa::dfg::ParseResult *sym_ent;
   string_vec_t* str_vec;
   ctrl_def_t* ctrl_def;
+  std::vector<std::pair<dsa::OpCode, int>> *fu_and_cnt;
 
   YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
   ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -68,6 +71,7 @@ static void yyerror(parse_param*, const char *);
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
 %type <str_vec> ident_list value_list
+%type <fu_and_cnt> fu_list
 
 
 %start statement_list
@@ -87,7 +91,6 @@ statement: INPUT ':' io_def  eol {
   int n = std::max(1, len);
   int slice = 64 / width;
   p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
-  LOG(PARSE) << p->dfg->vins.back().id() << " " << p->dfg->vins.back().name();
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
@@ -115,7 +118,6 @@ statement: INPUT ':' io_def  eol {
   // int t = ceil(n / float(slice)); -- FIXME: do we need this?
   // I think it's somewhat likely i am breaking decomposability
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
-  LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
@@ -130,7 +132,7 @@ statement: INPUT ':' io_def  eol {
       auto sym = p->symbols.Get(ss.str());
       if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
         int num_entries = ce->entries.size();
-        assert(num_entries > 0 && num_entries <= 16);
+        CHECK(num_entries > 0 && num_entries <= 16);
         std::vector<int> es;
         for (auto elem : ce->entries) {
           p->dfg->edges.emplace_back(
@@ -139,10 +141,11 @@ statement: INPUT ':' io_def  eol {
           es.push_back(p->dfg->edges.back().id);
         }
         p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
-      } else if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
+      } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
+        LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
         p->dfg->edges.emplace_back(
-          p->dfg, ne->nid, ne->vid,
-          p->dfg->vouts.back().id(), ne->l, ne->r);
+          p->dfg, ve->nid, ve->vid,
+          p->dfg->vouts.back().id(), ve->l, ve->r);
         std::vector<int> es{p->dfg->edges.back().id};
         p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
       }
@@ -152,33 +155,23 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | value_list '=' rhs eol {
-  if (auto ne = dynamic_cast<ValueEntry*>($3)) {
-    assert($1->size()==1);
-    std::string name = (*$1)[0];
-    p->symbols.Set(name, new ValueEntry(ne->nid, ne->vid, ne->l, ne->r));
-  } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
-    //By definition, converge entries only need one symbol (just def)
-    if ($1->size()==1) {
-      std::string name = (*$1)[0];
-      for (auto elem : ce->entries) {
-        auto node = p->dfg->nodes[elem->nid];
-        if(!node->has_name()) node->set_name(name);
-      }
-      p->symbols.Set(name, $3);
-    } else if ($1->size() == ce->entries.size()) {
-      auto o = dynamic_cast<ValueEntry*>(ce->entries[0]);
-      assert(o && "Assumption check failure, the first element should be a value entry!");
-      assert(dynamic_cast<dsa::dfg::Instruction*>(p->dfg->nodes[o->nid]) && "Should be a instruction!");
-      p->symbols.Set((*$1)[0], new ValueEntry(o->nid, o->vid));
-      for (int i = 1, n = ce->entries.size(); i < n; ++i) {
-        if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
-          assert(ve->nid == o->nid && "Should all from the same node!");
-          p->symbols.Set((*$1)[i], new ValueEntry(ve->nid, 0));
-        } else {
-          assert(false && "Assumption check failure! All the remaining element should also be a value entry!");
-        }
+  if (auto ne = dynamic_cast<NodeEntry*>($3)) {
+    auto node = p->dfg->nodes[ne->nid];
+    if (auto op = dynamic_cast<dsa::dfg::Operation*>(node)) {
+      for (int i = 0, n = $1->size(); i < n; ++i) {
+        op->values.emplace_back(p->dfg, op->id(), i);
       }
     }
+    for (int i = 0, n = node->values.size(); i < n; ++i) {
+      auto *ve = new ValueEntry(node->id(), i, 0, node->bitwidth() - 1);
+      p->symbols.Set((*$1)[i], ve);
+    }
+  } else if (dynamic_cast<ConvergeEntry*>($3) || dynamic_cast<ValueEntry*>($3)) {
+    // Converge all the space-separated values
+    CHECK($1->size() == 1);
+    p->symbols.Set((*$1)[0], $3);
+  } else {
+    CHECK(false) << "Unknown type of entry!";
   }
   delete $1;
 }
@@ -191,7 +184,7 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | PRAGMA IDENT IDENT I_CONST eol {
-  assert(*$2 == "group");
+  CHECK(*$2 == "group");
   std::ostringstream oss;
   oss << $4;
   p->dfg->set_pragma(*$3, oss.str());
@@ -246,7 +239,7 @@ expr: I_CONST {
 }
 | edge_list {
   auto ce = dynamic_cast<ConvergeEntry*>($1);
-  assert(ce);
+  CHECK(ce);
   if (ce->entries.size() == 1) {
     $$ = ce->entries[0];
     delete ce;
@@ -257,58 +250,33 @@ expr: I_CONST {
 | IDENT '(' arg_list ')' {
   auto &opcode = *$1;
   auto &args = *$3;
-
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
   auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
-  int iid = inst->id();
-  for (unsigned i = 0; i < args.size(); ++i) {
-    if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {
-      inst->ops().emplace_back(data->data);
-    } else if (auto ne = dynamic_cast<ValueEntry*>(args[i])) {
-      p->dfg->edges.emplace_back(p->dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
-      std::vector<int> es{p->dfg->edges.back().id};
-      inst->ops().emplace_back(p->dfg, es, EdgeType::data);
-    } else if (auto ce = dynamic_cast<ConvergeEntry*>(args[i])) {
-      std::vector<int> es;
-      for (auto elem : ce->entries) {
-        if (auto ne = dynamic_cast<ValueEntry*>(elem)) {
-          p->dfg->edges.emplace_back(p->dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
-          es.push_back(p->dfg->edges.back().id);
-        }
-      }
-      inst->ops().emplace_back(p->dfg, es, EdgeType::data );
-    } else if (auto ce = dynamic_cast<ControlEntry*>(args[i])) {
-      // External control
-      if (ce->controller) {
-        auto ne = dynamic_cast<ValueEntry*>(ce->controller);
-        p->dfg->edges.emplace_back(p->dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
-        inst->predicate = ce->bits;
-        std::vector<int> es{p->dfg->edges.back().id};
-        inst->ops().emplace_back(p->dfg, es, ce->flag);
-      } else {
-        // Self control
-        inst->self_predicate = ce->bits;
-      }
-    } else {
-      CHECK(false) << "Invalide Node type";
-      throw;
-    }
-  }
-  std::vector<ValueEntry*> values(inst->values.size());
-  for (int i = 0, n = values.size(); i < n; ++i) {
-    values[i] = new ValueEntry(inst->id(), i, 0, inst->bitwidth() - 1);
-  }
-  if (values.size() == 1) {
-    $$ = values[0];
-  } else {
-    auto res = new ConvergeEntry();
-    res->entries = values;
-    $$ = res;
-  }
-
+  dsa::dfg::UpdateNodeByArgs(inst, args);
+  $$ = new NodeEntry(inst->id());
   delete $1;
   delete $3;
+}
+| IDENT '<' fu_list '>' '(' arg_list ')' {
+  auto &opcode = *$1;
+  auto &fu_cnt = *$3;
+  auto &args = *$6;
+  std::vector<dsa::OpCode> fus;
+  std::vector<int> cnts;
+  for (int i = 0, n = fu_cnt.size(); i < n; ++i) {
+    fus.push_back(fu_cnt[i].first);
+    cnts.push_back(fu_cnt[i].second);
+  }
+  p->dfg->emplace_back<dsa::dfg::Operation>(p->dfg, fus, cnts);
+  auto *operation = &p->dfg->type_filter<dsa::dfg::Operation>().back();
+  LOG(PARSE) << operation->name();
+  LOG(PARSE) << p->dfg->nodes[operation->id()]->name();
+  dsa::dfg::UpdateNodeByArgs(operation, args);
+  $$ = new NodeEntry(operation->id());
+  delete $1;
+  delete $3;
+  delete $6;
 };
 
 
@@ -365,6 +333,15 @@ ident_list: IDENT {
   $$ = $1;
 };
 
+fu_list: IDENT ':' I_CONST {
+  $$ = new std::vector<std::pair<dsa::OpCode, int>>();
+  $$->emplace_back(dsa::inst_from_string($1->c_str()), $3);
+}
+| fu_list ',' IDENT ':' I_CONST {
+  $1->emplace_back(dsa::inst_from_string($3->c_str()), $5);
+  $$ = $1;
+}
+
 edge_list: edge {
   auto res = new dsa::dfg::ConvergeEntry(); 
   if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>($1)) {
@@ -372,19 +349,19 @@ edge_list: edge {
   } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($1)) {
     res->entries = ce->entries;
   } else {
-    assert(0 && "Not supported edge list type!");
+    CHECK(0) << "Not supported edge list type!";
   }
   $$ = res;
 }
 | edge_list edge {
   auto res = dynamic_cast<dsa::dfg::ConvergeEntry*>($1);
-  assert(res);
+  CHECK(res);
   if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>($2)) {
     res->entries.insert(res->entries.begin(), ne);
   } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($1)) {
     res->entries.insert(res->entries.begin(), ce->entries.begin(), ce->entries.end());
   } else {
-    assert(0 && "Not supported edge list type!");
+    CHECK(0) << "Not supported edge list type!";
   }
   $$ = res;
 };
@@ -396,7 +373,7 @@ edge: IDENT {
   }
 | IDENT ':' I_CONST ':' I_CONST {
   auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(p->symbols.Get(*$1));
-  assert(ne && "For now only result values supports slicing!");
+  CHECK(ne) << "For now only result values supports slicing!";
   if (ne->l == (int) $3 && ne->r == (int) $5) {
     $$ = ne;
   } else {
@@ -430,5 +407,5 @@ int parse_dfg(const char* filename, SSDfg* _dfg) {
 
 static void yyerror(struct parse_param* p, char const* s) {
   fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
-  assert(0);
+  CHECK(0);
 }

@@ -16,8 +16,8 @@ void Visitor::Visit(ssswitch* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssnode* node) {
   visited[node->id()] = true;
   for (auto elem : node->out_links()) {
-    if (!visited[elem->dest()->id()]) {
-      elem->dest()->Accept(this);
+    if (!visited[elem->sink()->id()]) {
+      elem->sink()->Accept(this);
     }
   }
 }
