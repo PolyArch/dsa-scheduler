@@ -418,8 +418,6 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   std::random_shuffle(nodes.begin() + from, nodes.begin() + n);
 
   for (int i = 0; i < n; ++i) {
-    LOG(CAND) << nodes[i]->name() << " has " << sched->candidate_cnt[nodes[i]->id()]
-              << " candidate(s)";
   }
 
   for (int i = 0; i < 3; ++i) {
@@ -434,12 +432,15 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
                     << "Cannot map " << node->name();
           break;
         }
+        LOG(CAND) << node->name() << " has " << candidates.size()
+                  << " candidate(s)";
         int best_candidate = try_candidates(candidates, sched, node);
         if (best_candidate == -1) {
           unmap_some(ssDFG, sched);
           std::random_shuffle(nodes.begin(), nodes.end());
           break;
         }
+        sched->candidate_cnt[node->id()] = candidates.size();
       }
     }
   }
@@ -553,6 +554,122 @@ void insert_edge(std::pair<int, sslink*> link, Schedule* sched, dsa::dfg::Edge* 
     }
   }
 }
+
+int SchedulerSimulatedAnnealing::route(
+    Schedule* sched, dsa::dfg::Edge* edge, std::pair<int, dsa::ssnode*> source,
+    std::pair<int, dsa::ssnode*> dest) {
+
+  struct DfsRouting {
+    DfsRouting(SchedulerSimulatedAnnealing *ssa_,
+               Schedule *sched_,
+               const std::pair<int, dsa::ssnode*> &src_,
+               const std::pair<int, dsa::ssnode*> &dst_,
+               dsa::dfg::Edge *edge_) :
+      ssa(ssa_), sched(sched_), src(src_), dst(dst_), edge(edge_) {
+      visited.resize(sched_->ssModel()->subModel()->node_list().size(),
+                     std::vector<bool>(8, false));
+    }
+
+  #define LOG2(x) (31 - __builtin_clz(x))
+    void DfsImpl(const std::pair<int, dsa::ssnode*> &cur) {
+      if (visited[cur.second->id()][cur.first]) {
+        return;
+      }
+      visited[cur.second->id()][cur.first] = true;
+      {
+        for (auto elem : path) {
+          LOG(ROUTE) << elem.first << ", " << elem.second->name();
+        }
+      }
+      if (cur == dst) {
+        LOG(ROUTE) << "Arrived!";
+        found = true;
+        return;
+      } else {
+        LOG(ROUTE) << "==========================";
+      }
+      int slot = cur.first;
+      auto *node = cur.second;
+      std::vector<std::tuple<int, int, int, dsa::ssnode*, int>> q;
+      LOG(ROUTE) << "od: " << node->out_links().size();
+      for (int i = 0, n = node->out_links().size(); i < n; ++i) {
+        auto link = node->out_links()[i];
+        int slots = link->slots(slot, edge->bitwidth() / 8);
+        auto next = link->sink();
+        int dist = sched->distances[next->id()][dst.second->id()];
+        if (dist >= (int)1e9) {
+          continue;
+        }
+        while (slots) {
+          int raw = slots & -slots;
+          slots -= raw;
+          int next_slot = LOG2(raw);
+          std::pair<int, sslink*> next_pair(next_slot, link);
+
+          int route_cost = ssa->routing_cost(edge, slot, next_slot, link, sched, dst);
+
+          LOG(ROUTE) << "!!!! " << node->name() << " -> " << next->name()
+                     << ": " << route_cost << ", " << dist;
+          q.emplace_back(route_cost, dist, next_slot, next, i);
+        }
+      }
+      std::sort(q.begin(), q.end());
+      if (rand() % 10 == 0) {
+        int i = 0;
+        while (i < q.size() && std::get<0>(q[i]) <= 1) {
+          ++i;
+        }
+        std::random_shuffle(q.begin(), q.begin() + i);
+      }
+      for (auto &elem : q) {
+        int cost = std::get<0>(elem);
+        int dist = std::get<1>(elem);
+        std::pair<int, dsa::ssnode*> next(std::get<2>(elem), std::get<3>(elem));
+        path.emplace_back(std::get<2>(elem), node->out_links()[std::get<4>(elem)]);
+        DfsImpl(next);
+        if (found) {
+          break;
+        }
+        path.pop_back();
+      }
+    }
+  #undef LOG2
+
+    void Route() {
+      LOG(ROUTE) << src.second->name() << "," << src.first << "(" << src.second->id() << ") -> "
+                 << dst.second->name() << "," << dst.first << "(" << dst.second->id() << ")";
+      LOG(ROUTE) << "distance: " << sched->distances[src.second->id()][dst.second->id()];
+      DfsImpl(src);
+      if (found) {
+        for (auto elem : path) {
+          sched->assign_edgelink(edge, elem.first, elem.second);
+          if (dynamic_cast<dsa::ssfu*>(elem.second->sink())) {
+            if (elem.first == dst.first && elem.second->sink() == dst.second) {
+              continue;
+            }
+            sched->assign_edge_pt(edge, {elem.first, elem.second->sink()});
+          }
+        }
+      }
+    }
+
+    SchedulerSimulatedAnnealing *ssa;
+    Schedule *sched;
+    std::pair<int, dsa::ssnode*> src;
+    std::pair<int, dsa::ssnode*> dst;
+    dsa::dfg::Edge *edge;
+    std::vector<std::pair<int, dsa::sslink*>> path;
+    std::vector<std::vector<bool>> visited;
+    bool found{false};
+  };
+  if (rand() % 2 == 0) {
+    DfsRouting dr(this, sched, source, dest, edge);
+    dr.Route();
+    return dr.found;
+  }
+  return route(sched, edge, source, dest, nullptr, false);
+}
+
 
 int SchedulerSimulatedAnnealing::route(
     Schedule* sched, dsa::dfg::Edge* edge, std::pair<int, dsa::ssnode*> source,
@@ -710,12 +827,13 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
     int n = edge_.size();                                                          \
     for (int i = 0; i < n; ++i) {                                                  \
       auto edge = edges[i];                                                        \
+      LOG(ROUTE) << "Routing " << edge->name();                                    \
       CHECK(sched->link_count(edge) == 0)                                          \
           << "Edge: " << edge->name() << " is already routed!\n";                  \
       auto node = edge->node_();                                                   \
       if (sched->is_scheduled(node)) {                                             \
         auto loc = sched->location_of(node);                                       \
-        if (!route(sched, edge, src, dest, nullptr, 0)) {                          \
+        if (!route(sched, edge, src, dest)) {                                      \
           LOG(ROUTE) << "Cannot route " << edge->name() << " " << src.second->id() \
                      << " -> " << dest.second->id() << ":"                         \
                      << sched->distances[src.second->id()][dest.second->id()];     \
@@ -783,7 +901,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   int no_imporve = 0;
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
-    LOG(MAP) << "Try: " << candidates[i].second->name();
+    LOG(MAP) << "Try " << i << ": " << candidates[idx[i]].second->name();
 
     if (scheduleHere(sched, node, candidates[idx[i]])) {
       ++candidates_succ;
@@ -824,7 +942,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
     LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].second->name();
   }
 
-  LOG(MAP) << "return for best candidate!";
+  LOG(MAP) << "return for best candidate!" << best_candidate;
   return best_candidate;
 }
 

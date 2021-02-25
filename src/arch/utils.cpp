@@ -67,6 +67,7 @@ SpatialFabric* Import(std::string filename) {
         int out_vec_width = *cgranode["num_output"]->As<int64_t>();
         int port_num = -1;
         // whether is a input/output vector port
+        LOG(LOAD) << id << ": " << in_vec_width << " " << out_vec_width;
         if (in_vec_width > 0) {
           is_input = false;
           port_num = num_ovp++;

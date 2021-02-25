@@ -51,6 +51,10 @@ int sslink::slots(int slot, int width) {
     return (a & full_mask) == full_mask;
   };
   for (int i = 0; i < n; ++i) {
+    slot = (slot + i) % n;
+    // if ((slot & -slot) % width) {
+    //   continue;
+    // }
     if (slot + width <= n) {
       if (f(subnet[i] >> slot, width)) {
         res |= 1 << (i + slot) % n;

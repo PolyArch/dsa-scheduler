@@ -532,6 +532,14 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
 
         int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
         int cur_ovr = cur_util - v.node->max_util();
+        if (cur_ovr) {
+          LOG(UTIL) << "over used: " << v.node->name() << ", " << i << ": "
+                    << cnt << ", " << slot.passthrus.size() << ", "
+                    << unique_io << ", " << (ops.size() != 0) << " > " << v.node->max_util();
+          for (auto elem : slot.vertices) {
+            LOG(UTIL) << elem.first->name();
+          }
+        }
         agg_ovr += std::max(cur_ovr, 0);
         ovr = max(ovr, cur_ovr);
         max_util = std::max(cur_util, max_util);
@@ -572,7 +580,14 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
       }
     }
     util = vector_utils::count_unique(values) + vector_utils::count_unique(vecs);
-    int cur_ovr = util - link->max_util();
+    int cur_ovr = std::max(0, util - link->max_util());
+    if (cur_ovr) {
+      LOG(UTIL) << link->name() << " " << util << " " << cur_ovr;
+      for (auto& it : lp.slots[slot].edges) {
+        dsa::dfg::Edge* edge = &ssdfg()->edges[it.eid];
+        LOG(UTIL) << edge->name();
+      }
+    }
     ovr = std::max(cur_ovr, ovr);
     agg_ovr += std::max(cur_ovr, 0);
     max_util = std::max(util, max_util);
@@ -639,6 +654,7 @@ Schedule::Schedule(const Schedule& s, bool dup_)
 }
 
 void Schedule::normalize() {
+  LOG(NORM) << "Normalizing...";
   auto dfg = _ssDFG;
   auto model = _ssModel;
   dsa::dfg::pass::SliceOverlappedEdges(dfg);
@@ -651,9 +667,14 @@ void Schedule::normalize() {
   operands = std::get<0>(redundancy);
   users = std::get<1>(redundancy);
   group_throughput = dsa::dfg::pass::GroupThroughput(dfg, reversed_topo);
-  dsa::mapper::CandidateSpotVisitor cpv(this, 50);
-  dfg->Apply(&cpv);
-  candidate_cnt = cpv.cnt;
+  if (model->subModel()->node_list().size() < 1000) {
+    dsa::mapper::CandidateSpotVisitor cpv(this, 50);
+    dfg->Apply(&cpv);
+    candidate_cnt = cpv.cnt;
+  } else {
+    candidate_cnt.resize(model->subModel()->node_list().size(), 0);
+  }
+  LOG(NORM) << "Normalize done...";
 }
 
 double Schedule::estimated_performance() {

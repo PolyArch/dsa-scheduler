@@ -36,9 +36,9 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
     void Visit(ssfu* fu) override {
       for (auto elem : fu->fu_type_.capability) {
         if (fu->max_util() == 1) {
-          inst_exist[{elem.op, 0}] += 64 / dsa::bitwidth[elem.op];
+          inst_exist[{elem.op, 0}] += (64 / dsa::bitwidth[elem.op]) * elem.count;
         } else {
-          inst_exist[{elem.op, 1}] += fu->max_util();
+          inst_exist[{elem.op, 1}] += std::max(fu->max_util(), elem.count);
         }
       }
     }
@@ -60,6 +60,10 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
                  << sc.inst_exist[elem.first] << " found";
       return false;
     }
+  }
+
+  if (getenv("SKIP_PORTS")) {
+    return true;
   }
 
   for (int i = 0; i < 2; ++i) {

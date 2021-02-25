@@ -14,10 +14,13 @@ struct CandidateSpotVisitor : dfg::Visitor {
     std::vector<std::pair<int, ssnode*>> not_chosen_spots;
 
     std::vector<ssfu*> fus = model->nodes<dsa::ssfu*>();
+    std::vector<int> idx(fus.size());
+    for (int i = 0, n = fus.size(); i < n; ++i) {
+      idx[i] = i;
+    }
     // For Dedicated-required Instructions
     for (size_t i = 0; i < fus.size(); ++i) {
-      ssfu* cand_fu = fus[i];
-
+      ssfu* cand_fu = fus[idx[i]];
       if (!cand_fu->fu_type_.Capable(inst->inst())) {
         LOG(CAND) << "Not capable!";
         continue;
@@ -27,16 +30,13 @@ struct CandidateSpotVisitor : dfg::Visitor {
                   << cand_fu->out_links().size() << " < " << inst->values.size();
         continue;
       }
-
       if (!inst->is_temporal()) {
         if (sched->isPassthrough(0, cand_fu))  // FIXME -- this can't be right
           continue;
         // Normal Dedidated Instructions
-
         if (cand_fu->is_shared() && !spots.empty()) {
           continue;
         }
-
         for (int k = 0; k < 8; k += inst->bitwidth() / 8) {
           int cnt = 0;
           for (int sub_slot = k; sub_slot < k + inst->bitwidth() / 8; ++sub_slot) {
@@ -61,6 +61,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
           not_chosen_spots.emplace_back(0, fus[i]);
         }
       }
+      if (spots.size() == max_candidates) {
+        break;
+      }
     }
 
     // If we couldn't find any good spots, we can just pick a bad spot for now
@@ -68,10 +71,12 @@ struct CandidateSpotVisitor : dfg::Visitor {
       spots = not_chosen_spots;
     }
 
-    std::random_shuffle(spots.begin(), spots.end());
+    // std::random_shuffle(spots.begin(), spots.end());
 
     int n = spots.size();
-    if (n > max_candidates) n = max_candidates;
+    if (n > max_candidates) {
+      n = max_candidates;
+    }
 
     cnt[inst->id()] = n;
     candidates[inst->id()] =
@@ -88,15 +93,15 @@ struct CandidateSpotVisitor : dfg::Visitor {
         cnt[j] = capability[j].count;
       }
       // TODO(@were): For now, I assume that decomposability cannot happen on Operation
-      // mapping.
+      //              mapping.
       //              We actually need better data structure representation on
       //              decomposability, but I do not have a clear plan in my brain.
       // TODO(@were): For now, I assume all the instruction on this node should be
-      // spatially shared.
+      //              spatially shared.
       //              We later need a attribute on the adg node to indicate the sharing
       //              strategy.
       // TODO(@were): For the purpose of performance, we move this cnt to a schedule
-      // redundant data structure.
+      //              redundant data structure.
       for (auto elem : sched->dfg_nodes_of(0, fabric->fu_list()[i])) {
         if (auto tmp = dynamic_cast<dfg::Operation*>(elem.first)) {
           for (int j = 0, m = tmp->opcodes.size(); j < m; ++j) {
@@ -120,6 +125,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
           break;
         }
         if (cnt[iter - capability.begin()] < op->cnt[j]) {
+          LOG(CAND) << i << ": (" << fu->fu_type_.capability[iter - capability.begin()].count
+                    << ")" << cnt[iter - capability.begin()] << " < " << op->cnt[j];
+          for (auto elem : sched->dfg_nodes_of(0, fabric->fu_list()[i])) {
+            LOG(CAND) << "mapped: " << elem.first->name();
+          }
           ok = false;
           break;
         }
@@ -136,14 +146,21 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto vports = fabric->input_list();
     // Lets write size in units of bits
     std::vector<std::pair<int, ssnode*>>& spots = candidates[input->id()];
+    auto bad_spots = spots;
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= input->phys_bitwidth()) {
-        spots.push_back(make_pair(0, cand));
+        bool cond = sched->node_prop()[cand->id()].slots[0].vertices.size() < cand->max_util();
+        LOG(CAND) << cand->name() << " ? " << cond;
+        auto &to_append = cond ? spots : bad_spots;
+        to_append.push_back(make_pair(0, cand));
       }
     }
     cnt[input->id()] = spots.size();
+    if (spots.empty()) {
+      spots = bad_spots;
+    }
   }
 
   void Visit(dfg::OutputPort* output) override {
@@ -152,13 +169,19 @@ struct CandidateSpotVisitor : dfg::Visitor {
     // Lets write size in units of bits
     std::vector<std::pair<int, ssnode*>>& spots = candidates[output->id()];
     spots.clear();
+    auto bad_spots = spots;
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= output->phys_bitwidth()) {
-        spots.push_back(make_pair(0, cand));
+        bool cond = sched->node_prop()[cand->id()].slots[0].vertices.size() < cand->max_util();
+        auto &to_append = cond ? spots : bad_spots;
+        to_append.push_back(make_pair(0, cand));
       }
     }
     cnt[output->id()] = spots.size();
+    if (spots.empty()) {
+      spots = bad_spots;
+    }
   }
 
   CandidateSpotVisitor(Schedule* sched_, int max_candidates_)

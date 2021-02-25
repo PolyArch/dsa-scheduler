@@ -98,6 +98,9 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   bool scheduleHere(Schedule*, dsa::dfg::Node*, std::pair<int, dsa::ssnode*>);
 
+  int route(Schedule* sched, dsa::dfg::Edge* edge, std::pair<int, dsa::ssnode*> source,
+            std::pair<int, dsa::ssnode*> dest);
+
   int route(Schedule* sched, dsa::dfg::Edge* dfgnode, std::pair<int, dsa::ssnode*> source,
             std::pair<int, dsa::ssnode*> dest,
             std::vector<std::pair<int, sslink*>>::iterator* ins_it,

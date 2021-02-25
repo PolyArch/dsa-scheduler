@@ -15,7 +15,7 @@ class LOGGER {
   bool abort;
 
  public:
-  LOGGER(std::string reason, std::string file, int lineno, bool abort) : abort(abort) {
+  LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort(abort_) {
     std::cerr << reason << " " << file.substr(std::string(REPO_PREFIX).size() + 1) << ":"
               << lineno << ": ";
   }
@@ -23,9 +23,7 @@ class LOGGER {
   ~LOGGER() noexcept(false) {
     std::cerr << std::endl;
     if (abort) {
-      // TODO(@were): This is great for debugging backtrace but confuses user when reading
-      // the logs.
-      throw;
+      __builtin_unreachable();
     }
   }
 

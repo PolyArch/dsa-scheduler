@@ -149,7 +149,7 @@ inline std::vector<Node*> reversed_topology(SSDfg* dfg) {
 
 struct Bounds {
   int min{0};
-  int max{INT_MAX - 10000};
+  int max{(int)1e9};
   std::string ToString() {
     std::ostringstream oss;
     oss << "[" << min << ", " << max << "]";

@@ -23,24 +23,24 @@ using namespace dsa;
 
 // clang-format off
 static struct option long_options[] = {
-    {"verbose",        no_argument,       nullptr, 'v',},
-    {"print-bits",     no_argument,       nullptr, 'b',},
-    {"no-int-time",    no_argument,       nullptr, 'n',},
-    {"design-space",   no_argument,       nullptr, 'f',},
-    {"indir-mem",      no_argument,       nullptr, 'c',},
-    {"print-bit",      no_argument,       nullptr, 'b',},
-    {"dump-mapping-if-improved",   no_argument, nullptr, 'u',},
-    {"timeout",        required_argument, nullptr, 't',},
-    {"max-iters",      required_argument, nullptr, 'i',},
-    {"max-edge-delay", required_argument, nullptr, 'd',},
-    {"exec-timing",    required_argument, nullptr, 'm',},
-    {"seed",           required_argument, nullptr, 'e',},
-    {"control-flow",   required_argument, nullptr, 'l',},
-    {"decomposer",     required_argument, nullptr, 'r',},
-    {"hardware-json",  required_argument, nullptr, 'h',},
-    {"software-json",  required_argument, nullptr, 's',},
-    {"mapping-json",   required_argument, nullptr, 'a',},
-    {0, 0, 0, 0,},
+  {"verbose",                  no_argument,       nullptr, 'v'},
+  {"print-bits",               no_argument,       nullptr, 'b'},
+  {"no-int-time",              no_argument,       nullptr, 'n'},
+  {"design-space",             no_argument,       nullptr, 'f'},
+  {"indir-mem",                no_argument,       nullptr, 'c'},
+  {"print-bit",                no_argument,       nullptr, 'b'},
+  {"dump-mapping-if-improved", no_argument,       nullptr, 'u'},
+  {"timeout",                  required_argument, nullptr, 't'},
+  {"max-iters",                required_argument, nullptr, 'i'},
+  {"max-edge-delay",           required_argument, nullptr, 'd'},
+  {"exec-timing",              required_argument, nullptr, 'm'},
+  {"seed",                     required_argument, nullptr, 'e'},
+  {"control-flow",             required_argument, nullptr, 'l'},
+  {"decomposer",               required_argument, nullptr, 'r'},
+  {"hardware-json",            required_argument, nullptr, 'h'},
+  {"software-json",            required_argument, nullptr, 's'},
+  {"mapping-json",             required_argument, nullptr, 'a'},
+  {0, 0, 0, 0,},
 };
 // clang-format on
 
@@ -125,6 +125,14 @@ int main(int argc, char* argv[]) {
   if (decomposer != -1) {
     for (auto elem : ssmodel.subModel()->node_list()) {
       elem->granularity(elem->datawidth() / decomposer);
+    }
+  }
+
+  if (getenv("LINK_UTIL")) {
+    auto raw = getenv("LINK_UTIL");
+    int util = atol(raw);
+    for (auto elem : ssmodel.subModel()->link_list()) {
+      elem->max_util(util);
     }
   }
 
