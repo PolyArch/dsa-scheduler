@@ -912,6 +912,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
       LOG(MAP) << "creeping!!";
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
       LOG(MAP) << candScore.first << ", " << candScore.second;
+      std::cout << candScore.first << ", " << candScore.second;
 
       if (!find_best) {
         return i;
