@@ -610,17 +610,17 @@ int SchedulerSimulatedAnnealing::route(
 
           LOG(ROUTE) << "!!!! " << node->name() << " -> " << next->name()
                      << ": " << route_cost << ", " << dist;
-          q.emplace_back(route_cost, dist, next_slot, next, i);
+          q.emplace_back(route_cost + dist, route_cost, next_slot, next, i);
         }
       }
       std::sort(q.begin(), q.end());
-      if (rand() % 10 == 0) {
-        int i = 0;
-        while (i < q.size() && std::get<0>(q[i]) <= 1) {
-          ++i;
-        }
-        std::random_shuffle(q.begin(), q.begin() + i);
-      }
+      // if (rand() % 10 == 0) {
+      //   int i = 0;
+      //   while (i < q.size() && std::get<1>(q[i]) <= 1) {
+      //     ++i;
+      //   }
+      //   std::random_shuffle(q.begin(), q.begin() + i);
+      // }
       for (auto &elem : q) {
         int cost = std::get<0>(elem);
         int dist = std::get<1>(elem);
@@ -662,12 +662,12 @@ int SchedulerSimulatedAnnealing::route(
     std::vector<std::vector<bool>> visited;
     bool found{false};
   };
-  if (rand() % 2 == 0) {
+  // if (rand() % 2 == 0) {
     DfsRouting dr(this, sched, source, dest, edge);
     dr.Route();
     return dr.found;
-  }
-  return route(sched, edge, source, dest, nullptr, false);
+  // }
+  // return route(sched, edge, source, dest, nullptr, false);
 }
 
 
