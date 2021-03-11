@@ -14,6 +14,7 @@ using ConvergeEntry = dsa::dfg::ConvergeEntry;
 using ConstDataEntry = dsa::dfg::ConstDataEntry;
 using ValueEntry = dsa::dfg::ValueEntry;
 using EdgeType = dsa::dfg::OperandType;
+using TaskMapEntry = dsa::dfg::TaskMapEntry;
 
 }
 
@@ -53,6 +54,7 @@ static void yyerror(parse_param*, const char *);
   dsa::dfg::ParseResult *sym_ent;
   string_vec_t* str_vec;
   ctrl_def_t* ctrl_def;
+  task_def_t* task_def;
 
   YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
   ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -61,13 +63,14 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT
+%token<i> I_CONST INPUT OUTPUT TASKDEP
 
 %type <io_pair> io_def
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
 %type <str_vec> ident_list value_list
+%type <task_def> task_map_list
 
 
 %start statement_list
@@ -151,6 +154,24 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   delete $3;
 }
+| TASKDEP ':' '(' task_map_list ')' eol {
+  auto &args = *$4;
+  p->dfg->create_new_task_dependence_map();
+  for(auto it=args.begin(); it!=args.end(); ++it) {
+    // What is a type of struct?
+    if(1) { // auto data = dynamic_cast<TaskMapEntry*>(args[i])) {
+      std::string producer = it->first;
+      std::string consumer = it->second;
+      printf("producer: %s consumer: %s\n", producer, consumer);
+      p->dfg->add_new_task_dependence_map(producer, consumer);
+    } else {
+      CHECK(false) << "Invalid task mapping type";
+      throw;
+    }
+  }
+  p->meta.clear();
+  delete $4;
+}
 | value_list '=' rhs eol {
   if (auto ne = dynamic_cast<ValueEntry*>($3)) {
     assert($1->size()==1);
@@ -218,12 +239,24 @@ eol : ';'
 	| EOLN
 	;
 
+// Input: A[8]
 io_def: IDENT {
   $$ = new io_pair_t(*$1,0);
   delete $1;
 }
 | IDENT '[' I_CONST ']' {
     $$ = new io_pair_t(*$1,$3);
+    delete $1;
+};
+
+// TASKDEP: group(A:B) io_pair: pair<string, string>
+// Possibly we do not need to declare task map entry here??
+task_map_list: IDENT {
+  $$ = new task_def_t(); // dsa::dfg::TaskMapEntry(nullptr);
+  delete $1;
+}
+| IDENT ':' '(' task_map_list ')' {
+    $$ = new task_def_t(*$4); // new TaskMapEntry(*$4, nullptr);
     delete $1;
 };
 
@@ -311,7 +344,6 @@ expr: I_CONST {
   delete $3;
 };
 
-
 /* Argument expressions can have extra flag arguments as well */
 arg_expr : expr {
   $$ = $1;
@@ -335,6 +367,17 @@ arg_list: arg_expr {
 | arg_list ',' arg_expr {
   $1->push_back($3);
   $$ = $1;
+};
+
+task_map_list: IDENT ':' IDENT {
+  $$ = new task_def_t();
+  (*$$)[*$1]=*$3; 
+  delete $3;
+}
+| task_map_list ',' IDENT ':' IDENT {
+  $$ = $1;
+  (*$$)[*$3]=*$5;
+  delete $5;
 };
 
 ctrl_list: I_CONST ':' ident_list {
