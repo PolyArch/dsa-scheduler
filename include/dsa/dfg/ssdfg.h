@@ -54,6 +54,32 @@ struct Visitor;
 }  // namespace dfg
 }  // namespace dsa
 
+// post-parsing task dependence signal definitions (mapping of string of flag to it's value?)
+typedef std::unordered_map<std::string, std::string> task_def_t;
+// associated with each dfg-group that can be created dynamically..
+struct TaskPortMap {
+
+  // return the port number from this string...
+  TaskPortMap(const std::map<int, std::vector<std::string>>& raw);
+  TaskPortMap(task_def_t port_map_) : _mapping(port_map_) {}
+
+  // set another mapping of bits (Concatenate into the port)
+  void set(uint64_t prod_port, uint64_t cons_port);
+  int getMappedPort(int prod_port);
+  int getNumMappedPorts() {
+    return _mapping.size();
+  }
+  task_def_t mapping() { return _mapping; }
+
+ private:
+  task_def_t _mapping;
+
+  static int str_to_enum(const std::string& s) {
+    // return the port number from this string...
+
+  }
+};
+
 typedef std::vector<std::string> string_vec_t;
 
 // post-parsing control signal definitions (mapping of string of flag to it's value?)
@@ -85,6 +111,10 @@ class SSDfg {
 
   /*! \brief Start a new sub-dfg. */
   void start_new_dfg_group();
+
+  /*! \brief Set a new dependence among dfg groups. */
+  void create_new_task_dependence_map();
+  void add_new_task_dependence_map(std::string producer, std::string consumer);
 
   void set_pragma(const std::string& c, const std::string& s);
 
@@ -136,6 +166,7 @@ class SSDfg {
 
   /*! \brief The property information of each sub DFG. */
   std::vector<GroupProp> _groupProps;
+  std::vector<task_def_t> _dependence_maps;
 };
 
 template <>

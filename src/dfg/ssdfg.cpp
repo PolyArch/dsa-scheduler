@@ -91,6 +91,17 @@ void SSDfg::set_pragma(const std::string& c, const std::string& s) {
 
 void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
 
+void SSDfg::create_new_task_dependence_map() { 
+  task_def_t empty_map;
+  _dependence_maps.emplace_back(empty_map);
+}
+
+void SSDfg::add_new_task_dependence_map(std::string producer, std::string consumer) { 
+  unsigned size = _dependence_maps.size();
+  // std::cout << "Size of dependence maps: " << size << endl;
+  _dependence_maps[size-1].insert(make_pair(producer, consumer)); 
+}
+
 SSDfg::SSDfg(string filename_) : filename(filename_) {
   string line;
   start_new_dfg_group();

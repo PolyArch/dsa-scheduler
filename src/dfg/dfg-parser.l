@@ -56,6 +56,7 @@ M   [-]
 "InputVec"                              { yylval.i = 64; return(INPUT); }
 "Output"("8"|"16"|"32"|"64")*           { iow(&yylval, yytext); return(OUTPUT); }
 "OutputVec"                             { yylval.i = 64; return(OUTPUT); }
+"TaskDep"                               { return(TASKDEP); }
 \n                                      { return EOLN; }
 
 

@@ -9,6 +9,11 @@
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/node.h"
 
+struct SSDfgValue;
+struct SSDfgNode;
+struct CtrlBits;
+struct TaskPortMap;
+
 namespace dsa {
 namespace dfg {
 
@@ -97,6 +102,24 @@ struct ControlEntry : ParseResult {
   uint64_t bits;
 };
 
+
+/*!
+ * \brief The converted task mapping
+ *  TaskDep: (A:C, B:D)
+ *  Here `(A:C, B:D)` will be parsed as control entry
+ * @vidushi: I am not sure why is this here compared to in ssdfg.h (just copies?)
+ * actually this is not required...was just required for ControlEntry for some reason...
+ */
+struct TaskMapEntry : ParseResult {
+  TaskMapEntry(ParseResult* controller_);
+
+  TaskMapEntry(std::unordered_map<std::string, std::string>& port_map_,
+             ParseResult* controller_);
+
+  ParseResult* controller;
+  std::unordered_map<std::string, std::string> port_map; // FIXME: what is this type??
+};
+
 /*! \brief The symbol table of the parsed DFG. */
 class SymbolTable {
  public:
@@ -108,6 +131,7 @@ class SymbolTable {
   bool Has(const std::string& s) { return table_.count(s); }
 
   ParseResult* Get(const std::string& s) {
+    // std::cout << "parsed symbol: " << s << std::endl;
     CHECK(Has(s));
     return table_[s];
   }
