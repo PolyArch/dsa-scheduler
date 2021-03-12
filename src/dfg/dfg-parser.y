@@ -8,6 +8,7 @@
 #include "dsa/dfg/node.h"
 int parse_dfg(const char* dfgfile, SSDfg* dfg);
 typedef std::pair<std::string,int> io_pair_t;
+typedef std::pair<int,int> map_pair_t;
 
 using ParseResult = dsa::dfg::ParseResult;
 using ControlEntry = dsa::dfg::ControlEntry;
@@ -16,7 +17,6 @@ using ConstDataEntry = dsa::dfg::ConstDataEntry;
 using ValueEntry = dsa::dfg::ValueEntry;
 using NodeEntry = dsa::dfg::NodeEntry;
 using EdgeType = dsa::dfg::OperandType;
-using TaskMapEntry = dsa::dfg::TaskMapEntry;
 
 }
 
@@ -52,6 +52,7 @@ static void yyerror(parse_param*, const char *);
 
   std::string* s;
   io_pair_t* io_pair;
+  map_pair_t* map_pair;
   std::vector<ParseResult*> *sym_vec;
   dsa::dfg::ParseResult *sym_ent;
   string_vec_t* str_vec;
@@ -69,6 +70,7 @@ static void yyerror(parse_param*, const char *);
 %token<i> I_CONST INPUT OUTPUT TASKDEP
 
 %type <io_pair> io_def
+%type <map_pair> map_def
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
@@ -156,23 +158,14 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   delete $3;
 }
-| TASKDEP ':' '(' task_map_list ')' eol {
-  auto &args = *$4;
-  p->dfg->create_new_task_dependence_map();
-  for(auto it=args.begin(); it!=args.end(); ++it) {
-    // What is a type of struct?
-    if(1) { // auto data = dynamic_cast<TaskMapEntry*>(args[i])) {
-      std::string producer = it->first;
-      std::string consumer = it->second;
-      printf("producer: %s consumer: %s\n", producer, consumer);
-      p->dfg->add_new_task_dependence_map(producer, consumer);
-    } else {
-      CHECK(false) << "Invalid task mapping type";
-      throw;
-    }
+| TASKDEP map_def ':' '(' task_map_list ')' eol {
+  p->dfg->create_new_task_dependence_map($2->first, $2->second);
+  auto &args = *$5;
+  for(unsigned i=0; i<args.size(); ++i) {
+    p->dfg->add_new_task_dependence_map(args[i].first, args[i].second);
   }
   p->meta.clear();
-  delete $4;
+  delete $5;
 }
 | value_list '=' rhs eol {
   if (auto ne = dynamic_cast<NodeEntry*>($3)) {
@@ -241,15 +234,8 @@ io_def: IDENT {
     delete $1;
 };
 
-// TASKDEP: group(A:B) io_pair: pair<string, string>
-// Possibly we do not need to declare task map entry here??
-task_map_list: IDENT {
-  $$ = new task_def_t(); // dsa::dfg::TaskMapEntry(nullptr);
-  delete $1;
-}
-| IDENT ':' '(' task_map_list ')' {
-    $$ = new task_def_t(*$4); // new TaskMapEntry(*$4, nullptr);
-    delete $1;
+map_def: '[' I_CONST ':' I_CONST ']' {
+  $$ = new map_pair_t($2,$4);
 };
 
 rhs: expr { $$ = $1; };
@@ -311,7 +297,6 @@ expr: I_CONST {
   delete $6;
 };
 
-/* Argument expressions can have extra flag arguments as well */
 arg_expr : expr {
   $$ = $1;
 }
@@ -336,14 +321,14 @@ arg_list: arg_expr {
   $$ = $1;
 };
 
-task_map_list: IDENT ':' IDENT {
+task_map_list: ident_list ':' ident_list {
   $$ = new task_def_t();
-  (*$$)[*$1]=*$3; 
+  $$->push_back(std::make_pair(*$1, *$3));
   delete $3;
 }
-| task_map_list ',' IDENT ':' IDENT {
+| task_map_list ',' ident_list ':' ident_list {
   $$ = $1;
-  (*$$)[*$3]=*$5;
+  $$->push_back(std::make_pair(*$3, *$5));
   delete $5;
 };
 

@@ -55,17 +55,26 @@ struct Visitor;
 }  // namespace dsa
 
 // post-parsing task dependence signal definitions (mapping of string of flag to it's value?)
-typedef std::unordered_map<std::string, std::string> task_def_t;
+// typedef std::unordered_map<std::string, std::string> task_def_t;
+typedef std::pair<std::vector<std::string>, std::vector<std::string>> string_pair;
+typedef std::vector<string_pair> task_def_t;
 // associated with each dfg-group that can be created dynamically..
-struct TaskPortMap {
+// FIXME: is it used anywhere??
+/*struct TaskPortMap {
 
   // return the port number from this string...
   TaskPortMap(const std::map<int, std::vector<std::string>>& raw);
   TaskPortMap(task_def_t port_map_) : _mapping(port_map_) {}
 
   // set another mapping of bits (Concatenate into the port)
-  void set(uint64_t prod_port, uint64_t cons_port);
-  int getMappedPort(int prod_port);
+  void set(std::string prod_port, std::string cons_port) {
+    _mapping.insert(make_pair(prod_port, cons_port));
+  }
+  string getMappedPort(string prod_port) {
+    auto it = _mapping.find(prod_port);
+    assert(it->begin()!-it->end());
+    return it->second;
+  }
   int getNumMappedPorts() {
     return _mapping.size();
   }
@@ -73,12 +82,7 @@ struct TaskPortMap {
 
  private:
   task_def_t _mapping;
-
-  static int str_to_enum(const std::string& s) {
-    // return the port number from this string...
-
-  }
-};
+};*/
 
 typedef std::vector<std::string> string_vec_t;
 
@@ -88,7 +92,8 @@ typedef std::map<int, string_vec_t> ctrl_def_t;
 struct GroupProp {
   bool is_temporal{false};
   int64_t frequency{-1};
-  int64_t unroll{1};
+  int64_t unroll{1}; // TODO: @vidushi: should be changed with vector ID
+  // int64_t id=0; // TODO: @vidushi: add an ID here..
 };
 
 /*! \brief The data structure for the dataflow graph. */
@@ -113,8 +118,9 @@ class SSDfg {
   void start_new_dfg_group();
 
   /*! \brief Set a new dependence among dfg groups. */
-  void create_new_task_dependence_map();
-  void add_new_task_dependence_map(std::string producer, std::string consumer);
+  void create_new_task_dependence_map(int s, int d);
+  void add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer);
+  task_def_t producer_consumer_map(int src_group, int dst_group);
 
   void set_pragma(const std::string& c, const std::string& s);
 
@@ -142,6 +148,26 @@ class SSDfg {
 
   uint64_t cur_cycle() { return _cur_cycle; }
 
+  void insert_input_mapping(std::string &name, SSDfgVecInput* input) {
+    _map_name_input.insert(std::make_pair(name, input));
+  }
+
+  void insert_output_mapping(std::string &name, SSDfgVecOutput* output) {
+    _map_name_output.insert(std::make_pair(name, output));
+  }
+
+  SSDfgVecInput* get_input_mapping(std::string &name) {
+    auto it = _map_name_input.find(name);
+    assert(it!=_map_name_input.end());
+    return it->second;
+  }
+
+  SSDfgVecOutput* get_output_mapping(std::string &name) {
+    auto it = _map_name_output.find(name);
+    assert(it!=_map_name_output.end());
+    return it->second;
+  }
+
   /*! \brief The instances of the instructions. */
   std::vector<dsa::dfg::Instruction> instructions;
   /*! \brief The instances of the FU-occupy instructions. */
@@ -166,7 +192,11 @@ class SSDfg {
 
   /*! \brief The property information of each sub DFG. */
   std::vector<GroupProp> _groupProps;
-  std::vector<task_def_t> _dependence_maps;
+  task_def_t _dependence_maps[5][5]; // NUM_GROUPS][NUM_GROUPS];
+  std::unordered_map<std::string, SSDfgVecInput*> _map_name_input;
+  std::unordered_map<std::string, SSDfgVecOutput*> _map_name_output;
+  int _current_src_grp=0;
+  int _current_dst_grp=0;
 };
 
 template <>
