@@ -23,6 +23,12 @@ using namespace dsa;
 
 /// { SSDfg
 
+void SSDfg::reset_dfg() {
+  for(unsigned i=0; i<instructions.size(); ++i) {
+    instructions[i].reset_regs();
+  }
+}
+
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
     bool HasUse(dsa::dfg::Node* node) {
@@ -97,11 +103,12 @@ void SSDfg::create_new_task_dependence_map(int s, int d) {
 }
 
 void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer) { 
+  // printf("src: %d dst: %d producer size: %d consumer size: %d\n", _current_src_grp, _current_dst_grp, producer.size(), consumer.size());
   _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
 }
 
 task_def_t SSDfg::producer_consumer_map(int src_group, int dst_group) {
-  return _dependence_maps[src_group][dst_group];
+  return _dependence_maps[src_group][dst_group]; // could be an empty vector
 }
 
 SSDfg::SSDfg(string filename_) : filename(filename_) {

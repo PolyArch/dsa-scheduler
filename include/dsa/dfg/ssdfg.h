@@ -24,6 +24,8 @@
 #include "dsa/dfg/symbols.h"
 #include "dsa/simulation/data.h"
 
+#define NUM_GROUPS 6
+
 using dsa::SpatialFabric;
 
 // Feature Possibilities
@@ -58,6 +60,7 @@ struct Visitor;
 // typedef std::unordered_map<std::string, std::string> task_def_t;
 typedef std::pair<std::vector<std::string>, std::vector<std::string>> string_pair;
 typedef std::vector<string_pair> task_def_t;
+typedef std::vector<std::pair<std::vector<int>, std::vector<int>>> port_map_def_t;
 // associated with each dfg-group that can be created dynamically..
 // FIXME: is it used anywhere??
 /*struct TaskPortMap {
@@ -111,6 +114,9 @@ class SSDfg {
   /*! \brief Parse a DFG from the given file. */
   SSDfg(std::string filename);
 
+  /*! \brief Reset registers in the dfg instructions. */
+  void reset_dfg();
+
   /*! \brief The entrance for the visitor pattern. */
   void Apply(dsa::dfg::Visitor*);
 
@@ -148,25 +154,17 @@ class SSDfg {
 
   uint64_t cur_cycle() { return _cur_cycle; }
 
-  void insert_input_mapping(std::string &name, SSDfgVecInput* input) {
-    _map_name_input.insert(std::make_pair(name, input));
+  /*void insert_port_mapping(std::string name, SSDfgVec* vector_port) {
+    auto it = _map_name_port.find(name);
+    assert(it==_map_name_port.end() && "same port should not come again");
+    _map_name_port.insert(std::make_pair(name, vector_port));
   }
 
-  void insert_output_mapping(std::string &name, SSDfgVecOutput* output) {
-    _map_name_output.insert(std::make_pair(name, output));
-  }
-
-  SSDfgVecInput* get_input_mapping(std::string &name) {
-    auto it = _map_name_input.find(name);
-    assert(it!=_map_name_input.end());
+  SSDfgVec* get_port_mapping(std::string &name) {
+    auto it = _map_name_port.find(name);
+    assert(it!=_map_name_port.end());
     return it->second;
-  }
-
-  SSDfgVecOutput* get_output_mapping(std::string &name) {
-    auto it = _map_name_output.find(name);
-    assert(it!=_map_name_output.end());
-    return it->second;
-  }
+  }*/
 
   /*! \brief The instances of the instructions. */
   std::vector<dsa::dfg::Instruction> instructions;
@@ -180,6 +178,9 @@ class SSDfg {
   std::vector<dsa::dfg::Node*> nodes;
   /*! \brief The instances of all the edges. */
   std::vector<dsa::dfg::Edge> edges;
+  /*! \brief Mapping informtion for dependencies among taskflow. */
+  task_def_t _dependence_maps[NUM_GROUPS][NUM_GROUPS];
+  // port_map_def_t _port_dependence_maps[NUM_GROUPS][NUM_GROUPS];
 
  private:
   // @{
@@ -192,11 +193,9 @@ class SSDfg {
 
   /*! \brief The property information of each sub DFG. */
   std::vector<GroupProp> _groupProps;
-  task_def_t _dependence_maps[5][5]; // NUM_GROUPS][NUM_GROUPS];
-  std::unordered_map<std::string, SSDfgVecInput*> _map_name_input;
-  std::unordered_map<std::string, SSDfgVecOutput*> _map_name_output;
-  int _current_src_grp=0;
-  int _current_dst_grp=0;
+  // std::unordered_map<std::string, SSDfgVec*> _map_name_port;
+  int _current_src_grp=-1;
+  int _current_dst_grp=-1;
 };
 
 template <>

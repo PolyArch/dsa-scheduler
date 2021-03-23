@@ -26,7 +26,7 @@ struct Exporter : Visitor {
     plain::Array inputs;
     for (auto operand : node->ops()) {
       plain::Object operand_obj;
-      if (operand.edges.empty()) {
+      if (operand.edges.empty()) { // inputs/outputs
         operand_obj["imm"] = new json::Int(operand.imm);
       } else {
         operand_obj["type"] = (new json::String(OPERAND_TYPE[(int)operand.type]));
@@ -90,6 +90,37 @@ void Export(SSDfg* dfg, const std::string& fname) {
     auto elem_id = *nodes[i]->As<plain::Object>()->operator[]("id")->As<int64_t>();
     CHECK(elem_id == i) << elem_id << " != " << i;
   }
+  plain::Object current;
+  bool any_dep=false;
+  for(int src_grp=0; src_grp<NUM_GROUPS; ++src_grp) {
+    for(int dst_grp=0; dst_grp<NUM_GROUPS; ++dst_grp) {
+      if(dfg->_dependence_maps[src_grp][dst_grp].size()>0) {
+        any_dep=true;
+        // write in the below format
+        current["src_group"] = new json::Int(src_grp);
+        current["dst_group"] = new json::Int(dst_grp);
+        plain::Array mapping;
+        for(auto mapped_ports : dfg->_dependence_maps[src_grp][dst_grp]) { // 2
+          plain::Object map; // vector of mappings
+          plain::Array src_ports;
+          plain::Array dst_ports;
+          for(auto producer_port : mapped_ports.first) {
+            src_ports.push_back(new json::String(producer_port));
+          }
+          for(auto consumer_port : mapped_ports.second) {
+            dst_ports.push_back(new json::String(consumer_port));
+          }
+          map["src_ports"] = new json::Array(src_ports);  
+          map["dst_ports"] = new json::Array(dst_ports); 
+          mapping.push_back(new json::Object(map));
+        }
+        current["mappings"] = new json::Array(mapping);
+      }
+    }
+  }
+  if(any_dep) {
+    exporter.nodes.push_back(new json::Object(current));
+  }
 
   json::Array json_array(exporter.nodes);
   std::ofstream ofs(fname);
@@ -112,64 +143,103 @@ SSDfg* Import(const std::string& s) {
   for (int i = 0, n = nodes->size(); i < n; ++i) {
     auto node_ptr = (*nodes)[i]->As<plain::Object>();
     CHECK(node_ptr);
-    auto& node = *node_ptr;
-    auto& inputs = *node["inputs"]->As<plain::Array>();
-    auto& group_id = *node["group"]->As<int64_t>();
-    auto& name = *node["name"]->As<std::string>();
-    if (group_id != last_group) {
-      res->start_new_dfg_group();
-      res->group_prop(group_id).is_temporal = *node["temporal"]->As<int64_t>();
-      last_group = group_id;
-    }
-    if (node.count("width")) {
-      int length = *node["length"]->As<int64_t>();
-      int width = *node["width"]->As<int64_t>();
-      if (inputs.empty()) {
-        res->emplace_back<InputPort>(length, width, name, res, meta);
-      } else {
-        res->emplace_back<OutputPort>(length, width, name, res, meta);
-      }
-    } else if (node.count("op")) {
-      int opcode = *node["op"]->As<int64_t>();
-      res->emplace_back<Instruction>(res, static_cast<OpCode>(opcode));
-      auto& inst = res->instructions.back();
-      auto& opname = *node["inst"]->As<std::string>();
-      CHECK(std::string(name_of_inst(inst.inst())) == opname)
-          << name_of_inst(inst.inst()) << " != " << opname;
-      if (node.count("ctrl")) {
-        uint64_t ctrl = *node["ctrl"]->As<int64_t>();
-        inst.predicate = CtrlBits(ctrl);
-      }
-      if (node.count("self")) {
-        uint64_t self = *node["self"]->As<int64_t>();
-        inst.self_predicate = CtrlBits(self);
-      }
-    }
-    auto& operands = *node["inputs"]->As<plain::Array>();
-    for (int j = 0, m = operands.size(); j < m; ++j) {
-      auto& obj = *operands[j]->As<plain::Object>();
-      if (obj.count("imm")) {
-        res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
-      } else {
-        auto& type = *obj["type"]->As<std::string>();
-        auto& edges = *obj["edges"]->As<plain::Array>();
-        std::vector<int> es;
-        for (auto edge : edges) {
-          auto& edge_obj = *edge->As<plain::Object>();
-          int src_id = *edge_obj["src_id"]->As<int64_t>();
-          int src_val = *edge_obj["src_val"]->As<int64_t>();
-          int delay = *edge_obj["delay"]->As<int64_t>();
-          int l = *edge_obj["l"]->As<int64_t>();
-          int r = *edge_obj["r"]->As<int64_t>();
-          CHECK(src_id < i);
-          Edge e_instance(res, src_id, src_val, i, l, r);
-          es.push_back(*edge_obj["id"]->As<int64_t>());
-          if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
-          e_instance.delay = delay;
-          e_instance.id = es.back();
-          res->edges[es.back()] = e_instance;
+        auto &node = *node_ptr;
+    
+    if(node.count("dst_group")) { // a task dependence node
+      int dst_grp = *node["dst_group"]->As<int64_t>();
+      int src_grp = *node["src_group"]->As<int64_t>();
+      res->create_new_task_dependence_map(src_grp, dst_grp);
+      auto &mappings = *node["mappings"]->As<plain::Array>();
+      for (int j = 0, m = mappings.size(); j < m; ++j) { 
+        auto &obj = *mappings[j]->As<plain::Object>();
+        auto &src_ports = *obj["src_ports"]->As<plain::Array>();
+        auto &dst_ports = *obj["dst_ports"]->As<plain::Array>();
+        std::vector<std::string> producer_ports, consumer_ports;
+        for(auto src : src_ports) {
+          producer_ports.push_back(*(src->As<std::string>()));
         }
-        res->nodes[i]->ops().emplace_back(res, es, Str2Flag(type));
+        for(auto dst : dst_ports) {
+          consumer_ports.push_back(*(dst->As<std::string>()));
+        }
+        res->add_new_task_dependence_map(producer_ports, consumer_ports);
+      }
+    } else {
+      auto& inputs = *node["inputs"]->As<plain::Array>();
+      auto& group_id = *node["group"]->As<int64_t>();
+      auto& name = *node["name"]->As<std::string>();
+
+      if (group_id != last_group) {
+        res->start_new_dfg_group();
+        res->group_prop(group_id).is_temporal = *node["temporal"]->As<int64_t>();
+        last_group = group_id;
+      }
+      if (node.count("width")) {
+        int length = *node["length"]->As<int64_t>();
+        int width = *node["width"]->As<int64_t>();
+        if (inputs.empty()) {
+          res->emplace_back<InputPort>(length, width, name, res, meta);
+        } else {
+          res->emplace_back<OutputPort>(length, width, name, res, meta);
+        }
+      } else if (node.count("op")) {
+        int opcode = *node["op"]->As<int64_t>();
+        res->emplace_back<Instruction>(res, static_cast<OpCode>(opcode));
+        auto& inst = res->instructions.back();
+        auto& opname = *node["inst"]->As<std::string>();
+        CHECK(std::string(name_of_inst(inst.inst())) == opname)
+            << name_of_inst(inst.inst()) << " != " << opname;
+        if (node.count("ctrl")) {
+          uint64_t ctrl = *node["ctrl"]->As<int64_t>();
+          inst.predicate = CtrlBits(ctrl);
+        }
+        if (node.count("width")) {
+          int length = *node["length"]->As<int64_t>();
+          int width = *node["width"]->As<int64_t>();
+          if (inputs.empty()) {
+            res->emplace_back<SSDfgVecInput>(length, width, name, res, meta);
+          } else {
+            res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta);
+          }
+        } else if (node.count("op")) {
+          int opcode = *node["op"]->As<int64_t>();
+          res->emplace_back<SSDfgInst>(res, static_cast<OpCode>(opcode));
+          auto &inst = res->instructions.back();
+          if (node.count("ctrl")) {
+            uint64_t ctrl = *node["ctrl"]->As<int64_t>();
+            inst.predicate = CtrlBits(ctrl);
+          }
+          if (node.count("self")) {
+            uint64_t self = *node["self"]->As<int64_t>();
+            inst.self_predicate = CtrlBits(self);
+          }
+        }
+
+        auto& operands = *node["inputs"]->As<plain::Array>();
+        for (int j = 0, m = operands.size(); j < m; ++j) {
+          auto& obj = *operands[j]->As<plain::Object>();
+          if (obj.count("imm")) {
+            res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
+          } else {
+            auto& type = *obj["type"]->As<std::string>();
+            auto& edges = *obj["edges"]->As<plain::Array>();
+            std::vector<int> es;
+            for (auto edge : edges) {
+              auto& edge_obj = *edge->As<plain::Object>();
+              int src_id = *edge_obj["src_id"]->As<int64_t>();
+              int src_val = *edge_obj["src_val"]->As<int64_t>();
+              int delay = *edge_obj["delay"]->As<int64_t>();
+              int l = *edge_obj["l"]->As<int64_t>();
+              int r = *edge_obj["r"]->As<int64_t>();
+              CHECK(src_id < i);
+              Edge e_instance(res, src_id, src_val, i, l, r);
+              es.push_back(*edge_obj["id"]->As<int64_t>());
+              if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
+              e_instance.delay = delay;
+              e_instance.id = es.back();
+              res->edges[es.back()] = e_instance;
+            }
+          }
+        }
       }
     }
   }
@@ -185,9 +255,7 @@ SSDfg* Import(const std::string& s) {
     }
   } fa;
   res->Apply(&fa);
-
   return res;
 }
-
 }  // namespace dfg
 }  // namespace dsa
