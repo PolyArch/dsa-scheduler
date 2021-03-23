@@ -87,6 +87,12 @@ std::string SSDfgInst::name() {
 
 /// { SSDfg
 
+void SSDfg::reset_dfg() {
+  for(unsigned i=0; i<instructions.size(); ++i) {
+    instructions[i].reset_regs();
+  }
+}
+
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
     bool HasUse(SSDfgNode *node) {
@@ -161,11 +167,12 @@ void SSDfg::create_new_task_dependence_map(int s, int d) {
 }
 
 void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer) { 
+  // printf("src: %d dst: %d producer size: %d consumer size: %d\n", _current_src_grp, _current_dst_grp, producer.size(), consumer.size());
   _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
 }
 
 task_def_t SSDfg::producer_consumer_map(int src_group, int dst_group) {
-  return _dependence_maps[src_group][dst_group];
+  return _dependence_maps[src_group][dst_group]; // could be an empty vector
 }
 
 SSDfg::SSDfg(string filename_) : filename(filename_) {
@@ -179,6 +186,8 @@ SSDfgVec::SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name,
                    SSDfg* ssdfg, const dsa::dfg::MetaPort& meta_)
     : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
   _port_width = _bitwidth;
+  // std::cout << "name: " << name << " width: " << _port_width << std::endl;
+  // ssdfg->insert_port_mapping(name, this);
 }
 
 uint64_t SSDfgInst::do_compute(bool& discard) {
@@ -228,15 +237,12 @@ SSDfgVecInput::SSDfgVecInput(int len, int width, const std::string& name, SSDfg*
     values.emplace_back(ssdfg, id(), i);
   }
   std::string port_name = name;
-  ssdfg->insert_input_mapping(port_name, this);
 }
 
 SSDfgVecOutput::SSDfgVecOutput(int len, int width, const std::string& name, SSDfg* ssdfg,
                const dsa::dfg::MetaPort& meta)
     : SSDfgVec(V_OUTPUT, len, width, name, ssdfg, meta) {
   std::string port_name = name;
-  ssdfg->insert_output_mapping(port_name, this);
-
     }
 
 int SSDfgInst::bitwidth(){
