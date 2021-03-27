@@ -67,7 +67,7 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT TASKDEP
+%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP
 
 %type <io_pair> io_def
 %type <map_pair> map_def
@@ -96,11 +96,14 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
+    // for each len and width, create a symbol or a new vins
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
@@ -123,22 +126,26 @@ statement: INPUT ':' io_def  eol {
   // I think it's somewhat likely i am breaking decomposability
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
+      // at output, we make the connectivity because the previous edge would already be there..
       if (len) ss << cnt++;
       // TODO(@were): Do I need to modularize these two clean up segment?
-      auto sym = p->symbols.Get(ss.str());
+      auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
       if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
         int num_entries = ce->entries.size();
         CHECK(num_entries > 0 && num_entries <= 16);
         std::vector<int> es;
         for (auto elem : ce->entries) {
+          // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
           p->dfg->edges.emplace_back(
             p->dfg, elem->nid, elem->vid,
             p->dfg->vouts.back().id(), elem->l, elem->r);
@@ -158,6 +165,60 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   delete $3;
 }
+| INDIRECT ':' io_def eol { // create 1 input, 1 output and edge
+  auto name = $3->first;
+  int len = $3->second;
+  int width = $1;
+  int n = std::max(1, len);
+  int slice = 64 / width;
+  
+  // add input/output ports
+  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta);
+  
+  // add edges for the output port (this symbol should not be used anywhere)
+  // kind of new instruction, whose characteristics are already known
+  // nid? this needs to be incremented for every output. 
+  // vid? from sbmodel and seems to be always 0 for a direct connection
+  // OR vid=0 always, nid can be 0, 1... depending on the node_id. What instruction is being added? 
+  // ...where is the info?
+  // p->dfg->edges.emplace_back(p->dfg, nid, 0, p->dfg->vouts.back().id(), 0, width);
+  // std::vector<int> es{p->dfg->edges.back().id};
+
+  // ok so this is a converge entry
+  // Step1: push a symbol for a new converge entry (hopefully only 1 nid)
+  // std::string name2 = name;
+  int nid=p->dfg->vins.back().id(); // this creates seg fault...it should get its own id
+  p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
+  // p->symbols.Set(name2, $3);
+  // Step 2: associate an edge via that converge entry
+  std::stringstream ss;
+  ss << name;
+  auto sym = p->symbols.Get(ss.str());
+  auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
+  
+  nid = p->dfg->vins.back().id();
+  int vid = 0;
+  int iid = p->dfg->vouts.back().id();
+  int l=0, r=63;
+
+  p->dfg->edges.emplace_back(
+    p->dfg, nid, vid,
+    iid, l, r);
+
+  // p->dfg->edges.emplace_back(
+  //   p->dfg, ne->nid, ne->vid,
+  //   iid, ne->l, ne->r);
+  std::vector<int> es{p->dfg->edges.back().id};
+
+  // set ops on this output
+  p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+  // p->dfg->vins.back().values[0].uses.push_back(p->dfg->edges.back().id);
+  // LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
+
+  p->meta.clear();
+  delete $3;
+}
 | TASKDEP map_def ':' '(' task_map_list ')' eol {
   p->dfg->create_new_task_dependence_map($2->first, $2->second);
   auto &args = *$5;
@@ -168,11 +229,41 @@ statement: INPUT ':' io_def  eol {
   delete $5;
 }
 | value_list '=' rhs eol {
+<<<<<<< HEAD
   if (auto ne = dynamic_cast<NodeEntry*>($3)) {
     auto node = p->dfg->nodes[ne->nid];
     if (auto op = dynamic_cast<dsa::dfg::Operation*>(node)) {
       for (int i = 0, n = $1->size(); i < n; ++i) {
         op->values.emplace_back(p->dfg, op->id(), i);
+=======
+  if (auto ne = dynamic_cast<ValueEntry*>($3)) {
+    assert($1->size()==1);
+    std::string name = (*$1)[0];
+    p->symbols.Set(name, new ValueEntry(ne->nid, ne->vid, ne->l, ne->r));
+  } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
+    // By definition, converge entries only need one symbol (just def)
+    if ($1->size()==1) {
+      std::string name = (*$1)[0];
+      printf("name of converge entry: %s", name);
+      for (auto elem : ce->entries) {
+        printf("nid of converge entry is: %d", elem->nid);
+        auto node = p->dfg->nodes[elem->nid];
+        if(!node->has_name()) node->set_name(name);
+      }
+      p->symbols.Set(name, $3);
+    } else if ($1->size() == ce->entries.size()) {
+      auto o = dynamic_cast<ValueEntry*>(ce->entries[0]);
+      assert(o && "Assumption check failure, the first element should be a value entry!");
+      assert(dynamic_cast<SSDfgInst*>(p->dfg->nodes[o->nid]) && "Should be a instruction!");
+      p->symbols.Set((*$1)[0], new ValueEntry(o->nid, o->vid));
+      for (int i = 1, n = ce->entries.size(); i < n; ++i) {
+        if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
+          assert(ve->nid == o->nid && "Should all from the same node!");
+          p->symbols.Set((*$1)[i], new ValueEntry(ve->nid, 0));
+        } else {
+          assert(false && "Assumption check failure! All the remaining element should also be a value entry!");
+        }
+>>>>>>> added interface for indirect port
       }
     }
     for (int i = 0, n = node->values.size(); i < n; ++i) {
@@ -262,12 +353,17 @@ expr: I_CONST {
     $$ = ce->entries[0];
     delete ce;
   } else {
-    $$ = $1;
+    $$ = $1; // What does this mean???
   }
 }
 | IDENT '(' arg_list ')' {
   auto &opcode = *$1;
   auto &args = *$3;
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> added interface for indirect port
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
   auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
@@ -434,5 +530,9 @@ int parse_dfg(const char* filename, SSDfg* _dfg) {
 
 static void yyerror(struct parse_param* p, char const* s) {
   fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
+<<<<<<< HEAD
   CHECK(0);
+=======
+  assert(0);
+>>>>>>> added interface for indirect port
 }

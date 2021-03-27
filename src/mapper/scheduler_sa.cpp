@@ -729,6 +729,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
 
   process(sched->operands[node->id()], def, loc, here);
   to_revert = sched->operands[node->id()];
+  // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
   process(sched->users[node->id()], use, here, loc);
 
 #undef process
