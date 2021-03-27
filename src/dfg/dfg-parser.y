@@ -175,14 +175,13 @@ statement: INPUT ':' io_def  eol {
   p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
   p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta, true);
   
-  // int nid=p->dfg->vins.back().id(); // this creates seg fault...it should get its own id
-  // p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
   // std::stringstream ss;
   // ss << name;
   // auto sym = p->symbols.Get(ss.str());
   // auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
   
   int nid = p->dfg->vins.back().id();
+  p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
   int vid = 0;
   int iid = p->dfg->vouts.back().id();
   int l=0, r=63;
