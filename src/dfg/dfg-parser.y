@@ -64,7 +64,7 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT TASKDEP
+%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP
 
 %type <io_pair> io_def
 %type <map_pair> map_def
@@ -94,11 +94,14 @@ statement: INPUT ':' io_def  eol {
   p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
   LOG(PARSE) << p->dfg->vins.back().id() << " " << p->dfg->vins.back().name();
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
+    // for each len and width, create a symbol or a new vins
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
@@ -122,22 +125,26 @@ statement: INPUT ':' io_def  eol {
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
   LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
+      // at output, we make the connectivity because the previous edge would already be there..
       if (len) ss << cnt++;
       // TODO(@were): Do I need to modularize these two clean up segment?
-      auto sym = p->symbols.Get(ss.str());
+      auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
       if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
         int num_entries = ce->entries.size();
         assert(num_entries > 0 && num_entries <= 16);
         std::vector<int> es;
         for (auto elem : ce->entries) {
+          // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
           p->dfg->edges.emplace_back(
             p->dfg, elem->nid, elem->vid,
             p->dfg->vouts.back().id(), elem->l, elem->r);
@@ -145,6 +152,7 @@ statement: INPUT ':' io_def  eol {
         }
         p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
       } else if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
+        // printf("nid: %d vid: %d l: %d r: %d", ne->nid, ne->vid, ne->l, ne->r);
         p->dfg->edges.emplace_back(
           p->dfg, ne->nid, ne->vid,
           p->dfg->vouts.back().id(), ne->l, ne->r);
@@ -153,6 +161,60 @@ statement: INPUT ':' io_def  eol {
       }
     }
   }
+  p->meta.clear();
+  delete $3;
+}
+| INDIRECT ':' io_def eol { // create 1 input, 1 output and edge
+  auto name = $3->first;
+  int len = $3->second;
+  int width = $1;
+  int n = std::max(1, len);
+  int slice = 64 / width;
+  
+  // add input/output ports
+  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta);
+  
+  // add edges for the output port (this symbol should not be used anywhere)
+  // kind of new instruction, whose characteristics are already known
+  // nid? this needs to be incremented for every output. 
+  // vid? from sbmodel and seems to be always 0 for a direct connection
+  // OR vid=0 always, nid can be 0, 1... depending on the node_id. What instruction is being added? 
+  // ...where is the info?
+  // p->dfg->edges.emplace_back(p->dfg, nid, 0, p->dfg->vouts.back().id(), 0, width);
+  // std::vector<int> es{p->dfg->edges.back().id};
+
+  // ok so this is a converge entry
+  // Step1: push a symbol for a new converge entry (hopefully only 1 nid)
+  // std::string name2 = name;
+  int nid=p->dfg->vins.back().id(); // this creates seg fault...it should get its own id
+  p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
+  // p->symbols.Set(name2, $3);
+  // Step 2: associate an edge via that converge entry
+  std::stringstream ss;
+  ss << name;
+  auto sym = p->symbols.Get(ss.str());
+  auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
+  
+  nid = p->dfg->vins.back().id();
+  int vid = 0;
+  int iid = p->dfg->vouts.back().id();
+  int l=0, r=63;
+
+  p->dfg->edges.emplace_back(
+    p->dfg, nid, vid,
+    iid, l, r);
+
+  // p->dfg->edges.emplace_back(
+  //   p->dfg, ne->nid, ne->vid,
+  //   iid, ne->l, ne->r);
+  std::vector<int> es{p->dfg->edges.back().id};
+
+  // set ops on this output
+  p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+  // p->dfg->vins.back().values[0].uses.push_back(p->dfg->edges.back().id);
+  // LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
+
   p->meta.clear();
   delete $3;
 }
@@ -171,10 +233,12 @@ statement: INPUT ':' io_def  eol {
     std::string name = (*$1)[0];
     p->symbols.Set(name, new ValueEntry(ne->nid, ne->vid, ne->l, ne->r));
   } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
-    //By definition, converge entries only need one symbol (just def)
+    // By definition, converge entries only need one symbol (just def)
     if ($1->size()==1) {
       std::string name = (*$1)[0];
+      printf("name of converge entry: %s", name);
       for (auto elem : ce->entries) {
+        printf("nid of converge entry is: %d", elem->nid);
         auto node = p->dfg->nodes[elem->nid];
         if(!node->has_name()) node->set_name(name);
       }
@@ -270,12 +334,13 @@ expr: I_CONST {
     $$ = ce->entries[0];
     delete ce;
   } else {
-    $$ = $1;
+    $$ = $1; // What does this mean???
   }
 }
 | IDENT '(' arg_list ')' {
   auto &opcode = *$1;
   auto &args = *$3;
+
 
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<SSDfgInst>(p->dfg, op);

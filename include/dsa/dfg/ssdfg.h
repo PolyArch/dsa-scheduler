@@ -459,7 +459,6 @@ class SSDfg {
   std::vector<dsa::dfg::Edge> edges;
   /*! \brief Mapping informtion for dependencies among taskflow. */
   task_def_t _dependence_maps[NUM_GROUPS][NUM_GROUPS];
-  // port_map_def_t _port_dependence_maps[NUM_GROUPS][NUM_GROUPS];
 
  private:
   // @{

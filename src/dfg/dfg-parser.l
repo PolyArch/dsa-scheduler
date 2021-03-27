@@ -56,6 +56,7 @@ M   [-]
 "InputVec"                              { yylval.i = 64; return(INPUT); }
 "Output"("8"|"16"|"32"|"64")*           { iow(&yylval, yytext); return(OUTPUT); }
 "OutputVec"                             { yylval.i = 64; return(OUTPUT); }
+"Indirect"("8"|"16"|"32"|"64")*         { iow(&yylval, yytext); return(INDIRECT); }
 "TaskDep"                               { return(TASKDEP); }
 \n                                      { return EOLN; }
 
@@ -128,7 +129,7 @@ void sf(YYSTYPE* lval,char* yytext) {
 }
 
 void iow(YYSTYPE* lval,char* yytext) {
-  if (strcmp(yytext, "Input") == 0 || strcmp(yytext, "Output") == 0) {
+  if (strcmp(yytext, "Input") == 0 || strcmp(yytext, "Output") == 0 || strcmp(yytext, "Indirect") == 0) {
     lval->i = 64;
     return;
   }
