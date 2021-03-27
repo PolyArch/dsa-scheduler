@@ -417,6 +417,16 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   }
   std::random_shuffle(nodes.begin() + from, nodes.begin() + n);
 
+  // TODO: modify this candidate count to specify same output to the same name
+  /*
+  unordered_map<std::string, int> name_index;
+  if(name_index.find(nodes[i]->name())!=name_index.end()) {
+    auto it = name_index.find(nodes[i]->name());
+    // but shouldn't have been allocated double right?
+    sched->candidate_cnt[nodes[i]->id()] = it->second;
+  }
+  name_index.insert(make_pair(nodes[i]->name(), sched->candidate_cnt[nodes[i]->id()]));
+  */
   for (int i = 0; i < n; ++i) {
     LOG(CAND) << nodes[i]->name() << " has " << sched->candidate_cnt[nodes[i]->id()]
               << " candidate(s)";
@@ -705,8 +715,14 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
 
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
   if(node->indirect()) {
-    sched->assign_node(node, here); // mapping to the hardware
+    // if input is indirect, then create a mapping for the output node with the same name (search)
+    // if output is indirect, skip!!
+    printf("Found an indirect node, just assigned it to the same id\n");
+    // mapping to the hardware
+    sched->assign_node(node, here);
     return true;
+  } else {
+    printf("Found a normal node, just assigned it to the same id\n");
   }
   std::vector<dsa::dfg::Edge*> to_revert;
 
