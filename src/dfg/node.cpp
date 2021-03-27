@@ -7,7 +7,6 @@ namespace dfg {
 
 Operand::Operand(SSDfg *parent, const std::vector<int> &es, OperandType type_) :
   parent(parent), edges(es), type(type_), fifos(es.size()) {
-  // This seems to be an output node...
   for (auto eid : es) {
     auto &edge = parent->edges[eid];
     edge.val()->uses.push_back(eid);

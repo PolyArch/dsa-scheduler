@@ -21,8 +21,8 @@ uint64_t SSDfgNode::invalid() { return _invalid; }
 
 bool SSDfgNode::is_temporal() { return _ssdfg->group_prop(_group_id).is_temporal; }
 
-SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name)
-    : _ssdfg(ssdfg), _name(name), _vtype(v) {
+SSDfgNode::SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name, bool indirect)
+    : _ssdfg(ssdfg), _name(name), _vtype(v), _isIndirect(indirect) {
   _ID = ssdfg->instructions.size() + ssdfg->vins.size() + ssdfg->vouts.size();
   _group_id = _ssdfg->num_groups() - 1;
 }
@@ -183,8 +183,8 @@ SSDfg::SSDfg(string filename_) : filename(filename_) {
 }
 
 SSDfgVec::SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name,
-                   SSDfg* ssdfg, const dsa::dfg::MetaPort& meta_)
-    : SSDfgNode(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
+                   SSDfg* ssdfg, const dsa::dfg::MetaPort& meta_, bool indirect)
+    : SSDfgNode(ssdfg, v, name, indirect), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
   _port_width = _bitwidth;
   // std::cout << "name: " << name << " width: " << _port_width << std::endl;
   // ssdfg->insert_port_mapping(name, this);
@@ -240,8 +240,8 @@ SSDfgVecInput::SSDfgVecInput(int len, int width, const std::string& name, SSDfg*
 }
 
 SSDfgVecOutput::SSDfgVecOutput(int len, int width, const std::string& name, SSDfg* ssdfg,
-               const dsa::dfg::MetaPort& meta)
-    : SSDfgVec(V_OUTPUT, len, width, name, ssdfg, meta) {
+               const dsa::dfg::MetaPort& meta, bool indirect)
+    : SSDfgVec(V_OUTPUT, len, width, name, ssdfg, meta, indirect) {
   std::string port_name = name;
     }
 

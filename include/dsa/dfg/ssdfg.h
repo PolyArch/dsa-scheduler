@@ -86,7 +86,7 @@ class SSDfgNode {
   // some issue with this function
   virtual uint64_t invalid();
 
-  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
+  SSDfgNode(SSDfg* ssdfg, V_TYPE v, const std::string& name = "", bool indirect = false);
 
   virtual int lat_of_inst() { return 0; }
 
@@ -128,6 +128,8 @@ class SSDfgNode {
     return res;
   }
 
+  bool indirect() { return _isIndirect; }
+
   SSDfg*& ssdfg() { return _ssdfg; }
 
   /*! \brief The values produced by this node. */
@@ -143,6 +145,7 @@ class SSDfgNode {
   int _ID;
   std::string _name;
   std::vector<dsa::dfg::Operand> _ops;          // in edges
+  bool _isIndirect = false;
 
   int _min_lat = 0;
   int _max_thr = 0;
@@ -303,7 +306,7 @@ class SSDfgVec : public SSDfgNode {
   SSDfgVec() {}
 
   SSDfgVec(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
-           const dsa::dfg::MetaPort& meta);
+           const dsa::dfg::MetaPort& meta, bool indirect=false);
 
   virtual void Accept(dsa::dfg::Visitor *);
 
@@ -362,7 +365,7 @@ class SSDfgVecOutput : public SSDfgVec {
   SSDfgVecOutput() {}
 
   SSDfgVecOutput(int len, int width, const std::string& name, SSDfg* ssdfg,
-                 const dsa::dfg::MetaPort& meta);
+                 const dsa::dfg::MetaPort& meta, bool indirect=false);
 
   void Accept(dsa::dfg::Visitor *) override;
 
