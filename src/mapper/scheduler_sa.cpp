@@ -702,6 +702,12 @@ int SchedulerSimulatedAnnealing::route(
 
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* node,
                                                pair<int, dsa::ssnode*> here) {
+
+  // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
+  if(node->indirect()) {
+    sched->assign_node(node, here); // mapping to the hardware
+    return true;
+  }
   std::vector<dsa::dfg::Edge*> to_revert;
 
 #define process(edge_, node_, src, dest)                                           \
@@ -731,7 +737,6 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
   to_revert = sched->operands[node->id()];
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
   process(sched->users[node->id()], use, here, loc);
-
 #undef process
 
   sched->assign_node(node, here);

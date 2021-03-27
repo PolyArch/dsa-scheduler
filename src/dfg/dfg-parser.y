@@ -174,30 +174,16 @@ statement: INPUT ':' io_def  eol {
   
   // add input/output ports
   p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
-  p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta, true);
   
-  // add edges for the output port (this symbol should not be used anywhere)
-  // kind of new instruction, whose characteristics are already known
-  // nid? this needs to be incremented for every output. 
-  // vid? from sbmodel and seems to be always 0 for a direct connection
-  // OR vid=0 always, nid can be 0, 1... depending on the node_id. What instruction is being added? 
-  // ...where is the info?
-  // p->dfg->edges.emplace_back(p->dfg, nid, 0, p->dfg->vouts.back().id(), 0, width);
-  // std::vector<int> es{p->dfg->edges.back().id};
-
-  // ok so this is a converge entry
-  // Step1: push a symbol for a new converge entry (hopefully only 1 nid)
-  // std::string name2 = name;
-  int nid=p->dfg->vins.back().id(); // this creates seg fault...it should get its own id
-  p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
-  // p->symbols.Set(name2, $3);
-  // Step 2: associate an edge via that converge entry
-  std::stringstream ss;
-  ss << name;
-  auto sym = p->symbols.Get(ss.str());
-  auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
+  // int nid=p->dfg->vins.back().id(); // this creates seg fault...it should get its own id
+  // p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
+  // std::stringstream ss;
+  // ss << name;
+  // auto sym = p->symbols.Get(ss.str());
+  // auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
   
-  nid = p->dfg->vins.back().id();
+  int nid = p->dfg->vins.back().id();
   int vid = 0;
   int iid = p->dfg->vouts.back().id();
   int l=0, r=63;
@@ -206,9 +192,6 @@ statement: INPUT ':' io_def  eol {
     p->dfg, nid, vid,
     iid, l, r);
 
-  // p->dfg->edges.emplace_back(
-  //   p->dfg, ne->nid, ne->vid,
-  //   iid, ne->l, ne->r);
   std::vector<int> es{p->dfg->edges.back().id};
 
   // set ops on this output
