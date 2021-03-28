@@ -173,7 +173,7 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   
   // add input/output ports
-  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta, true);
   p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta, true);
   
   // std::stringstream ss;

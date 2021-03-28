@@ -22,6 +22,7 @@ struct Exporter : Visitor {
     current["temporal"] = new json::Int(node->is_temporal());
     current["group"] = new json::Int(node->group_id());
     current["name"] = new json::String(node->name());
+    current["indirect"] = new json::Int(node->indirect());
 
     plain::Array inputs;
     for (auto operand : node->ops()) {
@@ -167,6 +168,7 @@ SSDfg* Import(const std::string& s) {
       auto& inputs = *node["inputs"]->As<plain::Array>();
       auto& group_id = *node["group"]->As<int64_t>();
       auto& name = *node["name"]->As<std::string>();
+      auto &indirect = *node["indirect"]->As<int64_t>();
 
       if (group_id != last_group) {
         res->start_new_dfg_group();

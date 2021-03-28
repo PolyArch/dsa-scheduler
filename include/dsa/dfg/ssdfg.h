@@ -251,7 +251,7 @@ class SSDfgVecInput : public SSDfgVec {
   SSDfgVecInput() {}
 
   SSDfgVecInput(int len, int width, const std::string& name, SSDfg* ssdfg,
-                const dsa::dfg::MetaPort& meta);
+                const dsa::dfg::MetaPort& meta, bool indirect=false);
 
   int current_{0};
   void forward() override;

@@ -131,7 +131,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
   }
 
-  void Visit(dfg::InputPort* input) override {
+  // This is finding the candidates for input vector ports...
+  // possible numbers...condition for non-inclusiveness is somewhere else that uses these candidates...
+  void Visit(SSDfgVecInput *input) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->input_list();
     // Lets write size in units of bits
@@ -146,7 +148,8 @@ struct CandidateSpotVisitor : dfg::Visitor {
     cnt[input->id()] = spots.size();
   }
 
-  void Visit(dfg::OutputPort* output) override {
+  // This is finding the candidates for output vector ports...
+  void Visit(SSDfgVecOutput *output) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->output_list();
     // Lets write size in units of bits
