@@ -230,8 +230,8 @@ void SSDfg::Apply(dsa::dfg::Visitor *visitor) {
 }
 
 SSDfgVecInput::SSDfgVecInput(int len, int width, const std::string& name, SSDfg* ssdfg,
-                             const dsa::dfg::MetaPort& meta)
-      : SSDfgVec(V_INPUT, len, width, name, ssdfg, meta) {
+                             const dsa::dfg::MetaPort& meta, bool indirect)
+      : SSDfgVec(V_INPUT, len, width, name, ssdfg, meta, indirect) {
   int n = std::max(1, len / (64 / width));
   for (int i = 0; i < n; ++i) {
     values.emplace_back(ssdfg, id(), i);

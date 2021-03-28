@@ -20,6 +20,7 @@ struct Exporter : Visitor {
     current["temporal"] = new json::Int(node->is_temporal());
     current["group"] = new json::Int(node->group_id());
     current["name"] = new json::String(node->name());
+    current["indirect"] = new json::Int(node->indirect());
 
     plain::Array inputs;
     for (auto operand : node->ops()) {
@@ -164,6 +165,7 @@ SSDfg* Import(const std::string &s) {
       auto &inputs = *node["inputs"]->As<plain::Array>();
       auto &group_id = *node["group"]->As<int64_t>();
       auto &name = *node["name"]->As<std::string>();
+      auto &indirect = *node["indirect"]->As<int64_t>();
 
       if (group_id != last_group) {
         res->start_new_dfg_group();
@@ -174,9 +176,9 @@ SSDfg* Import(const std::string &s) {
         int length = *node["length"]->As<int64_t>();
         int width = *node["width"]->As<int64_t>();
         if (inputs.empty()) {
-          res->emplace_back<SSDfgVecInput>(length, width, name, res, meta);
+          res->emplace_back<SSDfgVecInput>(length, width, name, res, meta, indirect);
         } else {
-          res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta);
+          res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta, indirect);
         }
       } else if (node.count("op")) {
         int opcode = *node["op"]->As<int64_t>();

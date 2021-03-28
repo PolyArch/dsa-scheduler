@@ -177,6 +177,8 @@ class Schedule {
     }
   }
 
+  // this should be same as both input and output ports should give same locationOf
+  // locationOf is the same ssnode assigned...
   int vecPortOf(SSDfgVec* vec) {
     ssnode* n = locationOf(vec);
     if (n) {
@@ -211,6 +213,7 @@ class Schedule {
 
     assert(snode->id() < (int)_nodeProp.size());
 
+    // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
     int num_slots = dfgnode->bitwidth() / 8;
     for (int i = 0; i < num_slots; ++i) {
       int slot = orig_slot + i;
@@ -483,15 +486,35 @@ class Schedule {
   SSDfgNode* dfgNodeOf(sslink* link) { return dfgNodeOf(0, link); }
 
   // find first node for
-  SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
+  /*SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
     auto& vec = _nodeProp[node->id()].slots[slot].vertices;
     if (!vec.empty()) {
       return vec.front().first;
     }
     return nullptr;
-  }
+  }*/
+  SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
+    auto& vec = _nodeProp[node->id()].slots[slot].vertices;
+    for(auto it=vec.begin(); it!=vec.end(); ++it) {
+      return it->first;
+    }
+    return nullptr;
+   }
 
-  // find first node for
+  SSDfgNode* dfgNodeOf(int slot, int index, ssnode* node) {
+    auto& vec = _nodeProp[node->id()].slots[slot].vertices;
+    // std::cout << "vec size: " << vec.size() << std::endl;
+    int n=0;
+    for(auto it=vec.begin(); it!=vec.end(); ++it) {
+      if(n==index) {
+        return it->first;
+      }
+      ++n;
+    }
+    return nullptr;
+   }
+
+  // find first non-null node for
   SSDfgNode* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
 
   std::vector<std::pair<SSDfgNode*, int>>& dfg_nodes_of(int slot, ssnode* node) {
