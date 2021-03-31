@@ -8,7 +8,8 @@
 #include "dsa/dfg/node.h"
 int parse_dfg(const char* dfgfile, SSDfg* dfg);
 typedef std::pair<std::string,int> io_pair_t;
-typedef std::pair<int,int> map_pair_t;
+typedef std::pair<std::string,std::string> map_pair_t;
+typedef std::pair<int,int> map_id_t;
 
 using ParseResult = dsa::dfg::ParseResult;
 using ControlEntry = dsa::dfg::ControlEntry;
@@ -59,6 +60,8 @@ static void yyerror(parse_param*, const char *);
   ctrl_def_t* ctrl_def;
   std::vector<std::pair<dsa::OpCode, int>> *fu_and_cnt;
   task_def_t* task_def;
+  std::vector<map_pair_t*> *map_vec;
+  map_id_t* map_id;
 
   YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
   ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -70,12 +73,13 @@ static void yyerror(parse_param*, const char *);
 %token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP
 
 %type <io_pair> io_def
-%type <map_pair> map_def
+%type <map_vec> map_def
+%type <map_id> task_map_id_def
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
-%type <str_vec> ident_list value_list
 %type <fu_and_cnt> fu_list
+%type <str_vec> ident_list value_list // @vidushi: what does it mean to have two?
 %type <task_def> task_map_list
 
 %start statement_list
@@ -201,51 +205,24 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   delete $3;
 }
-| TASKDEP map_def ':' '(' task_map_list ')' eol {
-  p->dfg->create_new_task_dependence_map($2->first, $2->second);
-  auto &args = *$5;
+| TASKDEP '[' task_map_id_def map_def ':' '(' task_map_list ')' eol {
+  p->dfg->create_new_task_dependence_map($3->first, $3->second); // accessing a pair
+  for(unsigned task_param=0; task_param<$4->size(); ++task_param) {
+    p->dfg->add_new_task_dependence_characteristic((*$4)[task_param]->first, (*$4)[task_param]->second); // accessing a pair
+  }
+  auto &args = *$7;
   for(unsigned i=0; i<args.size(); ++i) {
     p->dfg->add_new_task_dependence_map(args[i].first, args[i].second);
   }
   p->meta.clear();
-  delete $5;
+  delete $7;
 }
 | value_list '=' rhs eol {
-<<<<<<< HEAD
   if (auto ne = dynamic_cast<NodeEntry*>($3)) {
     auto node = p->dfg->nodes[ne->nid];
     if (auto op = dynamic_cast<dsa::dfg::Operation*>(node)) {
       for (int i = 0, n = $1->size(); i < n; ++i) {
         op->values.emplace_back(p->dfg, op->id(), i);
-=======
-  if (auto ne = dynamic_cast<ValueEntry*>($3)) {
-    assert($1->size()==1);
-    std::string name = (*$1)[0];
-    p->symbols.Set(name, new ValueEntry(ne->nid, ne->vid, ne->l, ne->r));
-  } else if (auto ce = dynamic_cast<ConvergeEntry*>($3)) {
-    // By definition, converge entries only need one symbol (just def)
-    if ($1->size()==1) {
-      std::string name = (*$1)[0];
-      printf("name of converge entry: %s", name);
-      for (auto elem : ce->entries) {
-        printf("nid of converge entry is: %d", elem->nid);
-        auto node = p->dfg->nodes[elem->nid];
-        if(!node->has_name()) node->set_name(name);
-      }
-      p->symbols.Set(name, $3);
-    } else if ($1->size() == ce->entries.size()) {
-      auto o = dynamic_cast<ValueEntry*>(ce->entries[0]);
-      assert(o && "Assumption check failure, the first element should be a value entry!");
-      assert(dynamic_cast<SSDfgInst*>(p->dfg->nodes[o->nid]) && "Should be a instruction!");
-      p->symbols.Set((*$1)[0], new ValueEntry(o->nid, o->vid));
-      for (int i = 1, n = ce->entries.size(); i < n; ++i) {
-        if (auto ve = dynamic_cast<ValueEntry*>(ce->entries[i])) {
-          assert(ve->nid == o->nid && "Should all from the same node!");
-          p->symbols.Set((*$1)[i], new ValueEntry(ve->nid, 0));
-        } else {
-          assert(false && "Assumption check failure! All the remaining element should also be a value entry!");
-        }
->>>>>>> added interface for indirect port
       }
     }
     for (int i = 0, n = node->values.size(); i < n; ++i) {
@@ -307,8 +284,26 @@ io_def: IDENT {
     delete $1;
 };
 
-map_def: '[' I_CONST ':' I_CONST ']' {
-  $$ = new map_pair_t($2,$4);
+task_map_id_def: I_CONST ':' I_CONST {
+  $$ = new map_id_t($1, $3);
+}
+| task_map_id_def ',' {
+  $$ = $1;
+}
+| task_map_id_def ']' {
+  $$ = $1;
+};
+
+map_def: IDENT '=' IDENT {
+  $$ = new std::vector<map_pair_t*>();
+  $$->push_back(new map_pair_t(*$1,*$3));
+}
+| map_def ',' IDENT '=' IDENT {
+  $$ = $1;
+  $$->push_back(new map_pair_t(*$3,*$5)); // other entries
+}
+| map_def ']' {
+  $$ = $1;
 };
 
 rhs: expr { $$ = $1; };
@@ -341,11 +336,7 @@ expr: I_CONST {
 | IDENT '(' arg_list ')' {
   auto &opcode = *$1;
   auto &args = *$3;
-<<<<<<< HEAD
-=======
 
-
->>>>>>> added interface for indirect port
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
   auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
@@ -512,9 +503,5 @@ int parse_dfg(const char* filename, SSDfg* _dfg) {
 
 static void yyerror(struct parse_param* p, char const* s) {
   fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
-<<<<<<< HEAD
   CHECK(0);
-=======
-  assert(0);
->>>>>>> added interface for indirect port
 }
