@@ -162,13 +162,36 @@ void SSDfg::set_pragma(const std::string& c, const std::string& s) {
 void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
 
 void SSDfg::create_new_task_dependence_map(int s, int d) {
-  _current_src_grp=s;
-  _current_dst_grp=d;
+  // stringstream raw1(s); raw1 >> _current_src_grp;
+  // stringstream raw2(d); raw2 >> _current_dst_grp;
+  _current_src_grp = s;
+  _current_dst_grp = d;
+  for(int i=0; i<3; ++i) {
+    _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
+  }
 }
 
+void SSDfg::add_new_task_dependence_characteristic(std::string s, std::string d) {
+  auto it = _dependence_characteristics[_current_src_grp][_current_dst_grp].find(s);
+  assert(it!=_dependence_characteristics[_current_src_grp][_current_dst_grp].end() && "task characteristic type not defined yet");
+  _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(s, d)); 
+}
+
+// it should push to coalescer dependence map?
 void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer) { 
-  // printf("src: %d dst: %d producer size: %d consumer size: %d\n", _current_src_grp, _current_dst_grp, producer.size(), consumer.size());
-  _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
+  std::string type = _dependence_characteristics[_current_src_grp][_current_dst_grp]["type"];
+  if(type=="argument") {
+    _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
+  } else if(type=="coal") {
+    assert(producer.size()==1 && consumer.size()==1 && "coalescer does not do spatial scheduling");
+    _coalescer_dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer[0], consumer[0])); 
+  } else {
+    assert(0 && "unknown task type, currently only argument or coal is allowed");
+  }
+}
+
+std::vector<std::pair<std::string, std::string>> SSDfg::coalescer_input_output_map(int src_group, int dst_group) {
+  return _coalescer_dependence_maps[src_group][dst_group];
 }
 
 task_def_t SSDfg::producer_consumer_map(int src_group, int dst_group) {

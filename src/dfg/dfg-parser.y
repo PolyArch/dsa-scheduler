@@ -7,7 +7,8 @@
 #include "dsa/dfg/node.h"
 int parse_dfg(const char* dfgfile, SSDfg* dfg);
 typedef std::pair<std::string,int> io_pair_t;
-typedef std::pair<int,int> map_pair_t;
+typedef std::pair<std::string,std::string> map_pair_t;
+typedef std::pair<int,int> map_id_t;
 
 using ParseResult = dsa::dfg::ParseResult;
 using ControlEntry = dsa::dfg::ControlEntry;
@@ -56,6 +57,8 @@ static void yyerror(parse_param*, const char *);
   string_vec_t* str_vec;
   ctrl_def_t* ctrl_def;
   task_def_t* task_def;
+  std::vector<map_pair_t*> *map_vec;
+  map_id_t* map_id;
 
   YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
   ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -67,11 +70,12 @@ static void yyerror(parse_param*, const char *);
 %token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP
 
 %type <io_pair> io_def
-%type <map_pair> map_def
+%type <map_vec> map_def
+%type <map_id> task_map_id_def
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
-%type <str_vec> ident_list value_list
+%type <str_vec> ident_list value_list // @vidushi: what does it mean to have two?
 %type <task_def> task_map_list
 
 
@@ -200,14 +204,17 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   delete $3;
 }
-| TASKDEP map_def ':' '(' task_map_list ')' eol {
-  p->dfg->create_new_task_dependence_map($2->first, $2->second);
-  auto &args = *$5;
+| TASKDEP '[' task_map_id_def map_def ':' '(' task_map_list ')' eol {
+  p->dfg->create_new_task_dependence_map($3->first, $3->second); // accessing a pair
+  for(unsigned task_param=0; task_param<$4->size(); ++task_param) {
+    p->dfg->add_new_task_dependence_characteristic((*$4)[task_param]->first, (*$4)[task_param]->second); // accessing a pair
+  }
+  auto &args = *$7;
   for(unsigned i=0; i<args.size(); ++i) {
     p->dfg->add_new_task_dependence_map(args[i].first, args[i].second);
   }
   p->meta.clear();
-  delete $5;
+  delete $7;
 }
 | value_list '=' rhs eol {
   if (auto ne = dynamic_cast<ValueEntry*>($3)) {
@@ -218,7 +225,6 @@ statement: INPUT ':' io_def  eol {
     // By definition, converge entries only need one symbol (just def)
     if ($1->size()==1) {
       std::string name = (*$1)[0];
-      printf("name of converge entry: %s", name);
       for (auto elem : ce->entries) {
         printf("nid of converge entry is: %d", elem->nid);
         auto node = p->dfg->nodes[elem->nid];
@@ -288,8 +294,26 @@ io_def: IDENT {
     delete $1;
 };
 
-map_def: '[' I_CONST ':' I_CONST ']' {
-  $$ = new map_pair_t($2,$4);
+task_map_id_def: I_CONST ':' I_CONST {
+  $$ = new map_id_t($1, $3);
+}
+| task_map_id_def ',' {
+  $$ = $1;
+}
+| task_map_id_def ']' {
+  $$ = $1;
+};
+
+map_def: IDENT '=' IDENT {
+  $$ = new std::vector<map_pair_t*>();
+  $$->push_back(new map_pair_t(*$1,*$3));
+}
+| map_def ',' IDENT '=' IDENT {
+  $$ = $1;
+  $$->push_back(new map_pair_t(*$3,*$5)); // other entries
+}
+| map_def ']' {
+  $$ = $1;
 };
 
 rhs: expr { $$ = $1; };

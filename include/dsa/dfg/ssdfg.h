@@ -409,8 +409,14 @@ class SSDfg {
 
   /*! \brief Set a new dependence among dfg groups. */
   void create_new_task_dependence_map(int s, int d);
+  void add_new_task_dependence_characteristic(std::string s, std::string d);
   void add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer);
   task_def_t producer_consumer_map(int src_group, int dst_group);
+  std::vector<std::pair<std::string, std::string>> coalescer_input_output_map(int src_group, int dst_group);
+
+  std::unordered_map<std::string, std::string> dependence_characteristics(int src_group, int dst_group) {
+    return _dependence_characteristics[src_group][dst_group];
+  }
 
   void set_pragma(const std::string& c, const std::string& s);
 
@@ -450,6 +456,10 @@ class SSDfg {
     return it->second;
   }*/
 
+  std::string get_task_charac(int i) {
+    return _default_task_characs[i].first;
+  }
+
   /*! \brief The instances of the instructions. */
   std::vector<SSDfgInst> instructions;
   /*! \brief The instances of the vector inputs. */
@@ -462,6 +472,12 @@ class SSDfg {
   std::vector<dsa::dfg::Edge> edges;
   /*! \brief Mapping informtion for dependencies among taskflow. */
   task_def_t _dependence_maps[NUM_GROUPS][NUM_GROUPS];
+  /*! \brief Mapping informtion via coalescing buffer. */
+  std::vector<std::pair<std::string, std::string>> _coalescer_dependence_maps[NUM_GROUPS][NUM_GROUPS];
+  /*! \brief Mapping characteristics for dependencies among taskflow. */
+  std::unordered_map<std::string, std::string> _dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
+  /*! \brief Default mapping characteristics for dependencies among taskflow. */
+  std::pair<std::string, std::string> _default_task_characs[3] = {{"type", "argument"}, {"id","-1"}, {"gran","1"}};
 
  private:
   // @{
