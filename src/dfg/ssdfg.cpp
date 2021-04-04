@@ -98,11 +98,9 @@ void SSDfg::set_pragma(const std::string& c, const std::string& s) {
 void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
 
 void SSDfg::create_new_task_dependence_map(int s, int d) {
-  // stringstream raw1(s); raw1 >> _current_src_grp;
-  // stringstream raw2(d); raw2 >> _current_dst_grp;
   _current_src_grp = s;
   _current_dst_grp = d;
-  for(int i=0; i<3; ++i) {
+  for(int i=0; i<6; ++i) {
     _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
   }
 }

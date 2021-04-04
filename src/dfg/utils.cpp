@@ -101,13 +101,11 @@ void Export(SSDfg* dfg, const std::string& fname) {
         current["src_group"] = new json::Int(src_grp);
         current["dst_group"] = new json::Int(dst_grp);
 
-        plain::Array mapping_charac;
+        plain::Object map;
         for(auto charac : dfg->_dependence_characteristics[src_grp][dst_grp]) {
-          plain::Object map;
           map[charac.first] = new json::String(charac.second);
-          mapping_charac.push_back(new json::Object(map));         
         }
-        current["map_characteristics"] = new json::Array(mapping_charac);
+        current["map_characteristics"] = new json::Object(map);
 
         plain::Array mapping;
         for(auto mapped_ports : dfg->_dependence_maps[src_grp][dst_grp]) { // 2
@@ -160,11 +158,11 @@ SSDfg* Import(const std::string& s) {
       int dst_grp = *node["dst_group"]->As<int64_t>();
       res->create_new_task_dependence_map(src_grp, dst_grp);
           
-      auto &map_chars = *node["map_characteristics"]->As<plain::Array>();
-      for (int j = 0, m = map_chars.size(); j < m; ++j) { 
-        auto &obj = *map_chars[j]->As<plain::Object>();
-        std::string arg_type = res->get_task_charac(j);
-        res->add_new_task_dependence_characteristic(arg_type, *obj[arg_type]->As<std::string>());
+      auto &map_chars = *node["map_characteristics"]->As<plain::Object>();
+      for(auto charac : res->_dependence_characteristics[src_grp][dst_grp]) {
+        std::string arg_type = charac.first;
+        std::string arg_value = *map_chars[arg_type]->As<std::string>();
+        res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }
 
       auto &mappings = *node["mappings"]->As<plain::Array>();
