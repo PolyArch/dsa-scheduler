@@ -477,7 +477,7 @@ class SSDfg {
   /*! \brief Mapping characteristics for dependencies among taskflow. */
   std::unordered_map<std::string, std::string> _dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Default mapping characteristics for dependencies among taskflow. */
-  std::pair<std::string, std::string> _default_task_characs[3] = {{"type", "argument"}, {"id","-1"}, {"gran","1"}};
+  std::pair<std::string, std::string> _default_task_characs[6] = {{"type", "argument"}, {"id","-1"}, {"gran","1"}, {"bytes","64"},{"init_order","-1"},{"index", "-1"}};
 
  private:
   // @{
