@@ -164,23 +164,13 @@ void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
 void SSDfg::create_new_task_dependence_map(int s, int d) {
   _current_src_grp = s;
   _current_dst_grp = d;
-  for(int i=0; i<6; ++i) {
-    _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
-  }
-}
-
-void SSDfg::add_new_task_dependence_characteristic(std::string s, std::string d) {
-  auto it = _dependence_characteristics[_current_src_grp][_current_dst_grp].find(s);
-  assert(it!=_dependence_characteristics[_current_src_grp][_current_dst_grp].end() && "task characteristic type not defined yet");
-  _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(s, d)); 
 }
 
 // it should push to coalescer dependence map?
 void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer) { 
-  std::string type = _dependence_characteristics[_current_src_grp][_current_dst_grp]["type"];
-  if(type=="argument") {
+  if(_current_dependence_type=="argument") {
     _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
-  } else if(type=="coal") {
+  } else if(_current_dependence_type=="coal") {
     assert(producer.size()==1 && consumer.size()==1 && "coalescer does not do spatial scheduling");
     _coalescer_dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer[0], consumer[0])); 
   } else {
@@ -188,12 +178,45 @@ void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::
   }
 }
 
-std::vector<std::pair<std::string, std::string>> SSDfg::coalescer_input_output_map(int src_group, int dst_group) {
-  return _coalescer_dependence_maps[src_group][dst_group];
+void SSDfg::add_new_task_dependence_characteristic(std::string s, std::string d) {
+  // cout << "Current src: " << _current_src_grp << " current_dst: " << _current_dst_grp << " characteristic type: " << s << " value: " << d << endl;
+  if(s=="atype") {
+    _current_dependence_type = d;
+    if(d=="argument") {
+      assert(_dependence_characteristics[_current_src_grp][_current_dst_grp].empty() && "coalescer characteristics should have been empty already");
+      for(int i=0; i<6; ++i) {
+        _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
+      }
+      // cout << "Initializing an argument type dependence\n";
+    } else if(d=="coal") {
+      assert(_coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].empty() && "coalescer characteristics should have been empty already");
+      for(int i=0; i<6; ++i) {
+        _coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
+      }
+      // cout << "Initializing an coalescer type dependence\n";
+    } else {
+      assert(0 && "unknown task type, currently only argument or coal is allowed");
+    }
+  }
+  if(_current_dependence_type=="coal") {
+    auto it = _coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].find(s);
+    assert(it!=_coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].end() && "task characteristic type not defined yet");
+    _coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp][s] = d; // doesn't always overwrite..
+  } else if(_current_dependence_type=="argument") {
+    auto it = _dependence_characteristics[_current_src_grp][_current_dst_grp].find(s);
+    assert(it!=_dependence_characteristics[_current_src_grp][_current_dst_grp].end() && "task characteristic type not defined yet");
+    _dependence_characteristics[_current_src_grp][_current_dst_grp][s]=d; 
+  } else {
+    assert(0 && "unknown task type, currently only argument or coal is allowed");
+  }
 }
 
 task_def_t SSDfg::producer_consumer_map(int src_group, int dst_group) {
   return _dependence_maps[src_group][dst_group]; // could be an empty vector
+}
+
+std::vector<std::pair<std::string, std::string>> SSDfg::coalescer_input_output_map(int src_group, int dst_group) {
+  return _coalescer_dependence_maps[src_group][dst_group]; // could be an empty vector
 }
 
 SSDfg::SSDfg(string filename_) : filename(filename_) {

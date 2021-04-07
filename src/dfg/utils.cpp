@@ -92,11 +92,31 @@ void Export(SSDfg *dfg, const std::string &fname) {
   bool any_dep=false;
   for(int src_grp=0; src_grp<NUM_GROUPS; ++src_grp) {
     for(int dst_grp=0; dst_grp<NUM_GROUPS; ++dst_grp) {
-      if(dfg->_dependence_maps[src_grp][dst_grp].size()>0) {
+      if(dfg->_dependence_maps[src_grp][dst_grp].size()>0 || dfg->_coalescer_dependence_maps[src_grp][dst_grp].size()>0) {
         any_dep=true;
         // write in the below format
         current["src_group"] = new json::Int(src_grp);
         current["dst_group"] = new json::Int(dst_grp);
+
+        // coalescer related information (it should print "type" first...)
+        plain::Object coal_map;
+        for(auto charac : dfg->_coalescer_dependence_characteristics[src_grp][dst_grp]) {
+          coal_map[charac.first] = new json::String(charac.second);
+        }
+        current["coalescer_map_characteristics"] = new json::Object(coal_map);
+
+        plain::Array coal_mapping;
+        for(auto mapped_ports : dfg->_coalescer_dependence_maps[src_grp][dst_grp]) { // 2
+          plain::Object map; // vector of mappings
+          plain::Array src_ports;
+          plain::Array dst_ports;
+          src_ports.push_back(new json::String(mapped_ports.first));
+          dst_ports.push_back(new json::String(mapped_ports.second));
+          map["src_ports"] = new json::Array(src_ports);  
+          map["dst_ports"] = new json::Array(dst_ports); 
+          coal_mapping.push_back(new json::Object(map));
+        }
+        current["coalescer_mappings"] = new json::Array(coal_mapping);
 
         plain::Object map;
         for(auto charac : dfg->_dependence_characteristics[src_grp][dst_grp]) {
@@ -104,6 +124,7 @@ void Export(SSDfg *dfg, const std::string &fname) {
         }
         current["map_characteristics"] = new json::Object(map);
 
+        // argument related information
         plain::Array mapping;
         for(auto mapped_ports : dfg->_dependence_maps[src_grp][dst_grp]) { // 2
           plain::Object map; // vector of mappings
@@ -154,6 +175,36 @@ SSDfg* Import(const std::string &s) {
       int src_grp = *node["src_group"]->As<int64_t>();
       int dst_grp = *node["dst_group"]->As<int64_t>();
       res->create_new_task_dependence_map(src_grp, dst_grp);
+
+      // ------------------------------
+
+      // FIXME: account for empty information as well
+      // FIXME: condition that type should come first; so we need to be in order
+      auto &coal_map_chars = *node["coalescer_map_characteristics"]->As<plain::Object>();
+      // for(auto charac : res->_coalescer_dependence_characteristics[src_grp][dst_grp]) {
+      for(int i=0; i<6; ++i) {
+        std::string arg_type = res->get_task_charac(i); // charac.first;
+        std::string arg_value = *coal_map_chars[arg_type]->As<std::string>();
+        res->add_new_task_dependence_characteristic(arg_type, arg_value);
+      }
+
+      auto &coal_mappings = *node["coalescer_mappings"]->As<plain::Array>();
+      for (int j = 0, m = coal_mappings.size(); j < m; ++j) { 
+        auto &obj = *coal_mappings[j]->As<plain::Object>();
+        auto &src_ports = *obj["src_ports"]->As<plain::Array>();
+        auto &dst_ports = *obj["dst_ports"]->As<plain::Array>();
+        std::vector<std::string> producer_ports, consumer_ports;
+        for(auto src : src_ports) {
+          producer_ports.push_back(*(src->As<std::string>()));
+        }
+        for(auto dst : dst_ports) {
+          consumer_ports.push_back(*(dst->As<std::string>()));
+        }
+        res->add_new_task_dependence_map(producer_ports, consumer_ports);
+      }
+
+      // -----------------------
+
           
       auto &map_chars = *node["map_characteristics"]->As<plain::Object>();
       for(auto charac : res->_dependence_characteristics[src_grp][dst_grp]) {
