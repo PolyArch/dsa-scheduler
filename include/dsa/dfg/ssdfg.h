@@ -318,7 +318,10 @@ class SSDfg {
   task_def_t producer_consumer_map(int src_group, int dst_group);
   std::vector<std::pair<std::string, std::string>> coalescer_input_output_map(int src_group, int dst_group);
 
-  std::unordered_map<std::string, std::string> dependence_characteristics(int src_group, int dst_group) {
+  std::unordered_map<std::string, std::string> coalescer_dependence_characteristics(int src_group, int dst_group) {
+    return _coalescer_dependence_characteristics[src_group][dst_group];
+  }
+  std::unordered_map<std::string, std::string> argument_dependence_characteristics(int src_group, int dst_group) {
     return _dependence_characteristics[src_group][dst_group];
   }
 
@@ -382,8 +385,9 @@ class SSDfg {
   std::vector<std::pair<std::string, std::string>> _coalescer_dependence_maps[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Mapping characteristics for dependencies among taskflow. */
   std::unordered_map<std::string, std::string> _dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
+  std::unordered_map<std::string, std::string> _coalescer_dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Default mapping characteristics for dependencies among taskflow. */
-  std::pair<std::string, std::string> _default_task_characs[6] = {{"type", "argument"}, {"id","-1"}, {"gran","1"}, {"bytes","64"},{"init_order","-1"},{"index", "-1"}};
+  std::pair<std::string, std::string> _default_task_characs[6] = {{"atype", "argument"}, {"id","-1"}, {"gran","1"}, {"bytes","64"},{"init_order","-1"},{"index", "-1"}};
 
  private:
   // @{
@@ -399,6 +403,7 @@ class SSDfg {
   // std::unordered_map<std::string, SSDfgVec*> _map_name_port;
   int _current_src_grp=-1;
   int _current_dst_grp=-1;
+  std::string _current_dependence_type="unknown";
 };
 
 template <>
