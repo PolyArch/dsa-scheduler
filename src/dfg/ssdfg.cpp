@@ -104,6 +104,7 @@ void SSDfg::create_new_task_dependence_map(int s, int d) {
 
 // it should push to coalescer dependence map?
 void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer) { 
+  // cout << "Current src: " << _current_src_grp << " current_dst: " << _current_dst_grp << " producer: " << producer[0] << " consumer: " << consumer[0] << " current dependence type: " << _current_dependence_type << endl;
   if(_current_dependence_type=="argument") {
     _dependence_maps[_current_src_grp][_current_dst_grp].push_back(make_pair(producer, consumer)); 
   } else if(_current_dependence_type=="coal") {
@@ -115,18 +116,19 @@ void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::
 }
 
 void SSDfg::add_new_task_dependence_characteristic(std::string s, std::string d) {
-  // cout << "Current src: " << _current_src_grp << " current_dst: " << _current_dst_grp << " characteristic type: " << s << " value: " << d << endl;
-  if(s=="atype") {
+  // cout << "Current src: " << _current_src_grp << " current_dst: " << _current_dst_grp << " characteristic type: " << s << " value: " << d << " current dependence type: " << _current_dependence_type << endl;
+
+  if(s=="aaa") {
     _current_dependence_type = d;
     if(d=="argument") {
       assert(_dependence_characteristics[_current_src_grp][_current_dst_grp].empty() && "coalescer characteristics should have been empty already");
-      for(int i=0; i<6; ++i) {
+      for(int i=0; i<NUM_TASK_CHARAC; ++i) {
         _dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
       }
       // cout << "Initializing an argument type dependence\n";
     } else if(d=="coal") {
       assert(_coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].empty() && "coalescer characteristics should have been empty already");
-      for(int i=0; i<6; ++i) {
+      for(int i=0; i<NUM_TASK_CHARAC; ++i) {
         _coalescer_dependence_characteristics[_current_src_grp][_current_dst_grp].insert(make_pair(_default_task_characs[i].first, _default_task_characs[i].second));
       }
       // cout << "Initializing an coalescer type dependence\n";
