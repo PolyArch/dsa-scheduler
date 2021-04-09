@@ -178,11 +178,9 @@ SSDfg* Import(const std::string &s) {
 
       // ------------------------------
 
-      // FIXME: account for empty information as well
       // FIXME: condition that type should come first; so we need to be in order
       auto &coal_map_chars = *node["coalescer_map_characteristics"]->As<plain::Object>();
-      // for(auto charac : res->_coalescer_dependence_characteristics[src_grp][dst_grp]) {
-      for(int i=0; i<6; ++i) {
+      for(int i=0; i<7 && !coal_map_chars.empty(); ++i) {
         std::string arg_type = res->get_task_charac(i); // charac.first;
         std::string arg_value = *coal_map_chars[arg_type]->As<std::string>();
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
@@ -207,8 +205,8 @@ SSDfg* Import(const std::string &s) {
 
           
       auto &map_chars = *node["map_characteristics"]->As<plain::Object>();
-      for(auto charac : res->_dependence_characteristics[src_grp][dst_grp]) {
-        std::string arg_type = charac.first;
+      for(int i=0; i<7 && !map_chars.empty(); ++i) {
+        std::string arg_type = res->get_task_charac(i); // charac.first;
         std::string arg_value = *map_chars[arg_type]->As<std::string>();
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }

@@ -23,6 +23,7 @@
 #include "dsa/simulation/data.h"
 
 #define NUM_GROUPS 6
+#define NUM_TASK_CHARAC 7
 
 using dsa::SpatialFabric;
 
@@ -481,7 +482,7 @@ class SSDfg {
   std::unordered_map<std::string, std::string> _dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   std::unordered_map<std::string, std::string> _coalescer_dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Default mapping characteristics for dependencies among taskflow. */
-  std::pair<std::string, std::string> _default_task_characs[6] = {{"atype", "argument"}, {"id","-1"}, {"gran","1"}, {"bytes","64"},{"init_order","-1"},{"index", "-1"}};
+  std::pair<std::string, std::string> _default_task_characs[NUM_TASK_CHARAC] = {{"aaa", "argument"}, {"id","-1"}, {"bytes","-1"},{"init_order","-1"},{"index", "-1"},{"ack","-1"}, {"gran","1"}};
 
  private:
   // @{
