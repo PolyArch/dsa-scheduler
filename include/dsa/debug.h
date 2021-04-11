@@ -7,25 +7,23 @@
 #include <string>
 #include <utility>
 
-#ifndef REPO_PREFIX
-#define REPO_PREFIX ""
-#endif
-
 class LOGGER {
-  bool abort;
+  bool abort_;
 
  public:
-  LOGGER(std::string reason, std::string file, int lineno, bool abort) : abort(abort) {
-    std::cerr << reason << " " << file.substr(std::string(REPO_PREFIX).size() + 1) << ":"
+  LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort_(abort_) {
+    int i = file.size() - 1;
+    while (i >= 0 && file[i] != '/') {
+      --i;
+    }
+    std::cerr << reason << " " << file.substr(i + 1) << ":"
               << lineno << ": ";
   }
 
   ~LOGGER() noexcept(false) {
     std::cerr << std::endl;
-    if (abort) {
-      // TODO(@were): This is great for debugging backtrace but confuses user when reading
-      // the logs.
-      throw;
+    if (abort_) {
+      abort();
     }
   }
 
