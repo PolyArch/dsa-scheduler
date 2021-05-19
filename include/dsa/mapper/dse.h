@@ -443,20 +443,37 @@ class CodesignInstance {
         // change decomposer
         int index = rand() % sub->node_list().size();
         auto fu = sub->node_list()[index];
-        static const int candidates[] = {1, 2, 4, 8};
-        int new_one = candidates[rand() % 4];
-        while (new_one == fu->granularity()) {
-          new_one = candidates[rand() % 4];
+        int new_one = (1 << (rand() % 4)) * 8;
+        while (new_one == fu->granularity() || new_one > fu->datawidth()) {
+          new_one = (1 << (rand() % 4)) * 8;
         }
-        if (new_one > fu->granularity()) {
-          for_each_sched([&](Schedule& sched) {
-            for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
-              for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-                if (p.first->bitwidth() < new_one * 8) sched.unassign_dfgnode(p.first);
-              }
+        LOG(DSE) << "change granularity of " << index << " to " << new_one;
+        for_each_sched([fu, this, new_one](Schedule& sched) {
+          auto &np = sched.node_prop()[fu->id()];
+          for (auto &slot : np.slots) {
+            auto passthrus = slot.passthrus;
+            for (auto edge : passthrus) {
+              sched.unassign_edge(edge);
             }
-          });
-        }
+            auto vertices = slot.vertices;
+            for (auto v : vertices) {
+              sched.unassign_dfgnode(v.first);
+            }
+          }
+          np.slots.resize(fu->datawidth() / new_one);
+          for (auto &link : fu->out_links()) {
+            unassign_link(link);
+            auto &lp = sched.link_prop()[link->id()];
+            for (auto &slot : sched.link_prop()[link->id()].slots) {
+              CHECK(slot.edges.empty());
+            }
+            lp.slots.resize(link->source()->datawidth() / new_one);
+            link->subnet.resize(link->bitwidth() / new_one);
+            if (link->subnet.size() >= 2) {
+              link->subnet[1] = ~0ull >> (64 - link->bitwidth());
+            }
+          }
+        });
         fu->granularity(new_one);
       }
     }
@@ -499,14 +516,11 @@ class CodesignInstance {
     unused_links = c.unused_links;
   }
 
-  // Delete link on every schedule
-  void delete_link(sslink* link) {
-    delete_link_list.push_back(link->id());
-    delete_linkp_list.insert(link);
-
-    // remove it from every schedule
+  void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
-      for (int slot = 0; slot < sched.num_slots(link); ++slot) {
+      int slots = link->source()->datawidth() / link->source()->granularity();
+      LOG(UNASSIGN) << "Unassign link " << link->id() << " with " << slots << " slots";
+      for (int slot = 0; slot < slots; ++slot) {
         for (auto& p : sched.dfg_edges_of(slot, link)) {
           // TODO: consider just deleteting the edge, and having the scheduler
           // try to repair the edge schedule -- this might save some time
@@ -516,6 +530,15 @@ class CodesignInstance {
         }
       }
     });
+  }
+
+  // Delete link on every schedule
+  void delete_link(sslink* link) {
+    delete_link_list.push_back(link->id());
+    delete_linkp_list.insert(link);
+
+    // remove it from every schedule
+    unassign_link(link);
   }
 
   // Delete fu on every schedule

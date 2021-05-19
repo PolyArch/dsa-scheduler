@@ -12,6 +12,7 @@
 
 #include "./pass/print_graphviz.h"
 #include "dsa/arch/visitor.h"
+#include "dsa/core/singleton.h"
 #include "dsa/dfg/instruction.h"
 #include "dsa/dfg/visitor.h"
 #include "dsa/mapper/scheduler_sa.h"
@@ -19,7 +20,7 @@
 using namespace dsa;
 using namespace std;
 
-bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose) {
+bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
   struct DFGCounter : dsa::dfg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_required;
     std::vector<int> ports[2];
@@ -101,7 +102,7 @@ std::string basedir(const std::string& filename) {
   return filename.substr(0, lastindex);
 }
 
-Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
+Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   bool succeed_sched = false;
   Schedule* sched = nullptr;
 
@@ -127,7 +128,8 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   string model_base =
       model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
 
-  if (check_feasible(dfg, model, verbose)) {
+
+  if (check_feasible(dfg, model)) {
     auto sigint_handler = [](int) { exit(1); };
     std::cout << "feasible checked" << std::endl;
 
@@ -142,7 +144,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
 
     int lat = 0, latmis = 0;
 
-    if (verbose) {
+    if (dsa::ContextFlags::Global().verbose) {
       int ovr = 0, agg_ovr = 0, max_util = 0;
       sched->get_overprov(ovr, agg_ovr, max_util);
       int violation = sched->violation();
@@ -190,11 +192,11 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg, bool print_bits) {
   std::ofstream osh(config_header);
   CHECK(osh.good());
   sched->printConfigHeader(osh, dfg_base);
-  if (verbose) {
+  if (dsa::ContextFlags::Global().verbose) {
     std::cout << "Performance: " << sched->estimated_performance() << std::endl;
   }
 
-  if (print_bits) {
+  if (dsa::ContextFlags::Global().bitstream) {
     std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
     std::ofstream oshb(config_header_bits);
     CHECK(oshb.good());

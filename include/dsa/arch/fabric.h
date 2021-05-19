@@ -137,7 +137,7 @@ class SpatialFabric {
     std::vector<ssvport*> res;
     auto vports = vport_list();
     for (auto elem : vports) {
-      if (elem->links[is_input].empty()) res.push_back(elem);
+      if (elem->links_[is_input].empty()) res.push_back(elem);
     }
     return res;
   }
@@ -222,9 +222,9 @@ class SpatialFabric {
       auto* node = _node_list[I];
       auto* copy_node = copy_sub->_node_list[I];
       for (int j = 0; j < 2; ++j) {
-        for (unsigned i = 0; i < node->links[j].size(); ++i) {
-          sslink* link = node->links[j][i];
-          copy_node->links[j][i] = copy_sub->_link_list[link->id()];
+        for (unsigned i = 0; i < node->links_[j].size(); ++i) {
+          sslink* link = node->links_[j][i];
+          copy_node->links_[j][i] = copy_sub->_link_list[link->id()];
         }
       }
     }
@@ -267,12 +267,12 @@ class SpatialFabric {
 
   // External add link -- used by arch. search
   sslink* add_link(ssnode* src, ssnode* dst) {
-    if (auto out = dynamic_cast<ssvport*>(src)) {
-      CHECK(!out->out_links().empty());
-    }
-    if (auto in = dynamic_cast<ssvport*>(dst)) {
-      CHECK(!in->in_links().empty());
-    }
+    // if (auto out = dynamic_cast<ssvport*>(src)) {
+    //   CHECK(!out->out_links().empty());
+    // }
+    // if (auto in = dynamic_cast<ssvport*>(dst)) {
+    //   CHECK(!in->in_links().empty());
+    // }
 
     sslink* link = src->add_link(dst);
     link->id(_link_list.size());

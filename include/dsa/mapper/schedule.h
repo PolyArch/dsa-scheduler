@@ -257,15 +257,17 @@ class Schedule {
       int granularity = link.second->source()->granularity();
       int last_slot = edge->bitwidth() / granularity;
       for (int i = 0; i < last_slot; ++i) {
-        int slot_index = (link.first + i) % 8;
+        int slot_index = (link.first + i) % last_slot;
+        CHECK(slot_index >= 0 && slot_index < lp.slots.size());
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
-        auto it = std::remove(edges.begin(), edges.end(),
-                              EdgeSlice(edge->id, edge->l + i * granularity,
-                                        edge->l + (i + 1) * granularity));
+        EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity);
+        auto it = std::find(edges.begin(), edges.end(), es);
         CHECK(it != edges.end());
-        edges.erase(it, edges.end());
+        LOG(UNASSIGN) << "unassign " << edge->name() << " [" << es.l << ", " << es.r << "] "
+                      << slot_index;
+        edges.erase(it);
         if (slot.edges.empty()) {
           _links_mapped--;
           CHECK(_links_mapped >= 0);
@@ -313,20 +315,16 @@ class Schedule {
 
     if (node) {
       int orig_slot = vp.idx;
-
       _num_mapped[dfgnode->type()]--;
-      vp.node = nullptr;
-
-      int num_slots = dfgnode->bitwidth() / 8;
+      int num_slots = dfgnode->bitwidth() / node->granularity();
       for (int i = 0; i < num_slots; ++i) {
         int slot = orig_slot + i;
         auto& vertices = _nodeProp[node->id()].slots[slot].vertices;
-
-        auto it = std::remove(vertices.begin(), vertices.end(),
-                              std::make_pair(dfgnode, orig_slot));
+        auto it = std::find(vertices.begin(), vertices.end(), std::make_pair(dfgnode, orig_slot));
         CHECK(it != vertices.end());
-        vertices.erase(it, vertices.end());
+        vertices.erase(it);
       }
+      vp.node = nullptr;
     }
   }
 
@@ -365,12 +363,13 @@ class Schedule {
 
     for (int i = 0; i < dfgedge->bitwidth() / granularity; ++i) {
       int cur_slot_index = (slot_index + i) % lanes;
-
       auto& slot = lp.slots[cur_slot_index];
       if (slot.edges.empty()) _links_mapped++;
       int l = dfgedge->l + granularity * i;
       int r = dfgedge->l + granularity * (i + 1);
       slot.edges.emplace_back(dfgedge->id, l, r);
+      LOG(ASSIGN) << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
+                  << " to " << slink->id() << " " << cur_slot_index;
     }
 
     if ((int)_edgeProp.size() <= dfgedge->id) {
@@ -467,9 +466,9 @@ class Schedule {
     auto& slots = _linkProp[link.second->id()].slots;
     // Check all slots will be occupied empty.
     bool num_edges = 0;
-    int last_slot = link.first + edge->bitwidth() / 8;
+    int last_slot = link.first + edge->bitwidth() / link.second->source()->granularity();
     for (int s = link.first; s < last_slot; ++s) {
-      int slot = s % 8;
+      int slot = s;
       num_edges = slots[slot].edges.size();
       if (num_edges != 0) break;
     }
@@ -536,8 +535,12 @@ class Schedule {
   }
 
   // probably eventually we will need to change slots per node ...
-  int num_slots(ssnode* node) { return 8; }
-  int num_slots(sslink* link) { return 8; }
+  int num_slots(ssnode* node) {
+    return node->datawidth() / node->granularity();
+  }
+  int num_slots(sslink* link) {
+    return num_slots(link->source());
+  }
 
   // we should depricate this?
   ssnode* locationOf(dsa::dfg::Node* dfgnode) { return _vertexProp[dfgnode->id()].node; }
@@ -661,7 +664,7 @@ class Schedule {
     if (_ssDFG) {
       _vertexProp.resize(_ssDFG->nodes.size());
       _edgeProp.resize(_ssDFG->edges.size());
-      _groupMismatch.resize(_ssDFG->num_groups(), 0);
+      _groupMismatch.resize(_ssDFG->meta.size(), 0);
     }
     if (_ssModel) {
       _nodeProp.resize((size_t)_ssModel->subModel()->node_list().size());

@@ -1,5 +1,3 @@
-#include "dsa/mapper/scheduler_sa.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +8,11 @@
 #include <list>
 #include <unordered_map>
 
+#include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 #include "dsa/dfg/visitor.h"
 #include "dsa/mapper/scheduler.h"
+#include "dsa/mapper/scheduler_sa.h"
 
 using namespace dsa;
 using namespace std;
@@ -114,7 +114,7 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, dsa::dfg::Edge* 
           for (int i = 0; i < inserted; ++i) {
             std::pair<int, sslink*> from_link = *from_it;
             auto& alt_links = sched->links_of(alt_edge);
-            auto alt_it = alt_links.begin() + rand_link_no + 1 + i;
+            auto alt_it = alt_links.begin() + std::min(rand_link_no + 1 + i, (int) alt_links.size());
             sched->assign_edgelink(alt_edge, from_link.first, from_link.second, alt_it);
             if (auto fu = dynamic_cast<ssfu*>(from_link.second->sink())) {
               if (i + 1 != inserted) {
@@ -249,7 +249,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   initialize(ssDFG, sched);  // initialize if null, otherwise its fine
   auto pdgname = basename(ssDFG->filename);
   auto modelname = basename(_ssModel->filename);
-  if (!check_feasible(sched->ssdfg(), sched->ssModel(), false /*silent*/)) {
+  if (!check_feasible(sched->ssdfg(), sched->ssModel())) {
     LOG(MAP) << "Cannot be mapped, give up!\n";
     return false;
   }
@@ -272,8 +272,11 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
   int iter = 0;
   int fail_to_route = 0;
+  int max_iters = dsa::ContextFlags::Global().max_iters;
+  int timeout = dsa::ContextFlags::Global().timeout;
+  bool verbose = dsa::ContextFlags::Global().verbose;
   for (iter = 0; iter < max_iters; ++iter) {
-    if ((total_msec() > _reslim * 1000) || _should_stop) {
+    if ((total_msec() > timeout * 1000) || _should_stop) {
       break;
     }
 
@@ -423,7 +426,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   }
 
   for (int i = 0; i < 3; ++i) {
-    LOG(CAND) << i;
+    LOG(COMPLETE) << i;
     for (int j = 0; j < n; ++j) {
       dsa::dfg::Node* node = nodes[j];
       if (!sched->is_scheduled(node)) {
@@ -494,7 +497,8 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
   bool is_temporal_out = is_temporal && is_out;
 
   int internet_dis = abs(from_slot - next_slot);
-  internet_dis = min(internet_dis, 8 - internet_dis);
+  int num_of_slots = link->bitwidth() / link->source()->granularity();
+  internet_dis = min(internet_dis, num_of_slots - internet_dis);
 
   // For now, links only route on their own network
   // ie. temporal_io and non-temporal route on dedicated network
@@ -516,10 +520,10 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
         link, dynamic_cast<dsa::dfg::InputPort*>(def_dfgnode));
   } else if (is_temporal_out) {
     t_cost = sched->routing_cost_temporal_out(
-        make_pair(from_slot, link), def_dfgnode,
+        make_pair(next_slot, link), def_dfgnode,
         dynamic_cast<dsa::dfg::OutputPort*>(use_dfgnode));
   } else {  // NORMAL CASE!
-    t_cost = sched->routing_cost(make_pair(from_slot, link), edge);
+    t_cost = sched->routing_cost(make_pair(next_slot, link), edge);
   }
 
   if (t_cost >= 2) {  // square law avoidance of existing routes
@@ -608,11 +612,14 @@ int SchedulerSimulatedAnnealing::route(
     }
 
     for (auto link : node->out_links()) {
-      int slots = link->slots(slot, edge->bitwidth() / 8);
+      int slots = link->slots(slot, edge->bitwidth() / link->source()->granularity());
       while (slots) {
         int raw = slots & -slots;
         slots -= raw;
         int next_slot = 31 - __builtin_clz(raw);
+        if (next_slot * node->granularity() % edge->bitwidth()) {
+          continue;
+        }
         sslink* next_link = link;
         ssnode* next = next_link->sink();
         std::pair<int, sslink*> next_pair(next_slot, next_link);

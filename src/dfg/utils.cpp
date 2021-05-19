@@ -117,8 +117,8 @@ SSDfg* Import(const std::string& s) {
     auto& group_id = *node["group"]->As<int64_t>();
     auto& name = *node["name"]->As<std::string>();
     if (group_id != last_group) {
-      res->start_new_dfg_group();
-      res->group_prop(group_id).is_temporal = *node["temporal"]->As<int64_t>();
+      res->meta.emplace_back();
+      res->meta[group_id].is_temporal = *node["temporal"]->As<int64_t>();
       last_group = group_id;
     }
     if (node.count("width")) {

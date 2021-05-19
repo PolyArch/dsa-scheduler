@@ -364,7 +364,7 @@ inline void calc_mis_vio(SSDfg* dfg, std::vector<Node*>& non_temp,
                          int& total_vio, std::vector<int>& group_mismatch,
                          std::vector<int>& node_violation) {
   max_lat = max_lat_mis = total_vio = 0;
-  group_mismatch.resize(dfg->num_groups());
+  group_mismatch.resize(dfg->meta.size());
   node_violation.resize(dfg->nodes.size());
   std::fill(group_mismatch.begin(), group_mismatch.end(), 0);
   std::fill(node_violation.begin(), node_violation.end(), 0);

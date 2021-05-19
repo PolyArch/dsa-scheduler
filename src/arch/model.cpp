@@ -148,6 +148,9 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
   // Parse the JSON-format IR
   if (string_utils::String(filename).EndsWith(".json")) {
     _subModel = dsa::adg::Import(filename_);
+    for (auto fu : subModel()->fu_list()) {
+      fu_types.push_back(new Capability(fu->fu_type_));
+    }
     return;
   }
 

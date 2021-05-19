@@ -59,11 +59,31 @@ typedef std::vector<std::string> string_vec_t;
 // post-parsing control signal definitions (mapping of string of flag to it's value?)
 typedef std::map<int, string_vec_t> ctrl_def_t;
 
-struct GroupProp {
+namespace dsa {
+
+/*!
+ * \brief The metadata of a sub-DFG.
+ */
+struct MetaDfg {
+  /*!
+   * \brief If this sub DFG is temporal.
+   */
   bool is_temporal{false};
-  int64_t frequency{-1};
+  /*!
+   * \brief The relative execution frequency.
+   */
+  int64_t frequency{1};
+  /*!
+   * \brief The unrolling degree of this block
+   */
   int64_t unroll{1};
+
+  MetaDfg(bool temporal = false, int64_t freq = 1, int64_t u = 1) :
+    is_temporal(temporal), frequency(freq), unroll(u) {}
 };
+
+}
+
 
 /*! \brief The data structure for the dataflow graph. */
 class SSDfg {
@@ -83,9 +103,6 @@ class SSDfg {
   /*! \brief The entrance for the visitor pattern. */
   void Apply(dsa::dfg::Visitor*);
 
-  /*! \brief Start a new sub-dfg. */
-  void start_new_dfg_group();
-
   void set_pragma(const std::string& c, const std::string& s);
 
   template <typename T, typename... Args>
@@ -93,10 +110,6 @@ class SSDfg {
 
   template <typename T>
   inline std::vector<T>& type_filter();
-
-  GroupProp& group_prop(int i) { return _groupProps[i]; }
-
-  int num_groups() { return _groupProps.size(); }
 
   int forward(bool asap);
 
@@ -124,6 +137,8 @@ class SSDfg {
   std::vector<dsa::dfg::Node*> nodes;
   /*! \brief The instances of all the edges. */
   std::vector<dsa::dfg::Edge> edges;
+  /*! \brief The property information of each sub DFG. */
+  std::vector<dsa::MetaDfg> meta;
 
  private:
   // @{
@@ -134,8 +149,6 @@ class SSDfg {
 
   void normalize();
 
-  /*! \brief The property information of each sub DFG. */
-  std::vector<GroupProp> _groupProps;
 };
 
 template <>

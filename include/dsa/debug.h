@@ -7,6 +7,15 @@
 #include <string>
 #include <utility>
 
+#ifdef ENABLE_LLVM
+#include "llvm/Support/raw_ostream.h"
+#define OSTREAM llvm::errs()
+#define NEWLINE "\n"
+#else
+#define OSTREAM std::cerr
+#define NEWLINE std::endl
+#endif
+
 class LOGGER {
   bool abort_;
 
@@ -16,12 +25,11 @@ class LOGGER {
     while (i >= 0 && file[i] != '/') {
       --i;
     }
-    std::cerr << reason << " " << file.substr(i + 1) << ":"
-              << lineno << ": ";
+    OSTREAM << reason << " " << file.substr(i + 1) << ":" << lineno << ": ";
   }
 
   ~LOGGER() noexcept(false) {
-    std::cerr << std::endl;
+    OSTREAM << NEWLINE;
     if (abort_) {
       abort();
     }
@@ -29,7 +37,7 @@ class LOGGER {
 
   template <typename T>
   inline LOGGER& operator<<(T&& x) {
-    std::cerr << std::forward<T>(x);
+    OSTREAM << std::forward<T>(x);
     return *this;
   }
 };
@@ -39,7 +47,9 @@ class LOGGER {
 
 #define WARNING LOGGER("[WARNING]", __FILE__, __LINE__, false)
 
-#ifdef DEBUG_MODE
+#define INFO LOGGER("[INFO]", __FILE__, __LINE__, false)
+
+#if defined(DEBUG_MODE) || defined(_DEBUG)
 #define LOG(S) \
   if (getenv(#S)) LOGGER("[" #S "]", __FILE__, __LINE__, false)
 #else

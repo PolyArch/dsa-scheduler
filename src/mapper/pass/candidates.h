@@ -37,12 +37,14 @@ struct CandidateSpotVisitor : dfg::Visitor {
           continue;
         }
 
-        for (int k = 0; k < 8; k += inst->bitwidth() / 8) {
-          int cnt = 0;
-          for (int sub_slot = k; sub_slot < k + inst->bitwidth() / 8; ++sub_slot) {
-            cnt += sched->dfg_nodes_of(sub_slot, cand_fu).size();
+        for (int k = 0; k < cand_fu->datawidth(); k += cand_fu->granularity()) {
+          if (k % inst->bitwidth() != 0) {
+            continue;
           }
-          cnt = cnt / 8 + 1;
+          int cnt = 1;
+          for (int sub_slot = 0; sub_slot < inst->bitwidth(); sub_slot += cand_fu->granularity()) {
+            cnt += sched->dfg_nodes_of((sub_slot + k) / cand_fu->granularity(), cand_fu).size();
+          }
 
           if (rand() % (cnt * cnt) == 0) {
             spots.emplace_back(k, fus[i]);
@@ -136,12 +138,21 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto vports = fabric->input_list();
     // Lets write size in units of bits
     std::vector<std::pair<int, ssnode*>>& spots = candidates[input->id()];
+    std::vector<std::pair<int, ssnode*>> bad;
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= input->phys_bitwidth()) {
-        spots.push_back(make_pair(0, cand));
+        if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
+          spots.push_back(make_pair(0, cand));
+        } else {
+          bad.push_back(make_pair(0, cand));
+        }
       }
+    }
+    if (spots.empty()) {
+      spots = bad;
+      std::cerr << "Warning: " << input->phys_bitwidth() << "-wide input port insufficient!";
     }
     cnt[input->id()] = spots.size();
   }
@@ -151,12 +162,21 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto vports = fabric->output_list();
     // Lets write size in units of bits
     std::vector<std::pair<int, ssnode*>>& spots = candidates[output->id()];
+    std::vector<std::pair<int, ssnode*>> bad;
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= output->phys_bitwidth()) {
-        spots.push_back(make_pair(0, cand));
+        if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
+          spots.push_back(make_pair(0, cand));
+        } else {
+          bad.push_back(make_pair(0, cand));
+        }
       }
+    }
+    if (spots.empty()) {
+      spots = bad;
+      std::cerr << "Warning: " << output->phys_bitwidth() << "-wide output port insufficient!";
     }
     cnt[output->id()] = spots.size();
   }

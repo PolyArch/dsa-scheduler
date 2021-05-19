@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
     ssmodel.setCtrl(contrl_flow);
   }
 
-  scheduler = new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose);
+  scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
 
   clock_t StartTime = clock();
   scheduler->set_start_time();

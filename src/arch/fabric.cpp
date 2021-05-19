@@ -72,8 +72,8 @@ sslink::~sslink() {
     CHECK(iter != links.end()) << "Cannot find this link!";
     links.erase(iter);
   };
-  f(source()->links[0]);
-  f(sink()->links[1]);
+  f(source()->links_[0]);
+  f(sink()->links_[1]);
 }
 
 // ---------------------- ssswitch --------------------------------------------
@@ -334,16 +334,16 @@ void SpatialFabric::build_substrate(int sizex, int sizey) {
 sslink* ssnode::add_link(ssnode* node) {
   sslink* link = new sslink(this, node);
   CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
-  auto& olinks = links[0];
+  auto& olinks = links_[0];
   olinks.push_back(link);
 
-  link->subnet.resize(link->bitwidth() / 8);
+  link->subnet.resize(link->bitwidth() / link->source()->granularity());
   link->subnet[0] = ~0ull >> (64 - link->bitwidth());
   link->subnet[1] = ~0ull >> (64 - link->bitwidth());
 
   LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
 
-  node->links[1].push_back(link);
+  node->links_[1].push_back(link);
   return link;
 }
 

@@ -17,12 +17,6 @@
 using namespace std;
 using namespace dsa;
 
-/// { SSDfgNode
-
-/// }
-
-/// { SSDfg
-
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
     bool HasUse(dsa::dfg::Node* node) {
@@ -76,24 +70,21 @@ void SSDfg::set_pragma(const std::string& c, const std::string& s) {
     cout << "No pragmas yet for dfg\n";
   } else if (c == string("group")) {
     if (s == "temporal") {
-      CHECK(!_groupProps.empty());
-      _groupProps.back().is_temporal = true;
+      meta.back().is_temporal = true;
     }
   } else if (c == "frequency" || c == "unroll") {
     std::istringstream iss(s);
     auto& ref =
-        c == "frequency" ? _groupProps.back().frequency : _groupProps.back().unroll;
+        c == "frequency" ? meta.back().frequency : meta.back().unroll;
     iss >> ref;
   } else {
     cout << "Context \"" << c << "\" not recognized.";
   }
 }
 
-void SSDfg::start_new_dfg_group() { _groupProps.emplace_back(GroupProp()); }
-
 SSDfg::SSDfg(string filename_) : filename(filename_) {
   string line;
-  start_new_dfg_group();
+  meta.emplace_back();
   parse_dfg(filename_.c_str(), this);
   check_for_errors();
 }
@@ -110,7 +101,7 @@ void SSDfg::Apply(dsa::dfg::Visitor* visitor) {
 
 int SSDfg::forward(bool asap) {
   clear_issued();
-  std::vector<bool> group_ready(true, num_groups());
+  std::vector<bool> group_ready(true, meta.size());
   int old[2] = {dyn_issued[0], dyn_issued[1]};
   if (!asap) {
     for (auto& node : nodes) {
@@ -151,7 +142,7 @@ SSDfg::SSDfg(const SSDfg& dfg)
       vins(dfg.vins),
       vouts(dfg.vouts),
       edges(dfg.edges),
-      _groupProps(dfg._groupProps) {
+      meta(dfg.meta) {
   normalize();
   for (auto node : nodes) {
     node->ssdfg() = this;

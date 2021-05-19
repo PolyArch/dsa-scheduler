@@ -183,12 +183,12 @@ class ssnode {
   /*!
    * \brief In degrees of this node.
    */
-  std::vector<sslink*>& in_links() { return links[1]; }
+  std::vector<sslink*>& in_links() { return links_[1]; }
 
   /*!
    * \brief Out degrees of this node.
    */
-  std::vector<sslink*>& out_links() { return links[0]; }
+  std::vector<sslink*>& out_links() { return links_[0]; }
 
   /*!
    * \brief The method of checking hanger node in the ADG used by DSE.
@@ -265,7 +265,7 @@ class ssnode {
   /*!
    * \brief The output, and input of this node.
    */
-  std::vector<sslink*> links[2];  // {output, input}
+  std::vector<sslink*> links_[2];  // {output, input}
 
   // TODO(@were): Separate this out.
   int _node_dist[8];
@@ -288,6 +288,7 @@ class ssnode {
   DEF_ATTR(max_util)
   DEF_ATTR(flow_control)
   DEF_ATTR(max_delay)
+  const std::vector<sslink*> &links(int x) { return links_[x]; }
 };
 
 class ssswitch : public ssnode {
@@ -376,8 +377,8 @@ class ssswitch : public ssnode {
     CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
     features[4] = lanes();
     features[5] = max_delay();
-    features[6] = links[1].size();
-    features[7] = links[0].size();
+    features[6] = links_[1].size();
+    features[7] = links_[0].size();
     features[8] = max_util_;
   }
 
@@ -516,8 +517,8 @@ class ssfu : public ssnode {
     CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
     features[6] = lanes();
     features[7] = max_delay_;
-    features[8] = links[1].size();
-    features[9] = links[0].size();
+    features[8] = links_[1].size();
+    features[9] = links_[0].size();
     features[10] = register_file_size;
     features[11] = max_util_;
 
@@ -585,7 +586,7 @@ class ssvport : public ssnode {
   size_t size() { return _port_vec.size(); }
   std::string name() const override {
     std::stringstream ss;
-    ss << "OI"[links[0].size() > 0];
+    ss << "OI"[links_[0].size() > 0];
     if (port_ != -1) {
       ss << "P" << port_;
     } else {
@@ -648,8 +649,8 @@ class ssvport : public ssnode {
 
   int bitwidth_capability() {
     int res = 0;
-    CHECK((int)links[0].empty() + (int)links[1].empty() == 1);
-    for (auto& elem : links) {
+    CHECK((int)links_[0].empty() + (int)links_[1].empty() == 1);
+    for (auto& elem : links_) {
       for (auto link : elem) {
         res += link->bitwidth();
       }

@@ -18,7 +18,9 @@ inline int indexing(T v, std::vector<T> a) {
 template <typename T>
 int count_unique(std::vector<T>& vec) {
   sort(vec.begin(), vec.end());
-  return unique(vec.begin(), vec.end()) - vec.begin();
+  auto end = unique(vec.begin(), vec.end());
+  vec.erase(end, vec.end());
+  return vec.size();
 }
 
 template <typename Tfrom, typename Tto>

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "dsa/arch/model.h"
+#include "dsa/core/singleton.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/mapper/schedule.h"
 
@@ -38,10 +39,9 @@ class CodesignInstance;
 
 class Scheduler {
  public:
-  Scheduler(dsa::SSModel* ssModel, double timelimit = 100000, bool verbose_ = false)
-      : _ssModel(ssModel), _reslim(timelimit), verbose(verbose_) {}
+  Scheduler(dsa::SSModel* ssModel) : _ssModel(ssModel) {}
 
-  bool check_feasible(SSDfg* ssDFG, SSModel* ssmodel, bool verbose);
+  bool check_feasible(SSDfg* ssDFG, SSModel* ssmodel);
 
   virtual bool schedule(SSDfg* ssDFG, Schedule*& schedule) = 0;
 
@@ -65,6 +65,7 @@ class Scheduler {
     set_start_time();
 
     bool succeed_sched = schedule(ssDFG, sched);
+    bool verbose = dsa::ContextFlags::Global().verbose;
 
     if (verbose && !suppress_timing_print) {
       printf("sched_time: %0.4f seconds\n", total_msec() / 1000.0);
@@ -73,20 +74,16 @@ class Scheduler {
     return succeed_sched;
   }
 
-  void setTimeout(float timeout) { _reslim = timeout; }
-
   bool running() { return !_should_stop; }
   void stop() { _should_stop = true; }
 
-  Schedule* invoke(SSModel* model, SSDfg* dfg, bool);
+  Schedule* invoke(SSModel* model, SSDfg* dfg);
 
  protected:
   dsa::SSModel* getSSModel() { return _ssModel; }
 
   dsa::SSModel* _ssModel;
 
-  float _reslim;
-  bool verbose{false};
   bool _should_stop{false};
   std::string mapping_file{""};
   bool dump_mapping_if_improved{false};

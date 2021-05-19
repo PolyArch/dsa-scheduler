@@ -57,14 +57,11 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   void initialize(SSDfg*, Schedule*&);
 
-  SchedulerSimulatedAnnealing(dsa::SSModel* ssModel, double timeout = 1000000.,
-                              int max_iters_ = 20000, bool verbose = false,
+  SchedulerSimulatedAnnealing(dsa::SSModel* ssModel,
                               std::string mapping_file_ = "",
                               bool dump_mapping_if_improved_ = false)
-      : Scheduler(ssModel, timeout, verbose),
-        mapping_file(mapping_file_),
-        dump_mapping_if_improved(dump_mapping_if_improved_),
-        max_iters(max_iters_) {}
+      : Scheduler(ssModel), mapping_file(mapping_file_),
+        dump_mapping_if_improved(dump_mapping_if_improved_) {}
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
@@ -122,5 +119,4 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   std::string mapping_file{""};
   bool dump_mapping_if_improved{false};
-  int max_iters;
 };

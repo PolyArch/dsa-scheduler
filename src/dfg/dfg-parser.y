@@ -53,7 +53,7 @@ static void yyerror(parse_param*, const char *);
   io_pair_t* io_pair;
   std::vector<ParseResult*> *sym_vec;
   dsa::dfg::ParseResult *sym_ent;
-  string_vec_t* str_vec;
+  std::vector<std::string>* str_vec;
   ctrl_def_t* ctrl_def;
   std::vector<std::pair<dsa::OpCode, int>> *fu_and_cnt;
 
@@ -176,7 +176,7 @@ statement: INPUT ':' io_def  eol {
   delete $1;
 }
 | NEW_DFG eol {
-  p->dfg->start_new_dfg_group();
+  p->dfg->meta.emplace_back();
 }
 | PRAGMA IDENT IDENT eol {
   p->dfg->set_pragma(*$2,*$3);
@@ -312,7 +312,7 @@ ctrl_list: I_CONST ':' ident_list {
 }
 | ctrl_list ',' I_CONST ':' ident_list {
   $$ = $1;
-  (*$$)[$3]=*$5;
+  (*$$)[$3] = *$5;
   delete $5;
 };
 
@@ -321,11 +321,12 @@ value_list: IDENT {
   $$->push_back(std::string(*$1));
 }
 | value_list ',' IDENT {
-  $1->push_back(*$3); $$ = $1;
+  $1->push_back(*$3);
+  $$ = $1;
 };
 
 ident_list: IDENT {
-  $$ = new string_vec_t();
+  $$ = new std::vector<std::string>();
   $$->push_back(std::string(*$1));
 }
 | ident_list '|' IDENT {
@@ -392,8 +393,8 @@ edge: IDENT {
 int parse_dfg(const char* filename, SSDfg* _dfg) {
   FILE* dfg_file = fopen(filename, "r");
   if (dfg_file == NULL) {
-      perror(" Failed ");
-      exit(1);
+    perror(" Failed ");
+    exit(1);
   }
 
   struct parse_param p;

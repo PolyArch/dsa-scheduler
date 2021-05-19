@@ -2,165 +2,87 @@
 #include <getopt.h>
 #include <signal.h>
 
-#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 
+#include "cxxopts.hpp"
+
 #include "dsa/arch/estimation.h"
 #include "dsa/arch/model.h"
 #include "dsa/dfg/ssdfg.h"
 #include "dsa/dfg/utils.h"
+#include "dsa/core/singleton.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
 
-using namespace std;
-using sec = chrono::seconds;
-using get_time = chrono::steady_clock;
-
 using namespace dsa;
-
-// clang-format off
-static struct option long_options[] = {
-    {"verbose",        no_argument,       nullptr, 'v',},
-    {"print-bits",     no_argument,       nullptr, 'b',},
-    {"no-int-time",    no_argument,       nullptr, 'n',},
-    {"design-space",   no_argument,       nullptr, 'f',},
-    {"indir-mem",      no_argument,       nullptr, 'c',},
-    {"print-bit",      no_argument,       nullptr, 'b',},
-    {"dump-mapping-if-improved",   no_argument, nullptr, 'u',},
-    {"timeout",        required_argument, nullptr, 't',},
-    {"max-iters",      required_argument, nullptr, 'i',},
-    {"max-edge-delay", required_argument, nullptr, 'd',},
-    {"exec-timing",    required_argument, nullptr, 'm',},
-    {"seed",           required_argument, nullptr, 'e',},
-    {"control-flow",   required_argument, nullptr, 'l',},
-    {"decomposer",     required_argument, nullptr, 'r',},
-    {"hardware-json",  required_argument, nullptr, 'h',},
-    {"software-json",  required_argument, nullptr, 's',},
-    {"mapping-json",   required_argument, nullptr, 'a',},
-    {0, 0, 0, 0,},
-};
-// clang-format on
 
 Scheduler* scheduler;
 
+#define EXECUTABLE "ss_sched"
+
 int main(int argc, char* argv[]) {
-  int opt;
-  bool verbose = false;
+  cxxopts::Options
+    options(EXECUTABLE,
+            "Mapping data dependence graph of instructions onto spatial architectures.");
+
+  options.add_options()
+    ("v,verbose", "Dump verbosed scheduling log.")
+    ("b,print-bitstream", "Dump the binary of spatial scheduling.", cxxopts::value<bool>()->default_value("false"))
+    ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", cxxopts::value<int>()->default_value(std::to_string(24 * 3600)))
+    ("m,max-iters", "The maxium iterations of scheduling attemps.", cxxopts::value<int>()->default_value("20000"))
+    ("e,seed", "The seed of randomization.", cxxopts::value<int>())
+    ("h,help", "Print the help information.");
+  options.allow_unrecognised_options();
+  options.custom_help(
+    "[adg] [dfg] [Options...] # Schedule the DFG\n"
+    "  " EXECUTABLE " [adg] # Estimate the power/area");
+
+  auto parsed = options.parse(argc, argv);
+
+  if (parsed.count("help")) {
+    std::cout << options.help() << std::endl;
+    return 0;
+  }
   int seed = time(0);
-
-  bool print_bits = false;
-
-  float timeout = 86400.0f;
-  int max_edge_delay = 15;
-  int max_iters = 20000;
-  int decomposer = 8;
-
-  int indirect = false;
-  int memory_size = 4096;
-
-  std::string timing;
-  int contrl_flow = -1;
-
-  std::string hw_json_filename = "";
-  std::string sw_json_filename = "";
-  std::string mapping_json_filename = "";
-  bool dump_mapping_if_improved = false;
-
-  while ((opt = getopt_long(argc, argv, "m:vt:c:bd:e:l:r:h:s:a:u", long_options,
-                            nullptr)) != -1) {
-    switch (opt) {
-      case 'v': verbose = true; break;
-      case 'c': indirect = atoi(optarg); break;
-      case 'b': print_bits = true; break;
-      case 't': timeout = atof(optarg); break;
-      case 'i': max_iters = atoi(optarg); break;
-      case 'd': max_edge_delay = atoi(optarg); break;
-      case 'm': memory_size = atoi(optarg);
-      case 'e': seed = atoi(optarg); break;
-      case 'l': contrl_flow = atoi(optarg); break;
-      case 'r': decomposer = atoi(optarg); break;
-      case 'h': hw_json_filename = optarg; break;
-      case 's': sw_json_filename = optarg; break;
-      case 'a': mapping_json_filename = optarg; break;
-      case 'u': dump_mapping_if_improved = true; break;
-      default: exit(1);
-    }
+  if (parsed.count("seed")) {
+    seed = parsed["seed"].as<int>();
   }
-
-  argc -= optind;
-  argv += optind;
-
-  if (argc != 2) {
-    if (argc == 1) {
-      std::string model_filename = argv[0];
-      SSModel ssmodel(model_filename.c_str());
-      auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
-      std::string model_visual_filename = model_filename + ".gv";
-      ofstream os(model_visual_filename.c_str());
-      cout << "Hardware GV file is " << model_visual_filename << std::endl;
-      ssmodel.subModel()->PrintGraphviz(os);
-      res.Dump(std::cout);
-      return 0;
-    }
-    cerr << "Usage: ss_sched [FLAGS] config.ssmodel [compute.dfg]\n";
-    exit(1);
-  }
-
   srand(seed);
+  auto &ci = dsa::ContextFlags::Global();
+  ci.verbose = parsed.count("verbose");
+  ci.timeout = parsed["timeout"].as<int>();
+  ci.bitstream = parsed["print-bitstream"].as<bool>();
+  ci.max_iters = parsed["max-iters"].as<int>();
 
-  std::string model_filename = argv[0];
-  SSModel ssmodel(model_filename.c_str());
-
-  ssmodel.memory_size = memory_size;
-
-  if (max_edge_delay != -1) {
-    ssmodel.setMaxEdgeDelay(max_edge_delay);
-  }
-  if (contrl_flow != -1) {
-    ssmodel.setCtrl(contrl_flow);
-  }
-  if (decomposer != -1) {
-    for (auto elem : ssmodel.subModel()->node_list()) {
-      elem->granularity(elem->datawidth() / decomposer);
-    }
+  ENFORCED_SYSTEM("mkdir -p .sched");
+  auto args = parsed.unmatched();
+  if (args.size() != 1 && args.size() != 2) {
+    std::cerr << options.help() << std::endl;
+    std::cerr << "But " << args.size() << " arguments get." << std::endl;
+    std::cerr  << "Exit with 1." << std::endl;
+    return 1;
   }
 
-  ssmodel.indirect(indirect);
-
-  if (argc == 2) {
-    std::string pdg_filename = argv[1];
-
-    scheduler =
-        new SchedulerSimulatedAnnealing(&ssmodel, timeout, max_iters, verbose,
-                                        mapping_json_filename, dump_mapping_if_improved);
-
-    SSDfg ssdfg(pdg_filename);
-
-    Schedule* sched = scheduler->invoke(&ssmodel, &ssdfg, print_bits);
-    // Dump hardware
-    if (hw_json_filename != "") {
-      ssmodel.subModel()->DumpHwInJson(hw_json_filename.c_str());
-    }
-
-    // Dump software
-    if (!sw_json_filename.empty()) {
-      for (auto& edge : ssdfg.edges) {
-        edge.delay = sched->edge_delay(&edge);
-      }
-      dfg::Export(&ssdfg, sw_json_filename);
-    }
-
-    // Dump Final Mapping
-    if (mapping_json_filename != "") {
-      sched->DumpMappingInJson(mapping_json_filename);
-    }
+  std::string adg_file = args[0];
+  SSModel ssmodel(adg_file.c_str());
+  if (args.size() == 1) {
+    auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
+    std::string model_visual_filename = adg_file + ".gv";
+    ofstream os(model_visual_filename.c_str());
+    std::cout << "Hardware GV file is " << model_visual_filename << std::endl;
+    ssmodel.subModel()->PrintGraphviz(os);
+    res.Dump(std::cout);
+    return 0;
   }
 
-  auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
-  res.Dump(std::cout);
+  CHECK(args.size() == 2);
+  std::string dfg_file = args[1];
+  SSDfg dfg(dfg_file);
+  scheduler = new SchedulerSimulatedAnnealing(&ssmodel, "", false);
+  Schedule* sched = scheduler->invoke(&ssmodel, &dfg);
 
   return 0;
 }
