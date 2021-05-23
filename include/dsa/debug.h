@@ -9,55 +9,56 @@
 
 #ifdef ENABLE_LLVM
 #include "llvm/Support/raw_ostream.h"
-#define OSTREAM llvm::errs()
-#define NEWLINE "\n"
+#define DSA_OSTREAM llvm::errs()
+#define DSA_NEWLINE "\n"
 #else
-#define OSTREAM std::cerr
-#define NEWLINE std::endl
+#define DSA_OSTREAM std::cerr
+#define DSA_NEWLINE std::endl
 #endif
 
-class LOGGER {
+class DSA_LOGGER {
   bool abort_;
 
  public:
-  LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort_(abort_) {
+  DSA_LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort_(abort_) {
     int i = file.size() - 1;
     while (i >= 0 && file[i] != '/') {
       --i;
     }
-    OSTREAM << reason << " " << file.substr(i + 1) << ":" << lineno << ": ";
+    DSA_OSTREAM << reason << " " << file.substr(i + 1) << ":" << lineno << ": ";
   }
 
-  ~LOGGER() noexcept(false) {
-    OSTREAM << NEWLINE;
+  ~DSA_LOGGER() noexcept(false) {
+    DSA_OSTREAM << DSA_NEWLINE;
     if (abort_) {
       abort();
     }
   }
 
   template <typename T>
-  inline LOGGER& operator<<(T&& x) {
-    OSTREAM << std::forward<T>(x);
+  inline DSA_LOGGER& operator<<(T&& x) {
+    DSA_OSTREAM << std::forward<T>(x);
     return *this;
   }
 };
 
+
 #define CHECK(COND) \
-  if (!(COND)) LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
+  if (!(COND)) DSA_LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
 
-#define WARNING LOGGER("[WARNING]", __FILE__, __LINE__, false)
+#define DSA_WARNING DSA_LOGGER("[WARNING]", __FILE__, __LINE__, false)
 
-#define INFO LOGGER("[INFO]", __FILE__, __LINE__, false)
+#define DSA_INFO DSA_LOGGER("[INFO]", __FILE__, __LINE__, false)
 
 #if defined(DEBUG_MODE) || defined(_DEBUG)
 #define LOG(S) \
-  if (getenv(#S)) LOGGER("[" #S "]", __FILE__, __LINE__, false)
+  if (getenv(#S)) DSA_LOGGER("[" #S "]", __FILE__, __LINE__, false)
 #else
 #define LOG(S) \
-  if (false) LOGGER("[DEBUG]", __FILE__, __LINE__, false)
+  if (false) DSA_LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #endif
 
-#define ENFORCED_SYSTEM(CMD)                  \
-  if (int ret = system(CMD))                  \
-  LOGGER("[SHELL]", __FILE__, __LINE__, true) \
+#define ENFORCED_SYSTEM(CMD)                        \
+  if (int ret = system(CMD))                        \
+    DSA_LOGGER("[SHELL]", __FILE__, __LINE__, true) \
       << "Failed command: " << (CMD) << ", code" << ret

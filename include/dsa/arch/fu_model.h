@@ -34,7 +34,7 @@ class Capability {
   void Add(OpCode op, int count) {
     for (auto& elem : capability) {
       if (elem.op == op) {
-        WARNING << name_of_inst(op) << " already added to " << name << "! "
+        DSA_WARNING << name_of_inst(op) << " already added to " << name << "! "
                 << "Instead, increase the count.";
         elem.count += count;
         return;
