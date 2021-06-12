@@ -439,7 +439,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         // assign node should just copy the properties of the hardware ssnode to the logical node
         // no need to call the function below
         // FIXME: @vidushi: this works but I am not sure when we should clear... it delays convergence..
-        if(indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
+        if(0) { // indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
           // std::cout << "Already seen map for: " << node->name() << std::endl;
           auto it = indirect_map_to_index.find(node->name());
           // std::cout << "name: " << node->name() << " already to the node with id: " << it->second.second->id() << std::endl;
@@ -861,7 +861,8 @@ int SchedulerSimulatedAnnealing::try_candidates(
       }
     }*/
 
-    if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
+    // if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
+    if (scheduleHere(sched, node, candidates[idx[i]])) {
       ++candidates_succ;
 
       SchedStats s;

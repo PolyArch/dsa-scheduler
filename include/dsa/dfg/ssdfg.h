@@ -23,7 +23,8 @@
 #include "dsa/simulation/data.h"
 
 #define NUM_GROUPS 6
-#define NUM_TASK_CHARAC 7
+#define NUM_TASK_DEP_CHARAC 6
+#define NUM_TASK_TYPE_CHARAC 4
 
 using dsa::SpatialFabric;
 
@@ -409,17 +410,25 @@ class SSDfg {
   void start_new_dfg_group();
 
   /*! \brief Set a new dependence among dfg groups. */
+  void create_new_task_type(int id);
+  // void create_new_task_type(std::string id);
   void create_new_task_dependence_map(int s, int d);
+  void add_new_task_property(std::string property, std::string value);
   void add_new_task_dependence_characteristic(std::string s, std::string d);
   void add_new_task_dependence_map(std::vector<std::string> producer, std::vector<std::string> consumer);
   task_def_t producer_consumer_map(int src_group, int dst_group);
   std::vector<std::pair<std::string, std::string>> coalescer_input_output_map(int src_group, int dst_group);
+  std::pair<std::string, std::string> streaming_input_output_map(int src_group, int dst_group);
+  std::unordered_map<std::string, std::string> task_type_characteristics(int task_type);
 
   std::unordered_map<std::string, std::string> coalescer_dependence_characteristics(int src_group, int dst_group) {
     return _coalescer_dependence_characteristics[src_group][dst_group];
   }
   std::unordered_map<std::string, std::string> argument_dependence_characteristics(int src_group, int dst_group) {
     return _dependence_characteristics[src_group][dst_group];
+  }
+  std::unordered_map<std::string, std::string> streaming_dependence_characteristics(int src_group, int dst_group) {
+    return _streaming_dependence_characteristics[src_group][dst_group];
   }
 
   void set_pragma(const std::string& c, const std::string& s);
@@ -460,9 +469,23 @@ class SSDfg {
     return it->second;
   }*/
 
-  std::string get_task_charac(int i) {
-    return _default_task_characs[i].first;
+  std::string get_task_dep_charac(int i) {
+    return _default_task_dep_characs[i].first;
   }
+
+  std::string get_task_type_charac(int i) {
+    return _default_task_type_characs[i].first;
+  }
+
+  void add_total_task_types() {
+    ++_total_task_types;
+  }
+
+  int get_total_task_types() {
+    return _total_task_types;
+  }
+
+  int _total_task_types=0;
 
   /*! \brief The instances of the instructions. */
   std::vector<SSDfgInst> instructions;
@@ -478,11 +501,17 @@ class SSDfg {
   task_def_t _dependence_maps[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Mapping informtion via coalescing buffer. */
   std::vector<std::pair<std::string, std::string>> _coalescer_dependence_maps[NUM_GROUPS][NUM_GROUPS];
+  /*! \brief Mapping informtion for recurrence stream. */
+  std::pair<std::string, std::string> _streaming_dependence_maps[NUM_GROUPS][NUM_GROUPS]; // = {{std::make_pair("-1","-1")}};
   /*! \brief Mapping characteristics for dependencies among taskflow. */
+  std::unordered_map<std::string, std::string> _task_type_characteristics[NUM_GROUPS];
   std::unordered_map<std::string, std::string> _dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   std::unordered_map<std::string, std::string> _coalescer_dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
+  std::unordered_map<std::string, std::string> _streaming_dependence_characteristics[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Default mapping characteristics for dependencies among taskflow. */
-  std::pair<std::string, std::string> _default_task_characs[NUM_TASK_CHARAC] = {{"aaa", "argument"}, {"id","-1"}, {"bytes","-1"},{"init_order","-1"},{"index", "-1"},{"ack","-1"}, {"gran","1"}};
+  // std::pair<std::string, std::string> _default_task_characs[NUM_TASK_CHARAC] = {{"aaa", "argument"}, {"id","-1"}, {"bytes","-1"},{"init_order","-1"},{"index", "-1"},{"ack","-1"}, {"gran","1"}};
+  std::pair<std::string, std::string> _default_task_type_characs[NUM_TASK_TYPE_CHARAC] = {{"coreMask", "1000"}, {"remote", "-1"}, {"prio", "fifo"}, {"gran","1"}};
+  std::pair<std::string, std::string> _default_task_dep_characs[NUM_TASK_DEP_CHARAC] = {{"aaa", "argument"}, {"id","-1"}, {"bytes","-1"},{"init_order","-1"},{"index", "-1"},{"ack","-1"}};
 
  private:
   // @{
@@ -496,6 +525,7 @@ class SSDfg {
   /*! \brief The property information of each sub DFG. */
   std::vector<GroupProp> _groupProps;
   // std::unordered_map<std::string, SSDfgVec*> _map_name_port;
+  int _current_task_type=-1;
   int _current_src_grp=-1;
   int _current_dst_grp=-1;
   std::string _current_dependence_type="unknown";
