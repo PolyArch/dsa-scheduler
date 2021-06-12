@@ -22,12 +22,12 @@ int Node::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
 
 uint64_t Node::invalid() { return _invalid; }
 
-bool Node::is_temporal() { return _ssdfg->group_prop(_group_id).is_temporal; }
+bool Node::is_temporal() { return _ssdfg->meta[_group_id].is_temporal; }
 
 Node::Node(SSDfg* ssdfg, V_TYPE v, const std::string& name)
     : _ssdfg(ssdfg), _name(name), _vtype(v) {
   _ID = ssdfg->nodes.size();
-  _group_id = _ssdfg->num_groups() - 1;
+  _group_id = _ssdfg->meta.size() - 1;
 }
 
 dsa::dfg::Edge* Node::getLinkTowards(Node* to) {

@@ -664,8 +664,8 @@ void Schedule::normalize() {
 
 double Schedule::estimated_performance() {
   auto dfg = this->ssdfg();
-  std::vector<std::vector<double>> bw(dfg->num_groups(), std::vector<double>(2, 0));
-  std::vector<double> coef(dfg->num_groups(), (double)2.0);
+  std::vector<std::vector<double>> bw(dfg->meta.size(), std::vector<double>(2, 0));
+  std::vector<double> coef(dfg->meta.size(), (double)2.0);
 
   for (auto& elem : dfg->type_filter<dsa::dfg::InputPort>()) {
     if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&
@@ -685,14 +685,14 @@ double Schedule::estimated_performance() {
     coef[elem.group_id()] *= elem.meta.cmd;
   }
 
-  std::vector<int> inst_cnt(dfg->num_groups(), 0);
+  std::vector<int> inst_cnt(dfg->meta.size(), 0);
   for (auto& elem : dfg->type_filter<dsa::dfg::Instruction>()) {
     ++inst_cnt[elem.group_id()];
   }
 
   double memory_bw = 64 * this->ssModel()->io_ports;
-  std::vector<double> bw_coef(dfg->num_groups(), 1.0);
-  for (int i = 0; i < dfg->num_groups(); ++i) {
+  std::vector<double> bw_coef(dfg->meta.size(), 1.0);
+  for (int i = 0; i < dfg->meta.size(); ++i) {
     for (int j = 0; j < 2; ++j) {
       // std::cout << "memory bandwidth: " << memory_bw << " ? " << bw[i][j] << std::endl;
       if (bw[i][j] > memory_bw) {
@@ -702,20 +702,20 @@ double Schedule::estimated_performance() {
   }
 
   std::vector<double> nmlz_freq;
-  for (int i = 0; i < dfg->num_groups(); ++i) {
-    nmlz_freq.push_back(dfg->group_prop(i).frequency);
+  for (int i = 0; i < dfg->meta.size(); ++i) {
+    nmlz_freq.push_back(dfg->meta[i].frequency);
   }
   double nmlz = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
-  for (int i = 0; i < dfg->num_groups(); ++i) {
+  for (int i = 0; i < dfg->meta.size(); ++i) {
     nmlz_freq[i] /= nmlz;
   }
 
-  std::vector<double> rec_lat(dfg->num_groups(), 0.0);
-  std::vector<double> rec_hide(dfg->num_groups(), 0.0);
+  std::vector<double> rec_lat(dfg->meta.size(), 0.0);
+  std::vector<double> rec_hide(dfg->meta.size(), 0.0);
   for (auto& elem : dfg->type_filter<dsa::dfg::OutputPort>()) {
     if (elem.meta.dest == dsa::dfg::MetaPort::Data::LocalPort) {
       double lat = this->latOf(&elem);
-      double hide = elem.meta.conc / dfg->group_prop(elem.group_id()).unroll;
+      double hide = elem.meta.conc / dfg->meta[elem.group_id()].unroll;
       if (lat > hide) {
         rec_lat[elem.group_id()] = lat;
         rec_hide[elem.group_id()] = hide;
@@ -725,10 +725,10 @@ double Schedule::estimated_performance() {
 
   double overall = 0.0;
 
-  for (int i = 0; i < dfg->num_groups(); ++i) {
+  for (int i = 0; i < dfg->meta.size(); ++i) {
     double v =
         std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
-    LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->group_prop(i).frequency
+    LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->meta[i].frequency
                     << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
                     << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/"
                     << rec_lat[i] << ", Overall: " << v

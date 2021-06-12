@@ -177,8 +177,9 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   
   // add input/output ports
-  p->dfg->emplace_back<SSDfgVecInput>(n, width, name, p->dfg, p->meta, true);
-  p->dfg->emplace_back<SSDfgVecOutput>(n, width, name, p->dfg, p->meta, true);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta); //, true);
+  p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta);
+  //, true);
   
   // std::stringstream ss;
   // ss << name;
@@ -247,7 +248,7 @@ statement: INPUT ':' io_def  eol {
   delete $1;
 }
 | NEW_DFG eol {
-  p->dfg->start_new_dfg_group();
+  p->dfg->meta.emplace_back();
 }
 | PRAGMA IDENT IDENT eol {
   p->dfg->set_pragma(*$2,*$3);

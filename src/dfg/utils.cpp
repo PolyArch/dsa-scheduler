@@ -22,7 +22,7 @@ struct Exporter : Visitor {
     current["temporal"] = new json::Int(node->is_temporal());
     current["group"] = new json::Int(node->group_id());
     current["name"] = new json::String(node->name());
-    current["indirect"] = new json::Int(node->indirect());
+    // current["indirect"] = new json::Int(node->indirect());
 
     plain::Array inputs;
     for (auto operand : node->ops()) {
@@ -311,13 +311,13 @@ SSDfg* Import(const std::string& s) {
       }
     } else {
       auto& inputs = *node["inputs"]->As<plain::Array>();
+      // auto &indirect = *node["indirect"]->As<int64_t>();
       auto& group_id = *node["group"]->As<int64_t>();
       auto& name = *node["name"]->As<std::string>();
-      auto &indirect = *node["indirect"]->As<int64_t>();
 
       if (group_id != last_group) {
-        res->start_new_dfg_group();
-        res->group_prop(group_id).is_temporal = *node["temporal"]->As<int64_t>();
+        res->meta.emplace_back();
+        res->meta[group_id].is_temporal = *node["temporal"]->As<int64_t>();
         last_group = group_id;
       }
       if (node.count("width")) {
@@ -339,52 +339,34 @@ SSDfg* Import(const std::string& s) {
           uint64_t ctrl = *node["ctrl"]->As<int64_t>();
           inst.predicate = CtrlBits(ctrl);
         }
-        if (node.count("width")) {
-          int length = *node["length"]->As<int64_t>();
-          int width = *node["width"]->As<int64_t>();
-          if (inputs.empty()) {
-            res->emplace_back<SSDfgVecInput>(length, width, name, res, meta);
-          } else {
-            res->emplace_back<SSDfgVecOutput>(length, width, name, res, meta);
-          }
-        } else if (node.count("op")) {
-          int opcode = *node["op"]->As<int64_t>();
-          res->emplace_back<SSDfgInst>(res, static_cast<OpCode>(opcode));
-          auto &inst = res->instructions.back();
-          if (node.count("ctrl")) {
-            uint64_t ctrl = *node["ctrl"]->As<int64_t>();
-            inst.predicate = CtrlBits(ctrl);
-          }
-          if (node.count("self")) {
-            uint64_t self = *node["self"]->As<int64_t>();
-            inst.self_predicate = CtrlBits(self);
-          }
+        if (node.count("self")) {
+          uint64_t self = *node["self"]->As<int64_t>();
+          inst.self_predicate = CtrlBits(self);
         }
-
-        auto& operands = *node["inputs"]->As<plain::Array>();
-        for (int j = 0, m = operands.size(); j < m; ++j) {
-          auto& obj = *operands[j]->As<plain::Object>();
-          if (obj.count("imm")) {
-            res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
-          } else {
-            auto& type = *obj["type"]->As<std::string>();
-            auto& edges = *obj["edges"]->As<plain::Array>();
-            std::vector<int> es;
-            for (auto edge : edges) {
-              auto& edge_obj = *edge->As<plain::Object>();
-              int src_id = *edge_obj["src_id"]->As<int64_t>();
-              int src_val = *edge_obj["src_val"]->As<int64_t>();
-              int delay = *edge_obj["delay"]->As<int64_t>();
-              int l = *edge_obj["l"]->As<int64_t>();
-              int r = *edge_obj["r"]->As<int64_t>();
-              CHECK(src_id < i);
-              Edge e_instance(res, src_id, src_val, i, l, r);
-              es.push_back(*edge_obj["id"]->As<int64_t>());
-              if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
-              e_instance.delay = delay;
-              e_instance.id = es.back();
-              res->edges[es.back()] = e_instance;
-            }
+      }
+      auto& operands = *node["inputs"]->As<plain::Array>();
+      for (int j = 0, m = operands.size(); j < m; ++j) {
+        auto& obj = *operands[j]->As<plain::Object>();
+        if (obj.count("imm")) {
+          res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
+        } else {
+          auto& type = *obj["type"]->As<std::string>();
+          auto& edges = *obj["edges"]->As<plain::Array>();
+          std::vector<int> es;
+          for (auto edge : edges) {
+            auto& edge_obj = *edge->As<plain::Object>();
+            int src_id = *edge_obj["src_id"]->As<int64_t>();
+            int src_val = *edge_obj["src_val"]->As<int64_t>();
+            int delay = *edge_obj["delay"]->As<int64_t>();
+            int l = *edge_obj["l"]->As<int64_t>();
+            int r = *edge_obj["r"]->As<int64_t>();
+            CHECK(src_id < i);
+            Edge e_instance(res, src_id, src_val, i, l, r);
+            es.push_back(*edge_obj["id"]->As<int64_t>());
+            if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
+            e_instance.delay = delay;
+            e_instance.id = es.back();
+            res->edges[es.back()] = e_instance;
           }
         }
       }

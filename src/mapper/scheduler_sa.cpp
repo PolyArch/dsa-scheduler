@@ -402,8 +402,6 @@ struct CandidateFinder : dfg::Visitor {
 int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
   auto nodes = sched->ssdfg()->nodes;
   int n = nodes.size();
-
-  // FIXME: it might be starting to assign candidates here!!!
   dsa::mapper::CandidateSpotVisitor cpv(sched, 50);
 
   std::sort(nodes.begin(), nodes.end(), [sched](dsa::dfg::Node* a, dsa::dfg::Node* b) {
@@ -425,10 +423,10 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
               << " candidate(s)";
   }
 
-  for (int i = 0; i < 3; ++i) { // try 3 times
-    for (int j = 0; j < n; ++j) { // try scheduling all nodes (candidates should be non-empty, best candidate>0)
-      SSDfgNode* node = nodes[j];
-
+  for (int i = 0; i < 3; ++i) {
+    LOG(COMPLETE) << i;
+    for (int j = 0; j < n; ++j) {
+      dsa::dfg::Node* node = nodes[j];
       if (!sched->is_scheduled(node)) {
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
@@ -457,7 +455,6 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       }
     }
   }
-  // indirect_map_to_index.clear();
 
   return sched->is_complete<dsa::dfg::Node*>() ? 1 : -1;
 }

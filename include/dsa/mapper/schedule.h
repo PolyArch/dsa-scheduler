@@ -517,23 +517,15 @@ class Schedule {
 
   // find first node for
   dsa::dfg::Node* dfgNodeOf(sslink* link) { return dfgNodeOf(0, link); }
-
+  
   // find first node for
-  /*SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
->>>>>>> support explicit indirect ports sharing same hardware port
+  dsa::dfg::Node* dfgNodeOf(int slot, ssnode* node) {
     auto& vec = _nodeProp[node->id()].slots[slot].vertices;
     if (!vec.empty()) {
       return vec.front().first;
     }
     return nullptr;
-  }*/
-  SSDfgNode* dfgNodeOf(int slot, ssnode* node) {
-    auto& vec = _nodeProp[node->id()].slots[slot].vertices;
-    for(auto it=vec.begin(); it!=vec.end(); ++it) {
-      return it->first;
-    }
-    return nullptr;
-   }
+  }
 
   // find first node for
   dsa::dfg::Node* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
@@ -672,7 +664,7 @@ class Schedule {
     if (_ssDFG) {
       _vertexProp.resize(_ssDFG->nodes.size());
       _edgeProp.resize(_ssDFG->edges.size());
-      _groupMismatch.resize(_ssDFG->num_groups(), 0);
+      _groupMismatch.resize(_ssDFG->meta.size(), 0);
     }
     if (_ssModel) {
       _nodeProp.resize((size_t)_ssModel->subModel()->node_list().size());

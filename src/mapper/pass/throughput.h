@@ -13,7 +13,7 @@ namespace pass {
 inline std::vector<int> GroupThroughput(SSDfg* dfg,
                                         const std::vector<Node*>& reversed_topo) {
   std::vector<int> throughput(dfg->nodes.size(), 1);
-  std::vector<int> res(dfg->num_groups(), 1);
+  std::vector<int> res(dfg->meta.size(), 1);
   for (auto& inst : dfg->instructions) {
     throughput[inst.id()] = inst_thr(inst.inst());
   }
