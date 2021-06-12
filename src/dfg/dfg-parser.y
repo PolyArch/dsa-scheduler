@@ -70,7 +70,7 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP
+%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP TASKPROP
 
 %type <io_pair> io_def
 %type <map_vec> map_def
@@ -213,6 +213,14 @@ statement: INPUT ':' io_def  eol {
   auto &args = *$7;
   for(unsigned i=0; i<args.size(); ++i) {
     p->dfg->add_new_task_dependence_map(args[i].first, args[i].second);
+  }
+  p->meta.clear();
+  delete $7;
+}
+| TASKPROP '[' I_CONST ']' ':' '(' map_def ')' eol { // TASKPROP[0]: (coreMask:0111)
+  p->dfg->create_new_task_type($3); // accessing a pair
+  for(unsigned task_param=0; task_param<$7->size(); ++task_param) {
+    p->dfg->add_new_task_property((*$7)[task_param]->first, (*$7)[task_param]->second); // accessing a pair
   }
   p->meta.clear();
   delete $7;

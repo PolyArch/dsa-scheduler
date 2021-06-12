@@ -91,64 +91,112 @@ void Export(SSDfg* dfg, const std::string& fname) {
     auto elem_id = *nodes[i]->As<plain::Object>()->operator[]("id")->As<int64_t>();
     CHECK(elem_id == i) << elem_id << " != " << i;
   }
+
+  plain::Array all_task_charac;
+  bool any_prop=false;
+  for(int task_type=0; task_type<NUM_GROUPS; ++task_type) {
+    plain::Object current_prop;
+    if(dfg->_task_type_characteristics[task_type].size()>0) {
+      any_prop=true;
+      // write in the below format
+      current_prop["task_id"] = new json::Int(task_type);
+      // task related information (it should print "type" first...)
+      plain::Object task_prop;
+      for(auto charac : dfg->_task_type_characteristics[task_type]) {
+        task_prop[charac.first] = new json::String(charac.second);
+      }
+      current_prop["task_characteristics"] = new json::Object(task_prop);
+      exporter.nodes.push_back(new json::Object(current_prop));
+      // all_task_charac.push_back(new json::Object(current_prop));
+    }
+  }
+
   plain::Object current;
   bool any_dep=false;
   for(int src_grp=0; src_grp<NUM_GROUPS; ++src_grp) {
     for(int dst_grp=0; dst_grp<NUM_GROUPS; ++dst_grp) {
-      if(dfg->_dependence_maps[src_grp][dst_grp].size()>0 || dfg->_coalescer_dependence_maps[src_grp][dst_grp].size()>0) {
+      if(dfg->_dependence_characteristics[src_grp][dst_grp].size()>0 || dfg->_coalescer_dependence_characteristics[src_grp][dst_grp].size()>0 || dfg->_streaming_dependence_characteristics[src_grp][dst_grp].size()>0) {
         any_dep=true;
         // write in the below format
         current["src_group"] = new json::Int(src_grp);
         current["dst_group"] = new json::Int(dst_grp);
 
         // coalescer related information (it should print "type" first...)
-        plain::Object coal_map;
-        for(auto charac : dfg->_coalescer_dependence_characteristics[src_grp][dst_grp]) {
-          coal_map[charac.first] = new json::String(charac.second);
-        }
-        current["coalescer_map_characteristics"] = new json::Object(coal_map);
+        if(1) { // dfg->_coalescer_dependence_characteristics[src_grp][dst_grp].size()>0) {
+          plain::Object coal_map;
+          for(auto charac : dfg->_coalescer_dependence_characteristics[src_grp][dst_grp]) {
+            coal_map[charac.first] = new json::String(charac.second);
+          }
+          current["coalescer_map_characteristics"] = new json::Object(coal_map);
 
-        plain::Array coal_mapping;
-        for(auto mapped_ports : dfg->_coalescer_dependence_maps[src_grp][dst_grp]) { // 2
-          plain::Object map; // vector of mappings
+          plain::Array coal_mapping;
+          for(auto mapped_ports : dfg->_coalescer_dependence_maps[src_grp][dst_grp]) { // 2
+            plain::Object map; // vector of mappings
+            plain::Array src_ports;
+            plain::Array dst_ports;
+            src_ports.push_back(new json::String(mapped_ports.first));
+            dst_ports.push_back(new json::String(mapped_ports.second));
+            map["src_ports"] = new json::Array(src_ports);  
+            map["dst_ports"] = new json::Array(dst_ports); 
+            coal_mapping.push_back(new json::Object(map));
+          }
+          current["coalescer_mappings"] = new json::Array(coal_mapping);
+        }
+
+        if(1) { // dfg->_dependence_characteristics[src_grp][dst_grp].size()>0) {
+          plain::Object map;
+          for(auto charac : dfg->_dependence_characteristics[src_grp][dst_grp]) {
+            map[charac.first] = new json::String(charac.second);
+          }
+          current["map_characteristics"] = new json::Object(map);
+
+          // argument related information
+          plain::Array mapping;
+          for(auto mapped_ports : dfg->_dependence_maps[src_grp][dst_grp]) { // 2
+            plain::Object map; // vector of mappings
+            plain::Array src_ports;
+            plain::Array dst_ports;
+            for(auto producer_port : mapped_ports.first) {
+              src_ports.push_back(new json::String(producer_port));
+            }
+            for(auto consumer_port : mapped_ports.second) {
+              dst_ports.push_back(new json::String(consumer_port));
+            }
+            map["src_ports"] = new json::Array(src_ports);  
+            map["dst_ports"] = new json::Array(dst_ports); 
+            mapping.push_back(new json::Object(map));
+          }
+          current["mappings"] = new json::Array(mapping);
+        }
+
+        // direct edge related information
+        if(1) { // dfg->_streaming_dependence_characteristics[src_grp][dst_grp].size()>0) {
+          plain::Object direct_map;
+          for(auto charac : dfg->_streaming_dependence_characteristics[src_grp][dst_grp]) {
+            std::cout << "[Export] First characteristic: " << charac.first << " second characteristic: " << charac.second << std::endl;
+            direct_map[charac.first] = new json::String(charac.second);
+          }
+          current["direct_map_characteristics"] = new json::Object(direct_map);
+
+          // direct edge related information
+          plain::Array direct_mapping;
+          auto mapped_ports = dfg->_streaming_dependence_maps[src_grp][dst_grp];
+          plain::Object map2; // vector of mappings
           plain::Array src_ports;
           plain::Array dst_ports;
           src_ports.push_back(new json::String(mapped_ports.first));
           dst_ports.push_back(new json::String(mapped_ports.second));
-          map["src_ports"] = new json::Array(src_ports);  
-          map["dst_ports"] = new json::Array(dst_ports); 
-          coal_mapping.push_back(new json::Object(map));
+          map2["src_ports"] = new json::Array(src_ports);  
+          map2["dst_ports"] = new json::Array(dst_ports); 
+          direct_mapping.push_back(new json::Object(map2));
+          current["direct_mappings"] = new json::Array(direct_mapping);
         }
-        current["coalescer_mappings"] = new json::Array(coal_mapping);
 
-        plain::Object map;
-        for(auto charac : dfg->_dependence_characteristics[src_grp][dst_grp]) {
-          map[charac.first] = new json::String(charac.second);
-        }
-        current["map_characteristics"] = new json::Object(map);
 
-        // argument related information
-        plain::Array mapping;
-        for(auto mapped_ports : dfg->_dependence_maps[src_grp][dst_grp]) { // 2
-          plain::Object map; // vector of mappings
-          plain::Array src_ports;
-          plain::Array dst_ports;
-          for(auto producer_port : mapped_ports.first) {
-            src_ports.push_back(new json::String(producer_port));
-          }
-          for(auto consumer_port : mapped_ports.second) {
-            dst_ports.push_back(new json::String(consumer_port));
-          }
-          map["src_ports"] = new json::Array(src_ports);  
-          map["dst_ports"] = new json::Array(dst_ports); 
-          mapping.push_back(new json::Object(map));
-        }
-        current["mappings"] = new json::Array(mapping);
+        // push for each new entry, otherwise it was overwriting
+        exporter.nodes.push_back(new json::Object(current));
       }
     }
-  }
-  if(any_dep) {
-    exporter.nodes.push_back(new json::Object(current));
   }
 
   json::Array json_array(exporter.nodes);
@@ -174,17 +222,31 @@ SSDfg* Import(const std::string& s) {
     CHECK(node_ptr);
         auto &node = *node_ptr;
     
-    if(node.count("dst_group")) { // a task dependence node
+    // if(node.count("taskflow")) { // a task dependence node
+    if(node.count("task_id")) { // a task dependence node
+      int task_id = *node["task_id"]->As<int64_t>();
+      res->create_new_task_type(task_id);
+      std::cout << "Creating new task type: " << task_id << " ";
+
+      // FIXME: condition that type should come first; so we need to be in order
+      auto &task_prop = *node["task_characteristics"]->As<plain::Object>();
+      for(int i=0; i<NUM_TASK_TYPE_CHARAC && !task_prop.empty(); ++i) {
+        std::string arg_type = res->get_task_type_charac(i); // charac.first;
+        std::string arg_value = *task_prop[arg_type]->As<std::string>();
+        res->add_new_task_property(arg_type, arg_value);
+        std::cout << "Arg_type: " << arg_type << " arg_value: " << arg_value << "\n";
+      }
+      res->add_total_task_types();
+      std::cout << "Add new task id: " << task_id << " total task types: " << res->get_total_task_types() << std::endl;
+    } else if(node.count("dst_group")) { // a task dependence node
       int src_grp = *node["src_group"]->As<int64_t>();
       int dst_grp = *node["dst_group"]->As<int64_t>();
       res->create_new_task_dependence_map(src_grp, dst_grp);
 
-      // ------------------------------
-
       // FIXME: condition that type should come first; so we need to be in order
       auto &coal_map_chars = *node["coalescer_map_characteristics"]->As<plain::Object>();
-      for(int i=0; i<7 && !coal_map_chars.empty(); ++i) {
-        std::string arg_type = res->get_task_charac(i); // charac.first;
+      for(int i=0; i<NUM_TASK_DEP_CHARAC && !coal_map_chars.empty(); ++i) {
+        std::string arg_type = res->get_task_dep_charac(i); // charac.first;
         std::string arg_value = *coal_map_chars[arg_type]->As<std::string>();
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }
@@ -204,12 +266,31 @@ SSDfg* Import(const std::string& s) {
         res->add_new_task_dependence_map(producer_ports, consumer_ports);
       }
 
-      // -----------------------
+      auto &direct_map_chars = *node["direct_map_characteristics"]->As<plain::Object>();
+      for(int i=0; i<NUM_TASK_DEP_CHARAC && !direct_map_chars.empty(); ++i) {
+        std::string arg_type = res->get_task_dep_charac(i); // charac.first;
+        std::string arg_value = *direct_map_chars[arg_type]->As<std::string>();
+        res->add_new_task_dependence_characteristic(arg_type, arg_value);
+      }
 
-          
+      auto &direct_mappings = *node["direct_mappings"]->As<plain::Array>();
+      for (int j = 0, m = direct_mappings.size(); j < m && !direct_map_chars.empty(); ++j) { // above could not be empty when this is fall??
+        auto &obj = *direct_mappings[j]->As<plain::Object>();
+        auto &src_ports = *obj["src_ports"]->As<plain::Array>();
+        auto &dst_ports = *obj["dst_ports"]->As<plain::Array>();
+        std::vector<std::string> producer_ports, consumer_ports;
+        for(auto src : src_ports) {
+          producer_ports.push_back(*(src->As<std::string>()));
+        }
+        for(auto dst : dst_ports) {
+          consumer_ports.push_back(*(dst->As<std::string>()));
+        }
+        res->add_new_task_dependence_map(producer_ports, consumer_ports);
+      }
+
       auto &map_chars = *node["map_characteristics"]->As<plain::Object>();
-      for(int i=0; i<7 && !map_chars.empty(); ++i) {
-        std::string arg_type = res->get_task_charac(i); // charac.first;
+      for(int i=0; i<NUM_TASK_DEP_CHARAC && !map_chars.empty(); ++i) {
+        std::string arg_type = res->get_task_dep_charac(i); // charac.first;
         std::string arg_value = *map_chars[arg_type]->As<std::string>();
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }

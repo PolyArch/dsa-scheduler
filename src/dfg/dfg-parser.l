@@ -58,6 +58,7 @@ M   [-]
 "OutputVec"                             { yylval.i = 64; return(OUTPUT); }
 "Indirect"("8"|"16"|"32"|"64")*         { iow(&yylval, yytext); return(INDIRECT); }
 "TaskDep"                               { return(TASKDEP); }
+"TaskProp"                              { return(TASKPROP); }
 \n                                      { return EOLN; }
 
 
