@@ -9,10 +9,10 @@
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/node.h"
 
-struct SSDfgValue;
-struct SSDfgNode;
-struct CtrlBits;
-struct TaskPortMap;
+// struct SSDfgValue;
+// struct SSDfgNode;
+// struct CtrlBits;
+// struct TaskPortMap;
 
 namespace dsa {
 namespace dfg {

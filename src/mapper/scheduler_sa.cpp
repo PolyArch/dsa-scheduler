@@ -402,6 +402,8 @@ struct CandidateFinder : dfg::Visitor {
 int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
   auto nodes = sched->ssdfg()->nodes;
   int n = nodes.size();
+
+  // FIXME: it might be starting to assign candidates here!!!
   dsa::mapper::CandidateSpotVisitor cpv(sched, 50);
 
   std::sort(nodes.begin(), nodes.end(), [sched](dsa::dfg::Node* a, dsa::dfg::Node* b) {
@@ -455,6 +457,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       }
     }
   }
+  // indirect_map_to_index.clear();
 
   return sched->is_complete<dsa::dfg::Node*>() ? 1 : -1;
 }
@@ -712,8 +715,8 @@ int SchedulerSimulatedAnnealing::route(
   return count;
 }
 
-bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* node,
 // Assign a node, indices and hardware port from here...
+bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* node,
                                                pair<int, dsa::ssnode*> here) {
 
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
@@ -900,7 +903,10 @@ int SchedulerSimulatedAnnealing::try_candidates(
     // auto ne = dynamic_cast<SSDfgVec*>(node);
     // indirect_map_to_index.insert(make_pair(node->name(), sched->vecPortOf(ne)));
     // std::cout << "Assigned node: " << node->name() << " id: " << vport->id() << std::endl;
+    // indirect_map_to_index.insert(make_pair(node->name(), vport->id()));
     // indirect_map_to_index.insert(make_pair(node->name(), candidates[best_candidate]));
+    // LOG(MAPPING) << node->name() << " maps to "
+    //                << candidates[best_candidate].second->name();
   }
 
   LOG(MAP) << "return for best candidate!";

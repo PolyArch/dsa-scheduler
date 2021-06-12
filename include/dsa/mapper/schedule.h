@@ -526,7 +526,6 @@ class Schedule {
     }
     return nullptr;
   }
-
   // find first node for
   dsa::dfg::Node* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
 

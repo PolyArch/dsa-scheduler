@@ -220,9 +220,8 @@ SSDfg* Import(const std::string& s) {
   for (int i = 0, n = nodes->size(); i < n; ++i) {
     auto node_ptr = (*nodes)[i]->As<plain::Object>();
     CHECK(node_ptr);
-        auto &node = *node_ptr;
+    auto &node = *node_ptr;
     
-    // if(node.count("taskflow")) { // a task dependence node
     if(node.count("task_id")) { // a task dependence node
       int task_id = *node["task_id"]->As<int64_t>();
       res->create_new_task_type(task_id);
@@ -272,7 +271,6 @@ SSDfg* Import(const std::string& s) {
         std::string arg_value = *direct_map_chars[arg_type]->As<std::string>();
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }
-
       auto &direct_mappings = *node["direct_mappings"]->As<plain::Array>();
       for (int j = 0, m = direct_mappings.size(); j < m && !direct_map_chars.empty(); ++j) { // above could not be empty when this is fall??
         auto &obj = *direct_mappings[j]->As<plain::Object>();
@@ -344,17 +342,17 @@ SSDfg* Import(const std::string& s) {
           inst.self_predicate = CtrlBits(self);
         }
       }
-      auto& operands = *node["inputs"]->As<plain::Array>();
+      auto &operands = *node["inputs"]->As<plain::Array>();
       for (int j = 0, m = operands.size(); j < m; ++j) {
-        auto& obj = *operands[j]->As<plain::Object>();
+        auto &obj = *operands[j]->As<plain::Object>();
         if (obj.count("imm")) {
           res->nodes[i]->ops().emplace_back(*obj["imm"]->As<int64_t>());
         } else {
-          auto& type = *obj["type"]->As<std::string>();
-          auto& edges = *obj["edges"]->As<plain::Array>();
+          auto &type = *obj["type"]->As<std::string>();
+          auto &edges = *obj["edges"]->As<plain::Array>();
           std::vector<int> es;
           for (auto edge : edges) {
-            auto& edge_obj = *edge->As<plain::Object>();
+            auto &edge_obj = *edge->As<plain::Object>();
             int src_id = *edge_obj["src_id"]->As<int64_t>();
             int src_val = *edge_obj["src_val"]->As<int64_t>();
             int delay = *edge_obj["delay"]->As<int64_t>();
@@ -368,6 +366,7 @@ SSDfg* Import(const std::string& s) {
             e_instance.id = es.back();
             res->edges[es.back()] = e_instance;
           }
+          res->nodes[i]->ops().emplace_back(res, es, Str2Flag(type));
         }
       }
     }

@@ -49,7 +49,6 @@ using dsa::SpatialFabric;
 //     one-time constant?)
 
 class SSDfg;
-
 namespace dsa {
 namespace dfg {
 
@@ -58,37 +57,8 @@ struct Visitor;
 }  // namespace dfg
 }  // namespace dsa
 
-// post-parsing task dependence signal definitions (mapping of string of flag to it's value?)
-// typedef std::unordered_map<std::string, std::string> task_def_t;
 typedef std::pair<std::vector<std::string>, std::vector<std::string>> string_pair;
 typedef std::vector<string_pair> task_def_t;
-typedef std::vector<std::pair<std::vector<int>, std::vector<int>>> port_map_def_t;
-// associated with each dfg-group that can be created dynamically..
-// FIXME: is it used anywhere??
-/*struct TaskPortMap {
-
-  // return the port number from this string...
-  TaskPortMap(const std::map<int, std::vector<std::string>>& raw);
-  TaskPortMap(task_def_t port_map_) : _mapping(port_map_) {}
-
-  // set another mapping of bits (Concatenate into the port)
-  void set(std::string prod_port, std::string cons_port) {
-    _mapping.insert(make_pair(prod_port, cons_port));
-  }
-  string getMappedPort(string prod_port) {
-    auto it = _mapping.find(prod_port);
-    assert(it->begin()!-it->end());
-    return it->second;
-  }
-  int getNumMappedPorts() {
-    return _mapping.size();
-  }
-  task_def_t mapping() { return _mapping; }
-
- private:
-  task_def_t _mapping;
-};*/
-
 typedef std::vector<std::string> string_vec_t;
 
 // post-parsing control signal definitions (mapping of string of flag to it's value?)
@@ -108,6 +78,13 @@ struct MetaDfg {
    * \brief The relative execution frequency.
    */
   int64_t frequency{1};
+
+  void reset_regs() {
+    /*for(unsigned i=0; i<_reg.size(); ++i) {
+      _reg[i]=0;
+    }*/
+  }
+
   /*!
    * \brief The unrolling degree of this block
    */
@@ -257,7 +234,6 @@ class SSDfg {
   void normalize();
 
   /*! \brief The property information of each sub DFG. */
-//   std::vector<GroupProp> _groupProps;
   // std::unordered_map<std::string, SSDfgVec*> _map_name_port;
   int _current_task_type=-1;
   int _current_src_grp=-1;
