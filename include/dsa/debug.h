@@ -50,13 +50,18 @@ class DSA_LOGGER {
 
 #define DSA_INFO DSA_LOGGER("[INFO]", __FILE__, __LINE__, false)
 
-#if defined(DEBUG_MODE) || defined(_DEBUG)
+#define LOG(S) \
+  if (getenv(#S)) DSA_LOGGER("[" #S "]", __FILE__, __LINE__, false)
+
+/*
+#if defined(DEBUG_MODE) || defined(_DEBUG) || defined(ENABLE_LOG)
 #define LOG(S) \
   if (getenv(#S)) DSA_LOGGER("[" #S "]", __FILE__, __LINE__, false)
 #else
 #define LOG(S) \
   if (false) DSA_LOGGER("[DEBUG]", __FILE__, __LINE__, false)
 #endif
+*/
 
 #define ENFORCED_SYSTEM(CMD)                        \
   if (int ret = system(CMD))                        \
