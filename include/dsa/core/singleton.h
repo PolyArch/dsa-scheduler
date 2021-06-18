@@ -21,6 +21,10 @@ struct ContextFlags {
    * \brief If we want to dump the binary.
    */
   bool bitstream{false};
+  /*!
+   * \brief If we only want to schedule the ports to emulate the simulation.
+   */
+  bool dummy{false};
 
   ContextFlags();
 

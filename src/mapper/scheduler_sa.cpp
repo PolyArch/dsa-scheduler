@@ -404,6 +404,7 @@ struct CandidateFinder : dfg::Visitor {
 int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched) {
   auto nodes = sched->ssdfg()->nodes;
   int n = nodes.size();
+  bool dummy = dsa::ContextFlags::Global().dummy;
   dsa::mapper::CandidateSpotVisitor cpv(sched, 50);
 
   std::sort(nodes.begin(), nodes.end(), [sched](dsa::dfg::Node* a, dsa::dfg::Node* b) {
@@ -426,24 +427,32 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   }
 
   for (int i = 0; i < 3; ++i) {
-    LOG(COMPLETE) << i;
+    bool success = true;
     for (int j = 0; j < n; ++j) {
       dsa::dfg::Node* node = nodes[j];
+      if (dummy && !dynamic_cast<dsa::dfg::VectorPort*>(node)) {
+        continue;
+      }
       if (!sched->is_scheduled(node)) {
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
         if (candidates.empty()) {
           LOG(CAND) << ssDFG->filename << ": "
                     << "Cannot map " << node->name();
+          success = false;
           break;
         }
         int best_candidate = try_candidates(candidates, sched, node);
         if (best_candidate == -1) {
           unmap_some(ssDFG, sched);
           std::random_shuffle(nodes.begin(), nodes.end());
+          success = false;
           break;
         }
       }
+    }
+    if (dummy && success) {
+      return 1;
     }
   }
 
