@@ -100,6 +100,9 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
   plain::Array instructions;
 
   for (int i = 0, n = nodes.size(); i < n; ++i) {
+    if (!is_scheduled(nodes[i])) {
+      continue;
+    }
     auto loc = location_of(nodes[i]);
     plain::Object mapping;
     mapping["op"] = new json::String("assign_node");
@@ -451,7 +454,7 @@ void Schedule::stat_printOutputLatency() {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
     auto loc = location_of(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.second);
-    CHECK(vport);
+    CHECK(vport) << this;
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : operands[vec_out->id()]) {
       int routing_latency = edge_latency(inc_edge);

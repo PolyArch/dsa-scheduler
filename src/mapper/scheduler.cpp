@@ -106,8 +106,8 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   bool succeed_sched = false;
   Schedule* sched = nullptr;
 
-  string dfg_base =
-      basename(dfg->filename);  // the name without preceeding dirs or file extension
+  // the name without preceeding dirs or file extension
+  string dfg_base = basename(dfg->filename);
   string pdg_dir = basedir(dfg->filename);  // preceeding directories only
   if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
     pdg_dir += "/";

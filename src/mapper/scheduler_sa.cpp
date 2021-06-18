@@ -289,6 +289,10 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     }
 
     int status = schedule_internal(ssDFG, cur_sched);
+    if (dsa::ContextFlags::Global().dummy && status) {
+      *sched = *cur_sched;  // shallow copy of sched should work?
+      return true;
+    }
     if (status == 0) {
       LOG(MAP) << "Insufficient candidates!";
       return false;
@@ -438,8 +442,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
         if (candidates.empty()) {
-          LOG(CAND) << ssDFG->filename << ": "
-                    << "Cannot map " << node->name();
+          LOG(CAND) << ssDFG->filename << ": " << "Cannot map " << node->name();
           success = false;
           break;
         }
@@ -447,7 +450,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         // assign node should just copy the properties of the hardware ssnode to the logical node
         // no need to call the function below
         // FIXME: @vidushi: this works but I am not sure when we should clear... it delays convergence..
-        if(0) { // indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
+        if (0) { // indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
           // std::cout << "Already seen map for: " << node->name() << std::endl;
           auto it = indirect_map_to_index.find(node->name());
           // std::cout << "name: " << node->name() << " already to the node with id: " << it->second.second->id() << std::endl;
@@ -462,6 +465,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
           }
         }
       }
+      CHECK(sched->location_of(node).second);
     }
     if (dummy && success) {
       return 1;
