@@ -8,6 +8,8 @@
 #include "dsa/dfg/node.h"
 int parse_dfg(const char* dfgfile, SSDfg* dfg);
 typedef std::pair<std::string,int> io_pair_t;
+typedef std::pair<std::string,std::string> map_pair_t;
+typedef std::pair<int,int> map_id_t;
 
 using ParseResult = dsa::dfg::ParseResult;
 using ControlEntry = dsa::dfg::ControlEntry;
@@ -51,11 +53,15 @@ static void yyerror(parse_param*, const char *);
 
   std::string* s;
   io_pair_t* io_pair;
+  map_pair_t* map_pair;
   std::vector<ParseResult*> *sym_vec;
   dsa::dfg::ParseResult *sym_ent;
   std::vector<std::string>* str_vec;
   ctrl_def_t* ctrl_def;
   std::vector<std::pair<dsa::OpCode, int>> *fu_and_cnt;
+  task_def_t* task_def;
+  std::vector<map_pair_t*> *map_vec;
+  map_id_t* map_id;
 
   YYSTYPE() {}   // this is only okay because sym_ent doesn't need a
   ~YYSTYPE() {}  // real constructor/deconstructuor (but string/vector do)
@@ -64,15 +70,17 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT
+%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP TASKPROP
 
 %type <io_pair> io_def
+%type <map_vec> map_def
+%type <map_id> task_map_id_def
 %type <sym_vec> arg_list
 %type <sym_ent> arg_expr rhs expr edge edge_list
 %type <ctrl_def> ctrl_list
-%type <str_vec> ident_list value_list
 %type <fu_and_cnt> fu_list
-
+%type <str_vec> ident_list value_list // @vidushi: what does it mean to have two?
+%type <task_def> task_map_list
 
 %start statement_list
 %debug
@@ -92,11 +100,14 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
+    // for each len and width, create a symbol or a new vins
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
@@ -119,22 +130,26 @@ statement: INPUT ':' io_def  eol {
   // I think it's somewhat likely i am breaking decomposability
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
   int left_len = 0;
+  // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
     left_len = slice;
     if (n - i > 0) {
       left_len = std::min(n - i, slice);
     }
+    // printf("left_len: , width: %d %d", left_len, width);
     for (int j = 0; j < left_len * width; j += width) {
       std::stringstream ss;
       ss << name;
+      // at output, we make the connectivity because the previous edge would already be there..
       if (len) ss << cnt++;
       // TODO(@were): Do I need to modularize these two clean up segment?
-      auto sym = p->symbols.Get(ss.str());
+      auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
       if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
         int num_entries = ce->entries.size();
         CHECK(num_entries > 0 && num_entries <= 16);
         std::vector<int> es;
         for (auto elem : ce->entries) {
+          // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
           p->dfg->edges.emplace_back(
             p->dfg, elem->nid, elem->vid,
             p->dfg->vouts.back().id(), elem->l, elem->r);
@@ -153,6 +168,63 @@ statement: INPUT ':' io_def  eol {
   }
   p->meta.clear();
   delete $3;
+}
+| INDIRECT ':' io_def eol { // create 1 input, 1 output and edge
+  auto name = $3->first;
+  int len = $3->second;
+  int width = $1;
+  int n = std::max(1, len);
+  int slice = 64 / width;
+  
+  // add input/output ports
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta); //, true);
+  p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta);
+  //, true);
+  
+  // std::stringstream ss;
+  // ss << name;
+  // auto sym = p->symbols.Get(ss.str());
+  // auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(sym);
+  
+  int nid = p->dfg->vins.back().id();
+  p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
+  int vid = 0;
+  int iid = p->dfg->vouts.back().id();
+  int l=0, r=63;
+
+  p->dfg->edges.emplace_back(
+    p->dfg, nid, vid,
+    iid, l, r);
+
+  std::vector<int> es{p->dfg->edges.back().id};
+
+  // set ops on this output
+  p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+  // p->dfg->vins.back().values[0].uses.push_back(p->dfg->edges.back().id);
+  // LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
+
+  p->meta.clear();
+  delete $3;
+}
+| TASKDEP '[' task_map_id_def map_def ':' '(' task_map_list ')' eol {
+  p->dfg->create_new_task_dependence_map($3->first, $3->second); // accessing a pair
+  for(unsigned task_param=0; task_param<$4->size(); ++task_param) {
+    p->dfg->add_new_task_dependence_characteristic((*$4)[task_param]->first, (*$4)[task_param]->second); // accessing a pair
+  }
+  auto &args = *$7;
+  for(unsigned i=0; i<args.size(); ++i) {
+    p->dfg->add_new_task_dependence_map(args[i].first, args[i].second);
+  }
+  p->meta.clear();
+  delete $7;
+}
+| TASKPROP '[' I_CONST ']' ':' '(' map_def ')' eol { // TASKPROP[0]: (coreMask:0111)
+  p->dfg->create_new_task_type($3); // accessing a pair
+  for(unsigned task_param=0; task_param<$7->size(); ++task_param) {
+    p->dfg->add_new_task_property((*$7)[task_param]->first, (*$7)[task_param]->second); // accessing a pair
+  }
+  p->meta.clear();
+  delete $7;
 }
 | value_list '=' rhs eol {
   if (auto ne = dynamic_cast<NodeEntry*>($3)) {
@@ -211,6 +283,7 @@ eol : ';'
 	| EOLN
 	;
 
+// Input: A[8]
 io_def: IDENT {
   $$ = new io_pair_t(*$1,0);
   delete $1;
@@ -218,6 +291,28 @@ io_def: IDENT {
 | IDENT '[' I_CONST ']' {
     $$ = new io_pair_t(*$1,$3);
     delete $1;
+};
+
+task_map_id_def: I_CONST ':' I_CONST {
+  $$ = new map_id_t($1, $3);
+}
+| task_map_id_def ',' {
+  $$ = $1;
+}
+| task_map_id_def ']' {
+  $$ = $1;
+};
+
+map_def: IDENT '=' IDENT {
+  $$ = new std::vector<map_pair_t*>();
+  $$->push_back(new map_pair_t(*$1,*$3));
+}
+| map_def ',' IDENT '=' IDENT {
+  $$ = $1;
+  $$->push_back(new map_pair_t(*$3,*$5)); // other entries
+}
+| map_def ']' {
+  $$ = $1;
 };
 
 rhs: expr { $$ = $1; };
@@ -244,12 +339,14 @@ expr: I_CONST {
     $$ = ce->entries[0];
     delete ce;
   } else {
-    $$ = $1;
+    $$ = $1; // What does this mean???
   }
 }
 | IDENT '(' arg_list ')' {
   auto &opcode = *$1;
   auto &args = *$3;
+
+
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
   auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
@@ -279,8 +376,6 @@ expr: I_CONST {
   delete $6;
 };
 
-
-/* Argument expressions can have extra flag arguments as well */
 arg_expr : expr {
   $$ = $1;
 }
@@ -303,6 +398,17 @@ arg_list: arg_expr {
 | arg_list ',' arg_expr {
   $1->push_back($3);
   $$ = $1;
+};
+
+task_map_list: ident_list ':' ident_list {
+  $$ = new task_def_t();
+  $$->push_back(std::make_pair(*$1, *$3));
+  delete $3;
+}
+| task_map_list ',' ident_list ':' ident_list {
+  $$ = $1;
+  $$->push_back(std::make_pair(*$3, *$5));
+  delete $5;
 };
 
 ctrl_list: I_CONST ':' ident_list {

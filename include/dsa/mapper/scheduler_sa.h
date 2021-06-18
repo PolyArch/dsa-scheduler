@@ -3,6 +3,7 @@
 #include <iostream>
 #include <map>
 #include <utility>
+#include <unordered_map>
 
 #include "dse.h"
 #include "scheduler.h"
@@ -119,4 +120,6 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   std::string mapping_file{""};
   bool dump_mapping_if_improved{false};
+  int max_iters;
+  std::unordered_map<std::string, std::pair<int, ssnode*>> indirect_map_to_index;
 };

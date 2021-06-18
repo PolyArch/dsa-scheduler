@@ -86,5 +86,16 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
   }
 }
 
+TaskMapEntry::TaskMapEntry(ParseResult* controller_)
+    : controller(controller_) {
+  std::unordered_map<std::string, std::string> temp;
+  port_map = temp;
+}
+
+/*TaskMapEntry::TaskMapEntry(
+            std::unordered_map<std::string, std::string>& port_map_,
+            ParseResult* controller_)
+    : controller(controller_), port_map(TaskPortMap(port_map_).mapping()) {
+}*/
 }  // namespace dfg
 }  // namespace dsa

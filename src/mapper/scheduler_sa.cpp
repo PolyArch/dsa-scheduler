@@ -6,7 +6,6 @@
 
 #include <fstream>
 #include <list>
-#include <unordered_map>
 
 #include "dsa/core/singleton.h"
 #include "dsa/debug.h"
@@ -276,6 +275,8 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   int timeout = dsa::ContextFlags::Global().timeout;
   bool verbose = dsa::ContextFlags::Global().verbose;
   for (iter = 0; iter < max_iters; ++iter) {
+    // okay so new port has same name..
+    // indirect_map_to_index.clear();
     if ((total_msec() > timeout * 1000) || _should_stop) {
       break;
     }
@@ -442,12 +443,23 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
           success = false;
           break;
         }
-        int best_candidate = try_candidates(candidates, sched, node);
-        if (best_candidate == -1) {
-          unmap_some(ssDFG, sched);
-          std::random_shuffle(nodes.begin(), nodes.end());
-          success = false;
-          break;
+        // if this node name is already scheduled, assign this new node also to previous ssnode
+        // assign node should just copy the properties of the hardware ssnode to the logical node
+        // no need to call the function below
+        // FIXME: @vidushi: this works but I am not sure when we should clear... it delays convergence..
+        if(0) { // indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
+          // std::cout << "Already seen map for: " << node->name() << std::endl;
+          auto it = indirect_map_to_index.find(node->name());
+          // std::cout << "name: " << node->name() << " already to the node with id: " << it->second.second->id() << std::endl;
+          sched->assign_node(node, it->second);
+        } else {
+          int best_candidate = try_candidates(candidates, sched, node);
+          if (best_candidate == -1) {
+            unmap_some(ssDFG, sched);
+            std::random_shuffle(nodes.begin(), nodes.end());
+            success = false;
+            break;
+          }
         }
       }
     }
@@ -455,6 +467,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       return 1;
     }
   }
+  // indirect_map_to_index.clear();
 
   return sched->is_complete<dsa::dfg::Node*>() ? 1 : -1;
 }
@@ -716,8 +729,21 @@ int SchedulerSimulatedAnnealing::route(
   return count;
 }
 
+// Assign a node, indices and hardware port from here...
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* node,
                                                pair<int, dsa::ssnode*> here) {
+
+  // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
+  /*if(node->indirect()) {
+    // if input is indirect, then create a mapping for the output node with the same name (search)
+    // if output is indirect, skip!!
+    printf("Found an indirect node, just assigned it to the same id\n");
+    // mapping to the hardware
+    sched->assign_node(node, here);
+    return true;
+  } else {
+    printf("Found a normal node, just assigned it to the same id\n");
+  }*/
   std::vector<dsa::dfg::Edge*> to_revert;
 
 #define process(edge_, node_, src, dest)                                           \
@@ -745,8 +771,8 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
 
   process(sched->operands[node->id()], def, loc, here);
   to_revert = sched->operands[node->id()];
+  // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
   process(sched->users[node->id()], use, here, loc);
-
 #undef process
 
   sched->assign_node(node, here);
@@ -754,6 +780,9 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
   return true;
 }
 
+// okay so this function is trying among candidates for this node...
+// for any output node, it should discard all *indirect* ports
+// for the indirect port, chose the candidate which is the same as its corresponding indirect port
 int SchedulerSimulatedAnnealing::try_candidates(
     const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched,
     dsa::dfg::Node* node) {
@@ -794,13 +823,58 @@ int SchedulerSimulatedAnnealing::try_candidates(
     }
     keys.push_back(sum);
   }
+  // based on the keys, sort the indices. So we prioritize according to that...
   std::sort(idx.begin(), idx.end(), [&keys](int a, int b) { return keys[a] < keys[b]; });
 
   int no_imporve = 0;
+  // for all ports and instructions whose names are printed
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
-    LOG(MAP) << "Try: " << candidates[i].second->name();
+    // maybe here, that it will access the next index now..
+    LOG(MAP) << "Try: " << candidates[i].second->name() << " index into candidates: " << idx[i];
 
+    // schedule/allocate this input/output ports on of these...
+    // Why did this chose the first one?? is it allocating ports on the first correct chosen?
+    // Where is mutual exclusiveness?
+    // TODO: scheduleHere seems to always return true (I don't know) // does this return false for ports that are already assigned?
+    bool isSameAsIndirectInput = true;
+    /*std::cout << "Node name: " << node->name() << std::endl;
+    if(node->indirect()) {
+      int assigned_port = -1;
+      if(indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
+        // ID that we are hoping for!!
+        best_candidate=idx;
+        // fill best path and assign node
+        break;
+        auto it = indirect_map_to_index.find(node->name());
+        assigned_port = it->second; // sched->vecPortOf(ne);
+
+        // ID associated with the current port
+        auto cur_vport = candidates[idx[i]].second;
+        auto ne = dynamic_cast<SSDfgVec*>(node);
+        std::cout << "Identified an indirect output port with input port mapped to: " << assigned_port << "\n";
+        if(cur_vport->id()!=assigned_port) {
+          isSameAsIndirectInput = false;
+          std::cout << "Not allowed because cur_vport: " << cur_vport->id() << " should assign: " << assigned_port << std::endl;
+        } else {
+          std::cout << "Allowed because same as indirect port: " << assigned_port << std::endl;
+        }
+      } else {
+        // FIXME: it comes in this situation after some time??
+        std::cout << "Should have found an earlier mapped input port\n";
+      }
+    } else { // ensure that the ID is not the same as any of the allotted indirect ports
+      for(auto it=indirect_map_to_index.begin(); it!=indirect_map_to_index.end(); ++it) {
+        int ind = it->second;
+        auto cur_vport = candidates[idx[i]].second;
+        if(cur_vport->id()==ind) {
+          std::cout << "Not allowed because cur_vport: " << cur_vport->id() << " should not assign: " << ind << std::endl;
+          isSameAsIndirectInput = false;
+        }
+      }
+    }*/
+
+    // if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
     if (scheduleHere(sched, node, candidates[idx[i]])) {
       ++candidates_succ;
       LOG(MAP) << "succ!";
@@ -809,7 +883,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
       CandidateRoute undo_path;
       LOG(MAP) << "creeping!!";
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
-      LOG(MAP) << candScore.first << ", " << candScore.second;
+      LOG(MAP) << "Cand score: " << candScore.first << ", " << candScore.second;
 
       if (!find_best) {
         return i;
@@ -838,6 +912,15 @@ int SchedulerSimulatedAnnealing::try_candidates(
     best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
     LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].second->name();
+    // FIXME: is first not the assign port number???? need port for the hardware port
+    // auto vport = candidates[best_candidate].second; // ssnode*
+    // auto ne = dynamic_cast<SSDfgVec*>(node);
+    // indirect_map_to_index.insert(make_pair(node->name(), sched->vecPortOf(ne)));
+    // std::cout << "Assigned node: " << node->name() << " id: " << vport->id() << std::endl;
+    // indirect_map_to_index.insert(make_pair(node->name(), vport->id()));
+    // indirect_map_to_index.insert(make_pair(node->name(), candidates[best_candidate]));
+    // LOG(MAPPING) << node->name() << " maps to "
+    //                << candidates[best_candidate].second->name();
   }
 
   LOG(MAP) << "return for best candidate!";

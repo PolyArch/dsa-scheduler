@@ -39,6 +39,8 @@ class VectorPort : public Node {
 
   int length() { return _ops.size(); }
 
+  bool indirect() { return _indirect; }
+
   virtual std::string name() override { return _name; }
 
   virtual int bitwidth() override { return _bitwidth; }
@@ -49,6 +51,7 @@ class VectorPort : public Node {
   int _bitwidth;  // element bitwidth
   int _port_width;
   int _vp_len;
+  bool _indirect=false;
 
  public:
   CompileMeta meta;

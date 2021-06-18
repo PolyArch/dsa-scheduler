@@ -200,6 +200,8 @@ class Schedule {
     // }
   }
 
+  // this should be same as both input and output ports should give same locationOf
+  // locationOf is the same ssnode assigned...
   int vecPortOf(dsa::dfg::VectorPort* vec) {
     ssnode* n = locationOf(vec);
     if (n) {
@@ -238,6 +240,7 @@ class Schedule {
     CHECK(snode->id() < (int)_nodeProp.size())
         << snode->id() << "<" << (int)_nodeProp.size();
 
+    // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
     int num_slots = dfgnode->bitwidth() / snode->granularity();
     for (int i = 0; i < num_slots; ++i) {
       int slot = orig_slot + i;
@@ -513,7 +516,7 @@ class Schedule {
 
   // find first node for
   dsa::dfg::Node* dfgNodeOf(sslink* link) { return dfgNodeOf(0, link); }
-
+  
   // find first node for
   dsa::dfg::Node* dfgNodeOf(int slot, ssnode* node) {
     auto& vec = _nodeProp[node->id()].slots[slot].vertices;
@@ -522,7 +525,6 @@ class Schedule {
     }
     return nullptr;
   }
-
   // find first node for
   dsa::dfg::Node* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
 

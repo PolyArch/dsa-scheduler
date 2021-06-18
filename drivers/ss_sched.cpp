@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.")
-    ("d,dummp", "Only schedule the i/o ports.")
+    ("d,dummy", "Only schedule the i/o ports.")
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", cxxopts::value<bool>()->default_value("false"))
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", cxxopts::value<int>()->default_value(std::to_string(24 * 3600)))
     ("m,max-iters", "The maxium iterations of scheduling attemps.", cxxopts::value<int>()->default_value("20000"))

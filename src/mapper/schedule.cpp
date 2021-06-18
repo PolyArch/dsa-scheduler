@@ -24,6 +24,10 @@
 #include "json.tab.h"
 #include "pass/bitstream.h"
 
+#define NUM_IN_PORTS 32
+
+#define NUM_IN_PORTS 32
+
 using namespace std;
 using namespace dsa;
 
@@ -144,7 +148,11 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
 
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
-    os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
+    if(pv.indirect()) {
+      os << "#define P_" << cfg_name << "_" << pv.name() << "_in" << " " << (pn+NUM_IN_PORTS) << "\n";
+    } else {
+      os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
+    }
   }
   os << "\n";
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::OutputPort>()) {

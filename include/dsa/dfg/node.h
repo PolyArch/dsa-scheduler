@@ -118,7 +118,7 @@ struct Edge {
   std::string name() const;
   /*! \brief The bitwidth of this data path. */
   int bitwidth() { return r - l + 1; }
-
+  
   /*! \brief The index of the edge in the parent's edge list. */
   int id{-1};
   /*! \brief The DFG this edge belongs to. */
