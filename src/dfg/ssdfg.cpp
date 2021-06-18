@@ -23,11 +23,11 @@ using namespace dsa;
 
 /// { SSDfg
 
-// void SSDfg::reset_dfg() {
-//   for(unsigned i=0; i<instructions.size(); ++i) {
-//     instructions[i].reset_regs();
-//   }
-// }
+void SSDfg::reset_dfg() {
+  /*for(unsigned i=0; i<instructions.size(); ++i) {
+    instructions[i].reset_regs();
+  }*/
+}
 
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {

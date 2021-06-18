@@ -225,7 +225,7 @@ SSDfg* Import(const std::string& s) {
     if(node.count("task_id")) { // a task dependence node
       int task_id = *node["task_id"]->As<int64_t>();
       res->create_new_task_type(task_id);
-      std::cout << "Creating new task type: " << task_id << " ";
+      // std::cout << "Creating new task type: " << task_id << " ";
 
       // FIXME: condition that type should come first; so we need to be in order
       auto &task_prop = *node["task_characteristics"]->As<plain::Object>();
@@ -233,10 +233,10 @@ SSDfg* Import(const std::string& s) {
         std::string arg_type = res->get_task_type_charac(i); // charac.first;
         std::string arg_value = *task_prop[arg_type]->As<std::string>();
         res->add_new_task_property(arg_type, arg_value);
-        std::cout << "Arg_type: " << arg_type << " arg_value: " << arg_value << "\n";
+        // std::cout << "Arg_type: " << arg_type << " arg_value: " << arg_value << "\n";
       }
       res->add_total_task_types();
-      std::cout << "Add new task id: " << task_id << " total task types: " << res->get_total_task_types() << std::endl;
+      // std::cout << "Add new task id: " << task_id << " total task types: " << res->get_total_task_types() << std::endl;
     } else if(node.count("dst_group")) { // a task dependence node
       int src_grp = *node["src_group"]->As<int64_t>();
       int dst_grp = *node["dst_group"]->As<int64_t>();
