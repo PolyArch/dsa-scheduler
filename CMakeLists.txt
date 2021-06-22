@@ -75,6 +75,7 @@ add_library(dsa
 
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_INSTALL_PREFIX}/include # I am not sure if it is good?
   ${CMAKE_SOURCE_DIR}/json-parser/include)
 
 target_link_libraries(dsa PRIVATE json)

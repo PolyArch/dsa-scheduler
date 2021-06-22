@@ -24,10 +24,6 @@
 #include "json.tab.h"
 #include "pass/bitstream.h"
 
-#define NUM_IN_PORTS 32
-
-#define NUM_IN_PORTS 32
-
 using namespace std;
 using namespace dsa;
 

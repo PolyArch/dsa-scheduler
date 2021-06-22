@@ -23,10 +23,8 @@
 #include "dsa/dfg/port.h"
 #include "dsa/dfg/symbols.h"
 #include "dsa/simulation/data.h"
+#include "dsa-ext/spec.h"
 
-#define NUM_GROUPS 6
-#define NUM_TASK_DEP_CHARAC 6
-#define NUM_TASK_TYPE_CHARAC 4
 
 using dsa::SpatialFabric;
 
