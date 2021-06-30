@@ -31,6 +31,7 @@ int main(int argc, char* argv[]) {
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.")
     ("d,dummy", "Only schedule the i/o ports.")
+    ("r,tolerate-unuse", "Do not throw an error if there are unused values", cxxopts::value<bool>()->default_value("false"))
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", cxxopts::value<bool>()->default_value("false"))
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", cxxopts::value<int>()->default_value(std::to_string(24 * 3600)))
     ("m,max-iters", "The maxium iterations of scheduling attemps.", cxxopts::value<int>()->default_value("20000"))
@@ -58,6 +59,7 @@ int main(int argc, char* argv[]) {
   ci.timeout = parsed["timeout"].as<int>();
   ci.bitstream = parsed["print-bitstream"].as<bool>();
   ci.max_iters = parsed["max-iters"].as<int>();
+  ci.tolerate_unuse = parsed["tolerate-unuse"].as<bool>();
 
   ENFORCED_SYSTEM("mkdir -p .sched");
   auto args = parsed.unmatched();

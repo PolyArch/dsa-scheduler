@@ -25,6 +25,10 @@ struct ContextFlags {
    * \brief If we only want to schedule the ports to emulate the simulation.
    */
   bool dummy{false};
+  /*!
+   * \brief If true, do not throw an error when there are unused values in the DFG.
+   */
+  bool tolerate_unuse{false};
 
   ContextFlags();
 

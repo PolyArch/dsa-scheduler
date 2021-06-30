@@ -9,6 +9,7 @@
 #include "../utils/model_parsing.h"
 #include "../utils/vector_utils.h"
 #include "dfg-parser.tab.h"
+#include "dsa/core/singleton.h"
 #include "dsa/dfg/instruction.h"
 #include "dsa/dfg/utils.h"
 #include "dsa/dfg/visitor.h"
@@ -200,7 +201,9 @@ SSDfg::SSDfg(string filename_) : filename(filename_) {
   string line;
   meta.emplace_back();
   parse_dfg(filename_.c_str(), this);
-  check_for_errors();
+  if (!dsa::ContextFlags::Global().tolerate_unuse) {
+    check_for_errors();
+  }
 }
 
 /// }
