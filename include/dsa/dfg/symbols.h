@@ -131,8 +131,7 @@ class SymbolTable {
   bool Has(const std::string& s) { return table_.count(s); }
 
   ParseResult* Get(const std::string& s) {
-    // std::cout << "parsed symbol: " << s << std::endl;
-    CHECK(Has(s));
+    CHECK(Has(s)) << s;
     return table_[s];
   }
 

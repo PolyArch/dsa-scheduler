@@ -140,10 +140,7 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
   // Step 1: Write the vector port mapping
   // TODO(@Sihao): print out the real config bit stream
-  os << "#ifndef "
-     << "__" << cfg_name << "_H__\n";
-  os << "#define "
-     << "__" << cfg_name << "_H__\n";
+  os << "#pragma once\n";
 
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
@@ -264,7 +261,6 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     */
   }
 
-  os << "#endif //" << cfg_name << "_H\n";
 }
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
