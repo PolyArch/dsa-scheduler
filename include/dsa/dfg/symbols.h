@@ -62,7 +62,7 @@ struct ValueEntry : ParseResult {
 };
 
 /*!
- * \brief A node(?vertex) of the DFG.
+ * \brief A node (?vertex) of the DFG.
  *
  * Example 1:
  * A = F(B, C)
@@ -120,6 +120,18 @@ struct TaskMapEntry : ParseResult {
   std::unordered_map<std::string, std::string> port_map; // FIXME: what is this type??
 };
 
+/*!
+ * \brief A = Add(Reg0, B). The local register in a PE.
+ */
+struct RegisterEntry : ParseResult {
+  /*! \brief The data type of the register. */
+  int dtype{0};
+  /*! \brief The index of the register. */
+  int idx{-1};
+
+  RegisterEntry(int d, int i) : dtype(d), idx(i) {}
+};
+
 /*! \brief The symbol table of the parsed DFG. */
 class SymbolTable {
  public:
@@ -130,8 +142,21 @@ class SymbolTable {
 
   bool Has(const std::string& s) { return table_.count(s); }
 
+  /*!
+   * \brief Check if this symbol is a local register.
+   *        If so, return the index of the register.
+   *        If not, return -1.
+   */
+  static RegisterEntry isLocalRegister(const std::string &s);
+
   ParseResult* Get(const std::string& s) {
-    CHECK(Has(s)) << s;
+    auto re = isLocalRegister(s);
+    if (re.idx != -1) {
+      if (!Has(s)) {
+        Set(s, new RegisterEntry(re));
+      }
+    }
+    CHECK(Has(s)) << "Symbol " << s << " not found";
     return table_[s];
   }
 

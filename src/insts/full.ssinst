@@ -132,7 +132,8 @@ RealInv                 64           1              1              12          1
 RealSqrtInv             64           1              1              13          1            
 Delay                   64           1              1              5           1            
                                                                                             
-Compare64               64           2              1              1           1            
+Compare64               64           2              1              1           1
+FCompare64              64           2              1              1	       1
 Accumulate64            64           1              1              1           1            
 FAccumulate64           64           1              1              1           1            
                                                                                             

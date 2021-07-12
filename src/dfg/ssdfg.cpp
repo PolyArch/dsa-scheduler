@@ -208,8 +208,6 @@ SSDfg::SSDfg(string filename_) : filename(filename_) {
 
 /// }
 
-using dsa::SpatialFabric;
-
 void SSDfg::Apply(dsa::dfg::Visitor* visitor) {
   for (auto elem : nodes) {
     elem->Accept(visitor);

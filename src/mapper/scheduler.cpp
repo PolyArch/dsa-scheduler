@@ -43,7 +43,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
         }
       }
     }
-    void Visit(ssvport* vp) {
+    void Visit(ssvport* vp) override {
       ports[vp->in_links().empty()].push_back(vp->bitwidth_capability());
     }
   };

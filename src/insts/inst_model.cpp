@@ -450,7 +450,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "  case SS_NONE: return \"NONE\";\n";
   ofs << "  case SS_ERR:  CHECK(false) << \"Error opcode!\"; throw;\n";
   ofs << "  case SS_NUM_TYPES:  CHECK(false) << \"Opcode exceeds.\";\n";
-  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
+  ofs << "    default: CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n";
   ofs << "}\n\n";
 

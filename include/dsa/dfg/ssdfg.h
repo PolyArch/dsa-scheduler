@@ -270,4 +270,5 @@ inline T& SSDfg::emplace_back(Args&&... args) {
   if (vec.capacity() != capacity) {
     normalize();
   }
+  return vec.back();
 }

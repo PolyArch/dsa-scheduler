@@ -9,10 +9,10 @@
 namespace dsa {
 namespace dfg {
 
-enum class OperandType { data, ctrl, self, ctrl_true, ctrl_false, unknown };
+enum class OperandType { data, ctrl, self, ctrl_true, ctrl_false, local_reg, unknown };
 
-constexpr char const* OPERAND_TYPE[] = {"data", "ctrl",     "self",
-                                        "pred", "inv_pred", "<unknown>"};
+constexpr char const* OPERAND_TYPE[] = {"data", "ctrl", "self",
+                                        "pred", "inv_pred", "register", "<unknown>"};
 
 struct MetaPort {
   enum class Data {

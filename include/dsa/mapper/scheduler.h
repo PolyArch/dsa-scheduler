@@ -47,6 +47,7 @@ class Scheduler {
 
   virtual bool incrementalSchedule(CodesignInstance& incr_table) {
     CHECK(0) << "not supported";
+    return false;
   }
 
   bool suppress_timing_print = false;

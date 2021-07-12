@@ -20,8 +20,6 @@ int Node::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
   return slot;
 }
 
-uint64_t Node::invalid() { return _invalid; }
-
 bool Node::is_temporal() { return _ssdfg->meta[_group_id].is_temporal; }
 
 Node::Node(SSDfg* ssdfg, V_TYPE v, const std::string& name)
@@ -42,25 +40,25 @@ dsa::dfg::Edge* Node::getLinkTowards(Node* to) {
 
 Operand::Operand(SSDfg* parent, const std::vector<int>& es, OperandType type_)
     : parent(parent), edges(es), type(type_), fifos(es.size()) {
-
   for (auto eid : es) {
     auto& edge = parent->edges[eid];
     edge.val()->uses.push_back(eid);
   }
 }
 
-Operand::Operand(uint64_t imm_) : parent(parent), imm(imm_), type(OperandType::data) {}
+Operand::Operand(SSDfg *parent_, uint64_t imm_) :
+  parent(parent_), imm(imm_), type(OperandType::data) {}
 
-bool Operand::is_imm() { return edges.empty(); }
+Operand::Operand(SSDfg *parent_, OperandType ty, uint64_t imm_) :
+  parent(parent_), imm(imm_), type(ty) {}
 
-bool Operand::valid() {
-  for (auto eid : edges) {
-    auto* e = &parent->edges[eid];
-    auto* n = e->def();
-    if (n->invalid()) return false;
-  }
-  return true;
+Operand::Operand(SSDfg *parent_, int dtype, int idx) :
+  parent(parent_), imm((((uint64_t) dtype) << 32) | idx), type(OperandType::local_reg) {
 }
+
+bool Operand::isImm() { return type == OperandType::data && edges.empty(); }
+
+bool Operand::isReg() { return type == OperandType::local_reg && edges.empty(); }
 
 bool Operand::ready() {
   if (edges.empty()) {
@@ -122,9 +120,7 @@ Value* Edge::val() const { return &parent->nodes[sid]->values[vid]; }
 Node* Edge::use() const { return parent->nodes[uid]; }
 
 Node* Edge::get(int x) const {
-  if (x == 0) return def();
-  if (x == 1) return use();
-  CHECK(false);
+  return x ? use() : def();
 }
 
 std::string Edge::name() const {

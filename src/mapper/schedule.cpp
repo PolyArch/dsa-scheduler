@@ -20,8 +20,7 @@
 #include "dsa/dfg/utils.h"
 #include "dsa/dfg/visitor.h"
 #include "dsa/mapper/dse.h"
-#include "json.lex.h"
-#include "json.tab.h"
+#include "json/json.h"
 #include "pass/bitstream.h"
 
 using namespace std;
@@ -51,89 +50,85 @@ std::map<dsa::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
 }
 
 void Schedule::LoadMappingInJson(const std::string& mapping_filename) {
-  FILE* fjson = fopen(mapping_filename.c_str(), "r");
-  CHECK(fjson) << "Open " << mapping_filename << " failed";
-  JSONrestart(fjson);
-  struct params p;
-  JSONparse(&p);
-
-  auto& json = p.data;
-  auto& instructions = *json->As<plain::Array>();
+  Json::CharReaderBuilder crb;
+  std::ifstream ifs(mapping_filename);
+  Json::Value *json = new Json::Value;
+  std::string errs;
+  Json::parseFromStream(crb, ifs, json, &errs);
+  auto &instructions = *json;
 
   SSDfg* dfg = ssdfg();
   SpatialFabric* fabric = ssModel()->subModel();
   for (int i = 0, n = instructions.size(); i < n; ++i) {
-    auto& obj = *instructions[i]->As<plain::Object>();
-    auto& op = *obj["op"]->As<std::string>();
+    auto& obj = instructions[i];
+    auto op = obj["op"].asString();
     if (op == "assign_node") {
-      auto dfgnode = *obj["dfgnode"]->As<int64_t>();
-      auto adgnode = *obj["adgnode"]->As<int64_t>();
-      auto adgslot = *obj["adgslot"]->As<int64_t>();
+      auto dfgnode = obj["dfgnode"].asInt();
+      auto adgnode = obj["adgnode"].asInt();
+      auto adgslot = obj["adgslot"].asInt();
       this->assign_node(dfg->type_filter<dsa::dfg::Node*>()[dfgnode],
                         {adgslot, fabric->node_list()[adgnode]});
     } else if (op == "assign_link") {
-      auto dfgedge = *obj["dfgedge"]->As<int64_t>();
-      auto adglink = *obj["adglink"]->As<int64_t>();
-      auto adgslot = *obj["adgslot"]->As<int64_t>();
+      auto dfgedge = obj["dfgedge"].asInt();
+      auto adglink = obj["adglink"].asInt();
+      auto adgslot = obj["adgslot"].asInt();
       this->assign_edgelink(&dfg->edges[dfgedge], adgslot, fabric->link_list()[adglink]);
     } else if (op == "assign_delay") {
-      auto dfgedge = *obj["dfgedge"]->As<int64_t>();
-      auto delay = *obj["delay"]->As<int64_t>();
+      auto dfgedge = obj["dfgedge"].asInt();
+      auto delay = obj["delay"].asInt();
       this->set_edge_delay(delay, &dfg->edges[dfgedge]);
     } else if (op == "max_lat_mis") {
-      this->_max_lat_mis = *obj["value"]->As<int64_t>();
+      this->_max_lat_mis = obj["value"].asInt();
     }
   }
 }
 
 void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
-  ofstream os(mapping_filename);
-  CHECK(os.good()) << "Cannot open " << mapping_filename;
 
   SSDfg* ssDFG = ssdfg();
   auto& nodes = ssDFG->nodes;
   auto& edges = ssDFG->edges;
-  plain::Array instructions;
+  Json::Value instructions;
 
   for (int i = 0, n = nodes.size(); i < n; ++i) {
     if (!is_scheduled(nodes[i])) {
       continue;
     }
     auto loc = location_of(nodes[i]);
-    plain::Object mapping;
-    mapping["op"] = new json::String("assign_node");
-    mapping["dfgnode"] = new json::Int(nodes[i]->id());
-    mapping["adgnode"] = new json::Int(loc.second->id());
-    mapping["adgslot"] = new json::Int(loc.first);
-    instructions.push_back(new json::Object(mapping));
+    Json::Value mapping;
+    mapping["op"] = "assign_node";
+    mapping["dfgnode"] = nodes[i]->id();
+    mapping["adgnode"] = loc.second->id();
+    mapping["adgslot"] = loc.first;
+    instructions.append(mapping);
   }
 
   for (int i = 0, n = edges.size(); i < n; ++i) {
     auto edge = &edges[i];
     auto& links = links_of(edge);
     for (auto link : links) {
-      plain::Object mapping;
-      mapping["op"] = new json::String("assign_link");
-      mapping["dfgedge"] = new json::Int(edges[i].id);
-      mapping["adglink"] = new json::Int(link.second->id());
-      mapping["adgslot"] = new json::Int(link.first);
-      instructions.push_back(new json::Object(mapping));
-      plain::Object latency;
-      latency["op"] = new json::String("assign_delay");
-      latency["dfgedge"] = new json::Int(edges[i].id);
-      latency["delay"] = new json::Int(edge_delay(&edges[i]));
-      instructions.push_back(new json::Object(latency));
+      Json::Value mapping;
+      mapping["op"] = "assign_link";
+      mapping["dfgedge"] = edges[i].id;
+      mapping["adglink"] = link.second->id();
+      mapping["adgslot"] = link.first;
+      instructions.append(mapping);
+      Json::Value latency;
+      latency["op"] = "assign_delay";
+      latency["dfgedge"] = edges[i].id;
+      latency["delay"] = edge_delay(&edges[i]);
+      instructions.append(latency);
     }
   }
 
-  plain::Object mis;
-  mis["op"] = new json::String("max_lat_mis");
-  mis["value"] = new json::Int(this->_max_lat_mis);
-  instructions.push_back(new json::Object(mis));
+  Json::Value mis;
+  mis["op"] = "max_lat_mis";
+  mis["value"] = this->_max_lat_mis;
+  instructions.append(mis);
 
-  json::Array array(instructions);
-  json::JSONPrinter printer(os);
-  array.Accept(&printer);
+  std::ofstream ofs(mapping_filename);
+  ofs << instructions;
+  CHECK(ofs.good()) << "Cannot open " << mapping_filename;
 }
 
 // Write to a header file
@@ -692,7 +687,7 @@ double Schedule::estimated_performance() {
     if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&
         elem.meta.source != dsa::dfg::MetaPort::Data::Unknown) {
       bw[elem.group_id()][elem.meta.source == dsa::dfg::MetaPort::Data::SPad] +=
-          elem.get_vp_len() * elem.get_port_width() / 8;
+          (double) elem.get_vp_len() * elem.get_port_width() / 8;
     } else if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndRead & 1) ||
                (elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndWrite) & 1) {
       if (this->ssModel()->indirect() < 1) {
@@ -736,7 +731,7 @@ double Schedule::estimated_performance() {
   for (auto& elem : dfg->type_filter<dsa::dfg::OutputPort>()) {
     if (elem.meta.dest == dsa::dfg::MetaPort::Data::LocalPort) {
       double lat = this->latOf(&elem);
-      double hide = elem.meta.conc / dfg->meta[elem.group_id()].unroll;
+      double hide = (double) elem.meta.conc / dfg->meta[elem.group_id()].unroll;
       if (lat > hide) {
         rec_lat[elem.group_id()] = lat;
         rec_hide[elem.group_id()] = hide;

@@ -23,7 +23,26 @@ struct CtrlBits {
     Discard,  // Predication off the produced value.
     Reset,    // Reset the register file to all zeros.
     Abstain,  // Avoid instruction execution.
+    Write,    // Write to the accumulate register
     Total     // Placeholder for the last behavior. Used by declaration.
+  };
+
+  /*!
+   * \brief The behavior of predicated execution.
+   */
+  struct Behavior {
+    /*! \brief Back pressure the operand. */
+    std::vector<bool> backpressure;
+    /*! \brief Discard the output. */
+    bool discard{false};
+    /*! \brief Reset the register file. */
+    bool reset{false};
+    /*! \brief Execute the instruction. */
+    bool predicate{true};
+    /*! \brief Write the result to register. */
+    bool write{false};
+
+    Behavior(int n) : backpressure(n, false) {}
   };
 
   /*!
@@ -43,8 +62,7 @@ struct CtrlBits {
 
   void set(uint64_t val, Control b);
   bool test(uint64_t val, Control b);
-  void test(uint64_t val, std::vector<bool>& back_array, bool& discard, bool& predicate,
-            bool& reset);
+  void test(uint64_t val, Behavior &b);
   CtrlBits& operator=(const CtrlBits& b) {
     mask = b.mask;
     const_cast<bool&>(is_dynamic) = b.is_dynamic;
@@ -66,7 +84,9 @@ struct CtrlBits {
     if (s == "d") return Discard;
     if (s == "r") return Reset;
     if (s == "a") return Abstain;
+    if (s == "w") return Write;
     CHECK(false) << "Not a valid command";
+    abort();
   }
 };
 
@@ -115,8 +135,7 @@ class Instruction : public Node {
   // @{
   int last_execution{-1};
   void forward() override;
-  uint64_t do_compute(bool& discard);
-  uint64_t invalid() override { return _invalid; }
+  uint64_t do_compute(bool& discard, std::vector<bool> &backpressure);
   // @}
  private:
   // TODO(@were): These are data structures for simulation. Move them out later.
@@ -168,7 +187,7 @@ class Operation : public Node {
   /*! \brief The number of compute resources required. */
   std::vector<int> cnt;
 
-  void forward() { CHECK(false) << "Operation node is for scheduling only!"; }
+  void forward() override { CHECK(false) << "Operation node is for scheduling only!"; }
 };
 
 }  // namespace dfg

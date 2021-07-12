@@ -36,7 +36,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
   auto dfg = node->ssdfg();
   for (int i = 0, n = args.size(); i < n; ++i) {
     if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {
-      node->ops().emplace_back(data->data);
+      node->ops().emplace_back(dfg, data->data);
     } else if (auto ve = dynamic_cast<ValueEntry*>(args[i])) {
       dfg->edges.emplace_back(dfg, ve->nid, ve->vid, iid, ve->l, ve->r);
       std::vector<int> es{dfg->edges.back().id};
@@ -79,6 +79,10 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
         // Self control
         inst->self_predicate = ce->bits;
       }
+    } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
+      auto inst = dynamic_cast<Instruction*>(node);
+      CHECK(inst);
+      inst->ops().emplace_back(dfg, re->dtype, re->idx);
     } else {
       CHECK(false) << "Invalide Node type";
       throw;
@@ -90,6 +94,16 @@ TaskMapEntry::TaskMapEntry(ParseResult* controller_)
     : controller(controller_) {
   std::unordered_map<std::string, std::string> temp;
   port_map = temp;
+}
+
+RegisterEntry SymbolTable::isLocalRegister(const std::string &s) {
+  if (s.find("Reg") == 0) {
+    int dtype, idx;
+    if (sscanf(s.c_str() + 3, "%d_%d", &dtype, &idx) == 2) {
+      return RegisterEntry(dtype, idx);
+    }
+  }
+  return {-1, 0};
 }
 
 /*TaskMapEntry::TaskMapEntry(

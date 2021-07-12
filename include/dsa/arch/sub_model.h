@@ -14,7 +14,7 @@
 
 #include "dsa/debug.h"
 #include "fu_model.h"
-#include "json/visitor.h"
+#include "json/value.h"
 #include "predict.h"
 
 #define DEF_ATTR(attr)                         \
@@ -41,12 +41,8 @@ class ssnode;
 class ssvport;
 
 template <typename T>
-T get_prop_attr(plain::Object& prop, const std::string& name, T dft) {
-  auto iter = prop.find(name);
-  if (iter != prop.end())
-    return *iter->second->As<T>();
-  else
-    return dft;
+T get_prop_attr(Json::Value& prop, const std::string& name, T dft) {
+  return prop.get("name", dft);
 }
 
 template <typename T>
@@ -428,7 +424,7 @@ class ssfu : public ssnode {
     return res;
   }
 
-  void Accept(adg::Visitor* visitor);
+  void Accept(adg::Visitor* visitor) override;
 
   void dumpIdentifier(ostream& os) override {
     os << "[" + to_string(id_) + ",\"function unit\"" + "]";
@@ -579,7 +575,7 @@ class ssvport : public ssnode {
   ssvport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
       : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
 
-  void Accept(adg::Visitor* vistor);
+  void Accept(adg::Visitor* vistor) override;
 
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }

@@ -1,25 +1,25 @@
-#include "dsa/arch/utils.h"
-
 #include <string>
 
-#include "json.lex.h"
-#include "json.tab.h"
+#include "json/json.h"
+#include "dsa/arch/utils.h"
+
 
 namespace dsa {
 namespace adg {
 
 SpatialFabric* Import(std::string filename) {
+  Json::CharReaderBuilder crb;
+  std::ifstream ifs(filename);
+  std::string errs;
+  Json::Value *cgra = new Json::Value();
+  Json::parseFromStream(crb, ifs, cgra, &errs);
   FILE* fjson = fopen(filename.c_str(), "r");
-  struct params p;
-  JSONrestart(fjson);
-  JSONparse(&p);
   auto res = new SpatialFabric();
-  auto cgra = p.data->As<plain::Object>();
-  CHECK(cgra) << "CGRA root node not a JSON obj!";
+  CHECK(cgra->isObject());
 
   std::vector<ssnode*> sym_tab;
   {
-    auto jsonNodes = cgra->operator[]("nodes");
+    auto &jsonNodes = cgra->operator[]("nodes");
     auto sf = res;
     // Vector Port Parameter
     int num_ivp = 0;
@@ -27,44 +27,42 @@ SpatialFabric* Import(std::string filename) {
     int num_inputs = 0;
     int num_outputs = 0;  // Calculate the num of Input and Output in the fabric
 
-    sym_tab.resize(jsonNodes->As<plain::Array>()->size(), nullptr);
+    CHECK(jsonNodes.isArray());
+    sym_tab.resize(jsonNodes.size(), nullptr);
 
     // Go over all nodes
-    for (auto& jsonNode : *jsonNodes->As<plain::Array>()) {
-      plain::Object cgranode = *jsonNode->As<plain::Object>();
+    for (int i = 0; i < jsonNodes.size(); ++i) {
+      auto cgranode = jsonNodes[i];
       // Type and ID
-      std::string nodeType = *cgranode["nodeType"]->As<std::string>();
-      int id = *cgranode["id"]->As<int64_t>();
+      std::string nodeType = cgranode["nodeType"].asString();
+      int id = cgranode["id"].asInt();
       ssnode* node;
       // Initialize Different Module
       if (nodeType == "switch") {
-        node = new ssswitch(*cgranode["data_width"]->As<int64_t>(),
-                            *cgranode["granularity"]->As<int64_t>(),
-                            *cgranode["max_util"]->As<int64_t>(),
-                            /*dynamic timing=*/true,
-                            /*fifo depth=*/2);
+        node = new ssswitch(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
+                            cgranode["max_util"].asInt(), /*dynamic timing=*/true, /*fifo depth=*/2);
       } else if (nodeType == "processing element" || nodeType == "function unit") {
-        plain::Array insts = *cgranode["instructions"]->As<plain::Array>();
-        plain::Array fucnt = *cgranode["fu count"]->As<plain::Array>();
+        CHECK(cgranode["instructions"].isArray());
+        CHECK(cgranode["fu count"].isArray());
+        auto &insts = cgranode["instructions"];
+        auto &fucnt = cgranode["fu count"];
         CHECK(insts.size() == fucnt.size());
         Capability fu_type("fu_" + std::to_string(id));
         for (int i = 0; i < insts.size(); ++i) {
-          auto str = insts[i]->As<std::string>();
-          auto cnt = fucnt[i]->As<int64_t>();
-          CHECK(str) << "Instruction not a std::string!";
-          CHECK(cnt) << "FU count not a int64_t!";
-          fu_type.Add(dsa::inst_from_string(str->c_str()), *cnt);
+          auto str = insts[i].asString();
+          auto cnt = fucnt[i].asInt();
+          fu_type.Add(dsa::inst_from_string(str.c_str()), cnt);
         }
-        node = new ssfu(*cgranode["data_width"]->As<int64_t>(),
-                        *cgranode["granularity"]->As<int64_t>(),
-                        *cgranode["max_util"]->As<int64_t>(),
+        node = new ssfu(cgranode["data_width"].asInt(),
+                        cgranode["granularity"].asInt(),
+                        cgranode["max_util"].asInt(),
                         /*dynamic timing=*/true,
                         /*fifo depth=*/2,
                         /*fu capability=*/fu_type);
       } else if (nodeType == "vector port") {
         bool is_input = false;
-        int in_vec_width = *cgranode["num_input"]->As<int64_t>();
-        int out_vec_width = *cgranode["num_output"]->As<int64_t>();
+        int in_vec_width = cgranode["num_input"].asInt();
+        int out_vec_width = cgranode["num_output"].asInt();
         int port_num = -1;
         // whether is a input/output vector port
         if (in_vec_width > 0) {
@@ -78,9 +76,9 @@ SpatialFabric* Import(std::string filename) {
         } else {
           continue;
         }
-        auto vp = new ssvport(*cgranode["data_width"]->As<int64_t>(),
-                              *cgranode["granularity"]->As<int64_t>(),
-                              *cgranode["max_util"]->As<int64_t>(),
+        auto vp = new ssvport(cgranode["data_width"].asInt(),
+                              cgranode["granularity"].asInt(),
+                              cgranode["max_util"].asInt(),
                               /*dynamic timing=*/true,
                               /*fifo depth=*/2);
         vp->port(port_num);
@@ -97,15 +95,19 @@ SpatialFabric* Import(std::string filename) {
   }
 
   {
-    auto jsonNodes = cgra->operator[]("links");
+    auto &jsonNodes = cgra->operator[]("links");
     auto sf = res;
     // Go over all links
-    for (auto& jsonNode : *jsonNodes->As<plain::Array>()) {
-      plain::Object cgralink = *jsonNode->As<plain::Object>();
-      auto source = *cgralink["source"]->As<plain::Array>();
-      auto sink = *cgralink["sink"]->As<plain::Array>();
-      int source_id = *source[0]->As<int64_t>();
-      int sink_id = *sink[0]->As<int64_t>();
+    CHECK(jsonNodes.isArray());
+    for (int i = 0; i < jsonNodes.size(); ++i) {
+      auto &cgralink = jsonNodes[i];
+      CHECK(cgralink.isObject());
+      auto &source = cgralink["source"];
+      CHECK(source.isArray());
+      auto &sink = cgralink["sink"];
+      CHECK(sink.isArray());
+      int source_id = source[0].asInt();
+      int sink_id = sink[0].asInt();
 
       ssnode* from_module = sym_tab[source_id];
       ssnode* to_module = sym_tab[sink_id];
@@ -116,8 +118,7 @@ SpatialFabric* Import(std::string filename) {
   }
 
   res->post_process();
-  fclose(fjson);
-  delete p.data;
+  ifs.close();
   return res;
 }
 

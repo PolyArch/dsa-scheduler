@@ -15,7 +15,6 @@ else()
   message(STATUS "config.cmake not found, use defined configs")
 endif()
 
-add_subdirectory(${CMAKE_SOURCE_DIR}/json-parser)
 
 # Build assumptions
 set(BUILD_SHARED_LIBS ON)
@@ -75,10 +74,10 @@ add_library(dsa
 
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_INSTALL_PREFIX}/include # I am not sure if it is good?
-  ${CMAKE_SOURCE_DIR}/json-parser/include)
+  ${CMAKE_INSTALL_PREFIX}/include)
 
-target_link_libraries(dsa PRIVATE json)
+target_link_directories(dsa PRIVATE ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
+target_link_libraries(dsa PRIVATE jsoncpp)
 
 # Install the header files and library
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/

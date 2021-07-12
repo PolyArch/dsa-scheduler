@@ -13,9 +13,7 @@
 #include "dsa/arch/ssinst.h"
 #include "dsa/arch/utils.h"
 #include "dsa/debug.h"
-#include "json.lex.h"
-#include "json.tab.h"
-#include "json/visitor.h"
+#include "json/json.h"
 
 using namespace std;
 using namespace dsa;

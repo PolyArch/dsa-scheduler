@@ -333,13 +333,13 @@ expr: I_CONST {
   $$ = new ConstDataEntry((float) $1, (float) $2);
 }
 | edge_list {
-  auto ce = dynamic_cast<ConvergeEntry*>($1);
-  CHECK(ce);
-  if (ce->entries.size() == 1) {
-    $$ = ce->entries[0];
+  if (auto ce = dynamic_cast<ConvergeEntry*>($1)) {
+    if (ce->entries.size() == 1) {
+      $$ = ce->entries[0];
+    }
     delete ce;
   } else {
-    $$ = $1; // What does this mean???
+    $$ = $1;
   }
 }
 | IDENT '(' arg_list ')' {
@@ -453,20 +453,23 @@ edge_list: edge {
   auto res = new dsa::dfg::ConvergeEntry(); 
   if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>($1)) {
     res->entries.push_back(ne);
+    $$ = res;
   } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($1)) {
     res->entries = ce->entries;
+    $$ = res;
+  } else if (auto re = dynamic_cast<dsa::dfg::RegisterEntry*>($1)) {
+    $$ = re;
   } else {
     CHECK(0) << "Not supported edge list type!";
   }
-  $$ = res;
 }
 | edge_list edge {
   auto res = dynamic_cast<dsa::dfg::ConvergeEntry*>($1);
   CHECK(res);
   if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>($2)) {
-    res->entries.insert(res->entries.begin(), ne);
-  } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($1)) {
-    res->entries.insert(res->entries.begin(), ce->entries.begin(), ce->entries.end());
+    res->entries.push_back(ne);
+  } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($2)) {
+    res->entries.insert(res->entries.end(), ce->entries.begin(), ce->entries.end());
   } else {
     CHECK(0) << "Not supported edge list type!";
   }

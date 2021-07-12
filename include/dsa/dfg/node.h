@@ -60,11 +60,30 @@ struct Operand {
   /*! \brief Connect this operand to an list of edges and concatenate their values. */
   Operand(SSDfg* parent, const std::vector<int>& es, OperandType type);
 
+  /*! \brief Construct a register operand. */
+  Operand(SSDfg* parent, int dtype, int idx);
+
   /*! \brief The constant constructor. */
-  Operand(uint64_t);
+  Operand(SSDfg* parent, uint64_t);
+
+  /*! \brief Constructor for imm or register. */
+  Operand(SSDfg* parent, OperandType type, uint64_t);
 
   /*! \brief If this operand is a constant. */
-  bool is_imm();
+  bool isImm();
+
+  /*! \brief If this operand is a register. */
+  bool isReg();
+
+  int regIdx() { 
+    CHECK(isReg());
+    return imm & (~((uint32_t) 0));
+  }
+
+  int regDtype() {
+    CHECK(isReg());
+    return (imm >> 32) & (~((uint32_t) 0));
+  }
 
   /*! \brief The DFG this edge belongs to. */
   SSDfg* parent{nullptr};
@@ -77,7 +96,7 @@ struct Operand {
 
   // TODO(@were): Move these to simulation.
   // @{
-  bool valid();
+  // bool valid();
 
   std::vector<std::queue<simulation::Data>> fifos;
 
@@ -150,9 +169,6 @@ class Node {
 
   virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) { return node_slot; }
 
-  // some issue with this function
-  virtual uint64_t invalid();
-
   Node(SSDfg* ssdfg, V_TYPE v, const std::string& name = "");
 
   virtual int lat_of_inst() { return 0; }
@@ -196,10 +212,6 @@ class Node {
 
  protected:
   SSDfg* _ssdfg = 0;  // sometimes this is just nice to have : )
-
-  // Dynamic stuff
-  bool _invalid = false;
-  std::vector<bool> _back_array;  // in edges
 
   // Static Stuff
   int _ID;
