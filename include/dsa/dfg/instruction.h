@@ -38,7 +38,7 @@ struct CtrlBits {
     /*! \brief Reset the register file. */
     bool reset{false};
     /*! \brief Execute the instruction. */
-    bool predicate{true};
+    bool exec{true};
     /*! \brief Write the result to register. */
     bool write{false};
 

@@ -67,7 +67,7 @@ bool Operand::ready() {
   for (size_t i = 0; i < fifos.size(); ++i) {
     auto* e = &parent->edges[edges[i]];
     if (fifos[i].empty()) {
-      LOG(FORWARD) << "no element!";
+      LOG(FORWARD) << "fifo (" << &fifos[i] << ") " << i << " no element!";
       return false;
     }
     if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
@@ -159,6 +159,9 @@ bool Value::forward(bool attempt) {
                            << operand.fifos[i].size() + 1 << "/" << edge->buf_len
                            << " in " << edge->delay << " cycles(" << entry.available_at
                            << ")";
+              if (!attempt) {
+                LOG(FORWARD) << &fifo << " -> " << &operand.fifos[i];
+              }
               operand.fifos[i].push(entry);
             }
           } else {

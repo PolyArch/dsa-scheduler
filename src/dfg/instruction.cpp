@@ -27,7 +27,7 @@ void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {
   b.backpressure[0] = b.backpressure[0] || test(val, CtrlBits::B1);
   b.backpressure[1] = b.backpressure[1] || test(val, CtrlBits::B2);
   b.discard = b.discard || test(val, CtrlBits::Discard);
-  b.predicate = b.predicate && !(test(val, CtrlBits::Abstain));
+  b.exec = b.exec && !(test(val, CtrlBits::Abstain));
   b.reset = b.reset || test(val, CtrlBits::Reset);
   b.write = b.write || test(val, CtrlBits::Write);
 }
@@ -112,8 +112,8 @@ void Instruction::forward() {
     }else {
       _input_vals[i] = _ops[i].poll();
       if (!_ops[i].predicate()) {
-        bh.predicate = false;
-        reason << "operand " << i << " not valid!";
+        bh.discard = true;
+        reason << " operand " << i << " not valid!";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
         LOG(PRED) << "bits: " << predicate.bits() << ", pred: " << _input_vals[i];
         predicate.test(_input_vals[i], bh);
@@ -125,10 +125,8 @@ void Instruction::forward() {
   compute_dump << ") = (" << name() << ") ";
 
 
-  if (bh.predicate) {  // IF VALID
-
+  if (bh.exec) {  // IF VALID
     _ssdfg->inc_total_dyn_insts(is_temporal());
-
     // Read in some temp value and set _val after inst_lat cycles
     output = do_compute(bh.discard, bh.backpressure);
     self_predicate.test(output, bh);
@@ -138,9 +136,7 @@ void Instruction::forward() {
       memcpy(((uint8_t*)&_reg[0]) + idx * bytes, &output, bytes);
       LOG(COMP) << "Write " << output << " to register!";
     }
-
     compute_dump << output;
-
   } else {
     compute_dump << "???";
     _output_vals.resize(values.size());
@@ -153,7 +149,7 @@ void Instruction::forward() {
     }
   }
 
-  LOG(COMP) << compute_dump.str() << (bh.predicate ? " valid " : " invalid ") << reason.str()
+  LOG(COMP) << compute_dump.str() << (bh.exec ? " valid " : " invalid ") << reason.str()
             << " " << (bh.discard ? " and output discard!" : "");
 
   for (size_t i = 0; i < bh.backpressure.size(); ++i) {
@@ -165,8 +161,9 @@ void Instruction::forward() {
   }
 
   // TODO(@were): We need a better name for this flag.
-  if (bh.predicate) {
+  if (bh.exec) {
     for (size_t i = 0; i < values.size(); ++i) {
+      LOG(COMP) << "Push " << _output_vals[i] << "(" << !bh.discard << ") to " << i;
       values[i].push(_output_vals[i], !bh.discard, lat_of_inst());
     }
   }

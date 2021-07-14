@@ -101,7 +101,7 @@ bool OutputPort::can_pop() {
   for (auto& elem : _ops) {
     ++j;
     if (!elem.ready()) {
-      LOG(FORWARD) << ssdfg()->cur_cycle() << ": Cannot pop because " << j;
+      LOG(FORWARD) << ssdfg()->cur_cycle() << ": Cannot pop because of operand " << j;
       return false;
     }
   }
