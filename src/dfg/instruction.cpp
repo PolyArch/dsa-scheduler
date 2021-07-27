@@ -109,7 +109,7 @@ void Instruction::forward() {
       memcpy(&a, ((uint8_t*)&_reg[0]) + idx * bytes, bytes);
       _input_vals[i] = a;
       LOG(COMP) << "Register " << a << " " << _reg[0];
-    }else {
+    } else {
       _input_vals[i] = _ops[i].poll();
       if (!_ops[i].predicate()) {
         bh.discard = true;
@@ -119,7 +119,9 @@ void Instruction::forward() {
         predicate.test(_input_vals[i], bh);
       }
     }
-    if (i) compute_dump << ", ";
+    if (i) {
+      compute_dump << ", ";
+    }
     compute_dump << _input_vals[i];
   }
   compute_dump << ") = (" << name() << ") ";
@@ -154,8 +156,9 @@ void Instruction::forward() {
 
   for (size_t i = 0; i < bh.backpressure.size(); ++i) {
     if (bh.backpressure[i]) {
-      LOG(COMP) << "backpressure on " << i << " input\n";
+      LOG(COMP) << "backpressure on " << i;
     } else {
+      LOG(COMP) << "pop operand " << i;
       _ops[i].pop();
     }
   }
