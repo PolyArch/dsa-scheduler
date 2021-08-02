@@ -43,14 +43,15 @@ SpatialFabric* Import(std::string filename) {
                             cgranode["max_util"].asInt(), /*dynamic timing=*/true, /*fifo depth=*/2);
       } else if (nodeType == "processing element" || nodeType == "function unit") {
         CHECK(cgranode["instructions"].isArray());
-        CHECK(cgranode["fu count"].isArray());
+        bool fu_array = cgranode["fu count"].isArray();
+        // CHECK(cgranode["fu count"].isArray());
         auto &insts = cgranode["instructions"];
-        auto &fucnt = cgranode["fu count"];
-        CHECK(insts.size() == fucnt.size());
+        // auto &fucnt = cgranode["fu count"];
+        // CHECK(insts.size() == fucnt.size());
         Capability fu_type("fu_" + std::to_string(id));
         for (int i = 0; i < insts.size(); ++i) {
           auto str = insts[i].asString();
-          auto cnt = fucnt[i].asInt();
+          auto cnt = fu_array ? cgranode["fu count"][i].asInt() : 1;
           fu_type.Add(dsa::inst_from_string(str.c_str()), cnt);
         }
         node = new ssfu(cgranode["data_width"].asInt(),

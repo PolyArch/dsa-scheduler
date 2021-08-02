@@ -15,7 +15,6 @@
 #include "dsa/debug.h"
 #include "fu_model.h"
 #include "json/value.h"
-#include "predict.h"
 
 #define DEF_ATTR(attr)                         \
   decltype(attr##_) attr() { return attr##_; } \

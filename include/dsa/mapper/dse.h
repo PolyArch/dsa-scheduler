@@ -447,7 +447,7 @@ class CodesignInstance {
         while (new_one == fu->granularity() || new_one > fu->datawidth()) {
           new_one = (1 << (rand() % 4)) * 8;
         }
-        LOG(DSE) << "change granularity of " << index << " to " << new_one;
+        DSA_LOG(DSE) << "change granularity of " << index << " to " << new_one;
         for_each_sched([fu, this, new_one](Schedule& sched) {
           auto &np = sched.node_prop()[fu->id()];
           for (auto &slot : np.slots) {
@@ -519,7 +519,7 @@ class CodesignInstance {
   void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
       int slots = link->source()->datawidth() / link->source()->granularity();
-      LOG(UNASSIGN) << "Unassign link " << link->id() << " with " << slots << " slots";
+      DSA_LOG(UNASSIGN) << "Unassign link " << link->id() << " with " << slots << " slots";
       for (int slot = 0; slot < slots; ++slot) {
         for (auto& p : sched.dfg_edges_of(slot, link)) {
           // TODO: consider just deleteting the edge, and having the scheduler
@@ -623,6 +623,7 @@ class CodesignInstance {
 
     int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
     double performance = sched->estimated_performance();
+    
     if (succeed_sched) {
       double eval = performance * ((double)max_delay / (max_delay + s.latmis));
       eval /= std::max(1.0 + s.ovr, sqrt(s.agg_ovr));
@@ -637,14 +638,14 @@ class CodesignInstance {
     res.resize(workload_array.size());
 
     bool meaningful = true;
+    bool yes = false;
     double failure = 0;
     for (auto& ws : workload_array) {
       res[&ws - &workload_array[0]] = nullptr;
       std::pair<double, int> score = std::make_pair((double)1e-3, INT_MIN);
-      bool yes = false;
       for (Schedule& sched : ws.sched_array) {
         std::pair<double, int> new_score = dse_sched_obj(&sched);
-        if (new_score > score) {
+        if (new_score >= score) {
           score = new_score;
           res[&ws - &workload_array[0]] = &sched;
           yes = true;
@@ -666,9 +667,11 @@ class CodesignInstance {
 
     auto estimated = dsa::adg::estimation::EstimatePowerAera(&_ssModel);
 
-    float area = (estimated.Total<dsa::adg::estimation::Metric::Area>());
+    // float area = (estimated.Total<dsa::adg::estimation::Metric::Area>());
+    
     // float obj = total_score.first * 1e6 / area;
-    float obj = total_score.first * total_score.first * 1e6 / area;
+    float obj = total_score.first / estimated.sum()->normalize();
+    std::cout << "OBJ: " << obj << std::endl;
 
     return obj;
   }
@@ -736,6 +739,10 @@ class CodesignInstance {
   }
 
  private:
+
+  const int TotalLutResource = 1182240;
+  const int FlipFlopResource = 2364480;
+
   // When we delete a hardware element, we need to:
   // 1. deschedule anything that was assigned to that element
   // 2. remove the concept of that element from the schedule (consistency)

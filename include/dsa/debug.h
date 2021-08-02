@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
-
+  
 #ifdef ENABLE_LLVM
 #include "llvm/Support/raw_ostream.h"
 #define DSA_OSTREAM llvm::errs()
@@ -15,12 +15,13 @@
 #define DSA_OSTREAM std::cerr
 #define DSA_NEWLINE std::endl
 #endif
+namespace dsa {
 
-class DSA_LOGGER {
+class LOGGER {
   bool abort_;
 
  public:
-  DSA_LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort_(abort_) {
+  LOGGER(std::string reason, std::string file, int lineno, bool abort_) : abort_(abort_) {
     int i = file.size() - 1;
     while (i >= 0 && file[i] != '/') {
       --i;
@@ -28,7 +29,7 @@ class DSA_LOGGER {
     DSA_OSTREAM << reason << " " << file.substr(i + 1) << ":" << lineno << ": ";
   }
 
-  ~DSA_LOGGER() noexcept(false) {
+  ~LOGGER() noexcept(false) {
     DSA_OSTREAM << DSA_NEWLINE;
     if (abort_) {
       abort();
@@ -36,34 +37,25 @@ class DSA_LOGGER {
   }
 
   template <typename T>
-  inline DSA_LOGGER& operator<<(T&& x) {
+  inline LOGGER& operator<<(T&& x) {
     DSA_OSTREAM << std::forward<T>(x);
     return *this;
   }
 };
-
+}
 
 #define CHECK(COND) \
-  if (!(COND)) DSA_LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
+  if (!(COND)) dsa::LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
 
-#define DSA_WARNING DSA_LOGGER("[WARNING]", __FILE__, __LINE__, false)
+#define DSA_WARNING dsa::LOGGER("[WARNING]", __FILE__, __LINE__, false)
 
-#define DSA_INFO DSA_LOGGER("[INFO]", __FILE__, __LINE__, false)
+#define DSA_INFO dsa::LOGGER("[INFO]", __FILE__, __LINE__, false)
 
-#define LOG(S) \
-  if (getenv(#S)) DSA_LOGGER("[" #S "]", __FILE__, __LINE__, false)
-
-/*
-#if defined(DEBUG_MODE) || defined(_DEBUG) || defined(ENABLE_LOG)
-#define LOG(S) \
-  if (getenv(#S)) DSA_LOGGER("[" #S "]", __FILE__, __LINE__, false)
-#else
-#define LOG(S) \
-  if (false) DSA_LOGGER("[DEBUG]", __FILE__, __LINE__, false)
-#endif
-*/
+#define DSA_LOG(S) \
+  if (getenv(#S)) dsa::LOGGER("[" #S "]", __FILE__, __LINE__, false)
 
 #define ENFORCED_SYSTEM(CMD)                        \
   if (int ret = system(CMD))                        \
-    DSA_LOGGER("[SHELL]", __FILE__, __LINE__, true) \
+    dsa::LOGGER("[SHELL]", __FILE__, __LINE__, true) \
       << "Failed command: " << (CMD) << ", code" << ret
+

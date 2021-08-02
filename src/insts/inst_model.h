@@ -36,6 +36,12 @@ class ConfigInst {
   double power() { return _power; }
   void setPower(double power) { _power = power; }
 
+  double LogicLut() { return _logic_lut; }
+  void setLogicLut(double logic_lut) { _logic_lut = logic_lut; }
+
+  double FlipFlop() { return _flip_flop; }
+  void setFlipFlop(double flip_flop) { _flip_flop = flip_flop; }
+
  private:
   std::string _name;
   int _latency;
@@ -45,6 +51,8 @@ class ConfigInst {
   int _bitwidth;
   double _area = -1.0;
   double _power = -1.0;
+  double _logic_lut = -1.0;
+  double _flip_flop = -1.0;
 };
 
 class FuType {
@@ -58,10 +66,18 @@ class FuType {
   double power() { return _power; }
   void setPower(double power) { _power = power; }
 
+  double LogicLut() { return _logic_lut; }
+  void setLogicLut(double logic_lut) { _logic_lut = logic_lut; }
+
+  double FlipFlop() { return _flip_flop; }
+  void setFlipFlop(double flip_flop) { _flip_flop = flip_flop; }
+
  private:
   std::string _name;
   double _area = -1.0;
   double _power = -1.0;
+  double _logic_lut = -1.0;
+  double _flip_flop = -1.0;
 };
 
 class InstModel {

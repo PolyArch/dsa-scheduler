@@ -157,7 +157,7 @@ statement: INPUT ':' io_def  eol {
         }
         p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
       } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
-        LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
+        DSA_LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
         p->dfg->edges.emplace_back(
           p->dfg, ve->nid, ve->vid,
           p->dfg->vouts.back().id(), ve->l, ve->r);
@@ -201,7 +201,7 @@ statement: INPUT ':' io_def  eol {
   // set ops on this output
   p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
   // p->dfg->vins.back().values[0].uses.push_back(p->dfg->edges.back().id);
-  // LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
+  // DSA_LOG(PARSE) << p->dfg->vouts.back().name() << " " << p->dfg->vouts.back().id();
 
   p->meta.clear();
   delete $3;
@@ -367,8 +367,8 @@ expr: I_CONST {
   }
   p->dfg->emplace_back<dsa::dfg::Operation>(p->dfg, fus, cnts);
   auto *operation = &p->dfg->type_filter<dsa::dfg::Operation>().back();
-  LOG(PARSE) << operation->name();
-  LOG(PARSE) << p->dfg->nodes[operation->id()]->name();
+  DSA_LOG(PARSE) << operation->name();
+  DSA_LOG(PARSE) << p->dfg->nodes[operation->id()]->name();
   dsa::dfg::UpdateNodeByArgs(operation, args);
   $$ = new NodeEntry(operation->id());
   delete $1;

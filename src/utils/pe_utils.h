@@ -21,7 +21,7 @@ struct InstInfo {
 
   InstInfo(OpCode opcode_) {
     String opname(name_of_inst(opcode_));
-    LOG(STR) << std::string(opname) << " " << opname.StartsWith("F") << " "
+    DSA_LOG(STR) << std::string(opname) << " " << opname.StartsWith("F") << " "
              << !opname.StartsWith("Fx");
     if (opname.StartsWith("F") && !opname.StartsWith("Fx")) {
       is_float = true;

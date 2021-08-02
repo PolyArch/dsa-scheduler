@@ -89,6 +89,8 @@ class Capability {
   // Area and Power
   double area();
   double power();
+  double FlipFlop();
+  double LogicLut();
 };
 
 }  // namespace dsa

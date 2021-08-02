@@ -170,7 +170,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
           auto* e = &v->ssdfg()->edges[eid];
           int vio = sched->vioOf(e);
           if (vio > 0) {
-            LOG(CREEP) << e->name() << ": " << vio;
+            DSA_LOG(CREEP) << e->name() << ": " << vio;
             vio = rand() % vio;
             bool changed = false;
             changed |= length_creep(sched, e, vio, undo_routing);
@@ -249,7 +249,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   auto pdgname = basename(ssDFG->filename);
   auto modelname = basename(_ssModel->filename);
   if (!check_feasible(sched->ssdfg(), sched->ssModel())) {
-    LOG(MAP) << "Cannot be mapped, give up!\n";
+    DSA_LOG(MAP) << "Cannot be mapped, give up!\n";
     return false;
   }
 
@@ -294,14 +294,14 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       return true;
     }
     if (status == 0) {
-      LOG(MAP) << "Insufficient candidates!";
+      DSA_LOG(MAP) << "Insufficient candidates!";
       return false;
     }
     if (status == -1) {
       if (++fail_to_route > 32) {
         return false;
       }
-      LOG(ROUTING) << "Problem with Topology -- Mapping Impossible";
+      DSA_LOG(ROUTING) << "Problem with Topology -- Mapping Impossible";
       continue;
     }
 
@@ -427,7 +427,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   std::random_shuffle(nodes.begin() + from, nodes.begin() + n);
 
   for (int i = 0; i < n; ++i) {
-    LOG(CAND) << nodes[i]->name() << " has " << sched->candidate_cnt[nodes[i]->id()]
+    DSA_LOG(CAND) << nodes[i]->name() << " has " << sched->candidate_cnt[nodes[i]->id()]
               << " candidate(s)";
   }
 
@@ -442,7 +442,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
         if (candidates.empty()) {
-          LOG(CAND) << ssDFG->filename << ": " << "Cannot map " << node->name();
+          DSA_LOG(CAND) << ssDFG->filename << ": " << "Cannot map " << node->name();
           success = false;
           break;
         }
@@ -650,7 +650,7 @@ int SchedulerSimulatedAnnealing::route(
         ssnode* next = next_link->sink();
         std::pair<int, sslink*> next_pair(next_slot, next_link);
 
-        LOG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->source()->name()
+        DSA_LOG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->source()->name()
                    << "'s " << slot << " to " << link->sink()->name() << "'s "
                    << next_slot << "\n";
 
@@ -762,7 +762,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
       if (sched->is_scheduled(node)) {                                             \
         auto loc = sched->location_of(node);                                       \
         if (!route(sched, edge, src, dest, nullptr, 0)) {                          \
-          LOG(ROUTE) << "Cannot route " << edge->name() << " " << src.second->id() \
+          DSA_LOG(ROUTE) << "Cannot route " << edge->name() << " " << src.second->id() \
                      << " -> " << dest.second->id() << ":"                         \
                      << sched->distances[src.second->id()][dest.second->id()];     \
           for (auto revert : to_revert) sched->unassign_edge(revert);              \
@@ -790,7 +790,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
 int SchedulerSimulatedAnnealing::try_candidates(
     const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched,
     dsa::dfg::Node* node) {
-  LOG(MAP) << "Mapping " << node->name();
+  DSA_LOG(MAP) << "Mapping " << node->name();
   using std::make_pair;
   using std::pair;
   using std::vector;
@@ -835,7 +835,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   for (size_t i = 0; i < candidates.size(); ++i) {
     ++candidates_tried;
     // maybe here, that it will access the next index now..
-    LOG(MAP) << "Try: " << candidates[i].second->name() << " index into candidates: " << idx[i];
+    DSA_LOG(MAP) << "Try: " << candidates[i].second->name() << " index into candidates: " << idx[i];
 
     // schedule/allocate this input/output ports on of these...
     // Why did this chose the first one?? is it allocating ports on the first correct chosen?
@@ -881,13 +881,13 @@ int SchedulerSimulatedAnnealing::try_candidates(
     // if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
     if (scheduleHere(sched, node, candidates[idx[i]])) {
       ++candidates_succ;
-      LOG(MAP) << "succ!";
+      DSA_LOG(MAP) << "succ!";
 
       SchedStats s;
       CandidateRoute undo_path;
-      LOG(MAP) << "creeping!!";
+      DSA_LOG(MAP) << "creeping!!";
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
-      LOG(MAP) << "Cand score: " << candScore.first << ", " << candScore.second;
+      DSA_LOG(MAP) << "Cand score: " << candScore.first << ", " << candScore.second;
 
       if (!find_best) {
         return i;
@@ -915,7 +915,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   if (best_candidate != -1) {
     best_path.apply(sched);
     sched->assign_node(node, candidates[best_candidate]);
-    LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].second->name();
+    DSA_LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].second->name();
     // FIXME: is first not the assign port number???? need port for the hardware port
     // auto vport = candidates[best_candidate].second; // ssnode*
     // auto ne = dynamic_cast<SSDfgVec*>(node);
@@ -923,11 +923,11 @@ int SchedulerSimulatedAnnealing::try_candidates(
     // std::cout << "Assigned node: " << node->name() << " id: " << vport->id() << std::endl;
     // indirect_map_to_index.insert(make_pair(node->name(), vport->id()));
     // indirect_map_to_index.insert(make_pair(node->name(), candidates[best_candidate]));
-    // LOG(MAPPING) << node->name() << " maps to "
+    // DSA_LOG(MAPPING) << node->name() << " maps to "
     //                << candidates[best_candidate].second->name();
   }
 
-  LOG(MAP) << "return for best candidate!";
+  DSA_LOG(MAP) << "return for best candidate!";
   return best_candidate;
 }
 
@@ -936,7 +936,7 @@ void CandidateRoute::apply(Schedule* sched) {
 
   for (auto& edge_prop : edges) {
     sched->unassign_edge(edge_prop.first);  // for partial routes
-    LOG(PASSTHRU) << edge_prop.first->name();
+    DSA_LOG(PASSTHRU) << edge_prop.first->name();
     for (auto elem : edge_prop.second.thrus) {
       sched->assign_edge_pt(edge_prop.first, elem);
     }

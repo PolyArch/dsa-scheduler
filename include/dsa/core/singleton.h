@@ -4,6 +4,8 @@
 
 #include "cxxopts.hpp"
 
+#include "dsa/arch/estimation.h"
+
 namespace dsa {
 
 struct ContextFlags {
@@ -20,6 +22,10 @@ struct ContextFlags {
    */
   int timeout{86400};
   /*!
+   * \brief The max time cutoff of design space exploration.
+   */
+  int dse_timeout{-1};
+  /*!
    * \brief If we want to dump the binary.
    */
   bool bitstream{false};
@@ -31,6 +37,14 @@ struct ContextFlags {
    * \brief If true, do not throw an error when there are unused values in the DFG.
    */
   bool tolerate_unuse{false};
+  /*!
+   * \brief The target of design space exploration.
+   */
+  adg::estimation::Hardware dse_target{adg::estimation::Hardware::ASIC};
+  /*!
+   * \brief The budget of design space exploration.
+   */
+  adg::estimation::Resource *budget{nullptr};
 
   ContextFlags();
 

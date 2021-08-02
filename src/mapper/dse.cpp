@@ -19,7 +19,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
   auto scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
 
-  clock_t StartTime = clock();
+  clock_t start_time = clock();
   scheduler->set_start_time();
 
   CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
@@ -80,7 +80,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   std::cout << " ### Begin DSE Iteration " << i << " ### \n"
             << "DSE OBJ: " << cur_ci->weight_obj() << std::endl
             << "Execution Time: "
-            << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
+            << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::endl;
   cur_ci->dump_breakdown(ci.verbose);
   ++i;
 
@@ -124,7 +124,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   std::cout << " ### Begin DSE Iteration " << ++i << " ### \n"
             << "DSE OBJ: " << cur_ci->weight_obj() << std::endl
             << "Execution Time: "
-            << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << std::endl;
+            << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::endl;
   cur_ci->dump_breakdown(ci.verbose);
   {
     // dump the new hw json
@@ -134,7 +134,17 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   }
 
   while (i - last_improve <= 750) {
-    clock_t StartChange = clock();
+    clock_t current_time = clock();
+    double time_elps = static_cast<double>(current_time - start_time) / CLOCKS_PER_SEC;
+    if (dsa::ContextFlags::Global().dse_timeout != -1) {
+      if (time_elps > dsa::ContextFlags::Global().dse_timeout) {
+        std::cout
+          << time_elps << "s elapsed, the cutoff is "
+          << dsa::ContextFlags::Global().dse_timeout
+          << "s, break DSE" << std::endl;
+        break;
+      }
+    }
     std::cout << " ### Begin DSE Iteration " << i << " ### \n";
     cur_ci->verify();
     CodesignInstance* cand_ci;
@@ -144,7 +154,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     cand_ci->make_random_modification(temperature);
     cand_ci->verify();
     std::cout << "dse modification: "
-              << static_cast<double>(clock() - StartChange) / CLOCKS_PER_SEC << "s"
+              << static_cast<double>(clock() - current_time) / CLOCKS_PER_SEC << "s"
               << std::endl;
 
     clock_t StartSchedule = clock();
@@ -158,7 +168,9 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
     std::cout << "DSE OBJ: " << obj_func << "(" << best_obj << ") (" << init_obj << ")"
               << std::endl;
+    
     auto util = cand_ci->utilization();
+
     std::cout << std::setprecision(2)
               << "Utilization ratio overall: " << std::get<0>(util)
               << ", nodes: " << std::get<1>(util) << ", links: " << std::get<2>(util)
@@ -177,7 +189,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
       best_ci = cur_ci = cand_ci;
       std::cout << "----------------- IMPROVED OBJ! --------------------\n";
       std::cout << "Execution Time: " << std::setprecision(6)
-                << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC << ", "
+                << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << ", "
                 << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC << std::endl;
 
       for (int x = 0, ew = best_ci->workload_array.size(); x < ew; ++x) {
@@ -244,7 +256,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   std::cout << "Pruned DSE OBJ: " << cur_ci->weight_obj() << "\n";
   cur_ci->dump_breakdown(ci.verbose);
 
-  std::cout << "Total Time: " << static_cast<double>(clock() - StartTime) / CLOCKS_PER_SEC
+  std::cout << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC
             << std::endl;
 }
 

@@ -67,11 +67,11 @@ bool Operand::ready() {
   for (size_t i = 0; i < fifos.size(); ++i) {
     auto* e = &parent->edges[edges[i]];
     if (fifos[i].empty()) {
-      LOG(FORWARD) << "fifo (" << &fifos[i] << ") " << i << " no element!";
+      DSA_LOG(FORWARD) << "fifo (" << &fifos[i] << ") " << i << " no element!";
       return false;
     }
     if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
-      LOG(FORWARD) << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
+      DSA_LOG(FORWARD) << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
                    << fifos[i].front().available_at;
       return false;
     }
@@ -153,14 +153,14 @@ bool Value::forward(bool attempt) {
             if (!attempt) {
               simulation::Data entry(parent->cur_cycle() + edge->delay, data.value,
                                      data.valid);
-              LOG(FORWARD) << parent->cur_cycle() << ": " << name() << " pushes "
+              DSA_LOG(FORWARD) << parent->cur_cycle() << ": " << name() << " pushes "
                            << data.value << "(" << data.valid << ")"
                            << "to " << user->use()->name() << "'s " << j << "th operand "
                            << operand.fifos[i].size() + 1 << "/" << edge->buf_len
                            << " in " << edge->delay << " cycles(" << entry.available_at
                            << ")";
               if (!attempt) {
-                LOG(FORWARD) << &fifo << " -> " << &operand.fifos[i];
+                DSA_LOG(FORWARD) << &fifo << " -> " << &operand.fifos[i];
               }
               operand.fifos[i].push(entry);
             }

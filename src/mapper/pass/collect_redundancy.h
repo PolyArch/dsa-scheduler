@@ -22,8 +22,8 @@ CollectRedundancy(SSDfg* dfg) {
         for (auto eid : op.edges) {
           auto* edge = &dfg->edges[eid];
           operands[node->id()].push_back(edge);
-          LOG(COLLECT) << node->name() << " <- " << eid;
-          LOG(COLLECT) << edge->name();
+          DSA_LOG(COLLECT) << node->name() << " <- " << eid;
+          DSA_LOG(COLLECT) << edge->name();
         }
       }
       for (auto& value : node->values) {
@@ -33,8 +33,8 @@ CollectRedundancy(SSDfg* dfg) {
           CHECK(edge->parent == node->ssdfg())
               << edge->parent << " " << node->ssdfg() << " " << dfg;
           CHECK(edge->def() == node);
-          LOG(COLLECT) << node->name() << " -> " << eid;
-          LOG(COLLECT) << edge->name();
+          DSA_LOG(COLLECT) << node->name() << " -> " << eid;
+          DSA_LOG(COLLECT) << edge->name();
         }
       }
     }

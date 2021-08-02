@@ -12,7 +12,11 @@ if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
   include(${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
   message(STATUS "Using ${CMAKE_CURRENT_BINARY_DIR}/config.cmake")
 else()
-  message(STATUS "config.cmake not found, use defined configs")
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
+  else()
+    message(STATUS "config.cmake not found, use defined configs")
+  endif()
 endif()
 
 
@@ -36,9 +40,11 @@ add_definitions(-DREPO_PREFIX="${REPO_PREFIX}")
 # set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_options(-fno-strict-aliasing)
 
+
 # Find dependencies: Parser
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
+find_package(Torch REQUIRED)
 
 
 FLEX_TARGET(DFG_LEXER ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.l
@@ -76,10 +82,12 @@ add_library(dsa
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/3rd-party/cxxopts/include
-  ${CMAKE_INSTALL_PREFIX}/include)
+  ${CMAKE_SOURCE_DIR}/3rd-party/libtorch/include/torch/csrc/api/include
+  ${CMAKE_INSTALL_PREFIX}/include
+  )
 
 target_link_directories(dsa PRIVATE ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
-target_link_libraries(dsa PRIVATE jsoncpp)
+target_link_libraries(dsa PRIVATE jsoncpp ${TORCH_LIBRARIES})
 
 # Install the header files and library
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/

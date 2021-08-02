@@ -104,7 +104,7 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
           CHECK(inst);
           inject_noop_impl(dfg, i, inst);
         }
-        LOG(EDGES) << dfg->edges.back().name() << " " << dfg->edges.back().id;
+        DSA_LOG(EDGES) << dfg->edges.back().name() << " " << dfg->edges.back().id;
         if (dfg->edges.back().id >= edge_length.size())
           edge_length.resize(dfg->edges.back().id + 1);
         edge_length[dfg->edges.back().id] = distance;
@@ -197,7 +197,7 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
     changed = false;
 
     iters++;
-    LOG(LAT_PASS) << "=================== " << iters << " ===================";
+    DSA_LOG(LAT_PASS) << "=================== " << iters << " ===================";
     if (overflow) {
       overflow = false;
       dfg->Apply(&rbv);
@@ -227,13 +227,13 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
 
           // This edge is routed
           if (routing_latency != 0) {
-            LOG(LAT_PASS) << edge->name();
-            LOG(LAT_PASS) << "orig: [" << orig_vp.min << ", " << orig_vp.max << "]";
-            LOG(LAT_PASS) << "before:  [" << new_min << ", " << new_max << "]";
+            DSA_LOG(LAT_PASS) << edge->name();
+            DSA_LOG(LAT_PASS) << "orig: [" << orig_vp.min << ", " << orig_vp.max << "]";
+            DSA_LOG(LAT_PASS) << "before:  [" << new_min << ", " << new_max << "]";
             new_min = std::max(new_min, orig_vp.min + edge_lat);
             new_max = std::min(new_max, orig_vp.max + edge_lat + max_ed + max_mis);
-            LOG(LAT_PASS) << "update:  [" << new_min << ", " << new_max << "]";
-            LOG(LAT_PASS) << edge_lat << " " << max_ed << " " << max_mis;
+            DSA_LOG(LAT_PASS) << "update:  [" << new_min << ", " << new_max << "]";
+            DSA_LOG(LAT_PASS) << edge_lat << " " << max_ed << " " << max_mis;
           } else {
             // This edge is not routed, so give worst case upper bound
             new_min = std::max(new_min, orig_vp.min + edge_lat + min_expect);
@@ -249,7 +249,7 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
 
       if (new_min > new_max) {
         overflow = true;
-        LOG(LAT_PASS) << "forward overflow!";
+        DSA_LOG(LAT_PASS) << "forward overflow!";
         break;
       }
     }
@@ -278,12 +278,12 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
                             : 0;
 
           if (routing_latency != 0) {
-            LOG(LAT_PASS) << edge->name();
-            LOG(LAT_PASS) << "down: [" << use_vp.min << ", " << use_vp.max << "]";
+            DSA_LOG(LAT_PASS) << edge->name();
+            DSA_LOG(LAT_PASS) << "down: [" << use_vp.min << ", " << use_vp.max << "]";
             new_min = std::max(new_min, use_vp.min - edge_lat - max_ed - max_mis);
             new_max = std::min(new_max, use_vp.max - edge_lat);
-            LOG(LAT_PASS) << "new: [" << new_min << ", " << new_max << "]";
-            LOG(LAT_PASS) << edge_lat << " " << max_ed << " " << max_mis;
+            DSA_LOG(LAT_PASS) << "new: [" << new_min << ", " << new_max << "]";
+            DSA_LOG(LAT_PASS) << edge_lat << " " << max_ed << " " << max_mis;
           } else {
             new_min =
                 std::max(new_min, use_vp.min - edge_lat - max_ed - max_mis - max_expect);
@@ -297,7 +297,7 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
       vp.max = new_max;
 
       if (new_min > new_max) {
-        LOG(LAT_PASS) << "backward overflow!";
+        DSA_LOG(LAT_PASS) << "backward overflow!";
         overflow = true;
         break;
       }
@@ -317,7 +317,7 @@ void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_temp,
     auto* node = non_temp[i];
     auto& vp = bounds[node->id()];
     int target = vp.min;
-    LOG(LAT_PASS) << "process: " << node->name();
+    DSA_LOG(LAT_PASS) << "process: " << node->name();
 
     int max = 0;
     // int mis = 0;
@@ -345,11 +345,11 @@ void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_temp,
 
         int vio = std::max(0, (target - lat) - max_ed);
         edge_violation[eid] = vio;
-        LOG(LAT_PASS) << edge->name();
-        LOG(LAT_PASS) << "src lat: " << latency[origNode->id()] << ", "
+        DSA_LOG(LAT_PASS) << edge->name();
+        DSA_LOG(LAT_PASS) << "src lat: " << latency[origNode->id()] << ", "
                       << "edge lat: " << edge_length[eid] << ", "
                       << "bounds: " << bounds[node->id()].ToString();
-        LOG(LAT_PASS) << "delay: " << diff << "  vio: " << vio;
+        DSA_LOG(LAT_PASS) << "delay: " << diff << "  vio: " << vio;
 
         max = std::max(max, lat + diff);
       }
@@ -424,9 +424,9 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
   std::vector<std::pair<int, int>> mapping;
   inject_passthrus(&dfg_, sched, edge_length, mapping, edge_groups);
   for (auto& edge : sched->ssdfg()->edges) {
-    LOG(LAT_PASS) << edge.name();
+    DSA_LOG(LAT_PASS) << edge.name();
     for (auto& lp : sched->edge_prop()[edge.id].links) {
-      LOG(LAT_PASS) << lp.first << " " << lp.second->name();
+      DSA_LOG(LAT_PASS) << lp.first << " " << lp.second->name();
     }
   }
   CHECK(edge_length.size() == dfg_.edges.size())
@@ -437,14 +437,14 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
   std::copy_if(ordered.begin(), ordered.end(), std::back_inserter(non_temp),
                [](Node* node) { return !node->is_temporal(); });
   for (auto elem : non_temp) {
-    LOG(LAT_PASS) << "topo: " << elem->name();
+    DSA_LOG(LAT_PASS) << "topo: " << elem->name();
   }
   std::vector<Bounds> bounds;
   // Migrate legacy iterative bound here.
   iterative_bounds(&dfg_, non_temp, edge_length, mapping, sched->ssModel(), bounds);
 
   for (auto elem : non_temp) {
-    LOG(LAT_PASS) << elem->name() << "[" << bounds[elem->id()].min << ", "
+    DSA_LOG(LAT_PASS) << elem->name() << "[" << bounds[elem->id()].min << ", "
                   << bounds[elem->id()].max << "]";
   }
 
@@ -454,7 +454,7 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
                  edge_violation, edge_delay);
 
   for (auto node : dfg_.nodes) {
-    LOG(LAT_PASS) << node->name() << ": " << latency[node->id()];
+    DSA_LOG(LAT_PASS) << node->name() << ": " << latency[node->id()];
   }
 
   // Migrate legacy violation calculation here.
@@ -471,15 +471,15 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
   }
   for (auto& elem : sched->ssdfg()->edges) {
     sched->edge_prop()[elem.id].extra_lat = sched->edge_prop()[elem.id].vio = 0;
-    LOG(LAT_PASS) << "edge: " << elem.name();
+    DSA_LOG(LAT_PASS) << "edge: " << elem.name();
     for (auto id : edge_groups[elem.id]) {
-      LOG(LAT_PASS) << "member: " << dfg_.edges[id].name();
+      DSA_LOG(LAT_PASS) << "member: " << dfg_.edges[id].name();
       sched->edge_prop()[elem.id].extra_lat += edge_delay[id];
       sched->edge_prop()[elem.id].vio += edge_violation[id];
     }
-    LOG(LAT_PASS) << "vio: " << sched->vioOf(&elem);
+    DSA_LOG(LAT_PASS) << "vio: " << sched->vioOf(&elem);
   }
-  LOG(LAT_PASS) << "total vio: " << total_vio << " "
+  DSA_LOG(LAT_PASS) << "total vio: " << total_vio << " "
                 << "latency: " << max_lat << " "
                 << "mis: " << max_lat_mis;
   if (is_export) {

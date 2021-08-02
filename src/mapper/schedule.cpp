@@ -533,14 +533,14 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
         int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
         int cur_ovr = cur_util - v.node->max_util();
         if (cur_ovr > 0) {
-          LOG(OVERPROV) << v.node->name() << ": "
+          DSA_LOG(OVERPROV) << v.node->name() << ": "
             << cnt << " + " << slot.passthrus.size() << " + "
             << unique_io << " + " << (ops.size() != 0) << " > " << v.node->max_util();
           for (auto elem: io) {
-            LOG(OVERPROV) << elem->name();
+            DSA_LOG(OVERPROV) << elem->name();
           }
           for (auto elem: other) {
-            LOG(OVERPROV) << elem->name();
+            DSA_LOG(OVERPROV) << elem->name();
           }
         }
         agg_ovr += std::max(cur_ovr, 0);
@@ -586,13 +586,13 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
     util = vector_utils::count_unique(values) + vector_utils::count_unique(vecs);
     int cur_ovr = util - link->max_util();
     if (cur_ovr > 0) {
-      LOG(OVERPROV) << link->name() << ": " << values.size()
+      DSA_LOG(OVERPROV) << link->name() << ": " << values.size()
                     << " + " << vecs.size() << " > " << link->max_util();
       for (auto &value : values) {
-        LOG(OVERPROV) << value.second << " " << value.first->name();
+        DSA_LOG(OVERPROV) << value.second << " " << value.first->name();
       }
       for (auto &vec : vecs) {
-        LOG(OVERPROV) << vec->name();
+        DSA_LOG(OVERPROV) << vec->name();
       }
     }
     ovr = std::max(cur_ovr, ovr);
@@ -744,7 +744,7 @@ double Schedule::estimated_performance() {
   for (int i = 0; i < dfg->meta.size(); ++i) {
     double v =
         std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
-    LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->meta[i].frequency
+    DSA_LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->meta[i].frequency
                     << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
                     << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/"
                     << rec_lat[i] << ", Overall: " << v

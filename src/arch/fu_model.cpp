@@ -27,7 +27,7 @@ double pa_impl(const Capability& cap, std::function<double(OpCode)> f) {
     }
   }
   for (auto& elem : sumup) {
-    LOG(PA) << (int)elem.first.first << ", " << elem.first.second << ", " << elem.second;
+    DSA_LOG(PA) << (int)elem.first.first << ", " << elem.first.second << ", " << elem.second;
     res += elem.second;
   }
   return res;
@@ -37,5 +37,9 @@ double pa_impl(const Capability& cap, std::function<double(OpCode)> f) {
 double Capability::area() { return pa_impl(*this, inst_area); }
 
 double Capability::power() { return pa_impl(*this, inst_power); }
+
+double Capability::LogicLut() { return pa_impl(*this, inst_logic_lut); }
+
+double Capability::FlipFlop() { return pa_impl(*this, inst_flip_flop); }
 
 }  // namespace dsa

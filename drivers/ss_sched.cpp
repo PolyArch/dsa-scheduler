@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
   auto default_24_36 = cxxopts::value<int>()->default_value(std::to_string(24 * 3600));
   auto default_20000 = cxxopts::value<int>()->default_value("20000");
   auto default_string = cxxopts::value<std::string>();
+  auto default_neg_1 = cxxopts::value<int>()->default_value("-1");
 
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.", default_false)
@@ -40,9 +41,11 @@ int main(int argc, char* argv[]) {
     ("x,design-explore", "Design space exploration for the given DFG's.", default_false)
     ("r,tolerate-unuse", "Do not throw an error if there are unused values", default_false)
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", default_false)
+    ("fpga", "Design space exploration for FPGA overlay.", default_false)
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", default_24_36)
     ("m,max-iters", "The maxium iterations of scheduling attemps.", default_20000)
     ("e,seed", "The seed of randomization.", cxxopts::value<int>())
+    ("dse-timeout", "The timeout cut-off for design space exploration.", default_neg_1)
     ("h,help", "Print the help information.");
   options.allow_unrecognised_options();
   options.custom_help(
@@ -87,6 +90,7 @@ int main(int argc, char* argv[]) {
     ofstream os(model_visual_filename.c_str());
     std::cout << "Hardware GV file is " << model_visual_filename << std::endl;
     ssmodel.subModel()->PrintGraphviz(os);
+    std::cout << "[Total] " << res.sum()->dump() << std::endl;
     res.Dump(std::cout);
     return 0;
   }

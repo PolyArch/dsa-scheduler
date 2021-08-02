@@ -1,6 +1,6 @@
-[submodule "json-parser"]
-	path = json-parser
-	url = https://github.com/were/json-parser
+[submodule "jsoncpp"]
+	path = 3rd-party/jsoncpp
+	url = https://github.com/open-source-parsers/jsoncpp
 [submodule "3rd-party/cxxopts"]
 	path = 3rd-party/cxxopts
 	url = https://github.com/jarro2783/cxxopts

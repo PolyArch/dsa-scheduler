@@ -1,6 +1,7 @@
 *.Td
 *.d
 src/gams_models/*.h
+3rd-party/libtorch/
 build/
 *.sw?
 *.tar.gz
@@ -20,5 +21,7 @@ cmake-build-debug/*
 .vscode
 test_config/*
 sched/*
+.sched/
 .ycm_extra_conf.py
 .cache/*
+3rd-party/*.zip

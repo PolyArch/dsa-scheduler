@@ -77,11 +77,11 @@ inline void SliceOverlappedEdges(SSDfg* dfg) {
         std::sort(v.begin(), v.end());
         auto tail = std::unique(v.begin(), v.end());
         v.erase(tail, v.end());
-        LOG(SLICE) << l << ", " << r;
-        LOG(SLICE) << edges[i].name();
-        LOG(SLICE) << edges[j].name();
+        DSA_LOG(SLICE) << l << ", " << r;
+        DSA_LOG(SLICE) << edges[i].name();
+        DSA_LOG(SLICE) << edges[j].name();
         for (auto elem : v) {
-          LOG(SLICE) << elem;
+          DSA_LOG(SLICE) << elem;
         }
         CHECK(v.size() % 2 == 0) << v.size();
         split_edge(v, dfg, i);
@@ -92,7 +92,7 @@ inline void SliceOverlappedEdges(SSDfg* dfg) {
   }
 
   for (auto& edge : dfg->edges) {
-    LOG(SLICE) << edge.name();
+    DSA_LOG(SLICE) << edge.name();
   }
 }
 

@@ -1,6 +1,83 @@
 #include "dsa/arch/predict.h"
 
+#include <torch/script.h>
 #include <iostream>
+
+#include "dsa/debug.h"
+
+#define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
+
+/*
+Input: [decomposer, delay_fifo_depth, num_input_ports, isShared,
+        num_output_ports, output_select_mode, protocol, register_file_size]
+
+OutputSelectMode:
+    0 = Individual
+    1 = Universal
+Protocol:
+    0 = Data
+    1 = DataValidReady
+
+Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
+*/
+std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
+  torch::jit::script::Module module;
+  try {
+    module = torch::jit::load(TORCH_MODEL_PREFIX "/pe_model.pt");
+  }
+  catch (const c10::Error& e) {
+    CHECK(false)
+      << "Error Loading FPGA Processing Element Model: " << TORCH_MODEL_PREFIX "/pe_model.pt";
+  }
+
+  std::vector<torch::jit::IValue> inputs;
+  inputs.push_back(torch::tensor(parameters));
+
+  at::Tensor output = module.forward(inputs).toTensor();
+
+  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
+
+  return output_vector;
+}
+
+std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameters){
+  torch::jit::script::Module module;
+  try {
+    module = torch::jit::load(TORCH_MODEL_PREFIX "/router_model.pt");
+  }
+  catch (const c10::Error& e) {
+    CHECK(false) << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "/router_model.pt";
+  }
+
+  std::vector<torch::jit::IValue> inputs;
+  inputs.push_back(torch::tensor(parameters));
+
+  at::Tensor output = module.forward(inputs).toTensor();
+
+  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
+
+  return output_vector;
+}
+
+
+std::vector<float>  vport_area_predict_fpga(const  std::vector<float> parameters){
+  torch::jit::script::Module module;
+  try {
+    module = torch::jit::load(TORCH_MODEL_PREFIX "/vport_model.pt");
+  }
+  catch (const c10::Error& e) {
+    CHECK(false) << "Error Loading FPGA Router Model" << TORCH_MODEL_PREFIX "/vport_model.pt";
+  }
+
+  std::vector<torch::jit::IValue> inputs;
+  inputs.push_back(torch::tensor(parameters));
+
+  at::Tensor output = module.forward(inputs).toTensor();
+
+  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
+
+  return output_vector;
+}
 
 double pred_vport_power(const double x1[3]) {
   double xp1_idx_0;

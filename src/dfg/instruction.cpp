@@ -57,7 +57,7 @@ int Instruction::bitwidth() {
 void Instruction::forward() {
   int inst_throughput = inst_thr(inst());
   if (_ssdfg->cur_cycle() - last_execution < (uint64_t)inst_throughput) {
-    LOG(COMP) << "Throughput: " << _ssdfg->cur_cycle() << ", " << last_execution << ", "
+    DSA_LOG(COMP) << "Throughput: " << _ssdfg->cur_cycle() << ", " << last_execution << ", "
               << inst_throughput;
     return;
   }
@@ -67,7 +67,7 @@ void Instruction::forward() {
     for (auto& elem : values) {
       CHECK(!elem.fifo.empty());
       if (!elem.forward(true)) {
-        LOG(FORWARD) << _ssdfg->cur_cycle() << ": " << name()
+        DSA_LOG(FORWARD) << _ssdfg->cur_cycle() << ": " << name()
                      << " Cannot forward because of " << elem.name();
         return;
       }
@@ -83,7 +83,7 @@ void Instruction::forward() {
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
     if (!_ops[i].ready()) {
-      LOG(FORWARD) << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since "
+      DSA_LOG(FORWARD) << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since "
                    << (i + 1) << " th op not ready ";
       return;
     }
@@ -108,14 +108,14 @@ void Instruction::forward() {
       int bytes = (_ops[i].regDtype() / 8);
       memcpy(&a, ((uint8_t*)&_reg[0]) + idx * bytes, bytes);
       _input_vals[i] = a;
-      LOG(COMP) << "Register " << a << " " << _reg[0];
+      DSA_LOG(COMP) << "Register " << a << " " << _reg[0];
     } else {
       _input_vals[i] = _ops[i].poll();
       if (!_ops[i].predicate()) {
         bh.discard = true;
         reason << " operand " << i << " not valid!";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
-        LOG(PRED) << "bits: " << predicate.bits() << ", pred: " << _input_vals[i];
+        DSA_LOG(PRED) << "bits: " << predicate.bits() << ", pred: " << _input_vals[i];
         predicate.test(_input_vals[i], bh);
       }
     }
@@ -136,7 +136,7 @@ void Instruction::forward() {
       int idx = 0;
       int bytes = bitwidth() / 8;
       memcpy(((uint8_t*)&_reg[0]) + idx * bytes, &output, bytes);
-      LOG(COMP) << "Write " << output << " to register!";
+      DSA_LOG(COMP) << "Write " << output << " to register!";
     }
     compute_dump << output;
   } else {
@@ -151,14 +151,14 @@ void Instruction::forward() {
     }
   }
 
-  LOG(COMP) << compute_dump.str() << (bh.exec ? " valid " : " invalid ") << reason.str()
+  DSA_LOG(COMP) << compute_dump.str() << (bh.exec ? " valid " : " invalid ") << reason.str()
             << " " << (bh.discard ? " and output discard!" : "");
 
   for (size_t i = 0; i < bh.backpressure.size(); ++i) {
     if (bh.backpressure[i]) {
-      LOG(COMP) << "backpressure on " << i;
+      DSA_LOG(COMP) << "backpressure on " << i;
     } else {
-      LOG(COMP) << "pop operand " << i;
+      DSA_LOG(COMP) << "pop operand " << i;
       _ops[i].pop();
     }
   }
@@ -166,7 +166,7 @@ void Instruction::forward() {
   // TODO(@were): We need a better name for this flag.
   if (bh.exec) {
     for (size_t i = 0; i < values.size(); ++i) {
-      LOG(COMP) << "Push " << _output_vals[i] << "(" << !bh.discard << ") to " << i;
+      DSA_LOG(COMP) << "Push " << _output_vals[i] << "(" << !bh.discard << ") to " << i;
       values[i].push(_output_vals[i], !bh.discard, lat_of_inst());
     }
   }

@@ -83,13 +83,13 @@ void InstModel::PowerAreaModel(char* filename) {
     return;
   }
 
-  std::map<std::string, pair<double, double>> inst_to_power_area;
+  std::map<std::string, std::vector<double>> inst_to_power_area;
 
   // Parsing the instructions
   char line[1024];
   while (ifs.good()) {
     // reading
-    LOG(PA_MODEL) << "reading and parse the csv file\n";
+    DSA_LOG(PA_MODEL) << "reading and parse the csv file\n";
     // fetch line
     ifs.getline(line, 1024);
 
@@ -109,19 +109,25 @@ void InstModel::PowerAreaModel(char* filename) {
     if (ModelParsing::is_number(tokens[5]) && ModelParsing::is_number(tokens[6])) {
       char* end = 0;
       std::string inst_name = tokens[4];
-      double power = strtod(tokens[5].c_str(), &end);
-      double area = strtod(tokens[6].c_str(), &end);
+      double area = strtod(tokens[5].c_str(), &end);
+      double power = strtod(tokens[6].c_str(), &end);
+      double logicLut = strtod(tokens[7].c_str(), &end);
+      double flipFlop = strtod(tokens[8].c_str(), &end);
       if (ModelParsing::StartsWith(inst_name, "FLOAT") ||
           ModelParsing::StartsWith(inst_name, "FIXED")) {
         FuType* fuType = new FuType();
         fuType->setName(inst_name);
         fuType->setArea(area);
         fuType->setPower(power);
+        fuType->setLogicLut(logicLut);
+        fuType->setFlipFlop(flipFlop);
+
         _fuTypeList.push_back(fuType);
         continue;  // skip parsing the float/fixed function unit
       }
-      inst_to_power_area.insert(pair<std::string, pair<double, double>>(
-          inst_name, std::pair<double, double>(power, area)));
+
+      inst_to_power_area.insert(pair<std::string, vector<double>>(
+          inst_name, std::vector<double>{power, area, logicLut, flipFlop}));
     } else {
       continue;
     }
@@ -135,33 +141,33 @@ void InstModel::PowerAreaModel(char* filename) {
   for (auto inst_pa : fixed_size_map) {
     string inst_name = inst_pa.first;
     string last_two_str = inst_name.substr(inst_name.length() - 2);
-    LOG(PA_MODEL) << "the outer loop -- inst name = " << inst_name << "\n";
+    DSA_LOG(PA_MODEL) << "the outer loop -- inst name = " << inst_name << "\n";
     if (inst_name[0] == 'F') {  // Floating Unit
       // Add floating-point 32x2 here
       if (last_two_str == "32") {
-        pair<double, double> power_area = inst_to_power_area[inst_name];
-        pair<double, double> power_areax2 =
-            pair<double, double>(power_area.first * 2, power_area.second * 2);
+       std::vector<double> power_area = inst_to_power_area[inst_name];
+       std::vector<double> power_areax2 =
+            std::vector<double>{power_area[0] * 2, power_area[1] * 2, power_area[2] * 2, power_area[3] * 2};
         inst_to_power_area.insert(
-            pair<string, pair<double, double>>(inst_name + "x2", power_areax2));
+            pair<string, std::vector<double>>(inst_name + "x2", power_areax2));
       }
-      LOG(PA_MODEL) << "deal with the floating point\n";
+      DSA_LOG(PA_MODEL) << "deal with the floating point\n";
       continue;  // Skip the rest floating-point inst
     } else {     // Fixed Instruction
       // Add sign prefix to every fixed inst
-      pair<double, double> power_area = inst_to_power_area[inst_name];
+      std::vector<double> power_area = inst_to_power_area[inst_name];
       for (auto prefix : prefix_fixed_str) {
         stringstream sign_inst_ss;
         sign_inst_ss << prefix << inst_name;
         inst_to_power_area.insert(
-            pair<std::string, pair<double, double>>(sign_inst_ss.str(), power_area));
-        LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
+            pair<std::string, std::vector<double>>(sign_inst_ss.str(), power_area));
+        DSA_LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
                       << prefix << " : deal with the add sign bit to fixed point\n";
       }
       // Add power area to decomposed instruction
       char last_char = inst_name.back();
       if (last_char == '8' || last_two_str == "16" || last_two_str == "32") {
-        LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
+        DSA_LOG(PA_MODEL) << "length of map = " << inst_to_power_area.size() << " -- "
                       << "deal with the decomposed instructions\n";
         if (last_char == '8') {
           string func_name = inst_name.substr(0, inst_name.length() - 1);
@@ -170,15 +176,15 @@ void InstModel::PowerAreaModel(char* filename) {
             stringstream decomp_ss;
             decomp_ss << inst_name << "x" << decomposer;
             string decomp_inst_name = decomp_ss.str();
-            pair<double, double> power_area_x_decomposer = pair<double, double>(
-                power_area.first * decomposer, power_area.second * decomposer);
-            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+            std::vector<double> power_area_x_decomposer = std::vector<double>{
+                power_area[0] * decomposer, power_area[1] * decomposer, power_area[2] * decomposer, power_area[3] * decomposer};
+            inst_to_power_area.insert(pair<std::string, std::vector<double>>(
                 decomp_inst_name, power_area_x_decomposer));
             for (auto prefix : prefix_fixed_str) {
               stringstream sign_decomp_ss;
               sign_decomp_ss << prefix << decomp_inst_name;
-              LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
-              inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+              DSA_LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+              inst_to_power_area.insert(pair<std::string,  std::vector<double>>(
                   sign_decomp_ss.str(), power_area_x_decomposer));
             }
           }
@@ -191,15 +197,15 @@ void InstModel::PowerAreaModel(char* filename) {
             stringstream decomp_ss;
             decomp_ss << inst_name << "x" << decomposer;
             string decomp_inst_name = decomp_ss.str();
-            pair<double, double> power_area_x_decomposer = pair<double, double>(
-                power_area.first * decomposer, power_area.second * decomposer);
-            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+            std::vector<double> power_area_x_decomposer = std::vector<double>{
+                power_area[0] * decomposer, power_area[1] * decomposer, power_area[2] * decomposer, power_area[3] * decomposer};
+            inst_to_power_area.insert(pair<std::string, std::vector<double>>(
                 decomp_inst_name, power_area_x_decomposer));
             for (auto prefix : prefix_fixed_str) {
               stringstream sign_decomp_ss;
               sign_decomp_ss << prefix << decomp_inst_name;
-              LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
-              inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+              DSA_LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+              inst_to_power_area.insert(pair<std::string, std::vector<double>>(
                   sign_decomp_ss.str(), power_area_x_decomposer));
             }
           }
@@ -211,15 +217,15 @@ void InstModel::PowerAreaModel(char* filename) {
           stringstream decomp_ss;
           decomp_ss << inst_name << "x" << decomposer;
           string decomp_inst_name = decomp_ss.str();
-          pair<double, double> power_area_x_decomposer = pair<double, double>(
-              power_area.first * decomposer, power_area.second * decomposer);
-          inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+          std::vector<double> power_area_x_decomposer = std::vector<double>{
+                power_area[0] * decomposer, power_area[1] * decomposer, power_area[2] * decomposer, power_area[3] * decomposer};
+          inst_to_power_area.insert(pair<std::string, std::vector<double>>(
               decomp_inst_name, power_area_x_decomposer));
           for (auto prefix : prefix_fixed_str) {
             stringstream sign_decomp_ss;
             sign_decomp_ss << prefix << decomp_inst_name;
-            LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
-            inst_to_power_area.insert(pair<std::string, pair<double, double>>(
+            DSA_LOG(PA_MODEL) << "signed decoup inst = " << sign_decomp_ss.str() << "\n";
+            inst_to_power_area.insert(pair<std::string, std::vector<double>>(
                 sign_decomp_ss.str(), power_area_x_decomposer));
           }
           continue;
@@ -238,11 +244,11 @@ void InstModel::PowerAreaModel(char* filename) {
     string last_two_str = inst_name.substr(inst_name.length() - 2);
     if (last_two_str == "64") {
       string func_name = inst_name.substr(0, inst_name.length() - 2);
-      pair<double, double> power_area = inst_to_power_area[inst_name];
+      std::vector<double> power_area = inst_to_power_area[inst_name];
       inst_to_power_area.insert(
-          pair<string, pair<double, double>>(func_name, power_area));
+          pair<string, std::vector<double>>(func_name, power_area));
     }
-    LOG(PA_MODEL) << "deal with instruction with out bitwidth\n";
+    DSA_LOG(PA_MODEL) << "deal with instruction with out bitwidth\n";
   }
 
   // Add the power / area to inst list
@@ -250,8 +256,10 @@ void InstModel::PowerAreaModel(char* filename) {
     string inst_name = inst->name();
     if (inst_to_power_area.count(inst_name) > 0) {
       auto power_area = inst_to_power_area[inst_name];
-      inst->setArea(power_area.second);
-      inst->setPower(power_area.first);
+      inst->setArea(power_area[1]);
+      inst->setPower(power_area[0]);
+      inst->setLogicLut(power_area[2]);
+      inst->setFlipFlop(power_area[3]);
     }
   }
 }
@@ -338,6 +346,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "const char* name_of_inst(OpCode inst);\n"
          "double inst_area(OpCode inst);\n"
          "double inst_power(OpCode inst);\n"
+         "double inst_logic_lut(OpCode inst);\n"
+         "double inst_flip_flop(OpCode inst);\n"
          "int inst_lat(OpCode inst);\n"
          "int inst_thr(OpCode inst);\n"
          "int num_values(OpCode inst);\n"
@@ -500,6 +510,30 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
   ofs << "  }\n\n";
   ofs << "}\n\n";
+
+  // LogicLut of the ssinst
+  ofs << "double dsa::inst_logic_lut(OpCode inst) {\n"
+         "  switch(inst) {\n";
+  for (unsigned i = 0; i < _instList.size(); ++i) {
+    ofs << "    case "
+        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->LogicLut() << ";\n";
+  }
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
+  ofs << "  }\n\n";
+  ofs << "}\n\n";
+
+
+  // flip-flop of the ssinst
+  ofs << "double dsa::inst_flip_flop(OpCode inst) {\n"
+         "  switch(inst) {\n";
+  for (unsigned i = 0; i < _instList.size(); ++i) {
+    ofs << "    case "
+        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->FlipFlop() << ";\n";
+  }
+  ofs << "    default: CHECK(false) << \"Unknown inst\"; throw;\n";
+  ofs << "  }\n\n";
+  ofs << "}\n\n";
+  
 
   // Pre-defined Function Unit Type
   ofs << "fu_type_t dsa::fu_type_from_string(const char* str) {\n"

@@ -55,7 +55,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
 
   for (auto elem : dc.inst_required) {
     if (sc.inst_exist[elem.first] < elem.second) {
-      LOG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
+      DSA_LOG(COUNT) << elem.second << " " << name_of_inst(elem.first.first)
                  << " FU(s) are required in "
                  << (elem.first.second ? "temporal" : "dedicated") << " tiles, but only "
                  << sc.inst_exist[elem.first] << " found";
@@ -65,7 +65,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
 
   for (int i = 0; i < 2; ++i) {
     if (dc.ports[i].size() > sc.ports[i].size()) {
-      LOG(COUNT) << "In total, " << dc.ports[i].size()
+      DSA_LOG(COUNT) << "In total, " << dc.ports[i].size()
                  << " port(s) are required, but only have " << sc.ports[i].size();
       return false;
     }
@@ -73,7 +73,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
     sort(sc.ports[i].begin(), sc.ports[i].end(), std::greater<int>());
     for (int j = 0, n = dc.ports[i].size(); j < n; ++j) {
       if (dc.ports[i][j] > sc.ports[i][j]) {
-        LOG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
+        DSA_LOG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
                    << sc.ports[i][j];
         return false;
       }

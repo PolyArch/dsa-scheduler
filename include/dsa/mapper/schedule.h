@@ -268,7 +268,7 @@ class Schedule {
         EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity);
         auto it = std::find(edges.begin(), edges.end(), es);
         CHECK(it != edges.end());
-        LOG(UNASSIGN) << "unassign " << edge->name() << " [" << es.l << ", " << es.r << "] "
+        DSA_LOG(UNASSIGN) << "unassign " << edge->name() << " [" << es.l << ", " << es.r << "] "
                       << slot_index;
         edges.erase(it);
         if (slot.edges.empty()) {
@@ -371,7 +371,7 @@ class Schedule {
       int l = dfgedge->l + granularity * i;
       int r = dfgedge->l + granularity * (i + 1);
       slot.edges.emplace_back(dfgedge->id, l, r);
-      LOG(ASSIGN) << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
+      DSA_LOG(ASSIGN) << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
                   << " to " << slink->id() << " " << cur_slot_index;
     }
 

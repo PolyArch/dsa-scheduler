@@ -19,11 +19,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
       ssfu* cand_fu = fus[i];
 
       if (!cand_fu->fu_type_.Capable(inst->inst())) {
-        LOG(CAND) << "Not capable!";
+        DSA_LOG(CAND) << "Not capable!";
         continue;
       }
       if (cand_fu->out_links().size() < inst->values.size()) {
-        LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
+        DSA_LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
                   << cand_fu->out_links().size() << " < " << inst->values.size();
         continue;
       }
