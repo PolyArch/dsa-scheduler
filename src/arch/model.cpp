@@ -137,11 +137,7 @@ std::vector<Capability*> ParseFuType(std::istream& istream) {
 SSModel::SSModel(const char* filename_) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
-  bool failed_read = ifs.fail();
-  if (failed_read) {
-    cerr << "Could Not Open: " << filename << "\n";
-    return;
-  }
+  CHECK(ifs.good()) << "Could Not Open: " << filename << "\n";
 
   // Parse the JSON-format IR
   if (string_utils::String(filename).EndsWith(".json")) {

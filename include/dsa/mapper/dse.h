@@ -769,3 +769,9 @@ class CodesignInstance {
   std::vector<int> delete_sw_list;
   std::vector<int> delete_vport_list;
 };
+
+namespace dsa {
+
+void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename);
+
+} // namespace dsa

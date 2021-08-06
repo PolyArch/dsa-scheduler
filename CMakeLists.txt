@@ -57,12 +57,10 @@ set(SS_INSTS_H ${CMAKE_SOURCE_DIR}/include/dsa/arch/ssinst.h)
 set(SS_INSTS_CXX ${CMAKE_SOURCE_DIR}/src/insts/ssinst.cpp)
 set(PA_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.power_area.csv")
 
-message(${CMAKE_BINARY_DIR})
-message(${CMAKE_CURRENT_BINARY_DIR})
 
 add_custom_command(
   OUTPUT ${SS_INSTS_H} ${SS_INSTS_CXX}
-  COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/inst_model ${INST_MODEL} ${PA_MODEL} ${SS_INSTS_H} ${SS_INSTS_CXX}
+  COMMAND ${CMAKE_BINARY_DIR}/inst_model ${INST_MODEL} ${PA_MODEL} ${SS_INSTS_H} ${SS_INSTS_CXX}
   DEPENDS inst_model
 )
 
@@ -77,6 +75,7 @@ add_library(dsa
 
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_SOURCE_DIR}/3rd-party/cxxopts/include
   ${CMAKE_INSTALL_PREFIX}/include)
 
 target_link_directories(dsa PRIVATE ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)

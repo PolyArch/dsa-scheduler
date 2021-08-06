@@ -16,6 +16,7 @@
 #include "dsa/core/singleton.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
+#include "dsa/mapper/dse.h"
 
 using namespace dsa;
 
@@ -28,13 +29,19 @@ int main(int argc, char* argv[]) {
     options(EXECUTABLE,
             "Mapping data dependence graph of instructions onto spatial architectures.");
 
+  auto default_false = cxxopts::value<bool>()->default_value("false");
+  auto default_24_36 = cxxopts::value<int>()->default_value(std::to_string(24 * 3600));
+  auto default_20000 = cxxopts::value<int>()->default_value("20000");
+  auto default_string = cxxopts::value<std::string>();
+
   options.add_options()
-    ("v,verbose", "Dump verbosed scheduling log.")
-    ("d,dummy", "Only schedule the i/o ports.")
-    ("r,tolerate-unuse", "Do not throw an error if there are unused values", cxxopts::value<bool>()->default_value("false"))
-    ("b,print-bitstream", "Dump the binary of spatial scheduling.", cxxopts::value<bool>()->default_value("false"))
-    ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", cxxopts::value<int>()->default_value(std::to_string(24 * 3600)))
-    ("m,max-iters", "The maxium iterations of scheduling attemps.", cxxopts::value<int>()->default_value("20000"))
+    ("v,verbose", "Dump verbosed scheduling log.", default_false)
+    ("d,dummy", "Only schedule the i/o ports.", default_false)
+    ("x,design-explore", "Design space exploration for the given DFG's.", default_false)
+    ("r,tolerate-unuse", "Do not throw an error if there are unused values", default_false)
+    ("b,print-bitstream", "Dump the binary of spatial scheduling.", default_false)
+    ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", default_24_36)
+    ("m,max-iters", "The maxium iterations of scheduling attemps.", default_20000)
     ("e,seed", "The seed of randomization.", cxxopts::value<int>())
     ("h,help", "Print the help information.");
   options.allow_unrecognised_options();
@@ -53,25 +60,27 @@ int main(int argc, char* argv[]) {
     seed = parsed["seed"].as<int>();
   }
   srand(seed);
-  auto &ci = dsa::ContextFlags::Global();
-  ci.dummy = parsed.count("dummy");
-  ci.verbose = parsed.count("verbose");
-  ci.timeout = parsed["timeout"].as<int>();
-  ci.bitstream = parsed["print-bitstream"].as<bool>();
-  ci.max_iters = parsed["max-iters"].as<int>();
-  ci.tolerate_unuse = parsed["tolerate-unuse"].as<bool>();
+  dsa::ContextFlags::Global().Load(parsed);
 
-  ENFORCED_SYSTEM("mkdir -p .sched");
   auto args = parsed.unmatched();
   if (args.size() != 1 && args.size() != 2) {
     std::cerr << options.help() << std::endl;
     std::cerr << "But " << args.size() << " arguments get." << std::endl;
-    std::cerr  << "Exit with 1." << std::endl;
+    std::cerr << "Exit with 1." << std::endl;
     return 1;
   }
 
   std::string adg_file = args[0];
   SSModel ssmodel(adg_file.c_str());
+
+  // Evlove the underlying hardware.
+  ENFORCED_SYSTEM("mkdir -p .sched");
+  if (parsed.count("design-explore")) {
+    dsa::DesignSpaceExploration(ssmodel, args[1]);
+    return 0;
+  }
+
+  // Estimate the hardware cost.
   if (args.size() == 1) {
     auto res = dsa::adg::estimation::EstimatePowerAera(&ssmodel);
     std::string model_visual_filename = adg_file + ".gv";
@@ -82,6 +91,7 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  // Map the DFG to the spatial architecture.
   CHECK(args.size() == 2);
   std::string dfg_file = args[1];
   SSDfg dfg(dfg_file);

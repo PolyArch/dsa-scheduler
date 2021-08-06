@@ -128,7 +128,7 @@ void Instruction::forward() {
 
 
   if (bh.exec) {  // IF VALID
-    _ssdfg->inc_total_dyn_insts(is_temporal());
+    ++_ssdfg->dyn_issued[is_temporal()];
     // Read in some temp value and set _val after inst_lat cycles
     output = do_compute(bh.discard, bh.backpressure);
     self_predicate.test(output, bh);

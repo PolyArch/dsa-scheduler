@@ -39,7 +39,7 @@ std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size, uint64_t* bit
 }
 
 std::map<dsa::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
-  auto filename = std::string("sched/") + s;
+  auto filename = std::string(".sched/") + s;
   _ssDFG = dsa::dfg::Import(filename);
   struct Counter : dfg::Visitor {
     void Visit(dsa::dfg::Instruction* inst) { ++inst_histo[inst->inst()]; }
@@ -259,10 +259,10 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
 }
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
-  std::string dfg_fname = "sched/" + cfg_name + ".dfg.json";
+  std::string dfg_fname = ".sched/" + cfg_name + ".dfg.json";
   // TODO(@were): Dump the DFG with noop injected.
   dsa::dfg::Export(ssdfg(), dfg_fname);
-  std::string sched_fname = "sched/" + cfg_name + ".sched.json";
+  std::string sched_fname = ".sched/" + cfg_name + ".sched.json";
   DumpMappingInJson(sched_fname);
 
   os << "// CAUTION: This is a serialization-based version\n"

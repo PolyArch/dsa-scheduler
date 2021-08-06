@@ -202,6 +202,8 @@ class SSDfg {
   std::vector<dsa::dfg::Edge> edges;
   /*! \brief The property information of each sub DFG. */
   std::vector<dsa::MetaDfg> meta;
+  /* \brief Dynamic instructions executed. */
+  int dyn_issued[2] = {0, 0};
   /*! \brief Mapping informtion for dependencies among taskflow. */
   task_def_t _dependence_maps[NUM_GROUPS][NUM_GROUPS];
   /*! \brief Mapping informtion via coalescing buffer. */
@@ -222,7 +224,6 @@ class SSDfg {
   // @{
   // TODO(@were): These are for simulation. Move them out later!
   uint64_t _cur_cycle = 0;
-  int dyn_issued[2] = {0, 0};
   // @}
 
   void normalize();

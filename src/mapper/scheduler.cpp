@@ -115,12 +115,10 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   string viz_dir = pdg_dir + "viz/";
   string iter_dir = pdg_dir + "viz/iter/";
   string verif_dir = pdg_dir + "verif/";
-  string sched_dir = pdg_dir + "sched/";  // Directory for cheating on the scheduler
 
   ENFORCED_SYSTEM(("mkdir -p " + viz_dir).c_str());
   ENFORCED_SYSTEM(("mkdir -p " + iter_dir).c_str());
   ENFORCED_SYSTEM(("mkdir -p " + verif_dir).c_str());
-  ENFORCED_SYSTEM(("mkdir -p " + sched_dir).c_str());
 
   std::string model_filename = model->filename;
   int lastindex = model_filename.find_last_of(".");

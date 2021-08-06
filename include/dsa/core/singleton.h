@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "cxxopts.hpp"
+
 namespace dsa {
 
 struct ContextFlags {
@@ -33,6 +35,9 @@ struct ContextFlags {
   ContextFlags();
 
   static ContextFlags &Global();
+
+  void Load(const cxxopts::ParseResult &pr);
+
 };
 
 }
