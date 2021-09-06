@@ -1,4 +1,4 @@
-all: json dsa
+all: 3rd-party/libtorch json dsa
 
 3rd-party/libtorch:
 	wget -O $@.zip https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.9.0%2Bcpu.zip && \

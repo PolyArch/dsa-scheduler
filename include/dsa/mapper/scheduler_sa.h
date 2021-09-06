@@ -54,7 +54,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   int routing_times{0};
 
-  int candidates_tried{0}, candidates_succ{0};
+  //int candidates_tried{0}, candidates_succ{0};
 
   void initialize(SSDfg*, Schedule*&);
 
@@ -115,7 +115,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   void unmap_some(SSDfg* ssDFG, Schedule* sched);
 
   bool _integrate_timing = true;
-  int _best_latmis, _best_lat, _best_violation;
+  //int _best_latmis, _best_lat, _best_violation;
   bool _strict_timing = true;
 
   std::string mapping_file{""};

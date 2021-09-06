@@ -3,8 +3,12 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <set>
+#include <ctpl_stl.h>
+
 
 #include <fstream>
+#include <sstream>
 #include <list>
 
 #include "dsa/core/singleton.h"
@@ -221,29 +225,39 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
   // 5. profit?
 
   is_dse = true;
+  int num_workers = dsa::ContextFlags::Global().num_schedule_workers;
+  ctpl::thread_pool workers(num_workers);
+  std::cout << "Workers: " << num_workers << std::endl;
 
-  int i = 0;
   for (WorkloadSchedules& ws : inst.workload_array) {
-    int j = 0;
     for (Schedule& sr : ws.sched_array) {
-      Schedule* sched = &sr;
+      workers.push([this, &sr](int id) {
+        Schedule* sched = &sr;
 
-      SchedStats s;
+        SchedStats s;
+        std::stringstream startStream;
+        startStream << "### Start Schedule (" << 
+          sched->ssdfg()->filename << "): (Thread " << id << ") ###"
+          << std::endl;
+        std::cout << startStream.str();
 
-      schedule(sched->ssdfg(), sched);
-      auto p = obj(sched, s);
-      cout << "### Schedule (" << sched->ssdfg()->filename << "): " << -p.second
-           << " ###\n";
-      ++j;
+        schedule(sched->ssdfg(), sched);
+        auto p = obj(sched, s);
+        
+        std::stringstream endStream;
+        endStream <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
+        << -p.second << " (Thread "<< id << ") ###" << std::endl;
+        std::cout << endStream.str();
+      });
     }
-    ++i;
   }
+  
+  workers.stop(true);
 
   return true;
 }
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
-  std::cout << "Start Schedule" << std::endl;
 
   initialize(ssDFG, sched);  // initialize if null, otherwise its fine
   auto pdgname = basename(ssDFG->filename);
@@ -264,8 +278,8 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
   int last_improvement_iter = 0;
 
-  _best_lat = MAX_ROUTE;
-  _best_violation = MAX_ROUTE;
+  //int _best_lat = MAX_ROUTE;
+  //int _best_violation = MAX_ROUTE;
 
   int presize = ssDFG->type_filter<dsa::dfg::Instruction>().size();
 
@@ -274,7 +288,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   int max_iters = dsa::ContextFlags::Global().max_iters;
   int timeout = dsa::ContextFlags::Global().timeout;
   bool verbose = dsa::ContextFlags::Global().verbose;
+
   for (iter = 0; iter < max_iters; ++iter) {
+
     // okay so new port has same name..
     // indirect_map_to_index.clear();
     if ((total_msec() > timeout * 1000) || _should_stop) {
@@ -289,6 +305,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     }
 
     int status = schedule_internal(ssDFG, cur_sched);
+    
     if (dsa::ContextFlags::Global().dummy && status) {
       *sched = *cur_sched;  // shallow copy of sched should work?
       return true;
@@ -322,10 +339,14 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       for (auto& elem : ssDFG->type_filter<dsa::dfg::InputPort>()) {
         std::cout << cur_sched->vecPortOf(&elem) << " ";
       }
+
       std::cout << "|";
       for (auto& elem : ssDFG->type_filter<dsa::dfg::OutputPort>()) {
         std::cout << cur_sched->vecPortOf(&elem) << " ";
       }
+
+
+      if (score > best_score) {
 
       fprintf(stdout,
               "Iter: %4d, time:%0.2f, kRPS:%0.1f, left: %3d, "
@@ -343,11 +364,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
               cur_sched->total_passthrough, cur_sched->num_links_mapped(),
               cur_sched->num_edge_links_mapped(), succeed_sched ? ", all mapped" : "",
               succeed_timing ? ", mismatch == 0" : "");
-      if (score > best_score) {
-        std::cout << std::endl;
-      } else {
-        std::cout.flush();
-        std::cout << "\r";
+          std::cout << std::endl;
       }
     }
 
@@ -380,9 +397,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   }
 
   if (verbose) {
-    std::cout << "Breaking at Iter " << iter
-              << ", candidates success / candidates tried:  " << this->candidates_succ
-              << "/" << this->candidates_tried << std::endl;
+    std::cout << "Breaking at Iter " << iter << std::endl;
+              //<< ", candidates success / candidates tried:  " << this->candidates_succ
+              //<< "/" << this->candidates_tried << std::endl;
   }
 
   if (cur_sched) {
@@ -595,7 +612,11 @@ int SchedulerSimulatedAnnealing::route(
 
   bool path_lengthen = ins_it != nullptr;
 
-  _ssModel->subModel()->clear_all_runtime_vals();
+  std::map<int,  std::vector<int>> node_dist;
+  std::map<int,  std::vector<int>> done;
+  std::map<int,  std::vector<std::pair<int, sslink*>>> came_from;
+
+  _ssModel->subModel()->initialize_runtime_vals(node_dist, done, came_from);
 
   if (!path_lengthen) ++routing_times;
 
@@ -617,9 +638,13 @@ int SchedulerSimulatedAnnealing::route(
   dest.first = edge->use()->slot_for_op(edge, dest.first);
 
   int new_rand_prio = 0;                                 // just pick zero
-  source.second->set_done(source.first, new_rand_prio);  // remeber for deleting
+  // source.second->set_done(source.first, new_rand_prio)
+  done[source.second->id()][source.first] = new_rand_prio;
   openset.emplace(0, new_rand_prio, source.first, source.second);
-  source.second->update_dist(source.first, 0, 0, nullptr);
+
+  // source.second->update_dist(source.first, 0, 0, nullptr);
+  node_dist[source.second->id()][source.first] = 0;
+  came_from[source.second->id()][source.first] = std::make_pair(0, nullptr);
 
   while (!openset.empty()) {
     int cur_dist = std::get<0>(*openset.begin());
@@ -667,32 +692,50 @@ int SchedulerSimulatedAnnealing::route(
 
         int new_dist = cur_dist + route_cost;
 
-        int next_dist = next->node_dist(next_slot);
+        // int next_dist = next->node_dist(next_slot);
+        int next_dist = node_dist[next->id()][next_slot];
 
         bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
 
         if (next_dist == -1 || next_dist > new_dist || over_ride) {
           if (next_dist != -1) {
-            int next_rand_prio = next->done(next_slot);
+            int next_rand_prio = done[next->id()][next_slot];
+
             auto iter =
                 openset.find(std::make_tuple(next_dist, next_rand_prio, next_slot, next));
             if (iter != openset.end()) openset.erase(iter);
           }
           int new_rand_prio = rand() % 16;
-          next->set_done(next_slot, new_rand_prio);  // remeber for later for deleting
+          // next->set_done(next_slot, new_rand_prio);
+          done[next->id()][next_slot] = new_rand_prio;
+
           openset.emplace(new_dist, new_rand_prio, next_slot, next);
-          next->update_dist(next_slot, new_dist, slot, next_link);
+          // next->update_dist(next_slot, new_dist, slot, next_link);
+
+          /*
+          void update_dist(int slot, int dist, int from_slot, sslink* from) {
+              _node_dist[slot] = dist;
+              _came_from[slot] = std::make_pair(from_slot, from);
+            }
+          */
+
+          node_dist[next->id()][next_slot] = new_dist;
+          came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
         }
       }
     }
   }
+  /*
+      (dest.second->node_dist(dest.first) == -1 ||
+      (path_lengthen && dest.second->node_dist(dest.first) == 0)
+  */
 
-  if (dest.second->node_dist(dest.first) == -1 ||
-      (path_lengthen && dest.second->node_dist(dest.first) == 0)) {
+  if (node_dist[dest.second->id()][dest.first] == -1 ||
+      (path_lengthen && node_dist[dest.second->id()][dest.first] == 0)) {
     return false;  // routing failed, no routes exist!
   }
 
-  auto it = ins_it ? *ins_it : sched->links_of(edge).begin();
+  //auto it = ins_it ? *ins_it : sched->links_of(edge).begin();
   auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
   auto x = dest;
 
@@ -702,7 +745,7 @@ int SchedulerSimulatedAnnealing::route(
 
   while (x != source || (path_lengthen && count == 0)) {
     count++;
-    link = x.second->came_from(x.first);
+    link = came_from[x.second->id()][x.first];
 
     auto link_backup = link;
 
@@ -711,6 +754,7 @@ int SchedulerSimulatedAnnealing::route(
     if ((alt_edge = sched->alt_edge_for_link(link, edge))) {
       break;
     }
+
     insert_edge(link, sched, edge, sched->links_of(edge).begin() + idx, dest, x);
 
     x = std::make_pair(link_backup.first, link.second->source());
@@ -729,7 +773,6 @@ int SchedulerSimulatedAnnealing::route(
       if (alt_link == link) break;  // we added the final link
     }
   }
-
   return count;
 }
 
@@ -833,7 +876,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
   int no_imporve = 0;
   // for all ports and instructions whose names are printed
   for (size_t i = 0; i < candidates.size(); ++i) {
-    ++candidates_tried;
+    //++candidates_tried;
     // maybe here, that it will access the next index now..
     DSA_LOG(MAP) << "Try: " << candidates[i].second->name() << " index into candidates: " << idx[i];
 
@@ -841,7 +884,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
     // Why did this chose the first one?? is it allocating ports on the first correct chosen?
     // Where is mutual exclusiveness?
     // TODO: scheduleHere seems to always return true (I don't know) // does this return false for ports that are already assigned?
-    bool isSameAsIndirectInput = true;
+    // bool isSameAsIndirectInput = true;
     /*std::cout << "Node name: " << node->name() << std::endl;
     if(node->indirect()) {
       int assigned_port = -1;
@@ -880,7 +923,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
     // if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
     if (scheduleHere(sched, node, candidates[idx[i]])) {
-      ++candidates_succ;
+      //++candidates_succ;
       DSA_LOG(MAP) << "succ!";
 
       SchedStats s;
@@ -903,7 +946,6 @@ int SchedulerSimulatedAnnealing::try_candidates(
       } else {
         ++no_imporve;
       }
-
       undo_path.apply(sched);  // revert to paths before creep-based path lengthening
       sched->unassign_dfgnode(node);
       if (no_imporve > 8) {

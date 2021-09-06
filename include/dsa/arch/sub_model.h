@@ -199,24 +199,6 @@ class ssnode {
   virtual void dumpIdentifier(ostream& os) = 0;
   virtual void dumpFeatures(ostream& os) = 0;
 
-  /*!
-   * \brief Scheduling runtime, for the purpose of routing.
-   */
-  int node_dist(int slot) { return _node_dist[slot]; }
-  std::pair<int, sslink*> came_from(int slot) { return _came_from[slot]; }
-  int done(int slot) { return _done[slot]; }
-  void set_done(int slot, int n) { _done[slot] = n; }
-  void update_dist_only(int slot, int dist) { _node_dist[slot] = dist; }
-  void update_dist(int slot, int dist, int from_slot, sslink* from) {
-    _node_dist[slot] = dist;
-    _came_from[slot] = std::make_pair(from_slot, from);
-  }
-  void reset_runtime_vals() {
-    memset(_node_dist, -1, sizeof _node_dist);
-    memset(_came_from, 0, sizeof _came_from);
-    memset(_done, 0, sizeof _done);
-  }
-
   bool is_shared() { return max_util_ > 1; }
 
   virtual ~ssnode() {}
@@ -261,11 +243,6 @@ class ssnode {
    * \brief The output, and input of this node.
    */
   std::vector<sslink*> links_[2];  // {output, input}
-
-  // TODO(@were): Separate this out.
-  int _node_dist[8];
-  int _done[8];
-  std::pair<int, sslink*> _came_from[8];
 
   friend class SpatialFabric;
   friend class sslink;

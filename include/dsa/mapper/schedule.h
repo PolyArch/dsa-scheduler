@@ -261,7 +261,7 @@ class Schedule {
       int last_slot = edge->bitwidth() / granularity;
       for (int i = 0; i < last_slot; ++i) {
         int slot_index = (link.first + i) % last_slot;
-        CHECK(slot_index >= 0 && slot_index < lp.slots.size());
+        CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
@@ -442,6 +442,7 @@ class Schedule {
 
   // Return an alternate link for an edge
   dsa::dfg::Edge* alt_edge_for_link(std::pair<int, sslink*> link, dsa::dfg::Edge* e) {
+    CHECK(link.second != nullptr) << "Alternate Edge for Link is null";
     auto& slots = _linkProp[link.second->id()].slots;
     int granularity = link.second->source()->granularity();
     for (auto it : slots[link.first].edges) {

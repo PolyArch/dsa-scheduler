@@ -26,6 +26,10 @@ struct ContextFlags {
    */
   int dse_timeout{-1};
   /*!
+  * \brief The number of workers on the schedule function.
+  */
+  int num_schedule_workers{1};
+  /*!
    * \brief If we want to dump the binary.
    */
   bool bitstream{false};

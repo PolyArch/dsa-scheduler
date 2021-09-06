@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
   auto default_20000 = cxxopts::value<int>()->default_value("20000");
   auto default_string = cxxopts::value<std::string>();
   auto default_neg_1 = cxxopts::value<int>()->default_value("-1");
+  auto default_1 = cxxopts::value<int>()->default_value("1");
 
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.", default_false)
@@ -41,12 +42,14 @@ int main(int argc, char* argv[]) {
     ("x,design-explore", "Design space exploration for the given DFG's.", default_false)
     ("r,tolerate-unuse", "Do not throw an error if there are unused values", default_false)
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", default_false)
-    ("fpga", "Design space exploration for FPGA overlay.", default_false)
+    ("f,fpga", "Design space exploration for FPGA overlay.", default_false)
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", default_24_36)
     ("m,max-iters", "The maxium iterations of scheduling attemps.", default_20000)
     ("e,seed", "The seed of randomization.", cxxopts::value<int>())
     ("dse-timeout", "The timeout cut-off for design space exploration.", default_neg_1)
+    ("w,sched-workers", "The number of workers for scheduling.", default_1)
     ("h,help", "Print the help information.");
+  
   options.allow_unrecognised_options();
   options.custom_help(
     "[adg] [dfg] [Options...] # Schedule the DFG\n"

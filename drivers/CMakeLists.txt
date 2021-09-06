@@ -1,6 +1,3 @@
-message(WARNING ${TORCH_LIBRARIES})
-message(WARNING ${CMAKE_PREFIX_PATH}/include/torch/csrc/api/include)
-
 add_executable(ss_sched ss_sched.cpp)
 target_include_directories(ss_sched PRIVATE
   ${CMAKE_SOURCE_DIR}/src

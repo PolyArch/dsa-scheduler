@@ -30,7 +30,7 @@ endif()
 
 # Debug/Release
 #set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g")
-#set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O3")
+set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()
@@ -82,6 +82,7 @@ add_library(dsa
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/3rd-party/cxxopts/include
+  ${CMAKE_SOURCE_DIR}/3rd-party/cptl/
   ${CMAKE_SOURCE_DIR}/3rd-party/libtorch/include/torch/csrc/api/include
   ${CMAKE_INSTALL_PREFIX}/include
   )

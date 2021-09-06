@@ -154,7 +154,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
     if (spots.empty()) {
       spots = bad;
-      std::cerr << "Warning: " << input->phys_bitwidth() << "-wide input port insufficient!";
+      std::cerr << "Warning: " << input->phys_bitwidth() << "-wide input port insufficient!" << std::endl;
     }
     cnt[input->id()] = spots.size();
   }

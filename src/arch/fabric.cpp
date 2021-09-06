@@ -299,9 +299,11 @@ void SpatialFabric::Apply(adg::Visitor* visitor) {
   }
 }
 
-void SpatialFabric::clear_all_runtime_vals() {
+void SpatialFabric::initialize_runtime_vals(std::map<int,  std::vector<int>>& node_dist, std::map<int,  std::vector<int>>& done, std::map<int,  std::vector<std::pair<int, sslink*>>> & came_from) {
   for (ssnode* n : _node_list) {
-    n->reset_runtime_vals();
+    node_dist[n->id()] = std::vector<int>(8, -1);
+    came_from[n->id()] = std::vector<std::pair<int, sslink*>>(8);
+    done[n->id()] = std::vector<int>(8, 0);
   }
 }
 

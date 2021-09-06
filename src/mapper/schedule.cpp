@@ -708,7 +708,7 @@ double Schedule::estimated_performance() {
 
   double memory_bw = 64 * this->ssModel()->io_ports;
   std::vector<double> bw_coef(dfg->meta.size(), 1.0);
-  for (int i = 0; i < dfg->meta.size(); ++i) {
+  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
     for (int j = 0; j < 2; ++j) {
       // std::cout << "memory bandwidth: " << memory_bw << " ? " << bw[i][j] << std::endl;
       if (bw[i][j] > memory_bw) {
@@ -722,7 +722,7 @@ double Schedule::estimated_performance() {
     nmlz_freq.push_back(dfg->meta[i].frequency);
   }
   double nmlz = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
-  for (int i = 0; i < dfg->meta.size(); ++i) {
+  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
     nmlz_freq[i] /= nmlz;
   }
 
@@ -741,7 +741,7 @@ double Schedule::estimated_performance() {
 
   double overall = 0.0;
 
-  for (int i = 0; i < dfg->meta.size(); ++i) {
+  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
     double v =
         std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
     DSA_LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->meta[i].frequency

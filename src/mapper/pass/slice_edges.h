@@ -43,7 +43,7 @@ void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
 
 inline void SliceOverlappedEdges(SSDfg* dfg) {
   auto& edges = dfg->edges;
-  auto& nodes = dfg->nodes;
+  //auto& nodes = dfg->nodes;
   for (int i = 0, n = edges.size(); i < n; ++i) {
     for (int j = i + 1; j < n; ++j) {
       if (edges[i].sid == edges[j].sid && edges[j].vid == edges[j].vid) {

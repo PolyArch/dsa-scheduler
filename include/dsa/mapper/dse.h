@@ -621,7 +621,9 @@ class CodesignInstance {
               (s.max_util - 1) * 3000 + sched->total_passthrough;
     obj = obj * 100 + sched->num_links_mapped();
 
-    int max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
+    int max_delay = 1;
+    if (sched->ssModel()->subModel()->fu_list().size() > 0)
+      max_delay = sched->ssModel()->subModel()->fu_list()[0]->delay_fifo_depth();
     double performance = sched->estimated_performance();
     
     if (succeed_sched) {
