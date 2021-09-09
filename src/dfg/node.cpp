@@ -134,12 +134,12 @@ dsa::dfg::Node* Value::node() const { return parent->nodes[nid]; }
 
 void Value::push(uint64_t val, bool valid, int delay) {
   // TODO: Support FIFO length backpressure.
-  fifo.push(simulation::Data(parent->cur_cycle() + delay, val, valid));
+  fifo.push(sim::SpatialPacket(parent->cur_cycle() + delay, val, valid));
 }
 
 bool Value::forward(bool attempt) {
   if (fifo.empty()) return false;
-  simulation::Data data(fifo.front());
+  sim::SpatialPacket data(fifo.front());
   for (auto uid : uses) {
     int j = 0;
     auto* user = &parent->edges[uid];
@@ -151,7 +151,7 @@ bool Value::forward(bool attempt) {
           if ((int)operand.fifos[i].size() + 1 < edge->buf_len
               /*FIXME: The buffer size should be something more serious*/) {
             if (!attempt) {
-              simulation::Data entry(parent->cur_cycle() + edge->delay, data.value,
+              sim::SpatialPacket entry(parent->cur_cycle() + edge->delay, data.value,
                                      data.valid);
               DSA_LOG(FORWARD) << parent->cur_cycle() << ": " << name() << " pushes "
                            << data.value << "(" << data.valid << ")"

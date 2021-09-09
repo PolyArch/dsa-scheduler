@@ -58,12 +58,13 @@ struct Exporter : Visitor {
     Visit(static_cast<Node*>(inst));
   }
   void Visit(InputPort* in) override {
-    current["width"] = in->get_port_width();
+    current["width"] = in->bitwidth();
     current["length"] = in->get_vp_len();
+    current["tag"] = in->tagged;
     Visit(static_cast<Node*>(in));
   }
   void Visit(OutputPort* out) override {
-    current["width"] = out->get_port_width();
+    current["width"] = out->bitwidth();
     current["length"] = out->get_vp_len();
     Visit(static_cast<Node*>(out));
   }
@@ -311,8 +312,9 @@ SSDfg* Import(const std::string& s) {
       if (node.isMember("width")) {
         int length = node["length"].asInt();
         int width = node["width"].asInt();
+        bool tag = node["tag"].asBool();
         if (inputs.empty()) {
-          res->emplace_back<InputPort>(length, width, name, res, meta);
+          res->emplace_back<InputPort>(length, width, name, res, meta, tag);
         } else {
           res->emplace_back<OutputPort>(length, width, name, res, meta);
         }

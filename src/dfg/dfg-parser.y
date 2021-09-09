@@ -19,6 +19,14 @@ using ValueEntry = dsa::dfg::ValueEntry;
 using NodeEntry = dsa::dfg::NodeEntry;
 using EdgeType = dsa::dfg::OperandType;
 
+struct IODef {
+  std::string name;
+  int length;
+  bool isTagged;
+  IODef(const std::string &n, int l, bool t) :
+    isTagged(t), name(n), length(l) {}
+};
+
 }
 
 %{
@@ -52,7 +60,7 @@ static void yyerror(parse_param*, const char *);
   double d;
 
   std::string* s;
-  io_pair_t* io_pair;
+  IODef* io;
   map_pair_t* map_pair;
   std::vector<ParseResult*> *sym_vec;
   dsa::dfg::ParseResult *sym_ent;
@@ -72,7 +80,7 @@ static void yyerror(parse_param*, const char *);
 %token<d> F_CONST
 %token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP TASKPROP
 
-%type <io_pair> io_def
+%type <io> io_def
 %type <map_vec> map_def
 %type <map_id> task_map_id_def
 %type <sym_vec> arg_list
@@ -92,13 +100,14 @@ statement_list: statement
 	            | statement_list statement;
 
 statement: INPUT ':' io_def  eol {
-  CHECK(!p->symbols.Has($3->first)) << "Already has the symbol " << $3->first;
-  auto name = $3->first;
-  int len = $3->second;
+  auto name = $3->name;
+  CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
+  int len = $3->length;
+  bool tagged = $3->isTagged;
   int width = $1;
   int n = std::max(1, len);
   int slice = 64 / width;
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, tagged);
   int left_len = 0;
   // printf("n: , slice: %d %d", n, slice);
   for (int i = 0, cnt = 0; i < n; i += slice) {
@@ -117,12 +126,16 @@ statement: INPUT ':' io_def  eol {
     }
   }
   p->meta.clear();
+  if (tagged) {
+    p->symbols.Set(name + "Tag", new ValueEntry(p->dfg->vins.back().id(), n, 0, width - 1));
+  }
   delete $3;
 }
 | OUTPUT ':' io_def eol {
+  CHECK(!$3->isTagged) << "An output cannot be tagged!";
   using T = dsa::dfg::OutputPort;
-  auto name = $3->first;
-  int len = $3->second;
+  auto name = $3->name;
+  int len = $3->length;
   int width = $1;
   int n = std::max(1, len);
   int slice = 64 / width;
@@ -170,14 +183,14 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | INDIRECT ':' io_def eol { // create 1 input, 1 output and edge
-  auto name = $3->first;
-  int len = $3->second;
+  auto name = $3->name;
+  int len = $3->length;
   int width = $1;
   int n = std::max(1, len);
   int slice = 64 / width;
   
   // add input/output ports
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta); //, true);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, false);
   p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta);
   //, true);
   
@@ -285,13 +298,24 @@ eol : ';'
 
 // Input: A[8]
 io_def: IDENT {
-  $$ = new io_pair_t(*$1,0);
+  $$ = new IODef(*$1, 0, false);
   delete $1;
 }
 | IDENT '[' I_CONST ']' {
-    $$ = new io_pair_t(*$1,$3);
-    delete $1;
-};
+  $$ = new IODef(*$1, $3, false);
+  delete $1;
+}
+| IDENT IDENT {
+  CHECK(*$2 == "Tagged") << "Tagged expected";
+  $$ = new IODef(*$1, 0, true);
+  delete $1;
+}
+| IDENT '[' I_CONST ']' IDENT {
+  CHECK(*$5 == "Tagged") << "Tagged expected";
+  $$ = new IODef(*$1, $3, true);
+  delete $1;
+}
+;
 
 task_map_id_def: I_CONST ':' I_CONST {
   $$ = new map_id_t($1, $3);

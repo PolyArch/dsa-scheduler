@@ -468,9 +468,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
         // no need to call the function below
         // FIXME: @vidushi: this works but I am not sure when we should clear... it delays convergence..
         if (0) { // indirect_map_to_index.find(node->name())!=indirect_map_to_index.end()) {
-          // std::cout << "Already seen map for: " << node->name() << std::endl;
           auto it = indirect_map_to_index.find(node->name());
-          // std::cout << "name: " << node->name() << " already to the node with id: " << it->second.second->id() << std::endl;
           sched->assign_node(node, it->second);
         } else {
           int best_candidate = try_candidates(candidates, sched, node);
@@ -793,27 +791,28 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
   }*/
   std::vector<dsa::dfg::Edge*> to_revert;
 
-#define process(edge_, node_, src, dest)                                           \
-  do {                                                                             \
-    auto& edges = edge_;                                                           \
-    int n = edge_.size();                                                          \
-    for (int i = 0; i < n; ++i) {                                                  \
-      auto edge = edges[i];                                                        \
-      CHECK(sched->link_count(edge) == 0)                                          \
-          << "Edge: " << edge->name() << " is already routed!\n";                  \
-      auto node = edge->node_();                                                   \
-      if (sched->is_scheduled(node)) {                                             \
-        auto loc = sched->location_of(node);                                       \
-        if (!route(sched, edge, src, dest, nullptr, 0)) {                          \
-          DSA_LOG(ROUTE) << "Cannot route " << edge->name() << " " << src.second->id() \
-                     << " -> " << dest.second->id() << ":"                         \
-                     << sched->distances[src.second->id()][dest.second->id()];     \
-          for (auto revert : to_revert) sched->unassign_edge(revert);              \
-          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);              \
-          return false;                                                            \
-        }                                                                          \
-      }                                                                            \
-    }                                                                              \
+#define process(edge_, node_, src, dest)                                  \
+  do {                                                                    \
+    auto& edges = edge_;                                                  \
+    int n = edge_.size();                                                 \
+    for (int i = 0; i < n; ++i) {                                         \
+      auto edge = edges[i];                                               \
+      CHECK(sched->link_count(edge) == 0)                                 \
+          << "Edge: " << edge->name() << " is already routed!\n";         \
+      auto node = edge->node_();                                          \
+      if (sched->is_scheduled(node)) {                                    \
+        auto loc = sched->location_of(node);                              \
+        if (!route(sched, edge, src, dest, nullptr, 0)) {                 \
+          DSA_LOG(ROUTE)                                                  \
+            << "Cannot route " << edge->name() << " " << src.second->id() \
+            << " -> " << dest.second->id() << ":"                         \
+            << sched->distances[src.second->id()][dest.second->id()];     \
+          for (auto revert : to_revert) sched->unassign_edge(revert);     \
+          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);     \
+          return false;                                                   \
+        }                                                                 \
+      }                                                                   \
+    }                                                                     \
   } while (false)
 
   process(sched->operands[node->id()], def, loc, here);

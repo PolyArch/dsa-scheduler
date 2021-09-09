@@ -37,7 +37,7 @@ struct Value {
   Node* node() const;
 
   // @{
-  std::queue<dsa::simulation::Data> fifo;
+  std::queue<dsa::sim::SpatialPacket> fifo;
   void push(uint64_t value, bool valid, int delay);
   bool forward(bool attempt);
   // @}
@@ -98,7 +98,7 @@ struct Operand {
   // @{
   // bool valid();
 
-  std::vector<std::queue<simulation::Data>> fifos;
+  std::vector<std::queue<sim::SpatialPacket>> fifos;
 
   bool ready();
 

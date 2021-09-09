@@ -25,11 +25,7 @@ class VectorPort : public Node {
   VectorPort(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
              const MetaPort& meta);
 
-  virtual void Accept(Visitor*);
-
-  void set_port_width(int n) { _port_width = n; }
-
-  int get_port_width() { return _port_width; }
+  virtual void Accept(Visitor*) override;
 
   void set_vp_len(int n) { _vp_len = n; }
 
@@ -43,13 +39,17 @@ class VectorPort : public Node {
 
   virtual std::string name() override { return _name; }
 
-  virtual int bitwidth() override { return _bitwidth; }
+  /*!
+   * \brief The scalar bitwidth.
+   */
+  int bitwidth() override { return _bitwidth; }
 
-  int phys_bitwidth() { return is_temporal() ? 64 : (values.size() * bitwidth()); }
+  virtual int phys_bitwidth() {
+    return is_temporal() ? 64 : (values.size() * bitwidth());
+  }
 
  protected:
   int _bitwidth;  // element bitwidth
-  int _port_width;
   int _vp_len;
   bool _indirect=false;
 
@@ -59,6 +59,7 @@ class VectorPort : public Node {
 
 class InputPort : public VectorPort {
  public:
+  bool tagged{false};
   static std::string Suffix() { return ""; }
   static bool IsInput() { return true; }
 
@@ -69,7 +70,11 @@ class InputPort : public VectorPort {
   InputPort() {}
 
   InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
-            const MetaPort& meta);
+            const MetaPort& meta, bool tagged);
+
+  int phys_bitwidth() override {
+    return VectorPort::phys_bitwidth() - tagged * bitwidth();
+  }
 
   int current_{0};
   void forward() override;

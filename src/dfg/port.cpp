@@ -35,15 +35,13 @@ CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
 
 VectorPort::VectorPort(V_TYPE v, int len, int bitwidth, const std::string& name,
                        SSDfg* ssdfg, const MetaPort& meta_)
-    : Node(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {
-  _port_width = _bitwidth;
-}
+    : Node(ssdfg, v, name), _bitwidth(bitwidth), _vp_len(len), meta(meta_, this) {}
 
 InputPort::InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
-                     const dsa::dfg::MetaPort& meta)
-    : VectorPort(V_INPUT, len, width, name, ssdfg, meta) {
+                     const dsa::dfg::MetaPort& meta, bool tagged_)
+    : VectorPort(V_INPUT, len, width, name, ssdfg, meta), tagged(tagged_) {
   int n = std::max(1, len / (64 / width));
-  for (int i = 0; i < n; ++i) {
+  for (int i = 0; i < n + tagged_; ++i) {
     values.emplace_back(ssdfg, id(), i);
   }
 }
