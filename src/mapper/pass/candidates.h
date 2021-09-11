@@ -80,7 +80,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
         std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
   }
 
-  void Visit(dfg::Operation* op) {
+  void Visit(dfg::Operation* op) override {
     auto fabric = sched->ssModel()->subModel();
     for (int i = 0, n = fabric->fu_list().size(); i < n; ++i) {
       auto* fu = fabric->fu_list()[i];
@@ -144,17 +144,17 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
-      if ((int)cand->bitwidth_capability() >= input->phys_bitwidth()) {
+      if ((int)cand->bitwidth_capability() >= input->bandwidth()) {
         if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.push_back(make_pair(0, cand));
+          spots.push_back(std::make_pair(0, cand));
         } else {
-          bad.push_back(make_pair(0, cand));
+          bad.push_back(std::make_pair(0, cand));
         }
       }
     }
     if (spots.empty()) {
       spots = bad;
-      std::cerr << "Warning: " << input->phys_bitwidth() << "-wide input port insufficient!" << std::endl;
+      DSA_WARNING << input->bandwidth() << "-wide input port insufficient!";
     }
     cnt[input->id()] = spots.size();
   }
@@ -169,17 +169,17 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
-      if ((int)cand->bitwidth_capability() >= output->phys_bitwidth()) {
+      if ((int)cand->bitwidth_capability() >= output->bandwidth()) {
         if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.push_back(make_pair(0, cand));
+          spots.push_back(std::make_pair(0, cand));
         } else {
-          bad.push_back(make_pair(0, cand));
+          bad.push_back(std::make_pair(0, cand));
         }
       }
     }
     if (spots.empty()) {
       spots = bad;
-      std::cerr << "Warning: " << output->phys_bitwidth() << "-wide output port insufficient!";
+      DSA_WARNING << output->bandwidth() << "-wide output port insufficient!";
     }
     cnt[output->id()] = spots.size();
   }

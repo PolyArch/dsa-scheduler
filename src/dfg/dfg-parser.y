@@ -106,28 +106,19 @@ statement: INPUT ':' io_def  eol {
   bool tagged = $3->isTagged;
   int width = $1;
   int n = std::max(1, len);
-  int slice = 64 / width;
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, tagged);
-  int left_len = 0;
-  // printf("n: , slice: %d %d", n, slice);
-  for (int i = 0, cnt = 0; i < n; i += slice) {
-    left_len = slice;
-    if (n - i > 0) {
-      left_len = std::min(n - i, slice);
-    }
-    // printf("left_len: , width: %d %d", left_len, width);
-    // for each len and width, create a symbol or a new vins
-    for (int j = 0; j < left_len * width; j += width) {
-      std::stringstream ss;
-      ss << name;
-      if (len) ss << cnt++;
-      // TODO(@were): Do I need to modularize these two clean up segment?
-      p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i, j, j + width - 1));
-    }
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
+  for (int i = 0, cnt = 0; i < n; ++i) {
+    std::stringstream ss;
+    ss << name;
+    if (len) ss << cnt++;
+    // TODO(@were): Do I need to modularize these two clean up segment?
+    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i, 0, width - 1));
   }
   p->meta.clear();
   if (tagged) {
-    p->symbols.Set(name + "Tag", new ValueEntry(p->dfg->vins.back().id(), n, 0, width - 1));
+    p->dfg->vins.back().tid = p->dfg->nodes.size();
+    p->dfg->emplace_back<dsa::dfg::InputPort>(/*VecLanes*/1, /*Scalar Type*/8, /*Name*/name + "Tag", p->dfg, p->meta);
+    p->symbols.Set(name + "Tag", new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
   }
   delete $3;
 }
@@ -138,45 +129,35 @@ statement: INPUT ':' io_def  eol {
   int len = $3->length;
   int width = $1;
   int n = std::max(1, len);
-  int slice = 64 / width;
-  // int t = ceil(n / float(slice)); -- FIXME: do we need this?
   // I think it's somewhat likely i am breaking decomposability
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
   int left_len = 0;
-  // printf("n: , slice: %d %d", n, slice);
-  for (int i = 0, cnt = 0; i < n; i += slice) {
-    left_len = slice;
-    if (n - i > 0) {
-      left_len = std::min(n - i, slice);
-    }
-    // printf("left_len: , width: %d %d", left_len, width);
-    for (int j = 0; j < left_len * width; j += width) {
-      std::stringstream ss;
-      ss << name;
-      // at output, we make the connectivity because the previous edge would already be there..
-      if (len) ss << cnt++;
-      // TODO(@were): Do I need to modularize these two clean up segment?
-      auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
-      if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
-        int num_entries = ce->entries.size();
-        CHECK(num_entries > 0 && num_entries <= 16);
-        std::vector<int> es;
-        for (auto elem : ce->entries) {
-          // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
-          p->dfg->edges.emplace_back(
-            p->dfg, elem->nid, elem->vid,
-            p->dfg->vouts.back().id(), elem->l, elem->r);
-          es.push_back(p->dfg->edges.back().id);
-        }
-        p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
-      } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
-        DSA_LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
+  for (int i = 0, cnt = 0; i < n; ++i) {
+    std::stringstream ss;
+    ss << name;
+    // at output, we make the connectivity because the previous edge would already be there..
+    if (len) ss << cnt++;
+    // TODO(@were): Do I need to modularize these two clean up segment?
+    auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
+    if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
+      int num_entries = ce->entries.size();
+      CHECK(num_entries > 0 && num_entries <= 16);
+      std::vector<int> es;
+      for (auto elem : ce->entries) {
+        // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
         p->dfg->edges.emplace_back(
-          p->dfg, ve->nid, ve->vid,
-          p->dfg->vouts.back().id(), ve->l, ve->r);
-        std::vector<int> es{p->dfg->edges.back().id};
-        p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+          p->dfg, elem->nid, elem->vid,
+          p->dfg->vouts.back().id(), elem->l, elem->r);
+        es.push_back(p->dfg->edges.back().id);
       }
+      p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+    } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
+      DSA_LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
+      p->dfg->edges.emplace_back(
+        p->dfg, ve->nid, ve->vid,
+        p->dfg->vouts.back().id(), ve->l, ve->r);
+      std::vector<int> es{p->dfg->edges.back().id};
+      p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
     }
   }
   p->meta.clear();
@@ -190,7 +171,7 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   
   // add input/output ports
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, false);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
   p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta);
   //, true);
   

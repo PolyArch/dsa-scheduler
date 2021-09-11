@@ -20,14 +20,14 @@ OperandType Str2Flag(const std::string& s) {
 }
 
 ControlEntry::ControlEntry(const std::string& s, ParseResult* controller_)
-    : controller(controller_), bits(0) {
+    : controller(controller_), raw() {
   flag = Str2Flag(s);
 }
 
 ControlEntry::ControlEntry(const std::string& s,
                            std::map<int, std::vector<std::string>>& bits_,
                            ParseResult* controller_)
-    : controller(controller_), bits(CtrlBits(bits_).bits()) {
+    : controller(controller_), raw(bits_) {
   flag = Str2Flag(s);
 }
 
@@ -72,12 +72,12 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       if (ce->controller) {
         auto ne = dynamic_cast<ValueEntry*>(ce->controller);
         dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
-        inst->predicate = ce->bits;
+        inst->predicate = CtrlBits(ce->raw);
         std::vector<int> es{dfg->edges.back().id};
         inst->ops().emplace_back(dfg, es, ce->flag);
       } else {
         // Self control
-        inst->self_predicate = ce->bits;
+        inst->self_predicate = CtrlBits(ce->raw);
       }
     } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);

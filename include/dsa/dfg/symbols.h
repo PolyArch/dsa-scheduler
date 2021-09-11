@@ -99,7 +99,7 @@ struct ControlEntry : ParseResult {
 
   OperandType flag;
   ParseResult* controller;
-  uint64_t bits;
+  std::map<int, std::vector<std::string>> raw;
 };
 
 

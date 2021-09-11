@@ -26,7 +26,6 @@ struct Value {
    * \param parent The DFG it belongs to.
    * \param nid The IR node it belongs to.
    * \brief The value index in the node to which this value belongs.
-   * \param bitwidth The bitwidth of this value.
    */
   Value(SSDfg* parent, int nid, int index) : parent(parent), nid(nid), index(index) {}
 

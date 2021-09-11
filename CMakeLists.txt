@@ -30,7 +30,6 @@ endif()
 
 # Debug/Release
 #set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g")
-set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions("DEBUG_MODE")
 endif()

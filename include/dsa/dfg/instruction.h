@@ -51,32 +51,39 @@ struct CtrlBits {
    */
   CtrlBits(const std::map<int, std::vector<std::string>>& raw);
 
+
   /*!
-   * \brief Construct a new CtrlBits object with an existing LUT buffer.
-   * \param mask_ The LUT buffer.
+   * \brief Decode the format from json serialization.
    */
-  CtrlBits(uint64_t mask_) : mask(mask_) {}
+  CtrlBits(const std::vector<int> &v);
+
+  /*!
+   * \brief Assignment constructor.
+   */
+  CtrlBits &operator=(const CtrlBits &b) { lut = b.lut; return *this; }
+
+
+  /*!
+   * \brief Dump textformat for debugging.
+   */
+  std::string toString() const;
+
+  /*!
+   * \brief Encode this map lut in a vector for serialization.
+   */
+  std::vector<int> encode();
 
   /*! \brief Construct an empty CtrlBits object. */
-  CtrlBits() : mask(0) {}
+  CtrlBits() {}
 
-  void set(uint64_t val, Control b);
-  bool test(uint64_t val, Control b);
   void test(uint64_t val, Behavior &b);
-  CtrlBits& operator=(const CtrlBits& b) {
-    mask = b.mask;
-    const_cast<bool&>(is_dynamic) = b.is_dynamic;
-    return *this;
-  }
-
-  uint64_t bits() { return mask; }
 
   bool needs_ctrl_dep() { return is_dynamic; }
 
   const bool is_dynamic{false};
 
  private:
-  uint64_t mask{0};
+  std::map<int, std::vector<Control>> lut;
 
   static Control str_to_enum(const std::string& s) {
     if (s == "b1") return B1;

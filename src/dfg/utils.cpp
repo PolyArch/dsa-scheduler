@@ -1,5 +1,6 @@
 #include "dsa/dfg/utils.h"
 
+#include <algorithm>
 #include <fstream>
 #include <string>
 
@@ -53,19 +54,24 @@ struct Exporter : Visitor {
     int opcode = inst->inst();
     current["op"] = inst->inst();
     current["inst"] = name_of_inst(inst->inst());
-    current["ctrl"] = inst->predicate.bits();
-    current["self"] = inst->self_predicate.bits();
+    auto f = [](const std::vector<int> &a) {
+      Json::Value res(Json::ValueType::arrayValue);
+      for (auto &elem : a) { res.append(elem); }
+      return res;
+    };
+    current["ctrl"] = f(inst->predicate.encode());
+    current["self"] = f(inst->self_predicate.encode());
     Visit(static_cast<Node*>(inst));
   }
   void Visit(InputPort* in) override {
     current["width"] = in->bitwidth();
-    current["length"] = in->get_vp_len();
-    current["tag"] = in->tagged;
+    current["tid"] = in->tid;
+    current["lanes"] = in->vectorLanes();
     Visit(static_cast<Node*>(in));
   }
   void Visit(OutputPort* out) override {
     current["width"] = out->bitwidth();
-    current["length"] = out->get_vp_len();
+    current["lanes"] = out->vectorLanes();
     Visit(static_cast<Node*>(out));
   }
 };
@@ -310,11 +316,11 @@ SSDfg* Import(const std::string& s) {
         last_group = group_id;
       }
       if (node.isMember("width")) {
-        int length = node["length"].asInt();
+        int length = node["lanes"].asInt();
         int width = node["width"].asInt();
-        bool tag = node["tag"].asBool();
         if (inputs.empty()) {
-          res->emplace_back<InputPort>(length, width, name, res, meta, tag);
+          res->emplace_back<InputPort>(length, width, name, res, meta);
+          res->vins.back().tid = node["tid"].asInt();
         } else {
           res->emplace_back<OutputPort>(length, width, name, res, meta);
         }
@@ -325,13 +331,19 @@ SSDfg* Import(const std::string& s) {
         auto opname = node["inst"].asString();
         CHECK(std::string(name_of_inst(inst.inst())) == opname)
             << name_of_inst(inst.inst()) << " != " << opname;
-        if (node.get("ctrl", -1).asInt() != -1) {
-          uint64_t ctrl = node["ctrl"].asInt();
-          inst.predicate = CtrlBits(ctrl);
+        auto f = [](Json::Value &v) {
+          CHECK(v.isArray()) << v;
+          std::vector<int> res;
+          for (auto &elem : v) {
+            res.push_back(elem.asInt());
+          }
+          return res;
+        };
+        if (node.isMember("ctrl")) {
+          inst.predicate = CtrlBits(f(node["ctrl"]));
         }
         if (node.isMember("self")) {
-          uint64_t self = node["self"].asInt();
-          inst.self_predicate = CtrlBits(self);
+          inst.self_predicate = CtrlBits(f(node["self"]));
         }
       }
       auto &operands = node["inputs"];

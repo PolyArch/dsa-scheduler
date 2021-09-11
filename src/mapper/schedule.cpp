@@ -687,7 +687,7 @@ double Schedule::estimated_performance() {
     if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&
         elem.meta.source != dsa::dfg::MetaPort::Data::Unknown) {
       bw[elem.group_id()][elem.meta.source == dsa::dfg::MetaPort::Data::SPad] +=
-          (double) elem.get_vp_len() * elem.bitwidth() / 8;
+          (double) elem.vectorLanes() * elem.bitwidth() / 8;
     } else if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndRead & 1) ||
                (elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndWrite) & 1) {
       if (this->ssModel()->indirect() < 1) {

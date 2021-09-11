@@ -26,7 +26,6 @@
 #include "dsa-ext/spec.h"
 
 
-using dsa::SpatialFabric;
 
 // Feature Possibilities
 // 1. Commutative Instruction Groups.  Be able to mark a group of instructions as
@@ -76,12 +75,6 @@ struct MetaDfg {
    * \brief The relative execution frequency.
    */
   int64_t frequency{1};
-
-  void reset_regs() {
-    /*for(unsigned i=0; i<_reg.size(); ++i) {
-      _reg[i]=0;
-    }*/
-  }
   /*!
    * \brief The unrolling degree of this block
    */
@@ -107,9 +100,6 @@ class SSDfg {
 
   /*! \brief Parse a DFG from the given file. */
   SSDfg(std::string filename);
-
-  /*! \brief Reset registers in the dfg instructions. */
-  void reset_dfg();
 
   /*! \brief The entrance for the visitor pattern. */
   void Apply(dsa::dfg::Visitor*);
@@ -157,18 +147,6 @@ class SSDfg {
   void clear_issued() { memset(dyn_issued, 0, sizeof dyn_issued); }
 
   uint64_t cur_cycle() { return _cur_cycle; }
-
-  /*void insert_port_mapping(std::string name, SSDfgVec* vector_port) {
-    auto it = _map_name_port.find(name);
-    assert(it==_map_name_port.end() && "same port should not come again");
-    _map_name_port.insert(std::make_pair(name, vector_port));
-  }
-
-  SSDfgVec* get_port_mapping(std::string &name) {
-    auto it = _map_name_port.find(name);
-    assert(it!=_map_name_port.end());
-    return it->second;
-  }*/
 
   std::string get_task_dep_charac(int i) {
     return _default_task_dep_characs[i].first;

@@ -27,8 +27,8 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
     void Visit(dfg::Instruction* node) {
       inst_required[{node->inst(), (int)node->is_temporal()}]++;
     }
-    void Visit(dfg::InputPort* vec) { ports[1].push_back(vec->phys_bitwidth()); }
-    void Visit(dfg::OutputPort* vec) { ports[0].push_back(vec->phys_bitwidth()); }
+    void Visit(dfg::InputPort* vec) { ports[1].push_back(vec->bandwidth()); }
+    void Visit(dfg::OutputPort* vec) { ports[0].push_back(vec->bandwidth()); }
   };
 
   struct SpatialCounter : dsa::adg::Visitor {

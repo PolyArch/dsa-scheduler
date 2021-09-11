@@ -1,4 +1,5 @@
 #include "dsa/dfg/instruction.h"
+#include <vector>
 
 #include "../utils/vector_utils.h"
 #include "dsa/dfg/ssdfg.h"
@@ -6,36 +7,80 @@
 namespace dsa {
 namespace dfg {
 
-void CtrlBits::set(uint64_t val, Control b) {
-  if (b == CtrlBits::B1 || b == CtrlBits::B2) {
-    const_cast<bool&>(is_dynamic) = true;
-  }
-
-  int loc = val * Total + b;
-  CHECK(loc >= 0 && loc < 64) << val << " * Total + " << b << " = " << loc;
-  mask |= (1 << loc);
-}
-
-bool CtrlBits::test(uint64_t val, Control b) {
-  int loc = val * Total + b;
-  CHECK(loc >= 0 && loc < 64) << val << " * Total + " << b << " = " << loc;
-  return (mask >> loc) & 1;
-}
-
 void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {
-  if (!mask) return;
-  b.backpressure[0] = b.backpressure[0] || test(val, CtrlBits::B1);
-  b.backpressure[1] = b.backpressure[1] || test(val, CtrlBits::B2);
-  b.discard = b.discard || test(val, CtrlBits::Discard);
-  b.exec = b.exec && !(test(val, CtrlBits::Abstain));
-  b.reset = b.reset || test(val, CtrlBits::Reset);
-  b.write = b.write || test(val, CtrlBits::Write);
+  auto iter = lut.find(val);
+  if (iter == lut.end()) return;
+  auto f = [iter](CtrlBits::Control cc) {
+    auto enum_iter = std::find(iter->second.begin(), iter->second.end(), cc);
+    return enum_iter != iter->second.end();
+  };
+  b.backpressure[0] = b.backpressure[0] || f(CtrlBits::B1);
+  b.backpressure[1] = b.backpressure[1] || f(CtrlBits::B2);
+  b.discard = b.discard || f(CtrlBits::Discard);
+  b.exec = b.exec && !f(CtrlBits::Abstain);
+  b.reset = b.reset || f(CtrlBits::Reset);
+  b.write = b.write || f(CtrlBits::Write);
 }
 
+std::vector<int> CtrlBits::encode() {
+  std::vector<int> res;
+  for (auto &elem : lut) {
+    res.push_back(elem.first);
+    int v = 0;
+    for (auto &c : elem.second) {
+      v |= 1 << c;
+    }
+    res.push_back(v);
+  }
+  return res;
+}
+
+CtrlBits::CtrlBits(const std::vector<int> &a) {
+  CHECK(a.size() % 2 == 0);
+  for (int i = 0; i < (int) a.size(); ++i) {
+    std::vector<CtrlBits::Control> v;
+    for (int j = 0; j < CtrlBits::Control::Total; ++j) {
+      if (a[i + 1] >> j & 1) {
+        v.push_back((CtrlBits::Control) j);
+      }
+    }
+    lut[a[i]] = v;
+  }
+}
+
+std::string CtrlBits::toString() const {
+  std::ostringstream oss;
+  oss << "{";
+  for (auto &elem : lut) {
+    oss << "(" << elem.first << ":";
+    bool first = true;
+    for (auto c : elem.second) {
+      if (!first) {
+        oss << ",";
+      }
+      oss << c;
+      first = false;
+    }
+    oss << ") ";
+  }
+  oss << "}";
+  return oss.str();
+}
 
 CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw) {
-  for (auto& elem : raw)
-    for (auto& s : elem.second) set(elem.first, str_to_enum(s));
+  for (auto& elem : raw) {
+    std::vector<CtrlBits::Control> v;
+    for (auto& s : elem.second) {
+      auto e = str_to_enum(s);
+      if (std::find(v.begin(), v.end(), e) == v.end()) {
+        v.push_back(e);
+        if (e == CtrlBits::B1 || e == CtrlBits::B2) {
+          const_cast<bool&>(is_dynamic) = true;
+        }
+      }
+    }
+    lut[elem.first] = v;
+  }
 }
 
 Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
@@ -115,7 +160,7 @@ void Instruction::forward() {
         bh.discard = true;
         reason << " operand " << i << " not valid!";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
-        DSA_LOG(PRED) << "bits: " << predicate.bits() << ", pred: " << _input_vals[i];
+        DSA_LOG(PRED) << "bits: " << predicate.toString() << ", pred: " << _input_vals[i];
         predicate.test(_input_vals[i], bh);
       }
     }
@@ -124,7 +169,7 @@ void Instruction::forward() {
     }
     compute_dump << _input_vals[i];
   }
-  compute_dump << ") = (" << name() << ") ";
+  compute_dump << ") = ";
 
 
   if (bh.exec) {  // IF VALID

@@ -16,41 +16,39 @@ struct CompileMeta : MetaPort {
   CompileMeta(){};
 };
 
+/*!
+ * \brief The base class of an input/output in DFG.
+ */
 class VectorPort : public Node {
  public:
   friend class SSDfg;
 
   VectorPort() {}
 
-  VectorPort(V_TYPE v, int len, int bitwidth, const std::string& name, SSDfg* ssdfg,
+  VectorPort(V_TYPE v, int len, int bitwidth_, const std::string& name, SSDfg* ssdfg,
              const MetaPort& meta);
 
   virtual void Accept(Visitor*) override;
 
-  void set_vp_len(int n) { _vp_len = n; }
+  /*!
+   * \brief The vector lanes of this i/o.
+   */
+  virtual int vectorLanes() = 0;
 
-  int get_vp_len() { return _vp_len; }
-
-  int logical_len() { return _vp_len; }
-
-  int length() { return _ops.size(); }
-
+  /*! \brief If this port is an indirect port. */
   bool indirect() { return _indirect; }
 
-  virtual std::string name() override { return _name; }
+  /*! \brief The text format name of this port. */
+  std::string name() override { return _name; }
 
-  /*!
-   * \brief The scalar bitwidth.
-   */
-  int bitwidth() override { return _bitwidth; }
+  /*! \brief The scalar bitwidth. */
+  int bitwidth() override { return bitwidth_; }
 
-  virtual int phys_bitwidth() {
-    return is_temporal() ? 64 : (values.size() * bitwidth());
-  }
+  /*! \brief The bandwidth of this port. */
+  int bandwidth() { return is_temporal() ? bitwidth() : bitwidth() * vectorLanes(); }
 
  protected:
-  int _bitwidth;  // element bitwidth
-  int _vp_len;
+  int bitwidth_;  // element bitwidth
   bool _indirect=false;
 
  public:
@@ -59,7 +57,6 @@ class VectorPort : public Node {
 
 class InputPort : public VectorPort {
  public:
-  bool tagged{false};
   static std::string Suffix() { return ""; }
   static bool IsInput() { return true; }
 
@@ -69,16 +66,24 @@ class InputPort : public VectorPort {
 
   InputPort() {}
 
-  InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
-            const MetaPort& meta, bool tagged);
+  InputPort(int len, int width, const std::string& name, SSDfg* ssdfg, const MetaPort& meta);
 
-  int phys_bitwidth() override {
-    return VectorPort::phys_bitwidth() - tagged * bitwidth();
-  }
+  /*!
+   * \brief The vector lanes of this i/o.
+   */
+  int vectorLanes() override { return values.size(); }
 
+  /*!
+   * \brief The tag ID. If not -1, it refers to the ID of the tag port.
+   */
+  int tid{-1};
+
+  // @{
+  // Simulation stuff.
   int current_{0};
   void forward() override;
   bool can_push();
+  // @}
 };
 
 class OutputPort : public VectorPort {
@@ -96,11 +101,19 @@ class OutputPort : public VectorPort {
 
   void Accept(Visitor*) override;
 
+  /*!
+   * \brief The vector lanes of this i/o.
+   */
+  int vectorLanes() override { return _ops.size(); }
+
   virtual int slot_for_op(Edge* edge, int node_slot) override;
 
+  // @{
+  // Simulation stuff.
   void forward() override {}
   bool can_pop();
   void pop(std::vector<uint64_t>& data, std::vector<bool>& data_valid);
+  // @}
 };
 
 }  // namespace dfg
