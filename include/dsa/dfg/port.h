@@ -1,5 +1,7 @@
 #pragma once
 
+#include <climits>
+
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/node.h"
 
@@ -48,7 +50,7 @@ class VectorPort : public Node {
   int bandwidth() { return is_temporal() ? bitwidth() : bitwidth() * vectorLanes(); }
 
  protected:
-  int bitwidth_;  // element bitwidth
+  int bitwidth_{INT_MAX / 8};  // element bitwidth
   bool _indirect=false;
 
  public:

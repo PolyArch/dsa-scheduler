@@ -53,6 +53,8 @@ struct Value {
   int index{0};
   /*! \brief The id's of the out going edges. */
   std::vector<int> uses;
+  /*! \brief The register index this value should be written to. If no, -1. */
+  int reg{-1};
 };
 
 struct Operand {

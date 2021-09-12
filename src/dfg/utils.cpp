@@ -61,6 +61,11 @@ struct Exporter : Visitor {
     };
     current["ctrl"] = f(inst->predicate.encode());
     current["self"] = f(inst->self_predicate.encode());
+    Json::Value reg_write(Json::ValueType::arrayValue);
+    for (int i = 0; i < (int) inst->values.size(); ++i) {
+      reg_write.append(inst->values[i].reg);
+    }
+    current["reg_write"] = reg_write;
     Visit(static_cast<Node*>(inst));
   }
   void Visit(InputPort* in) override {
@@ -344,6 +349,11 @@ SSDfg* Import(const std::string& s) {
         }
         if (node.isMember("self")) {
           inst.self_predicate = CtrlBits(f(node["self"]));
+        }
+        if (node.isMember("reg_write")) {
+          for (int i = 0; i < (int) inst.values.size(); ++i) {
+            inst.values[i].reg = node["reg_write"][i].asInt();
+          }
         }
       }
       auto &operands = node["inputs"];

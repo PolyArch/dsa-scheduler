@@ -19,7 +19,6 @@ void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {
   b.discard = b.discard || f(CtrlBits::Discard);
   b.exec = b.exec && !f(CtrlBits::Abstain);
   b.reset = b.reset || f(CtrlBits::Reset);
-  b.write = b.write || f(CtrlBits::Write);
 }
 
 std::vector<int> CtrlBits::encode() {
@@ -177,11 +176,13 @@ void Instruction::forward() {
     // Read in some temp value and set _val after inst_lat cycles
     output = do_compute(bh.discard, bh.backpressure);
     self_predicate.test(output, bh);
-    if (bh.write) {
-      int idx = 0;
-      int bytes = bitwidth() / 8;
-      memcpy(((uint8_t*)&_reg[0]) + idx * bytes, &output, bytes);
-      DSA_LOG(COMP) << "Write " << output << " to register!";
+    for (int i = 0; i < (int) _output_vals.size(); ++i) {
+      if (values[i].reg != -1) {
+        int idx = values[i].reg;
+        int bytes = bitwidth() / 8;
+        memcpy(((uint8_t*)&_reg[values[i].reg]) + idx * bytes, &output, bytes);
+        DSA_LOG(COMP) << "Write " << output << " to register!";
+      }
     }
     compute_dump << output;
   } else {
@@ -189,7 +190,6 @@ void Instruction::forward() {
     _output_vals.resize(values.size());
   }
 
-  // TODO/FIXME: change to all registers
   if (bh.reset) {
     for (size_t i = 0; i < _reg.size(); ++i) {
       _reg[i] = 0;

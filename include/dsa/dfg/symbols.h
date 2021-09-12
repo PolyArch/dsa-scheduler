@@ -124,17 +124,17 @@ struct TaskMapEntry : ParseResult {
  * \brief A = Add(Reg0, B). The local register in a PE.
  */
 struct RegisterEntry : ParseResult {
-  /*! \brief The data type of the register. */
-  int dtype{0};
   /*! \brief The index of the register. */
   int idx{-1};
 
-  RegisterEntry(int d, int i) : dtype(d), idx(i) {}
+  RegisterEntry(int i) : idx(i) {}
 };
 
 /*! \brief The symbol table of the parsed DFG. */
 class SymbolTable {
  public:
+  SymbolTable();
+
   void Set(const std::string& s, ParseResult* pr) {
     CHECK(!Has(s)) << "Duplicated Symbol: " << s;
     table_[s] = pr;
@@ -150,12 +150,6 @@ class SymbolTable {
   static RegisterEntry isLocalRegister(const std::string &s);
 
   ParseResult* Get(const std::string& s) {
-    auto re = isLocalRegister(s);
-    if (re.idx != -1) {
-      if (!Has(s)) {
-        Set(s, new RegisterEntry(re));
-      }
-    }
     CHECK(Has(s)) << "Symbol " << s << " not found";
     return table_[s];
   }

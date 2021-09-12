@@ -46,6 +46,7 @@ void yyrestart(FILE *);
 struct parse_param {
   SSDfg* dfg;
   dsa::dfg::MetaPort meta;
+  std::map<std::string, std::string> regs;
   dsa::dfg::SymbolTable symbols;
 };
 
@@ -117,8 +118,10 @@ statement: INPUT ':' io_def  eol {
   p->meta.clear();
   if (tagged) {
     p->dfg->vins.back().tid = p->dfg->nodes.size();
-    p->dfg->emplace_back<dsa::dfg::InputPort>(/*VecLanes*/1, /*Scalar Type*/8, /*Name*/name + "Tag", p->dfg, p->meta);
-    p->symbols.Set(name + "Tag", new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
+    auto symbol_id = "$" + name + "Tag";
+    p->dfg->emplace_back<dsa::dfg::InputPort>(
+      /*VecLanes*/1, /*Scalar Type*/8, /*Name*/symbol_id, p->dfg, p->meta);
+    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
   }
   delete $3;
 }
@@ -231,6 +234,11 @@ statement: INPUT ':' io_def  eol {
     for (int i = 0, n = node->values.size(); i < n; ++i) {
       auto *ve = new ValueEntry(node->id(), i, 0, node->bitwidth() - 1);
       p->symbols.Set((*$1)[i], ve);
+      auto iter = p->regs.find((*$1)[i]);
+      if (iter != p->regs.end()) {
+        p->regs.erase(iter);
+        CHECK(sscanf(iter->second.c_str() + 4, "%d", &node->values[i].reg) == 1);
+      }
     }
   } else if (dynamic_cast<ConvergeEntry*>($3) || dynamic_cast<ValueEntry*>($3)) {
     // Converge all the space-separated values
@@ -245,7 +253,11 @@ statement: INPUT ':' io_def  eol {
   p->dfg->meta.emplace_back();
 }
 | PRAGMA IDENT IDENT eol {
-  p->dfg->set_pragma(*$2,*$3);
+  if ($2->find("$Reg") == 0) {
+    p->regs[*$3] = *$2;
+  } else {
+    p->dfg->set_pragma(*$2,*$3);
+  }
   delete $2;
   delete $3;
 }

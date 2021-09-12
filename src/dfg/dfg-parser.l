@@ -62,21 +62,22 @@ M   [-]
 \n                                      { return EOLN; }
 
 
-{L}{A}*					{ yylval.s = new std::string(yytext); return IDENT; }
+{L}{A}*                                 { yylval.s = new std::string(yytext); return IDENT; }
+"$"{L}{A}*                              { yylval.s = new std::string(yytext); return IDENT; }
 
-{HP}{H}+{IS}?				{ si(&yylval,yytext); return I_CONST; }
-{NZ}{D}*{IS}?				{ si(&yylval,yytext); return I_CONST; }
-"0"{O}*{IS}?				{ si(&yylval,yytext); return I_CONST; }
-{CP}?"'"([^'\\\n]|{ES})+"'"		{ si(&yylval,yytext); return I_CONST; }
+{HP}{H}+{IS}?                           { si(&yylval,yytext); return I_CONST; }
+{NZ}{D}*{IS}?                           { si(&yylval,yytext); return I_CONST; }
+"0"{O}*{IS}?                            { si(&yylval,yytext); return I_CONST; }
+{CP}?"'"([^'\\\n]|{ES})+"'"             { si(&yylval,yytext); return I_CONST; }
 
-{D}+{E}{FS}?				{ sf(&yylval,yytext); return F_CONST; }
-{D}*"."{D}+{E}?{FS}?			{ sf(&yylval,yytext); return F_CONST; }
-{D}+"."{E}?{FS}?			{ sf(&yylval,yytext); return F_CONST; }
-{HP}{H}+{P}{FS}?			{ sf(&yylval,yytext); return F_CONST; }
-{HP}{H}*"."{H}+{P}{FS}?			{ sf(&yylval,yytext); return F_CONST; }
-{HP}{H}+"."{P}{FS}?			{ sf(&yylval,yytext); return F_CONST; }
+{D}+{E}{FS}?                            { sf(&yylval,yytext); return F_CONST; }
+{D}*"."{D}+{E}?{FS}?                    { sf(&yylval,yytext); return F_CONST; }
+{D}+"."{E}?{FS}?                        { sf(&yylval,yytext); return F_CONST; }
+{HP}{H}+{P}{FS}?                        { sf(&yylval,yytext); return F_CONST; }
+{HP}{H}*"."{H}+{P}{FS}?                 { sf(&yylval,yytext); return F_CONST; }
+{HP}{H}+"."{P}{FS}?                     { sf(&yylval,yytext); return F_CONST; }
 
-({SP}?\"([^"\\\n]|{ES})*\"{WS}*)+	{ return STRING_LITERAL; }
+({SP}?\"([^"\\\n]|{ES})*\"{WS}*)+       { return STRING_LITERAL; }
 
 "#pragma"                               { return PRAGMA; }
 
@@ -84,20 +85,20 @@ M   [-]
 
 "|"                                     { return '|'; }
 
-";"					{ return ';'; }
-("{")					{ return '{'; }
-("}")					{ return '}'; }
-","					{ return ','; }
-":"					{ return ':'; }
-"="					{ return '='; }
-"("					{ return '('; }
-")"					{ return ')'; }
-("[")					{ return '['; }
-("]")					{ return ']'; }
-("<")					{ return '<'; }
-(">")					{ return '>'; }
+";"                                     { return ';'; }
+("{")                                   { return '{'; }
+("}")                                   { return '}'; }
+","                                     { return ','; }
+":"                                     { return ':'; }
+"="                                     { return '='; }
+"("                                     { return '('; }
+")"                                     { return ')'; }
+("[")                                   { return '['; }
+("]")                                   { return ']'; }
+("<")                                   { return '<'; }
+(">")                                   { return '>'; }
 
-{WS}+					{ /* whitespace separates tokens */ }
+{WS}+                                   { /* whitespace separates tokens */ }
 
 <*>.|\n                                 { 
   fprintf(stderr, "Bad Symbol at line %d: '%s'\n", yylineno, yytext); 

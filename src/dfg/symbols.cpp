@@ -82,7 +82,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
     } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);
       CHECK(inst);
-      inst->ops().emplace_back(dfg, re->dtype, re->idx);
+      inst->ops().emplace_back(dfg, node->bitwidth(), re->idx);
     } else {
       CHECK(false) << "Invalide Node type";
       throw;
@@ -96,14 +96,10 @@ TaskMapEntry::TaskMapEntry(ParseResult* controller_)
   port_map = temp;
 }
 
-RegisterEntry SymbolTable::isLocalRegister(const std::string &s) {
-  if (s.find("Reg") == 0) {
-    int dtype, idx;
-    if (sscanf(s.c_str() + 3, "%d_%d", &dtype, &idx) == 2) {
-      return RegisterEntry(dtype, idx);
-    }
+SymbolTable::SymbolTable() {
+  for (int i = 0; i < 8; ++i) {
+    table_["$Reg" + std::to_string(i)] = new RegisterEntry(i);
   }
-  return {-1, 0};
 }
 
 /*TaskMapEntry::TaskMapEntry(

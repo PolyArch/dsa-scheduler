@@ -23,7 +23,6 @@ struct CtrlBits {
     Discard,  // Predication off the produced value.
     Reset,    // Reset the register file to all zeros.
     Abstain,  // Avoid instruction execution.
-    Write,    // Write to the accumulate register
     Total     // Placeholder for the last behavior. Used by declaration.
   };
 
@@ -39,8 +38,6 @@ struct CtrlBits {
     bool reset{false};
     /*! \brief Execute the instruction. */
     bool exec{true};
-    /*! \brief Write the result to register. */
-    bool write{false};
 
     Behavior(int n) : backpressure(n, false) {}
   };
@@ -91,7 +88,6 @@ struct CtrlBits {
     if (s == "d") return Discard;
     if (s == "r") return Reset;
     if (s == "a") return Abstain;
-    if (s == "w") return Write;
     CHECK(false) << "Not a valid command";
     abort();
   }
