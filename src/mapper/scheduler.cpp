@@ -13,6 +13,7 @@
 #include "./pass/print_graphviz.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/core/singleton.h"
+#include "dsa/debug.h"
 #include "dsa/dfg/instruction.h"
 #include "dsa/dfg/visitor.h"
 #include "dsa/mapper/scheduler_sa.h"
@@ -26,9 +27,25 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
     std::vector<int> ports[2];
     void Visit(dfg::Instruction* node) {
       inst_required[{node->inst(), (int)node->is_temporal()}]++;
+      for (int i = 0; i < node->ops().size(); ++i) {
+        auto &operand = node->ops()[i];
+        if (!operand.edges.empty()) {
+          int operand_width = 0;
+          for (auto eid : operand.edges) {
+            operand_width += node->ssdfg()->edges[eid].bitwidth();
+          }
+          CHECK(operand_width == node->bitwidth())
+            << node->name() << "'s operand " << i << " dtype mismatch! "
+            << operand_width << " != " << node->bitwidth();
+        }
+      }
     }
-    void Visit(dfg::InputPort* vec) { ports[1].push_back(vec->bandwidth()); }
-    void Visit(dfg::OutputPort* vec) { ports[0].push_back(vec->bandwidth()); }
+    void Visit(dfg::InputPort* vec) {
+      ports[1].push_back(vec->bandwidth());
+    }
+    void Visit(dfg::OutputPort* vec) {
+      ports[0].push_back(vec->bandwidth());
+    }
   };
 
   struct SpatialCounter : dsa::adg::Visitor {

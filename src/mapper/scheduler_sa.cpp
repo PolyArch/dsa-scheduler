@@ -603,10 +603,6 @@ int SchedulerSimulatedAnnealing::route(
     Schedule* sched, dsa::dfg::Edge* edge, std::pair<int, dsa::ssnode*> source,
     std::pair<int, dsa::ssnode*> dest,
     std::vector<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen) {
-  // if (!sched->ssModel()->subModel()->connected[source.second->id()][dest.second->id()])
-  // {
-  //  return 0;
-  //}
 
   bool path_lengthen = ins_it != nullptr;
 
@@ -614,7 +610,11 @@ int SchedulerSimulatedAnnealing::route(
   std::map<int,  std::vector<int>> done;
   std::map<int,  std::vector<std::pair<int, sslink*>>> came_from;
 
-  _ssModel->subModel()->initialize_runtime_vals(node_dist, done, came_from);
+  for (ssnode* n : sched->ssModel()->subModel()->node_list()) {
+    node_dist[n->id()] = std::vector<int>(8, -1);
+    came_from[n->id()] = std::vector<std::pair<int, sslink*>>(8);
+    done[n->id()] = std::vector<int>(8, 0);
+  }
 
   if (!path_lengthen) ++routing_times;
 
@@ -877,7 +877,8 @@ int SchedulerSimulatedAnnealing::try_candidates(
   for (size_t i = 0; i < candidates.size(); ++i) {
     //++candidates_tried;
     // maybe here, that it will access the next index now..
-    DSA_LOG(MAP) << "Try: " << candidates[i].second->name() << " index into candidates: " << idx[i];
+    DSA_LOG(MAP)
+      << "Try: " << candidates[idx[i]].first << ", " << candidates[idx[i]].second->name();
 
     // schedule/allocate this input/output ports on of these...
     // Why did this chose the first one?? is it allocating ports on the first correct chosen?

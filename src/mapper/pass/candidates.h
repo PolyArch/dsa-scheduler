@@ -47,9 +47,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
           }
 
           if (rand() % (cnt * cnt) == 0) {
-            spots.emplace_back(k, fus[i]);
+            spots.emplace_back(k / cand_fu->granularity(), fus[i]);
           } else {
-            not_chosen_spots.emplace_back(k, fus[i]);
+            not_chosen_spots.emplace_back(k / cand_fu->granularity(), fus[i]);
           }
         }
 

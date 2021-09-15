@@ -125,9 +125,6 @@ class SpatialFabric {
 
   ssio_interface& io_interf() { return _ssio_interf; }
 
-  void initialize_runtime_vals(std::map<int,  std::vector<int>>& node_dist, std::map<int,  std::vector<int>>& done, std::map<int,  std::vector<std::pair<int, sslink*>>> & came_from);
-
-
   const std::vector<sslink*>& link_list() { return _link_list; }
 
   const std::vector<ssnode*>& node_list() { return _node_list; }

@@ -22,6 +22,7 @@ struct Slot {
   int lane_no;
   T instance;
 };
+
 struct EdgeSlice {
   /*! \brief The identifier of the edge to be sliced. */
   int eid;
@@ -260,16 +261,23 @@ class Schedule {
       int granularity = link.second->source()->granularity();
       int last_slot = edge->bitwidth() / granularity;
       for (int i = 0; i < last_slot; ++i) {
-        int slot_index = (link.first + i) % last_slot;
+        int slot_index = (link.first + i) % link.second->sink()->lanes();
         CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
         EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity);
         auto it = std::find(edges.begin(), edges.end(), es);
-        CHECK(it != edges.end());
-        DSA_LOG(UNASSIGN) << "unassign " << edge->name() << " [" << es.l << ", " << es.r << "] "
-                      << slot_index;
+        DSA_LOG(ASSIGN)
+          << edges.size() << " mapped on " << link.first << "(" << slot_index << ")" << ","
+          << link.second->name() << " [lp " << &lp << "], [lp.slot " << &lp.slots
+          << "], [lp.slot[idx].edges " << &slot.edges << "]";
+        CHECK(it != edges.end())
+          << ssdfg()->edges[es.eid].name() << "[" << es.l << "," << es.r << "] not found on link "
+          << link.second->name() << ", " << link.first;
+        DSA_LOG(ASSIGN)
+          << "unassign " << edge->name() << " [" << es.l << ", " << es.r << "] "
+          << slot_index;
         edges.erase(it);
         if (slot.edges.empty()) {
           _links_mapped--;
@@ -362,7 +370,7 @@ class Schedule {
     auto& lp = _linkProp[slink->id()];
 
     int granularity = slink->source()->granularity();
-    int lanes = slink->source()->lanes();
+    int lanes = slink->sink()->lanes();
 
     for (int i = 0; i < dfgedge->bitwidth() / granularity; ++i) {
       int cur_slot_index = (slot_index + i) % lanes;
@@ -371,8 +379,12 @@ class Schedule {
       int l = dfgedge->l + granularity * i;
       int r = dfgedge->l + granularity * (i + 1);
       slot.edges.emplace_back(dfgedge->id, l, r);
-      DSA_LOG(ASSIGN) << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
-                  << " to " << slink->id() << " " << cur_slot_index;
+      DSA_LOG(ASSIGN)
+        << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
+        << " to " << cur_slot_index << "," << slink->name();
+      DSA_LOG(ASSIGN)
+        << "pushed to [lp " << &lp << "], [lp.slot " << &lp.slots
+        << "], [lp.slot[idx].edge " << &slot.edges << "]";
     }
 
     if ((int)_edgeProp.size() <= dfgedge->id) {
