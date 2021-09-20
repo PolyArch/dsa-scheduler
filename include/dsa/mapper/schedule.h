@@ -17,15 +17,128 @@ using namespace dsa;
 
 #define MAX_SCHED_LAT 1000000
 
+namespace dsa {
+namespace mapper {
+
+/*!
+ * \brief The range silcing struct. Left close, right close.
+ *        Use const for left and right because I do not expect users change it.
+ */
+struct Range {
+  /*!
+   * \brief The left point of slicing.
+   */
+  const int l;
+  /*!
+   * \brief The right point of slicing.
+   */
+  const int r;
+
+  Range(int l_, int r_) : l(l_), r(r_) {}
+
+  bool operator==(const Range&);
+};
+
+/*!
+ * \brief The struct of decomposable mapping.
+ */
 template <typename T>
 struct Slot {
+  /*!
+   * \brief The number of lane.
+   */
   int lane_no;
-  T instance;
+  /*!
+   * \brief The component to be decomposed.
+   */
+  T ref;
+
+  Slot(int l, T r) : lane_no(l), ref(r) {}
 };
+
+/*!
+ * \brief The struct of slicing DFG components.
+ */
+template<typename T>
+struct DFGSlice {
+  /*!
+   * \brief The range of slicing.
+   */
+  int l, r;
+  /*!
+   * \brief The DFG node to be sliced.
+   */
+  T ref;
+};
+
+/*!
+ * \brief The spot of candidate mapping.
+ */
+struct MapSpot {
+  /*!
+   * \brief If we want to routing along with this lane.
+   */
+  bool routing_along;
+  /*!
+   * \brief The candidate slot.
+   */
+  Slot<ssnode*> slot;
+
+  MapSpot(bool r, const Slot<ssnode*> &s) :
+    routing_along(r), slot(s.lane_no, s.ref) {}
+};
+
+/*!
+ * \brif The properties of DFG node mapping.
+ */
+struct VertexProp {
+  /*!
+   * \brief The bound of data timing.
+   */
+  int min_lat{INT_MAX};
+  int max_lat{INT_MIN};
+  /*!
+   * \brief The latency assigned to this node.
+   */
+  int lat{0};
+  /*!
+   * \brief The timing violation of this node.
+   */
+  int vio{0};
+  /*!
+   * \brief The ADG decomposable slot mapped to.
+   */
+  mapper::Slot<ssnode*> slot{-1, nullptr};
+  /*!
+   * \brief The helper of accessing the ADG node.
+   */
+  ssnode* node() const { return slot.ref; }
+  /*!
+   * \brief The helper of accessing the lane in the ADG node.
+   */
+  int lane() const { return slot.lane_no; }
+};
+
+// struct NodeProp {
+//   /*! \brief To support the decomposability, we break a whole ssnode into slots. */
+//   struct NodeSlot {
+//     /*! \brief Edges pass through this node slot to route. */
+//     std::vector<dsa::dfg::Edge*> passthrus;
+//     /*! \brief Byte slot of the dfg node (inst/vec) that is mapped to this node slot. */
+//     std::vector<std::pair<dsa::dfg::Node*, int>> vertices;
+//   };
+//   /*! \brief The mapping information of each lane hardware lane. */
+//   std::vector<NodeSlot> slots;
+// };
+
+} // namespace mapper
+} // namespace dsa
 
 struct EdgeSlice {
   /*! \brief The identifier of the edge to be sliced. */
   int eid;
+
+  // TODO(@were): Do I want to refactor this to left close right open?
   /*! \brief The **absolute** slicing of the edge. By **absolute**,
              we mean if a edge is a.1[16:31], and we want to extract
              [16:23], the value of l,and r should be 16,23 respectively,
@@ -53,6 +166,7 @@ class Schedule {
 
   // TODO(@were): Will it be better to move all these tools to
   //              a separate python script.
+  // @{
   void printGraphviz(const char* name);
 
   void printNodeGraphviz(std::ofstream& ofs, ssnode* fu);
@@ -74,23 +188,46 @@ class Schedule {
   void printConfigVerif(std::ostream& os);
 
   void printCondensedVector(std::vector<int>& vec, std::ostream& os);
+  // @}
 
+  /*!
+   * \brief The software to be mapped.
+   */
   SSDfg* ssdfg() const { return _ssDFG; }
 
-  void assign_lat(dsa::dfg::Node* dfgnode, int lat) {
-    _vertexProp[dfgnode->id()].lat = lat;
+  /*!
+   * \brief Assign latency to the given node.
+   * \param node The node to be assigned.
+   * \param lat The latency to assign.
+   */
+  void assign_lat(dsa::dfg::Node* node, int lat) {
+    _vertexProp[node->id()].lat = lat;
   }
 
-  int latOf(dsa::dfg::Node* dfgnode) { return _vertexProp[dfgnode->id()].lat; }
+  /*!
+   * \brief Return the latency of the given node in DFG.
+   * \param n The DFG node to query.
+   */
+  int latOf(dsa::dfg::Node* n) { return _vertexProp[n->id()].lat; }
 
-  void assign_lat_bounds(dsa::dfg::Node* dfgnode, int min, int max) {
-    auto& vertex_prop = _vertexProp[dfgnode->id()];
+  /*!
+   * \brief Assign the bound of DFG latency for the purpose of timing.
+   * \param n The DFG node to update.
+   * \param min The lower bound.
+   * \param max The upper bound.
+   */
+  void assign_lat_bounds(dsa::dfg::Node* n, int min, int max) {
+    auto& vertex_prop = _vertexProp[n->id()];
     vertex_prop.min_lat = min;
     vertex_prop.max_lat = max;
   }
 
-  std::pair<int, int> lat_bounds(dsa::dfg::Node* dfgnode) {
-    auto& vertex_prop = _vertexProp[dfgnode->id()];
+  /*!
+   * \brief Return the latency bound of the given DFG node.
+   * \param n The node to query.
+   */
+  std::pair<int, int> lat_bounds(dsa::dfg::Node* n) {
+    auto& vertex_prop = _vertexProp[n->id()];
     return std::make_pair(vertex_prop.min_lat, vertex_prop.max_lat);
   }
 
@@ -123,6 +260,7 @@ class Schedule {
   }
 
   int vioOf(dsa::dfg::Edge* e) { return _edgeProp[e->id].vio; }
+
   void record_violation(dsa::dfg::Edge* e, int violation) {
     _edgeProp[e->id].vio = violation;
   }
@@ -204,15 +342,15 @@ class Schedule {
   // this should be same as both input and output ports should give same locationOf
   // locationOf is the same ssnode assigned...
   int vecPortOf(dsa::dfg::VectorPort* vec) {
-    ssnode* n = locationOf(vec);
-    if (n) {
-      auto vport = dynamic_cast<ssvport*>(n);
-      CHECK(vport) << vec->name() << " " << n->name();
+    auto mi = locationOf(vec);
+    if (auto vport = dynamic_cast<ssvport*>(mi.node())) {
+      CHECK(vport) << vec->name() << " " << mi.node()->name();
       return vport->port();
     } else {
       return -1;
     }
   }
+
 
   /*!
    * \brief Assign the given DFG node to the hardware resource.
@@ -221,25 +359,21 @@ class Schedule {
    */
   void assign_node(dsa::dfg::Node* dfgnode, std::pair<int, ssnode*> assigned) {
     int vid = dfgnode->id();
-    if (vid >= (int)_vertexProp.size()) {
-      _vertexProp.resize(vid + 1);
-    }
+    CHECK(vid >= 0 && vid < _vertexProp.size());
+
     int orig_slot = assigned.first;
     auto snode = assigned.second;
 
-    CHECK(_vertexProp[vid].node == nullptr || _vertexProp[vid].node == snode);
-    if (_vertexProp[vid].node == snode) return;
+    CHECK(_vertexProp[vid].node() == nullptr || _vertexProp[vid].node() == snode);
+    if (_vertexProp[vid].slot.ref == snode) return;
 
-    _vertexProp[vid].node = snode;
-    _vertexProp[vid].idx = orig_slot;
-    _vertexProp[vid].width = dfgnode->bitwidth();
+    _vertexProp[vid].slot = {orig_slot, snode};
 
     CHECK(dfgnode->type() < dsa::dfg::Node::V_NUM_TYPES);
     _num_mapped[dfgnode->type()]++;
 
     CHECK(dfgnode);
-    CHECK(snode->id() < (int)_nodeProp.size())
-        << snode->id() << "<" << (int)_nodeProp.size();
+    CHECK(snode->id() < (int)_nodeProp.size()) << snode->id() << "<" << (int)_nodeProp.size();
 
     // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
     int num_slots = dfgnode->bitwidth() / snode->granularity();
@@ -266,7 +400,7 @@ class Schedule {
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
-        EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity);
+        EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity - 1);
         auto it = std::find(edges.begin(), edges.end(), es);
         DSA_LOG(ASSIGN)
           << edges.size() << " mapped on " << link.first << "(" << slot_index << ")" << ","
@@ -322,10 +456,10 @@ class Schedule {
     }
 
     auto& vp = _vertexProp[dfgnode->id()];
-    ssnode* node = vp.node;
+    ssnode* node = vp.slot.ref;
 
     if (node) {
-      int orig_slot = vp.idx;
+      int orig_slot = vp.slot.lane_no;
       _num_mapped[dfgnode->type()]--;
       int num_slots = dfgnode->bitwidth() / node->granularity();
       for (int i = 0; i < num_slots; ++i) {
@@ -335,7 +469,7 @@ class Schedule {
         CHECK(it != vertices.end());
         vertices.erase(it);
       }
-      vp.node = nullptr;
+      vp.slot = {-1, nullptr};
     }
   }
 
@@ -348,8 +482,8 @@ class Schedule {
     // TODO: can't get vertex/edge from id, need to modify dfg to maintain
     for (unsigned i = 0; i < _vertexProp.size(); ++i) {
       auto& v = _vertexProp[i];
-      if (v.node) {
-        std::cout << i << "->" << v.node->name() << " ";
+      if (v.slot.ref) {
+        std::cout << i << "->" << v.slot.ref->name() << " ";
       }
     }
     std::cout << "\nEdges: ";
@@ -377,14 +511,11 @@ class Schedule {
       auto& slot = lp.slots[cur_slot_index];
       if (slot.edges.empty()) _links_mapped++;
       int l = dfgedge->l + granularity * i;
-      int r = dfgedge->l + granularity * (i + 1);
+      int r = dfgedge->l + granularity * (i + 1) - 1;
       slot.edges.emplace_back(dfgedge->id, l, r);
       DSA_LOG(ASSIGN)
         << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
         << " to " << cur_slot_index << "," << slink->name();
-      DSA_LOG(ASSIGN)
-        << "pushed to [lp " << &lp << "], [lp.slot " << &lp.slots
-        << "], [lp.slot[idx].edge " << &slot.edges << "]";
     }
 
     if ((int)_edgeProp.size() <= dfgedge->id) {
@@ -558,15 +689,12 @@ class Schedule {
   }
 
   // we should depricate this?
-  ssnode* locationOf(dsa::dfg::Node* dfgnode) { return _vertexProp[dfgnode->id()].node; }
-
-  std::pair<int, ssnode*> location_of(dsa::dfg::Node* dfgnode) {
-    return std::make_pair(_vertexProp[dfgnode->id()].idx,
-                          _vertexProp[dfgnode->id()].node);
+  const mapper::VertexProp &locationOf(dsa::dfg::Node* dfgnode) {
+    return _vertexProp[dfgnode->id()];
   }
 
   bool is_scheduled(dsa::dfg::Node* dfgnode) {
-    return _vertexProp[dfgnode->id()].node != nullptr;
+    return _vertexProp[dfgnode->id()].node() != nullptr;
   }
 
   void stat_printOutputLatency();
@@ -702,8 +830,8 @@ class Schedule {
   // Swaps the nodes from one schedule to another
   void swap_model(SpatialFabric* copy_sub) {
     for (auto& vp : _vertexProp) {
-      if (vp.node) {
-        vp.node = copy_sub->node_list()[vp.node->id()];  // bo ya
+      if (vp.slot.ref) {
+        vp.slot.ref = copy_sub->node_list()[vp.slot.ref->id()];  // bo ya
       }
     }
     for (auto& ep : _edgeProp) {
@@ -759,12 +887,6 @@ class Schedule {
     // std::cout << _nodeProp.size() << "just resized\n";
   }
 
-  struct VertexProp {
-    int min_lat = 0, max_lat = 0, lat = 0, vio = 0;
-    ssnode* node = nullptr;
-    int width = -1, idx = -1;
-  };
-
   struct EdgeProp {
     int num_links = 0;
     int extra_lat = 0;
@@ -802,7 +924,7 @@ class Schedule {
   };
 
   std::vector<NodeProp>& node_prop() { return _nodeProp; }
-  std::vector<VertexProp>& vex_prop() { return _vertexProp; }
+  std::vector<mapper::VertexProp>& vex_prop() { return _vertexProp; }
 
   /*!
    * \brief Estimate the performance of this mapping.
@@ -851,7 +973,7 @@ class Schedule {
   /*! \brief The timing mismatch of each sub-DFG. */
   std::vector<int> _groupMismatch;
   /*! \brief The hardware information of each mapped DFG node. */
-  std::vector<VertexProp> _vertexProp;
+  std::vector<mapper::VertexProp> _vertexProp;
   /*! \brief The hardware information of each mapped DFG edge. */
   std::vector<EdgeProp> _edgeProp;
   /*! \brief The software information of each occupied spatial hardware node. */

@@ -6,14 +6,6 @@
 namespace dsa {
 namespace dfg {
 
-int Node::num_inc_edges() {
-  int res = 0;
-  for (auto& op : ops()) {
-    res += op.edges.size();
-  }
-  return res;
-}
-
 int Node::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
   int slot = node_slot + edge->l / 8;
   CHECK(slot < 8);

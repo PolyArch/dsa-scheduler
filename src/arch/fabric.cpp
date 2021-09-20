@@ -18,6 +18,7 @@ using namespace std;
 // ----------------------- sslink ---------------------------------------------
 
 bool sslink::flow_control() { return sink_->flow_control(); }
+
 int sslink::bitwidth() { return sink_->datawidth(); }
 
 std::string sslink::name() const {
@@ -46,8 +47,8 @@ int sslink::slots(int slot, int width) {
    * */
   uint64_t res = 0;
   int n = subnet.size();
-  auto f = [](int64_t a, int bits) {
-    int full_mask = ~0ull >> (64 - bits);
+  auto f = [](uint64_t a, int bits) {
+    auto full_mask = ~0ull >> (64 - bits);
     return (a & full_mask) == full_mask;
   };
   for (int i = 0; i < n; ++i) {

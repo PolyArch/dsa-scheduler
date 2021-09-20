@@ -14,6 +14,7 @@
 #include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 #include "dsa/dfg/visitor.h"
+#include "dsa/mapper/schedule.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
 
@@ -104,8 +105,10 @@ bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, dsa::dfg::Edge* 
     }
 
     if (ssswitch* sw = dynamic_cast<ssswitch*>(rand_link.second->sink())) {
-      auto source = make_pair(rand_link.first, sw);
-      int inserted = route(sched, edge, source, source, &(++it), num + 1);
+      mapper::VertexProp vp;
+      vp.slot.lane_no = rand_link.first;
+      vp.slot.ref = sw;
+      int inserted = route(sched, edge, vp, vp, &(++it), num + 1);
       if (inserted) {
         for (auto& it : edge_list) {
           dsa::dfg::Edge* alt_edge = &sched->ssdfg()->edges[it.eid];
@@ -480,7 +483,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
           }
         }
       }
-      CHECK(sched->location_of(node).second);
+      CHECK(sched->locationOf(node).node());
     }
     if (dummy && success) {
       return 1;
@@ -600,20 +603,25 @@ void insert_edge(std::pair<int, sslink*> link, Schedule* sched, dsa::dfg::Edge* 
 }
 
 int SchedulerSimulatedAnnealing::route(
-    Schedule* sched, dsa::dfg::Edge* edge, std::pair<int, dsa::ssnode*> source,
-    std::pair<int, dsa::ssnode*> dest,
+    Schedule* sched, dsa::dfg::Edge* edge,
+    mapper::VertexProp &vps,
+    mapper::VertexProp &vpd,
     std::vector<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen) {
 
+  std::pair<int, ssnode*> source = {vps.lane(), vps.node()};
+  std::pair<int, ssnode*> dest = {vpd.lane(), vpd.node()};
   bool path_lengthen = ins_it != nullptr;
 
-  std::map<int,  std::vector<int>> node_dist;
-  std::map<int,  std::vector<int>> done;
-  std::map<int,  std::vector<std::pair<int, sslink*>>> came_from;
+  int n_nodes = sched->ssModel()->subModel()->node_list().size();
+  std::vector<std::vector<int>> node_dist(n_nodes);
+  std::vector<std::vector<int>> done(n_nodes);
+  std::vector<std::vector<std::pair<int, sslink*>>> came_from(n_nodes);
 
   for (ssnode* n : sched->ssModel()->subModel()->node_list()) {
-    node_dist[n->id()] = std::vector<int>(8, -1);
-    came_from[n->id()] = std::vector<std::pair<int, sslink*>>(8);
-    done[n->id()] = std::vector<int>(8, 0);
+    CHECK(n->id() >= 0 && n->id() < n_nodes);
+    node_dist[n->id()] = std::vector<int>(n->lanes(), -1);
+    came_from[n->id()] = std::vector<std::pair<int, sslink*>>(n->lanes(), {-1, nullptr});
+    done[n->id()] = std::vector<int>(n->lanes(), false);
   }
 
   if (!path_lengthen) ++routing_times;
@@ -645,10 +653,10 @@ int SchedulerSimulatedAnnealing::route(
   came_from[source.second->id()][source.first] = std::make_pair(0, nullptr);
 
   while (!openset.empty()) {
-    int cur_dist = std::get<0>(*openset.begin());
-    int slot = std::get<2>(*openset.begin());
-    ssnode* node = std::get<3>(*openset.begin());
-
+    auto &front_elem = *openset.begin();
+    int cur_dist = std::get<0>(front_elem);
+    int slot = std::get<2>(front_elem);
+    ssnode* node = std::get<3>(front_elem);
     openset.erase(openset.begin());
 
     if (!path_lengthen) {
@@ -708,14 +716,6 @@ int SchedulerSimulatedAnnealing::route(
           done[next->id()][next_slot] = new_rand_prio;
 
           openset.emplace(new_dist, new_rand_prio, next_slot, next);
-          // next->update_dist(next_slot, new_dist, slot, next_link);
-
-          /*
-          void update_dist(int slot, int dist, int from_slot, sslink* from) {
-              _node_dist[slot] = dist;
-              _came_from[slot] = std::make_pair(from_slot, from);
-            }
-          */
 
           node_dist[next->id()][next_slot] = new_dist;
           came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
@@ -723,10 +723,6 @@ int SchedulerSimulatedAnnealing::route(
       }
     }
   }
-  /*
-      (dest.second->node_dist(dest.first) == -1 ||
-      (path_lengthen && dest.second->node_dist(dest.first) == 0)
-  */
 
   if (node_dist[dest.second->id()][dest.first] == -1 ||
       (path_lengthen && node_dist[dest.second->id()][dest.first] == 0)) {
@@ -776,7 +772,7 @@ int SchedulerSimulatedAnnealing::route(
 
 // Assign a node, indices and hardware port from here...
 bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* node,
-                                               pair<int, dsa::ssnode*> here) {
+                                               mapper::Slot<ssnode*> here) {
 
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
   /*if(node->indirect()) {
@@ -799,14 +795,14 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
       auto edge = edges[i];                                               \
       CHECK(sched->link_count(edge) == 0)                                 \
           << "Edge: " << edge->name() << " is already routed!\n";         \
-      auto node = edge->node_();                                          \
-      if (sched->is_scheduled(node)) {                                    \
-        auto loc = sched->location_of(node);                              \
+      auto n = edge->node_();                                             \
+      if (sched->is_scheduled(n)) {                                       \
+        auto loc = sched->locationOf(n);                                  \
         if (!route(sched, edge, src, dest, nullptr, 0)) {                 \
           DSA_LOG(ROUTE)                                                  \
-            << "Cannot route " << edge->name() << " " << src.second->id() \
-            << " -> " << dest.second->id() << ":"                         \
-            << sched->distances[src.second->id()][dest.second->id()];     \
+            << "Cannot route " << edge->name() << " " << src.node()->id() \
+            << " -> " << dest.node()->id() << ":"                         \
+            << sched->distances[src.node()->id()][dest.node()->id()];     \
           for (auto revert : to_revert) sched->unassign_edge(revert);     \
           for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);     \
           return false;                                                   \
@@ -815,13 +811,15 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
     }                                                                     \
   } while (false)
 
-  process(sched->operands[node->id()], def, loc, here);
+  sched->assign_node(node, {here.lane_no, here.ref});
+  auto here_ = sched->locationOf(node);
+
+  process(sched->operands[node->id()], def, loc, here_);
   to_revert = sched->operands[node->id()];
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
-  process(sched->users[node->id()], use, here, loc);
+  process(sched->users[node->id()], use, here_, loc);
 #undef process
 
-  sched->assign_node(node, here);
 
   return true;
 }
@@ -830,7 +828,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
 // for any output node, it should discard all *indirect* ports
 // for the indirect port, chose the candidate which is the same as its corresponding indirect port
 int SchedulerSimulatedAnnealing::try_candidates(
-    const std::vector<std::pair<int, ssnode*>>& candidates, Schedule* sched,
+    const std::vector<mapper::MapSpot>& candidates, Schedule* sched,
     dsa::dfg::Node* node) {
   DSA_LOG(MAP) << "Mapping " << node->name();
   using std::make_pair;
@@ -847,13 +845,15 @@ int SchedulerSimulatedAnnealing::try_candidates(
   std::vector<int> src, dst, idx, keys;
 
   for (auto edge : sched->operands[node->id()]) {
-    if (auto node = sched->locationOf(edge->def())) {
+    auto loc = sched->locationOf(edge->def());
+    if (loc.node()) {
       src.push_back(node->id());
     }
   }
   for (auto edge : sched->users[node->id()]) {
-    if (auto node = sched->locationOf(edge->use())) {
-      dst.push_back(node->id());
+    auto loc = sched->locationOf(edge->use());
+    if (loc.node()) {
+      dst.push_back(loc.node()->id());
     }
   }
   for (size_t i = 0; i < candidates.size(); ++i) {
@@ -862,10 +862,10 @@ int SchedulerSimulatedAnnealing::try_candidates(
   for (size_t i = 0; i < candidates.size(); ++i) {
     int sum = 0;
     for (auto elem : src) {
-      sum += sched->distances[elem][candidates[i].second->id()];
+      sum += sched->distances[elem][candidates[i].slot.ref->id()];
     }
     for (auto elem : dst) {
-      sum += sched->distances[candidates[i].second->id()][elem];
+      sum += sched->distances[candidates[i].slot.ref->id()][elem];
     }
     keys.push_back(sum);
   }
@@ -878,7 +878,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
     //++candidates_tried;
     // maybe here, that it will access the next index now..
     DSA_LOG(MAP)
-      << "Try: " << candidates[idx[i]].first << ", " << candidates[idx[i]].second->name();
+      << "Try: " << candidates[idx[i]].slot.lane_no << ", " << candidates[idx[i]].slot.ref->name();
 
     // schedule/allocate this input/output ports on of these...
     // Why did this chose the first one?? is it allocating ports on the first correct chosen?
@@ -921,9 +921,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
       }
     }*/
 
-    // if (isSameAsIndirectInput && scheduleHere(sched, node, candidates[idx[i]])) {
-    if (scheduleHere(sched, node, candidates[idx[i]])) {
-      //++candidates_succ;
+    if (scheduleHere(sched, node, candidates[idx[i]].slot)) {
       DSA_LOG(MAP) << "succ!";
 
       SchedStats s;
@@ -956,8 +954,9 @@ int SchedulerSimulatedAnnealing::try_candidates(
 
   if (best_candidate != -1) {
     best_path.apply(sched);
-    sched->assign_node(node, candidates[best_candidate]);
-    DSA_LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].second->name();
+    auto &cand = candidates[best_candidate];
+    sched->assign_node(node, {cand.slot.lane_no, cand.slot.ref});
+    DSA_LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].slot.ref->name();
     // FIXME: is first not the assign port number???? need port for the hardware port
     // auto vport = candidates[best_candidate].second; // ssnode*
     // auto ne = dynamic_cast<SSDfgVec*>(node);

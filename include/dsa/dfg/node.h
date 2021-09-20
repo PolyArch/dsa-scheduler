@@ -41,7 +41,7 @@ struct Value {
   bool forward(bool attempt);
   // @}
 
-  /*! \brief The text representative of this node. */
+  /*! \brief The text representative of this node for logging. */
   std::string name();
 
   // TODO(@were): Do we want to over engineer it to make all these const?
@@ -55,6 +55,8 @@ struct Value {
   std::vector<int> uses;
   /*! \brief The register index this value should be written to. If no, -1. */
   int reg{-1};
+  /*! \brief Symbol name in DFG format. */
+  std::string symbol;
 };
 
 struct Operand {
@@ -203,8 +205,6 @@ class Node {
   int group_id() { return _group_id; }
 
   void set_group_id(int id) { _group_id = id; }
-
-  int num_inc_edges();
 
   SSDfg*& ssdfg() { return _ssdfg; }
 

@@ -61,11 +61,12 @@ struct Exporter : Visitor {
     };
     current["ctrl"] = f(inst->predicate.encode());
     current["self"] = f(inst->self_predicate.encode());
-    Json::Value reg_write(Json::ValueType::arrayValue);
+    Json::Value value_info(Json::ValueType::arrayValue);
     for (int i = 0; i < (int) inst->values.size(); ++i) {
-      reg_write.append(inst->values[i].reg);
+      value_info.append(inst->values[i].reg);
+      value_info.append(inst->values[i].symbol);
     }
-    current["reg_write"] = reg_write;
+    current["value_info"] = value_info;
     Visit(static_cast<Node*>(inst));
   }
   void Visit(InputPort* in) override {
@@ -350,10 +351,10 @@ SSDfg* Import(const std::string& s) {
         if (node.isMember("self")) {
           inst.self_predicate = CtrlBits(f(node["self"]));
         }
-        if (node.isMember("reg_write")) {
-          for (int i = 0; i < (int) inst.values.size(); ++i) {
-            inst.values[i].reg = node["reg_write"][i].asInt();
-          }
+        auto &value_info = node["value_info"];
+        for (int i = 0; i < (int) inst.values.size(); i += 2) {
+          inst.values[i / 2].reg = value_info[i].asInt();
+          inst.values[i / 2].symbol = value_info[i + 1].asString(); 
         }
       }
       auto &operands = node["inputs"];

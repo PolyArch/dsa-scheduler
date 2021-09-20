@@ -26,6 +26,18 @@
 using namespace std;
 using namespace dsa;
 
+namespace dsa {
+namespace mapper {
+
+bool Range::operator==(const Range &b) {
+  return l == b.l && r == b.r;
+}
+
+}
+}
+
+
+
 int Schedule::colorOf(dsa::dfg::Value* v) { return cm::ColorOf(v); }
 
 std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size, uint64_t* bits) {
@@ -94,12 +106,12 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
     if (!is_scheduled(nodes[i])) {
       continue;
     }
-    auto loc = location_of(nodes[i]);
+    auto loc = locationOf(nodes[i]);
     Json::Value mapping;
     mapping["op"] = "assign_node";
     mapping["dfgnode"] = nodes[i]->id();
-    mapping["adgnode"] = loc.second->id();
-    mapping["adgslot"] = loc.first;
+    mapping["adgnode"] = loc.node()->id();
+    mapping["adgslot"] = loc.lane();
     instructions.append(mapping);
   }
 
@@ -439,8 +451,8 @@ void Schedule::stat_printOutputLatency() {
   cout << "** Output Vector Latencies **\n";
   for (int i = 0; i < n; i++) {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
-    auto loc = location_of(vec_out);
-    ssvport* vport = dynamic_cast<ssvport*>(loc.second);
+    auto loc = locationOf(vec_out);
+    ssvport* vport = dynamic_cast<ssvport*>(loc.node());
     CHECK(vport) << this;
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : operands[vec_out->id()]) {
@@ -473,8 +485,8 @@ void Schedule::validate() {
   // destination
   for (dsa::dfg::Edge& edge : _ssDFG->edges) {
     auto& links = _edgeProp[edge.id].links;
-    ssnode* def_node = locationOf(edge.def());
-    ssnode* use_node = locationOf(edge.use());
+    auto def_node = locationOf(edge.def());
+    auto use_node = locationOf(edge.use());
 
     if (links.size() == 0) continue;  // maybe a partial schedule
 
@@ -483,7 +495,7 @@ void Schedule::validate() {
     for (auto& linkp : links) {
       sslink* link = linkp.second;
       if (i == 0) {
-        CHECK(link->source() == def_node);
+        CHECK(link->source() == def_node.node());
       }
       if (i > 0) {
         CHECK(prev_link->sink() == link->source());
@@ -495,7 +507,7 @@ void Schedule::validate() {
       prev_link = link;
     }
     CHECK(prev_link);
-    CHECK(prev_link->sink() == use_node);
+    CHECK(prev_link->sink() == use_node.node());
   }
 }
 
@@ -505,8 +517,8 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   max_util = 0;
 
   for (auto v : _vertexProp) {
-    if (v.node) {
-      const auto& np = _nodeProp[v.node->id()];
+    if (v.slot.ref) {
+      const auto& np = _nodeProp[v.slot.ref->id()];
 
       // Calculate aggregate overage
       for (int i = 0, m = np.slots.size(); i < m; ++i) {
@@ -531,11 +543,11 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
         int unique_io = vector_utils::count_unique(io);
 
         int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
-        int cur_ovr = cur_util - v.node->max_util();
+        int cur_ovr = cur_util - v.slot.ref->max_util();
         if (cur_ovr > 0) {
-          DSA_LOG(OVERPROV) << v.node->name() << ": "
+          DSA_LOG(OVERPROV) << v.slot.ref->name() << ": "
             << cnt << " + " << slot.passthrus.size() << " + "
-            << unique_io << " + " << (ops.size() != 0) << " > " << v.node->max_util();
+            << unique_io << " + " << (ops.size() != 0) << " > " << v.slot.ref->max_util();
           for (auto elem: io) {
             DSA_LOG(OVERPROV) << elem->name();
           }

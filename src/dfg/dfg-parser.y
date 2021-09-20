@@ -234,6 +234,7 @@ statement: INPUT ':' io_def  eol {
     for (int i = 0, n = node->values.size(); i < n; ++i) {
       auto *ve = new ValueEntry(node->id(), i, 0, node->bitwidth() - 1);
       p->symbols.Set((*$1)[i], ve);
+      node->values[i].symbol = (*$1)[i];
       auto iter = p->regs.find((*$1)[i]);
       if (iter != p->regs.end()) {
         p->regs.erase(iter);

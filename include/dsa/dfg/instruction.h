@@ -73,9 +73,12 @@ struct CtrlBits {
   /*! \brief Construct an empty CtrlBits object. */
   CtrlBits() {}
 
+  /*!
+   * \brief Look up the control table and update the behavior.
+   * \param val The key to index the lut.
+   * \param b The behavior.
+   * */
   void test(uint64_t val, Behavior &b);
-
-  bool needs_ctrl_dep() { return is_dynamic; }
 
   const bool is_dynamic{false};
 
@@ -127,11 +130,17 @@ class Instruction : public Node {
   // TODO(@were): Do we want to rename this to ToString?
   std::string name() override;
 
+  /*! \brief Guess the lane of this instruction. If it is unable to guess, return -1 or -2. */
+  int lane();
+
   /*! \brief The predication affected by an upstream operand. */
   CtrlBits predicate;
   /*! \brief The predication affected by itself. */
   CtrlBits self_predicate;
 
+  /*!
+   * \brief The bitwidth of the instruction.
+   */
   int bitwidth() override;
 
   // TODO(@were): Move these to simulation.
@@ -141,6 +150,11 @@ class Instruction : public Node {
   uint64_t do_compute(bool& discard, std::vector<bool> &backpressure);
   // @}
  private:
+  /*!
+   * \brief Remember the result of lane information. -1 is uninitialized, -2 is initialized but
+   *        still unable to guess.
+   */
+  int lane_{-1};
   // TODO(@were): These are data structures for simulation. Move them out later.
   std::vector<uint64_t> _input_vals;
   std::vector<uint64_t> _output_vals;

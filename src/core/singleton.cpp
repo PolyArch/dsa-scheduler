@@ -23,10 +23,10 @@ void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
   this->bitstream = parsed["print-bitstream"].as<bool>();
   this->max_iters = parsed["max-iters"].as<int>();
   this->tolerate_unuse = parsed["tolerate-unuse"].as<bool>();
+  this->route_along = parsed["route-along"].as<double>();
   using adg::estimation::Hardware;
   using adg::estimation::Result;
-  this->dse_target =
-    parsed.count("fpga") ? Hardware::FPGA : Hardware::ASIC;
+  this->dse_target = parsed.count("fpga") ? Hardware::FPGA : Hardware::ASIC;
   this->budget = Result::RESOURCE_CONSTRUCTOR[dse_target]();
   if (dse_target == Hardware::FPGA) {
     auto *fpga = dynamic_cast<adg::estimation::FPGAResource*>(budget);

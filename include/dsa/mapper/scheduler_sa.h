@@ -5,6 +5,7 @@
 #include <utility>
 #include <unordered_map>
 
+#include "dsa/mapper/schedule.h"
 #include "dse.h"
 #include "scheduler.h"
 
@@ -81,7 +82,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   template <typename T>
   bool scheduleHere(Schedule* sched, const std::vector<T>& nodes,
-                    const std::vector<std::pair<int, dsa::ssnode*>>& cand) {
+                    const std::vector<mapper::Slot<ssnode*>>& cand) {
     CHECK(cand.size() == nodes.size());
     for (int i = 0; i < (int)nodes.size(); ++i) {
       if (!scheduleHere(sched, nodes[i], cand[i])) {
@@ -94,10 +95,10 @@ class SchedulerSimulatedAnnealing : public Scheduler {
     return true;
   }
 
-  bool scheduleHere(Schedule*, dsa::dfg::Node*, std::pair<int, dsa::ssnode*>);
+  bool scheduleHere(Schedule*, dsa::dfg::Node*, mapper::Slot<ssnode*>);
 
-  int route(Schedule* sched, dsa::dfg::Edge* dfgnode, std::pair<int, dsa::ssnode*> source,
-            std::pair<int, dsa::ssnode*> dest,
+  int route(Schedule* sched, dsa::dfg::Edge* dfgnode,
+            mapper::VertexProp &vps, mapper::VertexProp &vpd,
             std::vector<std::pair<int, sslink*>>::iterator* ins_it,
             int max_path_lengthen);
 
@@ -109,7 +110,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   // 1: Success
   int map_to_completion(SSDfg* ssDFG, Schedule* sched);
 
-  inline int try_candidates(const std::vector<std::pair<int, ssnode*>>& candidates,
+  inline int try_candidates(const std::vector<mapper::MapSpot>& candidates,
                             Schedule*, dsa::dfg::Node* node);
 
   void unmap_some(SSDfg* ssDFG, Schedule* sched);
@@ -123,3 +124,4 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   int max_iters;
   std::unordered_map<std::string, std::pair<int, ssnode*>> indirect_map_to_index;
 };
+

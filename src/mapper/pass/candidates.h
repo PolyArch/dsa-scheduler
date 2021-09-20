@@ -7,11 +7,13 @@ namespace dsa {
 namespace mapper {
 
 struct CandidateSpotVisitor : dfg::Visitor {
+
   void Visit(dfg::Instruction* inst) override {
     auto fabric = sched->ssModel()->subModel();
     auto* model = fabric;
-    std::vector<std::pair<int, ssnode*>> spots;
-    std::vector<std::pair<int, ssnode*>> not_chosen_spots;
+
+    std::vector<MapSpot> spots;
+    std::vector<MapSpot> secondary_spots;
 
     std::vector<ssfu*> fus = model->nodes<dsa::ssfu*>();
     // For Dedicated-required Instructions
@@ -37,9 +39,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
           continue;
         }
 
+        bool routing_along = rand() & 1;
+
         for (int k = 0; k < cand_fu->datawidth(); k += cand_fu->granularity()) {
           if (k % inst->bitwidth() != 0) {
             continue;
+          }
+          if (routing_along) {
+            if (k / inst->bitwidth() != inst->lane() % cand_fu->lanes()) {
+              continue;
+            }
           }
           int cnt = 1;
           for (int sub_slot = 0; sub_slot < inst->bitwidth(); sub_slot += cand_fu->granularity()) {
@@ -47,9 +56,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
           }
 
           if (rand() % (cnt * cnt) == 0) {
-            spots.emplace_back(k / cand_fu->granularity(), fus[i]);
+            spots.emplace_back(routing_along, Slot<ssnode*>(k / cand_fu->granularity(), fus[i]));
           } else {
-            not_chosen_spots.emplace_back(k / cand_fu->granularity(), fus[i]);
+            secondary_spots.emplace_back(routing_along, Slot<ssnode*>(k / cand_fu->granularity(), fus[i]));
           }
         }
 
@@ -58,16 +67,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
         // For now the approach is to *not* consume dedicated resources, although
         // this can be changed later if that's helpful.
         if ((int)sched->dfg_nodes_of(0, cand_fu).size() + 1 < cand_fu->max_util()) {
-          spots.emplace_back(0, fus[i]);
+          spots.emplace_back(0, Slot<ssnode*>(0, fus[i]));
         } else {
-          not_chosen_spots.emplace_back(0, fus[i]);
+          secondary_spots.emplace_back(0, Slot<ssnode*>(0, fus[i]));
         }
       }
     }
 
     // If we couldn't find any good spots, we can just pick a bad spot for now
     if (spots.size() == 0) {
-      spots = not_chosen_spots;
+      spots = secondary_spots;
     }
 
     std::random_shuffle(spots.begin(), spots.end());
@@ -76,8 +85,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
     if (n > max_candidates) n = max_candidates;
 
     cnt[inst->id()] = n;
-    candidates[inst->id()] =
-        std::vector<std::pair<int, ssnode*>>(spots.begin(), spots.begin() + n);
+    candidates[inst->id()] = spots;
   }
 
   void Visit(dfg::Operation* op) override {
@@ -127,7 +135,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
         }
       }
       if (ok) {
-        candidates[op->id()].emplace_back(0, static_cast<ssnode*>(fu));
+        candidates[op->id()].emplace_back(0, Slot<ssnode*>(0, static_cast<ssnode*>(fu)));
         ++this->cnt[op->id()];
       }
     }
@@ -139,16 +147,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->input_list();
     // Lets write size in units of bits
-    std::vector<std::pair<int, ssnode*>>& spots = candidates[input->id()];
-    std::vector<std::pair<int, ssnode*>> bad;
+    std::vector<MapSpot>& spots = candidates[input->id()];
+    std::vector<MapSpot> bad;
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= input->bandwidth()) {
         if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.push_back(std::make_pair(0, cand));
+          spots.emplace_back(0, Slot<ssnode*>(0, cand));
         } else {
-          bad.push_back(std::make_pair(0, cand));
+          spots.emplace_back(0, Slot<ssnode*>(0, cand));
         }
       }
     }
@@ -164,16 +172,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->output_list();
     // Lets write size in units of bits
-    std::vector<std::pair<int, ssnode*>>& spots = candidates[output->id()];
-    std::vector<std::pair<int, ssnode*>> bad;
+    std::vector<MapSpot>& spots = candidates[output->id()];
+    std::vector<MapSpot> bad;
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
       if ((int)cand->bitwidth_capability() >= output->bandwidth()) {
         if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.push_back(std::make_pair(0, cand));
+          spots.emplace_back(0, Slot<ssnode*>(0, cand));
         } else {
-          bad.push_back(std::make_pair(0, cand));
+          bad.emplace_back(0, Slot<ssnode*>(0, cand));
         }
       }
     }
@@ -193,7 +201,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
   Schedule* sched{nullptr};
   int max_candidates;
   std::vector<int> cnt;
-  std::vector<std::vector<std::pair<int, ssnode*>>> candidates;
+  std::vector<std::vector<MapSpot>> candidates;
 };
 
 }  // namespace mapper

@@ -36,7 +36,7 @@ std::vector<int> CtrlBits::encode() {
 
 CtrlBits::CtrlBits(const std::vector<int> &a) {
   CHECK(a.size() % 2 == 0);
-  for (int i = 0; i < (int) a.size(); ++i) {
+  for (int i = 0; i < (int) a.size(); i += 2) {
     std::vector<CtrlBits::Control> v;
     for (int j = 0; j < CtrlBits::Control::Total; ++j) {
       if (a[i + 1] >> j & 1) {
@@ -229,6 +229,30 @@ std::string Instruction::name() {
   std::stringstream ss;
   ss << _name << "(" << dsa::name_of_inst(opcode) << " " << id() << ")";
   return ss.str();
+}
+
+int Instruction::lane() {
+  if (lane_ != -1) {
+    return lane_;
+  }
+  if (values.size() == 1) {
+    const std::string &name = values[0].symbol;
+    int i = name.size() - 1;
+    while (i >= 0 && isdigit(name[i])) {
+      --i;
+    }
+    CHECK(i >= 0) << name;
+    std::string laneno(name.begin() + i + 1, name.end());
+    if (!laneno.empty()) {
+      std::istringstream iss(laneno);
+      int res;
+      if (iss >> res) {
+        return lane_ = res;
+      }
+    }
+    return lane_ = -2;
+  }
+  return -1;
 }
 
 uint64_t Instruction::do_compute(bool& discard, std::vector<bool> &backpressure) {

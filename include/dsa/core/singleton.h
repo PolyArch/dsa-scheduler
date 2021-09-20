@@ -42,6 +42,10 @@ struct ContextFlags {
    */
   bool tolerate_unuse{false};
   /*!
+   * \brief The probability of routing along.
+   */
+  double route_along{0.0};
+  /*!
    * \brief The target of design space exploration.
    */
   adg::estimation::Hardware dse_target{adg::estimation::Hardware::ASIC};

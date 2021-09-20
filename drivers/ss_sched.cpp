@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
   auto default_string = cxxopts::value<std::string>();
   auto default_neg_1 = cxxopts::value<int>()->default_value("-1");
   auto default_1 = cxxopts::value<int>()->default_value("1");
+  auto default_d0 = cxxopts::value<double>()->default_value("0.0");
 
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.", default_false)
@@ -48,6 +49,7 @@ int main(int argc, char* argv[]) {
     ("e,seed", "The seed of randomization.", cxxopts::value<int>())
     ("dse-timeout", "The timeout cut-off for design space exploration.", default_neg_1)
     ("w,sched-workers", "The number of workers for scheduling.", default_1)
+    ("route-along", "Route along with a master lane when scheduling deomposable arch.", default_d0)
     ("h,help", "Print the help information.");
   
   options.allow_unrecognised_options();

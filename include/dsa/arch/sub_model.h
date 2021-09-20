@@ -82,6 +82,10 @@ class ssio_interface {
   void fill_vec();
 };
 
+/*!
+ * \brief The struct of component connection.
+ *        NOTE: This is not actually a hardware component. Just a set of helpers.
+ */
 class sslink {
  public:
   sslink() {}
@@ -104,7 +108,7 @@ class sslink {
   bool flow_control();
 
   /*!
-   * \brief The bitwidth of this connection.
+   * \brief The bandwith of this connection.
    */
   int bitwidth();
 
@@ -217,6 +221,7 @@ class ssnode {
    * \brief The coordination of this node in a mesh. If the topology is
    *        irregular, these two numbers are set to -1.
    */
+  // TODO(@were): Move this to fabric class.
   int x_{-1};
   int y_{-1};
   /*!

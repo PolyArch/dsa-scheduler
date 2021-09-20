@@ -29,6 +29,9 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
       inst_required[{node->inst(), (int)node->is_temporal()}]++;
       for (int i = 0; i < node->ops().size(); ++i) {
         auto &operand = node->ops()[i];
+        if (node->ops()[i].type != dfg::OperandType::data) {
+          continue;
+        }
         if (!operand.edges.empty()) {
           int operand_width = 0;
           for (auto eid : operand.edges) {

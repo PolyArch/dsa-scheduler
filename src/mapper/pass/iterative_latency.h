@@ -76,10 +76,10 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
   for (int i = 0, n = sched->edge_prop().size(); i < n; ++i) {
     auto& ep = sched->edge_prop()[i];
     auto f = [sched, &mapping, &i](Node* node) {
-      auto loc = sched->location_of(node);
-      if (loc.second) {
+      auto loc = sched->locationOf(node);
+      if (loc.node()) {
         CHECK(node->id() < mapping.size());
-        mapping[node->id()] = {loc.first, loc.second->id()};
+        mapping[node->id()] = {loc.lane(), loc.node()->id()};
       }
     };
     f(dfg->edges[i].def());
@@ -181,7 +181,7 @@ struct ResetBoundVisitor : Visitor {
 const int min_expect = 2;
 const int max_expect = 8;
 
-void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
+inline void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
                       std::vector<int>& edge_length,
                       std::vector<std::pair<int, int>>& mapping, SSModel* model,
                       std::vector<Bounds>& bounds) {
@@ -305,7 +305,7 @@ void iterative_bounds(SSDfg* dfg, std::vector<Node*>& non_temp,
   }
 }
 
-void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_temp,
+inline void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_temp,
                     std::vector<int>& edge_length,
                     std::vector<std::pair<int, int>>& mapping,
                     std::vector<Bounds>& bounds, std::vector<int>& latency,
