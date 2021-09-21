@@ -1,3 +1,4 @@
+#include <iostream>
 #include <iomanip>
 
 #include "dsa/core/singleton.h"
@@ -14,6 +15,40 @@ CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
 namespace dsa {
 
 void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
+  std::string path = "viz/objectives.csv";
+  ofstream ofs(path);
+  if (!ofs.good()) {
+    CHECK(false);
+    std::cerr << path << " not opened!" << std::endl;
+  }
+  ofs << "Time,Iteration,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Link Score,Best Link Score,DSE Change,DSE Change Details,Current Resources,Best Resources,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances" << std::endl;
+
+
+  auto dump_log = [](const double& time, const int& iteration, const double& temp, CodesignInstance* curr_ci, CodesignInstance* best_ci) {
+    std::ostringstream s;
+    s << time << ","
+      << iteration << "," 
+      << temp << ","
+      << curr_ci->weight_obj() << ","
+      << best_ci->weight_obj() << ","
+      << curr_ci->performance << ","
+      << best_ci->performance << ","
+      << curr_ci->normalized_resources << ","
+      << best_ci->normalized_resources << ","
+      << curr_ci->links_score << ","
+      << best_ci->links_score << ","
+      << curr_ci->dse_change << "," 
+      << curr_ci->get_changes_log() << ",\"" 
+      << curr_ci->resources() << "\",\"" 
+      << best_ci->resources() << "\","
+      << curr_ci->get_workload_weights() << ","
+      << best_ci->get_workload_weights() << ","
+      << curr_ci->get_workload_performances() << ","
+      << best_ci->get_workload_performances() << ","
+      << curr_ci->get_dfg_performances() << ","
+      << best_ci->get_dfg_performances();
+    return s.str();
+  };
 
   auto &ci = dsa::ContextFlags::Global();
 
@@ -25,7 +60,6 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
   CodesignInstance* best_ci = cur_ci;
   cur_ci->verify();
-  std::vector<WorkloadSchedules*> _incr_sched;
 
   {
     std::string curline;
@@ -49,9 +83,9 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   auto dump_checkpoint = [](Schedule* sched, const std::string& filename,
                             double performance) {
     if (!sched) return;
-    std::cout << "Dumping " << sched->ssdfg()->filename << " viz/" << filename << "/ "
+    std::cout << "Dumping " << sched->ssdfg()->filename << " viz/iters/" << filename << "/ "
               << performance << std::endl;
-    std::string path = "viz/" + filename;
+    std::string path = "viz/iters/" + filename;
     ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
     sched->printGraphviz((path + "/graph.gv").c_str());
     std::ofstream ofs(path + "/" + filename + ".dfg.h");
@@ -77,7 +111,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     cur_ci->ss_model()->indirect(best_indir);
   }
 
-  std::cout << " ### Begin DSE Iteration " << i << " ### \n"
+  std::cout << " ### Begin DSE Iteration " << i << " ###" <<std::endl
             << "DSE OBJ: " << cur_ci->weight_obj() << std::endl
             << "Execution Time: "
             << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::endl;
@@ -126,10 +160,13 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
             << "Execution Time: "
             << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::endl;
   cur_ci->dump_breakdown(ci.verbose);
+
+  ofs << dump_log(static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC, i, temperature, cur_ci, cur_ci) << std::endl;
+
   {
     // dump the new hw json
     std::stringstream hw_ss;
-    hw_ss << "viz/dse-sched-" << i << ".json";
+    hw_ss << "viz/iters/dse-sched-" << i << ".json";
     cur_ci->ss_model()->subModel()->DumpHwInJson(hw_ss.str().c_str());
   }
 
@@ -169,6 +206,8 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     std::cout << "DSE OBJ: " << obj_func << "(" << best_obj << ") (" << init_obj << ")"
               << std::endl;
     
+    ofs << dump_log(time_elps, i, temperature, cand_ci, best_ci) << std::endl;
+    
     auto util = cand_ci->utilization();
 
     std::cout << std::setprecision(2)
@@ -196,12 +235,12 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
         std::ostringstream oss;
         oss << "iter_" << i << "_" << x;
         dump_checkpoint(best_ci->res[x], oss.str(),
-                        best_ci->dse_sched_obj(best_ci->res[x]).first);
+                        best_ci->dse_sched_obj(best_ci->res[x]));
       }
 
       // dump the new hw json
       std::ostringstream hw_ss;
-      hw_ss << "viz/dse-sched-" << i << ".json";
+      hw_ss << "viz/iters/dse-sched-" << i << ".json";
       best_ci->ss_model()->subModel()->DumpHwInJson(hw_ss.str().c_str());
       temperature *= 0.98;
       last_improve = i;
@@ -248,7 +287,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   for (int x = 0, ew = cur_ci->workload_array.size(); x < ew; ++x) {
     std::ostringstream oss;
     oss << "final_" << x;
-    dump_checkpoint(cur_ci->res[x], oss.str(), cur_ci->dse_sched_obj(cur_ci->res[x]).first);
+    dump_checkpoint(cur_ci->res[x], oss.str(), cur_ci->dse_sched_obj(cur_ci->res[x]));
   }
 
   cur_ci->prune_all_unused();
@@ -259,5 +298,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   std::cout << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC
             << std::endl;
 }
+
+
 
 }

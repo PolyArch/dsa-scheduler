@@ -895,7 +895,6 @@ int SchedulerSimulatedAnnealing::try_candidates(
         break;
         auto it = indirect_map_to_index.find(node->name());
         assigned_port = it->second; // sched->vecPortOf(ne);
-
         // ID associated with the current port
         auto cur_vport = candidates[idx[i]].second;
         auto ne = dynamic_cast<SSDfgVec*>(node);

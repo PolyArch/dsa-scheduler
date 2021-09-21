@@ -34,14 +34,15 @@ int main(int argc, char* argv[]) {
   auto default_20000 = cxxopts::value<int>()->default_value("20000");
   auto default_string = cxxopts::value<std::string>();
   auto default_neg_1 = cxxopts::value<int>()->default_value("-1");
-  auto default_1 = cxxopts::value<int>()->default_value("1");
   auto default_d0 = cxxopts::value<double>()->default_value("0.0");
+  auto default_1 = cxxopts::value<int>()->default_value("1");
 
   options.add_options()
     ("v,verbose", "Dump verbosed scheduling log.", default_false)
     ("d,dummy", "Only schedule the i/o ports.", default_false)
     ("x,design-explore", "Design space exploration for the given DFG's.", default_false)
     ("r,tolerate-unuse", "Do not throw an error if there are unused values", default_false)
+    ("f,fpga", "Design space exploration for FPGA overlay.", default_false)
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", default_false)
     ("f,fpga", "Design space exploration for FPGA overlay.", default_false)
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", default_24_36)
@@ -84,6 +85,8 @@ int main(int argc, char* argv[]) {
   // Evlove the underlying hardware.
   ENFORCED_SYSTEM("mkdir -p .sched");
   if (parsed.count("design-explore")) {
+    // ENFORCED_SYSTEM("rm -rf viz;");
+    ENFORCED_SYSTEM("mkdir -p viz; mkdir -p viz/iters; touch viz/objectives.csv");
     dsa::DesignSpaceExploration(ssmodel, args[1]);
     return 0;
   }
@@ -95,12 +98,12 @@ int main(int argc, char* argv[]) {
     ofstream os(model_visual_filename.c_str());
     std::cout << "Hardware GV file is " << model_visual_filename << std::endl;
     ssmodel.subModel()->PrintGraphviz(os);
-    std::cout << "[Total] " << res.sum()->dump() << std::endl;
     res.Dump(std::cout);
     return 0;
   }
 
   // Map the DFG to the spatial architecture.
+
   CHECK(args.size() == 2);
   std::string dfg_file = args[1];
   SSDfg dfg(dfg_file);

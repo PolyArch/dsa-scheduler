@@ -81,7 +81,7 @@ add_library(dsa
 target_include_directories(dsa PRIVATE
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/3rd-party/cxxopts/include
-  ${CMAKE_SOURCE_DIR}/3rd-party/cptl/
+  ${CMAKE_SOURCE_DIR}/3rd-party/ctpl/
   ${CMAKE_SOURCE_DIR}/3rd-party/libtorch/include/torch/csrc/api/include
   ${CMAKE_INSTALL_PREFIX}/include
   )

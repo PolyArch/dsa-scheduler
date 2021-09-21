@@ -271,12 +271,19 @@ SpatialFabric::SpatialFabric(std::istream& istream,
 void SpatialFabric::PrintGraphviz(ostream& os) {
   os << "Digraph G { \n";
 
-  // switchesnew_sched
-  for (auto* sw : switch_list()) {
-    // os << switches[i][j]->name() <<"[ label = \"Switch[" << i << "][" << j << "]\"
-    // ];\n";
+  // VPorts
+  for (auto* vport : vport_list()) {
+    os << vport->name() << " [shape=\"circle\"]" << ";\n";
+    for (auto& elem : vport->out_links()) {
+      const ssnode* dest_node = elem->sink();
+      os << vport->name() << " -> " << dest_node->name() << ";\n";
+    }
+  }
 
+  // switches
+  for (auto* sw : switch_list()) {
     // output links
+    os << sw->name() << " [shape=\"diamond\"]" << ";\n";
     for (auto& elem : sw->out_links()) {
       const ssnode* dest_node = elem->sink();  // FUs and output nodes
       os << sw->name() << " -> " << dest_node->name() << ";\n";
@@ -285,6 +292,7 @@ void SpatialFabric::PrintGraphviz(ostream& os) {
 
   // fus
   for (auto* fu : fu_list()) {
+    os << fu->name() << " [shape=\"box\"]" << ";\n";
     for (auto& elem : fu->out_links()) {
       const ssnode* dest_node = elem->sink();  // Output link of each FU
       os << fu->name() << " -> " << dest_node->name() << ";\n";

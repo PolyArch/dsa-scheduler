@@ -4,6 +4,6 @@
 [submodule "3rd-party/cxxopts"]
 	path = 3rd-party/cxxopts
 	url = https://github.com/jarro2783/cxxopts
-[submodule "3rd-party/cptl"]
-	path = 3rd-party/cptl
+[submodule "CTPL"]
+	path = 3rd-party/ctpl
 	url = https://github.com/vit-vit/CTPL.git

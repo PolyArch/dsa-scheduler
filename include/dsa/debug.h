@@ -46,13 +46,14 @@ class LOGGER {
 
 #define CHECK(COND) \
   if (!(COND)) dsa::LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
-
+  
 #define DSA_WARNING dsa::LOGGER("[WARNING]", __FILE__, __LINE__, false)
 
 #define DSA_INFO dsa::LOGGER("[INFO]", __FILE__, __LINE__, false)
 
 #define DSA_LOG(S) \
   if (getenv(#S)) dsa::LOGGER("[" #S "]", __FILE__, __LINE__, false)
+
 
 #define ENFORCED_SYSTEM(CMD)                        \
   if (int ret = system(CMD))                        \

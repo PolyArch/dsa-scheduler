@@ -33,6 +33,6 @@ void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
     fpga->total_lut = 1182240;
     fpga->ff = 2364480;
   }
-}
 
+}
 }

@@ -358,7 +358,7 @@ inline void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_t
   }
 }
 
-inline void calc_mis_vio(SSDfg* dfg, std::vector<Node*>& non_temp,
+inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_temp,
                          std::vector<int>& edge_latency, std::vector<int>& edge_delay,
                          std::vector<int>& latency, int& max_lat, int& max_lat_mis,
                          int& total_vio, std::vector<int>& group_mismatch,
@@ -408,7 +408,10 @@ inline void calc_mis_vio(SSDfg* dfg, std::vector<Node*>& non_temp,
     }
 
     int new_lat = node->lat_of_inst() + up_lat;
+    
     latency[node->id()] = new_lat;
+    //int delay = sched->nod
+    //->delay_fifo_depth();
 
     if (max_lat < new_lat) max_lat = new_lat;
   }
@@ -459,7 +462,7 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
 
   // Migrate legacy violation calculation here.
   std::vector<int> node_vio;
-  calc_mis_vio(&dfg_, non_temp, edge_length, edge_delay, latency, max_lat, max_lat_mis,
+  calc_mis_vio(&dfg_, sched, non_temp, edge_length, edge_delay, latency, max_lat, max_lat_mis,
                total_vio, group_mismatch, node_vio);
   // Commit results to the schedule.
   for (auto elem : sched->ssdfg()->nodes) {

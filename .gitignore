@@ -25,3 +25,4 @@ sched/*
 .ycm_extra_conf.py
 .cache/*
 3rd-party/*.zip
+.metals/*

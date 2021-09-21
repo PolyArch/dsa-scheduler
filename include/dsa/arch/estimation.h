@@ -57,6 +57,7 @@ struct Result {
 
   /*! \brief Print the breakdowns */
   void Dump(std::ostream&);
+  void Dump_all_resources(std::ostream& os);
 
   Resource *sum();
 

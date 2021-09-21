@@ -92,103 +92,106 @@ std::pair<double, double> FIFOEst(int depth) {
 }
 
 struct Estimator : Visitor {
-  Estimator(SSModel* arch_) : arch(arch_) {
+  Estimator(SSModel* arch_, Hardware hw_) : arch(arch_), hw(hw_){
     auto iter = MEMORY_DATA.find({arch->memory_size, arch->io_ports});
     CHECK(iter != MEMORY_DATA.end());
     double power = iter->second.second + (arch->indirect() == 2) * 18.1 + 9.3;
     double area = iter->second.first + (arch->indirect() == 2) * 88800 + 5200;
     switch (hw) {
-    case Hardware::ASIC:
-      res.add(Breakdown::Memory, power, area);
-      break;
-    case Hardware::FPGA:
-      // TODO(@were): Include this!
-      break;
+      case Hardware::ASIC: {
+        res.add(Breakdown::Memory, power, area);
+        break;
+      }
+      case Hardware::FPGA: {
+        // TODO(@were): Include this!
+        break;
+      }
     }
   }
 
   void Visit(ssswitch* sw) {
     switch (hw) {
-    case Hardware::ASIC: {
-      auto nw = RadixEst(sw->in_links().size(), sw->out_links().size(),
-                         sw->lanes(), sw->flow_control());
-      res.add(Breakdown::Network, nw.first, nw.second);
-      auto sync = FIFOEst(sw->delay_fifo_depth());
-      res.add(Breakdown::Sync, sync.first, sync.second);
-      break;
-    }
-    case Hardware::FPGA: {
-      std::vector<float> model_inputs{
-        (float) sw->max_delay(), 
-        (float) sw->lanes(), 
-        (float) sw->in_links().size(), 
-        (float) sw->max_util() > 1 ? (float) 1 : (float) 0, 
-        (float) sw->out_links().size(), 
-        (float) sw->flow_control() ? (float) 1 : (float) 0};
-      auto of = router_area_predict_fpga(model_inputs);
-      std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-      res.add(Breakdown::Network, od);
-    }
-      break;
+      case Hardware::ASIC: {
+        auto nw = RadixEst(sw->in_links().size(), sw->out_links().size(),
+                          sw->lanes(), sw->flow_control());
+        res.add(Breakdown::Network, nw.first, nw.second);
+        auto sync = FIFOEst(sw->delay_fifo_depth());
+        res.add(Breakdown::Sync, sync.first, sync.second);
+        break;
+      }
+      case Hardware::FPGA: {
+        std::vector<float> model_inputs{
+          (float) sw->max_delay(), 
+          (float) sw->lanes(), 
+          (float) sw->in_links().size(), 
+          (float) sw->max_util() > 1 ? (float) 1 : (float) 0, 
+          (float) sw->out_links().size(), 
+          (float) sw->flow_control() ? (float) 1 : (float) 0};
+        
+        auto of = router_area_predict_fpga(model_inputs);
+        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
+        res.add(Breakdown::Network, od);
+        break;
+      }
     }
   }
 
   void Visit(ssvport* vp) {
     switch (hw) {
-    case Hardware::FPGA: {
-      std::vector<float> model_inputs{
-        (float) vp->in_links().size(), 
-        (float) vp->out_links().size(), 
-        (float) vp->datawidth(), 
-        (float) vp->delay_fifo_depth() };
-      auto of = vport_area_predict_fpga(model_inputs);
-      std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-      res.add(Breakdown::Sync, od);
-      break;
-    }
-    case Hardware::ASIC: {
-      auto nw =
-          RadixEst(std::max((int)1, (int)vp->in_links().size()),
-                   std::max((int)1, (int)vp->out_links().size()), vp->lanes(), false);
-      res.add(Breakdown::Network, nw.first, nw.second);
-      auto sync = FIFOEst(2);
-      res.add(Breakdown::Sync, sync.first, sync.second);
-      break;
-    }
+      case Hardware::FPGA: {
+        std::vector<float> model_inputs{
+          (float) vp->in_links().size(), 
+          (float) vp->out_links().size(), 
+          (float) vp->datawidth(), 
+          (float) vp->delay_fifo_depth() };
+        auto of = vport_area_predict_fpga(model_inputs);
+        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
+        res.add(Breakdown::Sync, od);
+        break;
+      }
+      case Hardware::ASIC: {
+        auto nw =
+            RadixEst(std::max((int)1, (int)vp->in_links().size()),
+                    std::max((int)1, (int)vp->out_links().size()), vp->lanes(), false);
+        res.add(Breakdown::Network, nw.first, nw.second);
+        auto sync = FIFOEst(2);
+        res.add(Breakdown::Sync, sync.first, sync.second);
+        break;
+      }
     }
 
   }
 
   void Visit(ssfu* fu) {
     switch (hw) {
-    case Hardware::FPGA: {
-      std::vector<float> model_inputs{
-        (float) fu->lanes(),
-        (float) fu->max_delay(), 
-        (float) fu->in_links().size(),
-        (float) fu->max_util() > 1 ? (float) 1 : (float) 0,
-        (float) fu->out_links().size(), 
-        (float) 0 /*features[4]*/, 
-        (float) fu->flow_control() ? (float) 1 : (float) 0, 
-        (float) fu->delay_fifo_depth()};
-      auto of = pe_area_predict_fpga(model_inputs);
-      std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-      res.add(Breakdown::FU, od);
-      break;
-    }
-    case Hardware::ASIC: {
-      auto nw_in =
-        RadixEst(2, fu->in_links().size(), fu->lanes(), fu->flow_control());
-      auto nw_out =
-        RadixEst(1, fu->out_links().size(), fu->lanes(), fu->flow_control());
-      auto sync = FIFOEst(fu->delay_fifo_depth());
-      res.add(Breakdown::Network, nw_in.first, nw_in.second);
-      res.add(Breakdown::Network, nw_out.first, nw_out.second);
-      res.add(Breakdown::Sync, sync.first, sync.second);
-      std::pair<double, double> fupa(fu->fu_type_.power(), fu->fu_type_.area());
-      res.add(Breakdown::FU, fupa.first, fupa.second);
-      break;
-    }
+      case Hardware::FPGA: {
+        std::vector<float> model_inputs{
+          (float) fu->lanes(),
+          (float) fu->max_delay(), 
+          (float) fu->in_links().size(),
+          (float) fu->max_util() > 1 ? (float) 1 : (float) 0,
+          (float) fu->out_links().size(), 
+          (float) 0 /*features[4]*/, 
+          (float) fu->flow_control() ? (float) 1 : (float) 0, 
+          (float) fu->delay_fifo_depth()};
+        auto of = pe_area_predict_fpga(model_inputs);
+        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
+        res.add(Breakdown::FU, od);
+        break;
+      }
+      case Hardware::ASIC: {
+        auto nw_in =
+          RadixEst(2, fu->in_links().size(), fu->lanes(), fu->flow_control());
+        auto nw_out =
+          RadixEst(1, fu->out_links().size(), fu->lanes(), fu->flow_control());
+        auto sync = FIFOEst(fu->delay_fifo_depth());
+        res.add(Breakdown::Network, nw_in.first, nw_in.second);
+        res.add(Breakdown::Network, nw_out.first, nw_out.second);
+        res.add(Breakdown::Sync, sync.first, sync.second);
+        std::pair<double, double> fupa(fu->fu_type_.power(), fu->fu_type_.area());
+        res.add(Breakdown::FU, fupa.first, fupa.second);
+        break;
+      }
     }
   }
 
@@ -198,8 +201,7 @@ struct Estimator : Visitor {
 };
 
 Result EstimatePowerAera(SSModel* arch) {
-  Estimator estimator(arch);
-  estimator.hw = ContextFlags::Global().dse_target;
+  Estimator estimator(arch, ContextFlags::Global().dse_target);
   arch->subModel()->Apply(&estimator);
   return estimator.res;
 }
