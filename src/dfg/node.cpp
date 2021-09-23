@@ -63,8 +63,9 @@ bool Operand::ready() {
       return false;
     }
     if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
-      DSA_LOG(FORWARD) << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
-                   << fifos[i].front().available_at;
+      DSA_LOG(FORWARD)
+        << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
+        << fifos[i].front().available_at;
       return false;
     }
   }
@@ -143,14 +144,13 @@ bool Value::forward(bool attempt) {
           if ((int)operand.fifos[i].size() + 1 < edge->buf_len
               /*FIXME: The buffer size should be something more serious*/) {
             if (!attempt) {
-              sim::SpatialPacket entry(parent->cur_cycle() + edge->delay, data.value,
-                                     data.valid);
-              DSA_LOG(FORWARD) << parent->cur_cycle() << ": " << name() << " pushes "
-                           << data.value << "(" << data.valid << ")"
-                           << "to " << user->use()->name() << "'s " << j << "th operand "
-                           << operand.fifos[i].size() + 1 << "/" << edge->buf_len
-                           << " in " << edge->delay << " cycles(" << entry.available_at
-                           << ")";
+              sim::SpatialPacket entry(data.available_at + edge->delay, data.value, data.valid);
+              DSA_LOG(FORWARD)
+                << parent->cur_cycle() << ": " << name() << " pushes "
+                << data.value << "(" << data.valid << ")"
+                << "to " << user->use()->name() << "'s " << j << "th operand "
+                << operand.fifos[i].size() + 1 << "/" << edge->buf_len
+                << " in " << edge->delay << " cycles(" << entry.available_at << ")";
               if (!attempt) {
                 DSA_LOG(FORWARD) << &fifo << " -> " << &operand.fifos[i];
               }

@@ -44,7 +44,6 @@ int main(int argc, char* argv[]) {
     ("r,tolerate-unuse", "Do not throw an error if there are unused values", default_false)
     ("f,fpga", "Design space exploration for FPGA overlay.", default_false)
     ("b,print-bitstream", "Dump the binary of spatial scheduling.", default_false)
-    ("f,fpga", "Design space exploration for FPGA overlay.", default_false)
     ("t,timeout", "Kill the scheduling if it times longer than the cutoff.", default_24_36)
     ("m,max-iters", "The maxium iterations of scheduling attemps.", default_20000)
     ("e,seed", "The seed of randomization.", cxxopts::value<int>())

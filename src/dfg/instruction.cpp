@@ -127,8 +127,9 @@ void Instruction::forward() {
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
     if (!_ops[i].ready()) {
-      DSA_LOG(FORWARD) << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since "
-                   << (i + 1) << " th op not ready ";
+      DSA_LOG(FORWARD)
+        << ssdfg()->cur_cycle() << ": " << name() << " Cannot forward since "
+        << (i + 1) << " th op not ready ";
       return;
     }
   }
@@ -157,7 +158,7 @@ void Instruction::forward() {
       _input_vals[i] = _ops[i].poll();
       if (!_ops[i].predicate()) {
         bh.discard = true;
-        reason << " operand " << i << " not valid!";
+        reason << "[operand " << i << " invalid]";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
         DSA_LOG(PRED) << "bits: " << predicate.toString() << ", pred: " << _input_vals[i];
         predicate.test(_input_vals[i], bh);
@@ -196,14 +197,16 @@ void Instruction::forward() {
     }
   }
 
-  DSA_LOG(COMP) << compute_dump.str() << (bh.exec ? " valid " : " invalid ") << reason.str()
-            << " " << (bh.discard ? " and output discard!" : "");
+  compute_dump << (bh.exec ? std::string(" [valid]") : (" [invalid, " + reason.str() + "]"));
+  if (bh.discard) {
+    compute_dump << (bh.discard ? " [and output discard!]" : " ");
+  }
 
   for (size_t i = 0; i < bh.backpressure.size(); ++i) {
     if (bh.backpressure[i]) {
-      DSA_LOG(COMP) << "backpressure on " << i;
+      compute_dump << " [backpressure " << i << "]";
     } else {
-      DSA_LOG(COMP) << "pop operand " << i;
+      compute_dump << " [pop " << i << "]";
       _ops[i].pop();
     }
   }
@@ -211,10 +214,12 @@ void Instruction::forward() {
   // TODO(@were): We need a better name for this flag.
   if (bh.exec) {
     for (size_t i = 0; i < values.size(); ++i) {
-      DSA_LOG(COMP) << "Push " << _output_vals[i] << "(" << !bh.discard << ") to " << i;
       values[i].push(_output_vals[i], !bh.discard, lat_of_inst());
+      compute_dump << " [pushed to value " << i << ", " << lat_of_inst() << "]";
     }
   }
+
+  DSA_LOG(COMP) << compute_dump.str();
 
   for (auto& elem : values) {
     if (!elem.forward(true)) return;
