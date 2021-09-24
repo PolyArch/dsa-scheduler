@@ -75,7 +75,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
 
     // If we couldn't find any good spots, we can just pick a bad spot for now
-    if (spots.size() == 0) {
+    if (spots.empty()) {
       spots = secondary_spots;
     }
 
