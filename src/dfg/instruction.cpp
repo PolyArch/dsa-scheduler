@@ -140,7 +140,7 @@ void Instruction::forward() {
   std::ostringstream reason;
   std::ostringstream compute_dump;
 
-  compute_dump << dsa::name_of_inst(inst()) << "(";
+  compute_dump << id() << ": " << dsa::name_of_inst(inst()) << "(";
 
   _input_vals.resize(_ops.size(), 0);
 
@@ -182,7 +182,7 @@ void Instruction::forward() {
         int idx = values[i].reg;
         int bytes = bitwidth() / 8;
         memcpy(((uint8_t*)&_reg[values[i].reg]) + idx * bytes, &output, bytes);
-        DSA_LOG(COMP) << "Write " << output << " to register!";
+        DSA_LOG(COMP) << "Write " << output << " to register" << values[i].reg;
       }
     }
     compute_dump << output;
@@ -202,8 +202,8 @@ void Instruction::forward() {
     compute_dump << (bh.discard ? " [and output discard!]" : " ");
   }
 
-  for (size_t i = 0; i < bh.backpressure.size(); ++i) {
-    if (bh.backpressure[i]) {
+  for (size_t i = 0; i < _ops.size(); ++i) {
+    if (i < bh.backpressure.size() && bh.backpressure[i]) {
       compute_dump << " [backpressure " << i << "]";
     } else {
       compute_dump << " [pop " << i << "]";

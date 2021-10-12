@@ -1,0 +1,6 @@
+MACRO(B1, b1)     // Backpressure on the first operand FIFO.
+MACRO(B2, b2)     // Backpressure on the second operand FIFO.
+MACRO(Discard, d) // Predication off the produced value.
+MACRO(Reset, r)   // Reset the register file to all zeros.
+MACRO(Abstain, a) // Avoid instruction execution.
+MACRO(Total, _)   // Placeholder for the last behavior. Used by declaration.

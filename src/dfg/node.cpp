@@ -151,9 +151,6 @@ bool Value::forward(bool attempt) {
                 << "to " << user->use()->name() << "'s " << j << "th operand "
                 << operand.fifos[i].size() + 1 << "/" << edge->buf_len
                 << " in " << edge->delay << " cycles(" << entry.available_at << ")";
-              if (!attempt) {
-                DSA_LOG(FORWARD) << &fifo << " -> " << &operand.fifos[i];
-              }
               operand.fifos[i].push(entry);
             }
           } else {

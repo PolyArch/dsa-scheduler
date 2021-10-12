@@ -18,12 +18,9 @@ namespace dfg {
 struct CtrlBits {
   /*! \brief The predicated behaviors. */
   enum Control {
-    B1,       // Backpressure on the first operand FIFO.
-    B2,       // Backpressure on the second operand FIFO.
-    Discard,  // Predication off the produced value.
-    Reset,    // Reset the register file to all zeros.
-    Abstain,  // Avoid instruction execution.
-    Total     // Placeholder for the last behavior. Used by declaration.
+  #define MACRO(ENUM, STR) ENUM,
+  #include "dsa/dfg/control.def"
+  #undef MACRO
   };
 
   /*!
