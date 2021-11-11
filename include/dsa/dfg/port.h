@@ -49,6 +49,11 @@ class VectorPort : public Node {
   /*! \brief The bandwidth of this port. */
   int bandwidth() { return is_temporal() ? bitwidth() : bitwidth() * vectorLanes(); }
 
+  /*!
+   * \brief The id of the state port.
+   */
+  int state_id{-1};
+
  protected:
   int bitwidth_{INT_MAX / 8};  // element bitwidth
   bool _indirect=false;
@@ -76,9 +81,10 @@ class InputPort : public VectorPort {
   int vectorLanes() override { return values.size(); }
 
   /*!
-   * \brief The tag ID. If not -1, it refers to the ID of the tag port.
+   * \brief If this port is stated, return the input port of the state.
+   *        If not, return null.
    */
-  int tid{-1};
+  InputPort *stated();
 
   // @{
   // Simulation stuff.
@@ -109,6 +115,12 @@ class OutputPort : public VectorPort {
   int vectorLanes() override { return _ops.size(); }
 
   virtual int slot_for_op(Edge* edge, int node_slot) override;
+
+  /*!
+   * \brief If this port is state-penetrated, return the output port of the state.
+   *        If not, return null.
+   */
+  OutputPort *stated();
 
   // @{
   // Simulation stuff.

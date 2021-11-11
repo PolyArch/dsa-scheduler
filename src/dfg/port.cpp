@@ -45,6 +45,26 @@ InputPort::InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
   }
 }
 
+InputPort* InputPort::stated() {
+  if (state_id != -1) {
+    auto *nptr = ssdfg()->nodes[state_id];
+    auto *res = dynamic_cast<InputPort*>(nptr);
+    CHECK(res);
+    return res;
+  }
+  return nullptr;
+}
+
+OutputPort* OutputPort::stated() {
+  if (state_id != -1) {
+    auto *nptr = ssdfg()->nodes[state_id];
+    auto *res = dynamic_cast<OutputPort*>(nptr);
+    CHECK(res);
+    return res;
+  }
+  return nullptr;
+}
+
 void InputPort::forward() {
   if (is_temporal()) {
     if (!values[current_].forward(true)) {

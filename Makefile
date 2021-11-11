@@ -1,3 +1,5 @@
+CMAKE_BUILD_TYPE ?= "Release"
+
 all: 3rd-party/libtorch json dsa
 
 3rd-party/libtorch:
@@ -11,7 +13,8 @@ json:
 
 dsa: json
 	mkdir -p build && cd build && \
-	cmake -DTorch_DIR="$(shell git rev-parse --show-toplevel)/3rd-party/libtorch/share/cmake/Torch" .. && \
+	cmake -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
+	      -DTorch_DIR="$(shell git rev-parse --show-toplevel)/3rd-party/libtorch/share/cmake/Torch" .. && \
 	make install -j
 
 clean:

@@ -69,16 +69,11 @@ struct Exporter : Visitor {
     current["value_info"] = value_info;
     Visit(static_cast<Node*>(inst));
   }
-  void Visit(InputPort* in) override {
-    current["width"] = in->bitwidth();
-    current["tid"] = in->tid;
-    current["lanes"] = in->vectorLanes();
-    Visit(static_cast<Node*>(in));
-  }
-  void Visit(OutputPort* out) override {
-    current["width"] = out->bitwidth();
-    current["lanes"] = out->vectorLanes();
-    Visit(static_cast<Node*>(out));
+  void Visit(VectorPort* vp) override {
+    current["width"] = vp->bitwidth();
+    current["state"] = vp->state_id;
+    current["lanes"] = vp->vectorLanes();
+    Visit(static_cast<Node*>(vp));
   }
 };
 
@@ -224,7 +219,6 @@ SSDfg* Import(const std::string& s) {
 
   for (int i = 0, n = root->size(); i < n; ++i) {
     auto &node = (*root)[i];
-    
     if(node.isMember("task_id")) { // a task dependence node
       int task_id = node["task_id"].asInt();
       res->create_new_task_type(task_id);
@@ -275,7 +269,8 @@ SSDfg* Import(const std::string& s) {
         res->add_new_task_dependence_characteristic(arg_type, arg_value);
       }
       auto &direct_mappings = node["direct_mappings"];
-      for (int j = 0, m = direct_mappings.size(); j < m && !direct_map_chars.empty(); ++j) { // above could not be empty when this is fall??
+      for (int j = 0, m = direct_mappings.size(); j < m && !direct_map_chars.empty(); ++j) {
+        // above could not be empty when this is fall??
         auto &obj = direct_mappings[j];
         auto &src_ports = obj["src_ports"];
         auto &dst_ports = obj["dst_ports"];
@@ -326,9 +321,10 @@ SSDfg* Import(const std::string& s) {
         int width = node["width"].asInt();
         if (inputs.empty()) {
           res->emplace_back<InputPort>(length, width, name, res, meta);
-          res->vins.back().tid = node["tid"].asInt();
+          res->vins.back().state_id = node["state"].asInt();
         } else {
           res->emplace_back<OutputPort>(length, width, name, res, meta);
+          res->vouts.back().state_id = node["state"].asInt();
         }
       } else if (node.isMember("op")) {
         int opcode = node["op"].asInt();

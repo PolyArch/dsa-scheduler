@@ -23,8 +23,9 @@ struct IODef {
   std::string name;
   int length;
   bool isTagged;
-  IODef(const std::string &n, int l, bool t) :
-    isTagged(t), name(n), length(l) {}
+  std::string penetrate;
+  IODef(const std::string &n, int l, bool t, const std::string &p) :
+    isTagged(t), name(n), length(l), penetrate(p) {}
 };
 
 }
@@ -101,6 +102,7 @@ statement_list: statement
 	            | statement_list statement;
 
 statement: INPUT ':' io_def  eol {
+  CHECK($3->penetrate.empty()) << "Input port cannot have penetration.";
   auto name = $3->name;
   CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
   int len = $3->length;
@@ -116,9 +118,13 @@ statement: INPUT ':' io_def  eol {
     p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i, 0, width - 1));
   }
   p->meta.clear();
+  /*
+   * If the a port is stated, the identifier of the port should be ${PortName}State.
+   * It will be come a standalone port with this identifier in the DFG data structure representation.
+   */
   if (tagged) {
-    p->dfg->vins.back().tid = p->dfg->nodes.size();
-    auto symbol_id = "$" + name + "Tag";
+    p->dfg->vins.back().state_id = p->dfg->nodes.size();
+    auto symbol_id = "$" + name + "State";
     p->dfg->emplace_back<dsa::dfg::InputPort>(
       /*VecLanes*/1, /*Scalar Type*/8, /*Name*/symbol_id, p->dfg, p->meta);
     p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
@@ -134,6 +140,7 @@ statement: INPUT ':' io_def  eol {
   int n = std::max(1, len);
   // I think it's somewhat likely i am breaking decomposability
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
+  auto &out = p->dfg->vouts.back();
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; ++i) {
     std::stringstream ss;
@@ -148,20 +155,29 @@ statement: INPUT ':' io_def  eol {
       std::vector<int> es;
       for (auto elem : ce->entries) {
         // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
-        p->dfg->edges.emplace_back(
-          p->dfg, elem->nid, elem->vid,
-          p->dfg->vouts.back().id(), elem->l, elem->r);
+        p->dfg->edges.emplace_back(p->dfg, elem->nid, elem->vid, out.id(), elem->l, elem->r);
         es.push_back(p->dfg->edges.back().id);
       }
-      p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+      out.ops().emplace_back(p->dfg, es, EdgeType::data);
     } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
       DSA_LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
-      p->dfg->edges.emplace_back(
-        p->dfg, ve->nid, ve->vid,
-        p->dfg->vouts.back().id(), ve->l, ve->r);
+      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, out.id(), ve->l, ve->r);
       std::vector<int> es{p->dfg->edges.back().id};
-      p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+      out.ops().emplace_back(p->dfg, es, EdgeType::data);
     }
+  }
+  if (!$3->penetrate.empty()) {
+    std::string state = "$" + $3->penetrate + "State";
+    auto *entry = p->symbols.Get(state);
+    auto *ve = dynamic_cast<dsa::dfg::ValueEntry*>(entry);
+    CHECK(ve);
+    out.state_id = p->dfg->nodes.size();
+    p->dfg->emplace_back<T>(
+      /*Lanes*/1, /*Scalar Dtype*/8, "$" + name + "Penetrate", p->dfg, p->meta);
+    p->dfg->edges.emplace_back(
+      p->dfg, ve->nid, ve->vid, p->dfg->vouts.back().id(), ve->l, ve->r);
+    std::vector<int> es{p->dfg->edges.back().id};
+    p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
   }
   p->meta.clear();
   delete $3;
@@ -292,22 +308,34 @@ eol : ';'
 
 // Input: A[8]
 io_def: IDENT {
-  $$ = new IODef(*$1, 0, false);
+  $$ = new IODef(*$1, 0, false, "");
   delete $1;
 }
 | IDENT '[' I_CONST ']' {
-  $$ = new IODef(*$1, $3, false);
+  $$ = new IODef(*$1, $3, false, "");
   delete $1;
 }
 | IDENT IDENT {
-  CHECK(*$2 == "Tagged") << "Tagged expected";
-  $$ = new IODef(*$1, 0, true);
+  CHECK(*$2 == "stated") << "'stated' expected";
+  $$ = new IODef(*$1, 0, true, "");
   delete $1;
 }
 | IDENT '[' I_CONST ']' IDENT {
-  CHECK(*$5 == "Tagged") << "Tagged expected";
-  $$ = new IODef(*$1, $3, true);
+  CHECK(*$5 == "stated") << "'stated' expected";
+  $$ = new IODef(*$1, $3, true, "");
   delete $1;
+}
+| IDENT IDENT '=' IDENT {
+  CHECK(*$2 == "state") << "'state=' expected";
+  $$ = new IODef(*$1, 0, false, *$4);
+  delete $1;
+  delete $4;
+}
+| IDENT '[' I_CONST ']' IDENT '=' IDENT {
+  CHECK(*$5 == "stated") << "'state=' expected";
+  $$ = new IODef(*$1, $3, false, *$7);
+  delete $1;
+  delete $7;
 }
 ;
 

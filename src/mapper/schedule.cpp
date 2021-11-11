@@ -151,7 +151,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
 
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
-    if (pv.name()[0] == '$' && pv.name().find("Tag") + 3 == pv.name().size()) {
+    if (pv.name()[0] == '$') {
       continue;
     }
     if(pv.indirect()) {
@@ -163,6 +163,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   os << "\n";
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::OutputPort>()) {
     int pn = vecPortOf(&pv);
+    if (pv.name()[0] == '$') {
+      continue;
+    }
     os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
   }
   os << "\n";

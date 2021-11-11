@@ -891,7 +891,12 @@ class Schedule {
     int num_links = 0;
     int extra_lat = 0;
     int vio = 0;  // temporary variable
+
+    /*!
+     * \brief Links used to route this edge, from source to destination.
+     */
     std::vector<std::pair<int, sslink*>> links;
+
     std::vector<std::pair<int, ssnode*>> passthroughs;
 
     void reset() {
