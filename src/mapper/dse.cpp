@@ -13,7 +13,7 @@ CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
 
 namespace dsa {
 
-const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Change Details,Current Resources,Current FU Resource,Current Switch Resource,Current VPort Resource,Current Mem Resource,Best Resources,Best FU Resource,Best Switch Resource,Best VPort Resource,Best Mem Resource,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances";
+const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Change Details,Current Resources,Current FU Resource,Current Switch Resource,Current VPort Resource,Current Mem Resource,Best Resources,Best FU Resource,Best Switch Resource,Best VPort Resource,Best Mem Resource,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances,DFG Names";
 
 // Print Resources for given type
 std::string resources(int type, dsa::adg::estimation::Result& estimated) {
@@ -68,6 +68,18 @@ std::string resources(int type, dsa::adg::estimation::Result& estimated) {
   return s.str();
 }
 
+
+std::string get_dfg_names(CodesignInstance* ci) {
+  std::ostringstream s;
+  for (int x = 0; x < ci->workload_array.size(); ++x) {
+    s << ci->res[x]->ssdfg()->filename;
+    if (x != ci->workload_array.size() - 1) {
+      s << ",";
+    }
+  }
+  return s.str();
+}
+
 std::string dump_log(const double& time, const int& iteration, const int& last_improve, const double& temp, CodesignInstance* curr_ci, CodesignInstance* best_ci) {
   auto curr_util = curr_ci->utilization();
   auto best_util = best_ci->utilization();
@@ -108,7 +120,8 @@ std::string dump_log(const double& time, const int& iteration, const int& last_i
     << curr_ci->get_workload_performances() << ","
     << best_ci->get_workload_performances() << ","
     << curr_ci->get_dfg_performances() << ","
-    << best_ci->get_dfg_performances();
+    << best_ci->get_dfg_performances() << ",\""
+    << get_dfg_names(best_ci) << "\"";
   return s.str();
 }
 
@@ -347,7 +360,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
         std::cout << "Dumping " << sched->ssdfg()->filename << "at" << path << "/" << x << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
         ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
         std::string filename = path + "/" + std::to_string(x);
-        sched->printGraphviz((path + "/" + sched->ssdfg()->filename + ".gv").c_str());
+        sched->printGraphviz((path + "/graph.gv").c_str());
         std::ofstream ofs(filename + ".dfg.h");
         sched->printConfigHeader(ofs, std::to_string(x));
       }
@@ -414,7 +427,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     std::cout << "Dumping " << sched->ssdfg()->filename << " " << path << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
     ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
     std::string filename = path + "/" + std::to_string(x);
-    sched->printGraphviz((path + "/" + sched->ssdfg()->filename + ".gv").c_str());
+    sched->printGraphviz((path + "/graph.gv").c_str());
     std::ofstream ofs(filename + ".dfg.h");
     sched->printConfigHeader(ofs, std::to_string(x));
   }

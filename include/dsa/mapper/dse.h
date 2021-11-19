@@ -964,5 +964,4 @@ class CodesignInstance {
 namespace dsa {
 
 void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename);
-std::string  dump_log(const double& time, const int& iteration, const double& temp, CodesignInstance* curr_ci, CodesignInstance* best_ci);
 } // namespace dsa
