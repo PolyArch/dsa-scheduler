@@ -15,7 +15,9 @@ enum class Breakdown { FU = 0, Network = 1, Sync = 2, Memory = 3, Total = 4 };
 
 struct Resource {
   virtual ~Resource() {}
-  virtual double normalize() = 0;
+  virtual void normalize() = 0;
+  virtual double constrained_resource(int n) = 0;
+  virtual std::string constrained_resource_name(int n) = 0;
   virtual std::string dump() = 0;
 };
 
@@ -25,8 +27,9 @@ struct ASICResource : Resource {
   /*! \brief The estimated area. */
   double area;
 
-  double normalize() override;
-
+  void normalize() override;
+  double constrained_resource(int n) override;
+  std::string constrained_resource_name(int n) override;
   std::string dump() override;
 
   ASICResource(double p = 0, double o = 0) : power(p), area(o) {}
@@ -34,17 +37,24 @@ struct ASICResource : Resource {
 
 struct FPGAResource : Resource {
   /*! \brief The estimated resource. */
-  double total_lut, logic_lut, ram_lut, ff;
+  double total_lut, logic_lut, ram_lut, srl, ff, ramb32, ramb18, uram, dsp;
 
-  FPGAResource(const std::vector<double> &v = {0, 0, 0, 0}) {
-    CHECK(v.size() == 4);
+  FPGAResource(const std::vector<double> &v = {0, 0, 0, 0, 0, 0, 0, 0, 0}) {
+    DSA_CHECK(v.size() == 9);
     total_lut = v[0];
     logic_lut = v[1];
     ram_lut = v[2];
-    ff = v[3];
+    srl = v[3];
+    ff = v[4];
+    ramb32 = v[5];
+    ramb18 = v[6];
+    uram = v[7];
+    dsp = v[8];
   }
 
-  double normalize() override;
+  void normalize() override;
+  double constrained_resource(int n) override;
+  std::string constrained_resource_name(int n) override;
 
   std::string dump() override;
 };
@@ -60,6 +70,7 @@ struct Result {
   void Dump_all_resources(std::ostream& os);
 
   Resource *sum();
+  Resource *resource_bd(int breakdown);
 
   void add(Breakdown k, double power, double area);
 

@@ -70,7 +70,7 @@ int sslink::slots(int slot, int width) {
 sslink::~sslink() {
   auto f = [this](std::vector<sslink*>& links) {
     auto iter = std::find(links.begin(), links.end(), this);
-    CHECK(iter != links.end()) << "Cannot find this link!";
+    DSA_CHECK(iter != links.end()) << "Cannot find this link!";
     links.erase(iter);
   };
   f(source()->links_[0]);
@@ -111,7 +111,7 @@ void SpatialFabric::parse_io(std::istream& istream) {
 
     int is_input = -1;
     if (ModelParsing::StartsWith(param, "VPORT")) {
-      CHECK(0) << "VPORT_IN/VPORT_OUT Depricated, switch to PORT_IN/PORT_OUT\n"
+      DSA_CHECK(0) << "VPORT_IN/VPORT_OUT Depricated, switch to PORT_IN/PORT_OUT\n"
                << "delete \":0\" \":1\" from port descriptions";
     }
     if (ModelParsing::StartsWith(param, "PORT_IN")) {
@@ -128,7 +128,7 @@ void SpatialFabric::parse_io(std::istream& istream) {
       int avgx = 0;
       int avgy = 0;
       for (int i : int_vec) {
-        CHECK(_io_map[is_input].count(i)) << "Error: " << (is_input ? "Input" : "Output")
+        DSA_CHECK(_io_map[is_input].count(i)) << "Error: " << (is_input ? "Input" : "Output")
                                           << " port " << i << " is not available!\n";
         ssnode* n = _io_map[is_input][i];
         if (is_input)
@@ -216,7 +216,7 @@ SpatialFabric::SpatialFabric(std::istream& istream,
       } else if (ModelParsing::StartsWith(value, "three_in_two_out")) {
         portType = PortType::threetwo;
       } else {
-        CHECK(false) << "io_layout parameter: \"" << value << "\" not recognized";
+        DSA_CHECK(false) << "io_layout parameter: \"" << value << "\" not recognized";
       }
     } else if (ModelParsing::StartsWith(param, "bw_extra")) {
       istringstream(value) >> bwmfrac;
@@ -265,6 +265,39 @@ SpatialFabric::SpatialFabric(std::istream& istream,
 
   connect_substrate(_sizex, _sizey, portType, switch_ins, switch_outs, temp_x, temp_y,
                     temp_width, temp_height);
+}
+
+SpatialFabric::SpatialFabric(const SpatialFabric& c) : _sizex(c._sizex), _sizey(c._sizey), _ssio_interf(c._ssio_interf) {
+  _node_list.resize(c._node_list.size());
+  _link_list.resize(c._link_list.size());
+
+  for (int i = 0; i < _node_list.size(); ++i) {
+    if (auto fu = dynamic_cast<ssfu*>(c._node_list[i])) {
+      _node_list[i] = new ssfu(*fu);
+    } else if (auto sw = dynamic_cast<ssswitch*>(c._node_list[i])) {
+      _node_list[i] = new ssswitch(*sw);
+    } else if (auto vp = dynamic_cast<ssvport*>(c._node_list[i])) {
+      _node_list[i] = new ssvport(*vp);
+    } else {
+      DSA_CHECK(false) << "Unknown node type " << c._node_list[i]->name();
+    }
+    _node_list[i]->parent = this;
+  }
+
+  for (int i = 0; i < _link_list.size(); ++i) {
+    _link_list[i] = new sslink(*c._link_list[i]);
+    _link_list[i]->source_ = _node_list[_link_list[i]->source_->id()];
+    _link_list[i]->sink_ = _node_list[_link_list[i]->sink_->id()];
+  }
+
+  for (int i = 0; i < _node_list.size(); ++i) {
+    for (int j = 0; j < _node_list[i]->in_links().size(); ++j) {
+      _node_list[i]->in_links()[j] = _link_list[c._node_list[i]->in_links()[j]->id()];
+    }
+    for (int j = 0; j < _node_list[i]->out_links().size(); ++j) {
+      _node_list[i]->out_links()[j] = _link_list[c._node_list[i]->out_links()[j]->id()];
+    }
+  }
 }
 
 // Graph of the configuration or substrate
@@ -336,7 +369,7 @@ void SpatialFabric::build_substrate(int sizex, int sizey) {
 
 sslink* ssnode::add_link(ssnode* node) {
   sslink* link = new sslink(this, node);
-  CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
+  DSA_CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
   auto& olinks = links_[0];
   olinks.push_back(link);
 

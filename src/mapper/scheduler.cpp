@@ -37,7 +37,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
           for (auto eid : operand.edges) {
             operand_width += node->ssdfg()->edges[eid].bitwidth();
           }
-          CHECK(operand_width == node->bitwidth())
+          DSA_CHECK(operand_width == node->bitwidth())
             << node->name() << "'s operand " << i << " dtype mismatch! "
             << operand_width << " != " << node->bitwidth();
         }
@@ -190,7 +190,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
     std::string verif_header = verif_dir + dfg_base + ".configbits";
     std::ofstream vsh(verif_header);
-    CHECK(vsh.good());
+    DSA_CHECK(vsh.good());
     sched->printConfigVerif(vsh);
   }
 
@@ -208,7 +208,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);
-  CHECK(osh.good());
+  DSA_CHECK(osh.good());
   sched->printConfigHeader(osh, dfg_base);
   if (dsa::ContextFlags::Global().verbose) {
     std::cout << "Performance: " << sched->estimated_performance() << std::endl;
@@ -217,7 +217,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   if (dsa::ContextFlags::Global().bitstream) {
     std::string config_header_bits = pdg_rawname + ".dfg.bits.h";
     std::ofstream oshb(config_header_bits);
-    CHECK(oshb.good());
+    DSA_CHECK(oshb.good());
     sched->printConfigHeader(oshb, dfg_base, true);
   }
 

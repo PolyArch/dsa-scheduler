@@ -17,7 +17,7 @@ const char* MetaPort::OperationText[] = {
 
 CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
     : MetaPort(meta), parent(parent) {
-  CHECK(parent);
+  DSA_CHECK(parent);
   if (dest == Data::LocalPort && !dest_port.empty()) {
     bool found = false;
     for (auto iv : parent->ssdfg()->type_filter<dsa::dfg::InputPort>()) {
@@ -26,7 +26,7 @@ CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
         found = true;
       }
     }
-    CHECK(found) << "No destination found!";
+    DSA_CHECK(found) << "No destination found!";
   } else {
     destination = nullptr;
   }
@@ -49,7 +49,7 @@ InputPort* InputPort::stated() {
   if (state_id != -1) {
     auto *nptr = ssdfg()->nodes[state_id];
     auto *res = dynamic_cast<InputPort*>(nptr);
-    CHECK(res);
+    DSA_CHECK(res);
     return res;
   }
   return nullptr;
@@ -59,7 +59,7 @@ OutputPort* OutputPort::stated() {
   if (state_id != -1) {
     auto *nptr = ssdfg()->nodes[state_id];
     auto *res = dynamic_cast<OutputPort*>(nptr);
-    CHECK(res);
+    DSA_CHECK(res);
     return res;
   }
   return nullptr;
@@ -79,7 +79,7 @@ void InputPort::forward() {
     if (!elem.forward(true)) return;
   }
   for (auto& elem : values) {
-    CHECK(elem.forward(false));
+    DSA_CHECK(elem.forward(false));
   }
 }
 
@@ -109,7 +109,7 @@ int OutputPort::slot_for_op(dsa::dfg::Edge* edge, int node_slot) {
       slot += _ssdfg->edges[eid].bitwidth() / 8;
     }
   }
-  CHECK(false) << "edge not present in any operands";
+  DSA_CHECK(false) << "edge not present in any operands";
   throw;
 }
 

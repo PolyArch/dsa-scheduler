@@ -87,7 +87,7 @@ struct MetaPort {
       }
     } else if (key == "conc") {
       std::istringstream iss(val);
-      CHECK(iss >> conc) << "Cannot read: " << val;
+      DSA_CHECK(iss >> conc) << "Cannot read: " << val;
       success = true;
     } else if (key == "repeat" || key == "cmd") {
       std::istringstream iss(val);
@@ -95,7 +95,7 @@ struct MetaPort {
       iss >> ref;
       success = true;
     }
-    CHECK(success) << key << " " << val;
+    DSA_CHECK(success) << key << " " << val;
   }
 
   void to_pragma(std::ostream& os) const {

@@ -160,7 +160,11 @@ class Schedule {
   Schedule(SSModel* model, SSDfg* dfg);
 
   /*! \brief Deep copy a schedule. */
-  Schedule(const Schedule&, bool dup_dfg);
+  Schedule(const Schedule& c, bool dup_dfg);
+
+  Schedule(const Schedule& c, SSModel* model);
+
+  //~Schedule() {delete _ssDFG;}
 
   constexpr static const float gvsf = 4.0f;
 
@@ -344,7 +348,7 @@ class Schedule {
   int vecPortOf(dsa::dfg::VectorPort* vec) {
     auto mi = locationOf(vec);
     if (auto vport = dynamic_cast<ssvport*>(mi.node())) {
-      CHECK(vport) << vec->name() << " " << mi.node()->name();
+      DSA_CHECK(vport) << vec->name() << " " << mi.node()->name();
       return vport->port();
     } else {
       return -1;
@@ -359,21 +363,21 @@ class Schedule {
    */
   void assign_node(dsa::dfg::Node* dfgnode, std::pair<int, ssnode*> assigned) {
     int vid = dfgnode->id();
-    CHECK(vid >= 0 && vid < _vertexProp.size());
+    DSA_CHECK(vid >= 0 && vid < _vertexProp.size());
 
     int orig_slot = assigned.first;
     auto snode = assigned.second;
 
-    CHECK(_vertexProp[vid].node() == nullptr || _vertexProp[vid].node() == snode);
+    DSA_CHECK(_vertexProp[vid].node() == nullptr || _vertexProp[vid].node() == snode);
     if (_vertexProp[vid].slot.ref == snode) return;
 
     _vertexProp[vid].slot = {orig_slot, snode};
 
-    CHECK(dfgnode->type() < dsa::dfg::Node::V_NUM_TYPES);
+    DSA_CHECK(dfgnode->type() < dsa::dfg::Node::V_NUM_TYPES);
     _num_mapped[dfgnode->type()]++;
 
-    CHECK(dfgnode);
-    CHECK(snode->id() < (int)_nodeProp.size()) << snode->id() << "<" << (int)_nodeProp.size();
+    DSA_CHECK(dfgnode);
+    DSA_CHECK(snode->id() < (int)_nodeProp.size()) << snode->id() << "<" << (int)_nodeProp.size();
 
     // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
     int num_slots = dfgnode->bitwidth() / snode->granularity();
@@ -396,7 +400,7 @@ class Schedule {
       int last_slot = edge->bitwidth() / granularity;
       for (int i = 0; i < last_slot; ++i) {
         int slot_index = (link.first + i) % link.second->sink()->lanes();
-        CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
+        DSA_CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
         auto& slot = lp.slots[slot_index];
 
         auto& edges = slot.edges;
@@ -406,7 +410,7 @@ class Schedule {
           << edges.size() << " mapped on " << link.first << "(" << slot_index << ")" << ","
           << link.second->name() << " [lp " << &lp << "], [lp.slot " << &lp.slots
           << "], [lp.slot[idx].edges " << &slot.edges << "]";
-        CHECK(it != edges.end())
+        DSA_CHECK(it != edges.end())
           << ssdfg()->edges[es.eid].name() << "[" << es.l << "," << es.r << "] not found on link "
           << link.second->name() << ", " << link.first;
         DSA_LOG(ASSIGN)
@@ -415,7 +419,7 @@ class Schedule {
         edges.erase(it);
         if (slot.edges.empty()) {
           _links_mapped--;
-          CHECK(_links_mapped >= 0);
+          DSA_CHECK(_links_mapped >= 0);
         }
       }
     }
@@ -433,7 +437,7 @@ class Schedule {
           break;
         }
       }
-      CHECK(erased);
+      DSA_CHECK(erased);
     }
 
     _edgeProp[edge->id].reset();
@@ -466,7 +470,7 @@ class Schedule {
         int slot = orig_slot + i;
         auto& vertices = _nodeProp[node->id()].slots[slot].vertices;
         auto it = std::find(vertices.begin(), vertices.end(), std::make_pair(dfgnode, orig_slot));
-        CHECK(it != vertices.end());
+        DSA_CHECK(it != vertices.end());
         vertices.erase(it);
       }
       vp.slot = {-1, nullptr};
@@ -497,8 +501,8 @@ class Schedule {
   }
 
   void assign_link_to_edge(dsa::dfg::Edge* dfgedge, int slot_index, sslink* slink) {
-    CHECK(slink);
-    CHECK(dfgedge);
+    DSA_CHECK(slink);
+    DSA_CHECK(dfgedge);
 
     _edge_links_mapped++;
     auto& lp = _linkProp[slink->id()];
@@ -528,7 +532,7 @@ class Schedule {
                        std::vector<std::pair<int, sslink*>>::iterator it) {
     assign_link_to_edge(dfgedge, slot, slink);
     int idx = it - _edgeProp[dfgedge->id].links.begin();
-    CHECK(idx >= 0 && idx <= (int)_edgeProp[dfgedge->id].links.size()) << idx;
+    DSA_CHECK(idx >= 0 && idx <= (int)_edgeProp[dfgedge->id].links.size()) << idx;
     _edgeProp[dfgedge->id].links.insert(it, std::make_pair(slot, slink));
   }
 
@@ -585,7 +589,7 @@ class Schedule {
 
   // Return an alternate link for an edge
   dsa::dfg::Edge* alt_edge_for_link(std::pair<int, sslink*> link, dsa::dfg::Edge* e) {
-    CHECK(link.second != nullptr) << "Alternate Edge for Link is null";
+    DSA_CHECK(link.second != nullptr) << "Alternate Edge for Link is null";
     auto& slots = _linkProp[link.second->id()].slots;
     int granularity = link.second->source()->granularity();
     for (auto it : slots[link.first].edges) {
@@ -604,7 +608,7 @@ class Schedule {
   // 1: empty
   //>2: already there
   int routing_cost(std::pair<int, sslink*> link, dsa::dfg::Edge* edge) {
-    CHECK(link.second);
+    DSA_CHECK(link.second);
 
     if (needs_dynamic[edge->uid] && !link.second->flow_control()) {
       return -1;
@@ -626,7 +630,7 @@ class Schedule {
 
   // Routing cost for inputs, but based on nodes instead of values
   int routing_cost_temporal_in(sslink* link, dsa::dfg::InputPort* in_v) {
-    CHECK(link);
+    DSA_CHECK(link);
     auto& vec = _linkProp[link->id()].slots[0].edges;
     if (vec.empty()) return 1;
     for (auto elem : vec) {
@@ -639,7 +643,7 @@ class Schedule {
   // Routing cost for outputs, but based on nodes instead of values
   int routing_cost_temporal_out(std::pair<int, sslink*> link, dsa::dfg::Node* node,
                                 dsa::dfg::OutputPort* out_v) {
-    CHECK(link.second);
+    DSA_CHECK(link.second);
     auto& vec = _linkProp[link.second->id()].slots[link.first].edges;
     if (vec.empty()) return 1;
     // It's free if the node is the same, or one of the use vectors is the same.
@@ -653,7 +657,7 @@ class Schedule {
 
   // find first node for
   dsa::dfg::Node* dfgNodeOf(int slot, sslink* link) {
-    CHECK(link);
+    DSA_CHECK(link);
     auto& vec = _linkProp[link->id()].slots[slot].edges;
     return vec.empty() ? nullptr : ssdfg()->edges[vec[0].eid].def();
   }
@@ -705,7 +709,7 @@ class Schedule {
   // Assert error if problem with consistency of schedule
   void validate();
 
-  bool fixLatency(int& lat, int& latmis);
+  bool fixLatency(int& lat, int& latmis, std::pair<int, int>& delay_violation);
 
   void clearAll() {
     _totalViolation = 0;
@@ -764,7 +768,7 @@ class Schedule {
   }
 
   int max_lat() {
-    CHECK(_max_lat != -1);
+    DSA_CHECK(_max_lat != -1);
     return _max_lat;
   }
 
@@ -848,43 +852,13 @@ class Schedule {
     }
   }
 
-  // Shuffle node and link properties post-delete
-  void reorder_node_link(std::vector<ssnode*>& old_n, std::vector<sslink*>& old_l) {
-    // first bulk copy node and link properties, b/c we're about to blow
-    // everything away and shuffle
-    auto copy_nodeProp = _nodeProp;
-    auto copy_linkProp = _linkProp;
 
-    _nodeProp.clear();
-    _linkProp.clear();
-
-    auto& new_node_list = _ssModel->subModel()->node_list();
-    auto& new_link_list = _ssModel->subModel()->link_list();
-
-    _nodeProp.resize(new_node_list.size());
-    _linkProp.resize(new_link_list.size());
-
-    // std::cout << _nodeProp.size() << "just resized\n";
-
-    for (unsigned i = 0; i < copy_nodeProp.size(); ++i) {
-      ssnode* n = old_n[i];
-      // at this point, we don't know if this node has been deleted...
-      // so to check, we are going to look up if its still there
-      if (n->id() < (int)new_node_list.size() && new_node_list[n->id()] == n) {
-        // ok, this node is still there, so perform the move
-        _nodeProp[n->id()] = copy_nodeProp[i];
-      }
-    }
-    for (unsigned i = 0; i < copy_linkProp.size(); ++i) {
-      sslink* l = old_l[i];
-      // at this point, we don't know if this link has been deleted...
-      // so to check, we are going to look up if its still there
-      if (l->id() < (int)new_link_list.size() && new_link_list[l->id()] == l) {
-        // ok, this link is still there, so perform the move
-        _linkProp[l->id()] = copy_linkProp[i];
-      }
-    }
-    // std::cout << _nodeProp.size() << "just resized\n";
+  void remove_link(int link_deleted_id) {
+    _linkProp.erase(_linkProp.begin() + link_deleted_id);
+  }
+  
+  void remove_node(int node_deleted_id) {
+    _nodeProp.erase(_nodeProp.begin() + node_deleted_id);
   }
 
   struct EdgeProp {
@@ -1005,6 +979,6 @@ inline bool Schedule::is_complete() {
 
 inline unsigned Schedule::num_left() {
   int num = _ssDFG->nodes.size() - num_mapped<dsa::dfg::Node*>();
-  CHECK(num >= 0);
+  DSA_CHECK(num >= 0);
   return num;
 }

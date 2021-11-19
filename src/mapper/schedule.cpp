@@ -44,7 +44,7 @@ std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size, uint64_t* bit
   // Figure out if this configuration is real or not
   // NOTE: the first 9 characters of the configuration must spell filename
   // for this hack to work!
-  CHECK(strncmp((char*)bits, "filename:", 9) == 0)
+  DSA_CHECK(strncmp((char*)bits, "filename:", 9) == 0)
       << "Hardware configuration not supported yet!";
   char* c_bits = ((char*)bits) + 9;
   return interpretConfigBitsCheat(c_bits);
@@ -140,7 +140,7 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
 
   std::ofstream ofs(mapping_filename);
   ofs << instructions;
-  CHECK(ofs.good()) << "Cannot open " << mapping_filename;
+  DSA_CHECK(ofs.good()) << "Cannot open " << mapping_filename;
 }
 
 // Write to a header file
@@ -193,7 +193,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         ssswitch* switch_node = dynamic_cast<ssswitch*>(in_link->sink());
         ssfu* fu_node = dynamic_cast<ssfu*>(out_link->sink());
         // config the switch
-        CHECK(switch_node) << "edge can only be routed by switch";
+        DSA_CHECK(switch_node) << "edge can only be routed by switch";
         // TODO(@sihao): Support passthru.
         {
           os << "//   config " << switch_node->name() << endl;
@@ -216,8 +216,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           int edge_of_vertex_idx = vector_utils::indexing(edge, operands[vertex->id()]);
           // which input port does this edge used
           int input_port_idx = dsa::vector_utils::indexing(out_link, fu_node->in_links());
-          CHECK(input_port_idx >= 0) << "not found input port";
-          CHECK(edge_of_vertex_idx >= 0) << "This edge's destination is fu but not used?";
+          DSA_CHECK(input_port_idx >= 0) << "not found input port";
+          DSA_CHECK(edge_of_vertex_idx >= 0) << "This edge's destination is fu but not used?";
           {
             os << "//   config " << fu_node->name() << endl
                << "//     add extra delay " << ep.extra_lat << " for operand "
@@ -228,7 +228,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
             info[fu_node->id()][edge_of_vertex_idx].operand = input_port_idx;
           }
           auto* inst_node = dynamic_cast<dsa::dfg::Instruction*>(vertex);
-          CHECK(inst_node) << "why a non-instruction node will be mapped to fu";
+          DSA_CHECK(inst_node) << "why a non-instruction node will be mapped to fu";
           int local_opcode = fu_node->fu_type_.get_encoding(inst_node->inst());
           opcodes[fu_node->id()] = local_opcode;
           os << "//     set current opcode to " << local_opcode << " means "
@@ -430,16 +430,16 @@ void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
 }
 
 void Schedule::printGraphviz(const char* name) {
-  ofstream ofs(name);
-  if (!ofs.good()) {
-    std::cerr << name << " not opened!" << std::endl;
-  }
+  std::ofstream ofs = ofstream(name);
+  DSA_CHECK(ofs.good()) << name << " not opened!";
 
   dsa::SpatialFabric* sub = _ssModel->subModel();
 
   ofs << "digraph sched {\n";
 
-  for (auto* elem : sub->input_list()) printNodeGraphviz(ofs, elem);
+  for (auto* elem : sub->input_list()) {
+    printNodeGraphviz(ofs, elem);
+  }
 
   for (auto* elem : sub->output_list()) printNodeGraphviz(ofs, elem);
 
@@ -450,6 +450,7 @@ void Schedule::printGraphviz(const char* name) {
   for (ssnode* node : sub->node_list()) printMelGraphviz(ofs, node);
 
   ofs << "}\n\n";
+  ofs.close();
 }
 
 void Schedule::stat_printOutputLatency() {
@@ -459,7 +460,7 @@ void Schedule::stat_printOutputLatency() {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
     auto loc = locationOf(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.node());
-    CHECK(vport) << this;
+    DSA_CHECK(vport) << this;
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : operands[vec_out->id()]) {
       int routing_latency = edge_latency(inc_edge);
@@ -471,7 +472,7 @@ void Schedule::stat_printOutputLatency() {
 }
 #include "./pass/iterative_latency.h"
 
-bool Schedule::fixLatency(int& max_lat, int& max_lat_mis) {
+bool Schedule::fixLatency(int& max_lat, int& max_lat_mis, std::pair<int, int>& delay_violation) {
   for (auto& i : _edgeProp) {
     i.extra_lat = 0;
   }
@@ -479,7 +480,7 @@ bool Schedule::fixLatency(int& max_lat, int& max_lat_mis) {
   max_lat = 0;
   max_lat_mis = 0;
   dsa::dfg::pass::IterativeLatency(this, max_lat, max_lat_mis, _totalViolation,
-                                   _groupMismatch, false);
+                                   _groupMismatch, false, delay_violation);
   this->_max_lat = max_lat;
   this->_max_lat_mis = max_lat_mis;
 
@@ -501,19 +502,19 @@ void Schedule::validate() {
     for (auto& linkp : links) {
       sslink* link = linkp.second;
       if (i == 0) {
-        CHECK(link->source() == def_node.node());
+        DSA_CHECK(link->source() == def_node.node());
       }
       if (i > 0) {
-        CHECK(prev_link->sink() == link->source());
+        DSA_CHECK(prev_link->sink() == link->source());
       }
       if (i + 1 < (int)links.size()) {
-        CHECK(dynamic_cast<ssvport*>(link->sink()) == 0);
+        DSA_CHECK(dynamic_cast<ssvport*>(link->sink()) == 0);
       }
       ++i;
       prev_link = link;
     }
-    CHECK(prev_link);
-    CHECK(prev_link->sink() == use_node.node());
+    DSA_CHECK(prev_link);
+    DSA_CHECK(prev_link->sink() == use_node.node());
   }
 }
 
@@ -523,8 +524,8 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   max_util = 0;
 
   for (auto v : _vertexProp) {
-    if (v.slot.ref) {
-      const auto& np = _nodeProp[v.slot.ref->id()];
+    if (v.node() != nullptr) {
+      const auto& np = _nodeProp[v.node()->id()];
 
       // Calculate aggregate overage
       for (int i = 0, m = np.slots.size(); i < m; ++i) {
@@ -678,6 +679,40 @@ Schedule::Schedule(const Schedule& s, bool dup_)
   normalize();
 }
 
+
+Schedule::Schedule(const Schedule& s, SSModel* _model)
+    : _ssModel(_model),
+      _totalViolation(s._totalViolation),
+      _max_lat(s._max_lat),
+      _max_lat_mis(s._max_lat_mis),
+      _links_mapped(s._links_mapped),
+      _edge_links_mapped(s._edge_links_mapped),
+      _groupMismatch(s._groupMismatch),
+      _vertexProp(s._vertexProp),
+      _edgeProp(s._edgeProp),
+      _nodeProp(s._nodeProp),
+      _linkProp(s._linkProp),
+      _min_expected_route_latency(s._min_expected_route_latency),
+      _max_expected_route_latency(s._max_expected_route_latency),
+      reversed_topo(s.reversed_topo),
+      needs_dynamic(s.needs_dynamic),
+      distances(s.distances),
+      operands(s.operands),
+      users(s.users),
+      group_throughput(s.group_throughput),
+      candidate_cnt(s.candidate_cnt) {
+  // Shallow Copy DFG
+  _ssDFG = s._ssDFG;
+  for (int i = 0; i < dsa::dfg::Node::V_NUM_TYPES; ++i) {
+    _num_mapped[i] = s._num_mapped[i];
+  }
+  swap_model(_model->subModel());
+  set_model(_model);
+  // We can just copy everything over and not have to normalize
+  //normalize();
+}
+
+
 void Schedule::normalize() {
   auto dfg = _ssDFG;
   auto model = _ssModel;
@@ -699,7 +734,7 @@ void Schedule::normalize() {
 double Schedule::estimated_performance() {
   auto dfg = this->ssdfg();
   std::vector<std::vector<double>> bw(dfg->meta.size(), std::vector<double>(2, 0));
-  std::vector<double> coef(dfg->meta.size(), (double)2.0);
+  std::vector<double> coef(dfg->meta.size(), (double)1.0);
 
   for (auto& elem : dfg->type_filter<dsa::dfg::InputPort>()) {
     if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&

@@ -83,14 +83,14 @@ void Export(SSDfg* dfg, const std::string& fname) {
   auto fcompare = [](Json::Value* a, Json::Value* b) {
     int ida = a->get("id", -1).asInt();
     int idb = b->get("id", -1).asInt();
-    CHECK(ida != -1 && idb != -1);
+    DSA_CHECK(ida != -1 && idb != -1);
     return ida < idb;
   };
   auto& nodes = exporter.nodes;
   // FIXME(@were): What if I do not sort here?
   // std::sort(nodes.begin(), nodes.end(), fcompare);
   for (int i = 0, n = nodes.size(); i < n; ++i) {
-    CHECK(nodes[i]["id"].asInt() == i) << "id: " << nodes[i]["id"].asInt() << " != " << i;
+    DSA_CHECK(nodes[i]["id"].asInt() == i) << "id: " << nodes[i]["id"].asInt() << " != " << i;
   }
 
   Json::Value all_task_charac;
@@ -331,10 +331,10 @@ SSDfg* Import(const std::string& s) {
         res->emplace_back<Instruction>(res, static_cast<OpCode>(opcode));
         auto& inst = res->instructions.back();
         auto opname = node["inst"].asString();
-        CHECK(std::string(name_of_inst(inst.inst())) == opname)
+        DSA_CHECK(std::string(name_of_inst(inst.inst())) == opname)
             << name_of_inst(inst.inst()) << " != " << opname;
         auto f = [](Json::Value &v) {
-          CHECK(v.isArray()) << v;
+          DSA_CHECK(v.isArray()) << v;
           std::vector<int> res;
           for (auto &elem : v) {
             res.push_back(elem.asInt());
@@ -369,7 +369,7 @@ SSDfg* Import(const std::string& s) {
             int delay = edge_obj["delay"].asInt();
             int l = edge_obj["l"].asInt();
             int r = edge_obj["r"].asInt();
-            CHECK(src_id < i);
+            DSA_CHECK(src_id < i);
             Edge e_instance(res, src_id, src_val, i, l, r);
             es.push_back(edge_obj["id"].asInt());
             if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);

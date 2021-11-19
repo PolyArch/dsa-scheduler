@@ -7,24 +7,16 @@
 
 #define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
 
-/*
-Input: [decomposer, delay_fifo_depth, num_input_ports, isShared,
-        num_output_ports, output_select_mode, protocol, register_file_size]
-OutputSelectMode:
-    0 = Individual
-    1 = Universal
-Protocol:
-    0 = Data
-    1 = DataValidReady
-Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
-*/
+/* Input Parameters {decomposer delay_fifo_depth num_input_ports isShared 
+                num_output_ports output_select_mode protocol register_file_size} */
+/* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
   torch::jit::script::Module module;
   try {
     module = torch::jit::load(TORCH_MODEL_PREFIX "/pe_model.pt");
   }
   catch (const c10::Error& e) {
-    CHECK(false)
+    DSA_CHECK(false)
       << "Error Loading FPGA Processing Element Model: " << TORCH_MODEL_PREFIX "/pe_model.pt";
   }
 
@@ -33,18 +25,20 @@ std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
 
   at::Tensor output = module.forward(inputs).toTensor();
 
-  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
+  std::vector<float> predicted_resources(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
 
-  return output_vector;
+  return {predicted_resources[0], predicted_resources[1], predicted_resources[2], 0, predicted_resources[3], 0, 0, 0, 0};;
 }
 
+/* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
+/* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameters){
   torch::jit::script::Module module;
   try {
     module = torch::jit::load(TORCH_MODEL_PREFIX "/router_model.pt");
   }
   catch (const c10::Error& e) {
-    CHECK(false) << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "/router_model.pt";
+    DSA_CHECK(false) << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "/router_model.pt";
   }
 
   std::vector<torch::jit::IValue> inputs;
@@ -52,29 +46,49 @@ std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameter
 
   at::Tensor output = module.forward(inputs).toTensor();
 
-  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
+  std::vector<float> predicted_resources(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
 
-  return output_vector;
+  return {predicted_resources[0], predicted_resources[1], predicted_resources[2], 0, predicted_resources[3], 0, 0, 0, 0};
 }
 
-
+/* Input Parameters {num_input num_output} */
+/* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float>  vport_area_predict_fpga(const  std::vector<float> parameters){
-  torch::jit::script::Module module;
-  try {
-    module = torch::jit::load(TORCH_MODEL_PREFIX "/vport_model.pt");
+  if (parameters[0] == 0) {
+    // Output Vector-Port
+    int next_power_of_two =  pow(2, ceil(log(parameters[1])/log(2)));
+    switch(next_power_of_two) {
+      case 1:
+        return {(int) (3014 / 4), (int) (2886 / 4), (int) (128 / 4), 0, (int) (584 / 4), 0, 0, 0, 0};
+      case 2:
+        return {(int) (3221 / 4), (int) (3013 / 4), (int) (208 / 4), 0, (int) (461 / 4), 0, 0, 0, 0};
+      case 4:
+        return {(int) (5027 / 4), (int) (4739 / 4), (int) (288 / 4), 0, (int) (473 / 4), 0, 0, 0, 0};
+      case 8:
+        return {(int) (7028 / 4), (int) (6900 / 4), (int) (128 / 4), 0, (int) ( 1017 / 4), 0, 0, 0, 0};
+      default: {
+        DSA_CHECK(false) << "Vector Port Too big. Size" << parameters[1];
+        return {0, 0, 0, 0, 0, 0, 0, 0, 0};
+      }
+    }
+  } else {
+    // Input Vector-Port
+    int next_power_of_two =  pow(2, ceil(log(parameters[0])/log(2)));
+    switch(next_power_of_two) {
+      case 1:
+        return {(int) (3014 / 4), (int) (2886 / 4), (int) (128 / 4), 0, (int) (584 / 4), 0, 0, 0, 0};
+      case 2:
+        return {(int) (3221 / 4), (int) (3013 / 4), (int) (208 / 4), 0, (int) (461 / 4), 0, 0, 0, 0};
+      case 4:
+        return {(int) (5027 / 4), (int) (4739 / 4), (int) (288 / 4), 0, (int) (473 / 4), 0, 0, 0, 0};
+      case 8:
+        return {(int) (7028 / 4), (int) (6900 / 4), (int) (128 / 4), 0, (int) ( 1017 / 4), 0, 0, 0, 0};
+      default: {
+        DSA_CHECK(false) << "Vector Port Too big. Size" << parameters[0];
+        return {0, 0, 0, 0, 0, 0, 0, 0, 0};
+      }
+    }
   }
-  catch (const c10::Error& e) {
-    CHECK(false) << "Error Loading FPGA Router Model" << TORCH_MODEL_PREFIX "/vport_model.pt";
-  }
-
-  std::vector<torch::jit::IValue> inputs;
-  inputs.push_back(torch::tensor(parameters));
-
-  at::Tensor output = module.forward(inputs).toTensor();
-
-  std::vector<float> output_vector(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
-
-  return output_vector;
 }
 
 double pred_vport_power(const double x1[3]) {

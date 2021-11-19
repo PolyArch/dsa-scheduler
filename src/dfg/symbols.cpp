@@ -15,7 +15,7 @@ OperandType Str2Flag(const std::string& s) {
       return static_cast<OperandType>(i);
     }
   }
-  CHECK(false) << "Unknown Qualifier: " << s;
+  DSA_CHECK(false) << "Unknown Qualifier: " << s;
   throw;
 }
 
@@ -67,7 +67,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       node->ops().emplace_back(dfg, es, OperandType::data);
     } else if (auto ce = dynamic_cast<ControlEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);
-      CHECK(inst);
+      DSA_CHECK(inst);
       // External control
       if (ce->controller) {
         auto ne = dynamic_cast<ValueEntry*>(ce->controller);
@@ -81,10 +81,10 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       }
     } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);
-      CHECK(inst);
+      DSA_CHECK(inst);
       inst->ops().emplace_back(dfg, node->bitwidth(), re->idx);
     } else {
-      CHECK(false) << "Invalide Node type";
+      DSA_CHECK(false) << "Invalide Node type";
       throw;
     }
   }

@@ -1,5 +1,4 @@
-CMAKE_BUILD_TYPE ?= "Release"
-
+CMAKE_BUILD_TYPE ?= Release
 all: 3rd-party/libtorch json dsa
 
 3rd-party/libtorch:

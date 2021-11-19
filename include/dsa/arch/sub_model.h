@@ -52,14 +52,8 @@ void fix_id(std::vector<T>& vec) {
 }
 
 template <typename T>
-void vec_delete_by_id(std::vector<T>& vec, std::vector<int>& indices) {
-  auto new_end = std::remove_if(vec.begin(), vec.end(), [&](T fu) {
-    for (int index : indices) {
-      if (fu->id() == index) return true;
-    }
-    return false;
-  });
-  vec.erase(new_end, vec.end());
+void delete_by_id(std::vector<T>& vec, int index) {
+  vec.erase(vec.begin() + index);
 }
 
 // TODO: Should we delete this class?
@@ -75,7 +69,7 @@ class ssio_interface {
   ssvport* get(bool is_input, int id) {
     auto& ports = vports(is_input);
     auto iter = ports.find(id);
-    CHECK(iter != ports.end()) << is_input << " " << id;
+    DSA_CHECK(iter != ports.end()) << is_input << " " << id;
     return iter->second;
   }
 
@@ -348,10 +342,10 @@ class ssswitch : public ssnode {
     features[0] = max_util_ > 1 ? 0.0 : 1.0;
     features[1] = max_util_ > 1 ? 1.0 : 0.0;
 
-    CHECK(features[0] || features[1]);
+    DSA_CHECK(features[0] || features[1]);
     features[2] = flow_control_ ? 0.0 : 1.0;
     features[3] = flow_control_ ? 1.0 : 0.0;
-    CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
     features[4] = lanes();
     features[5] = max_delay();
     features[6] = links_[1].size();
@@ -488,10 +482,10 @@ class ssfu : public ssnode {
     features[0] = max_util_ > 1 ? 0.0 : 1.0;
     features[1] = max_util_ > 1 ? 1.0 : 0.0;
 
-    CHECK(features[0] || features[1]);
+    DSA_CHECK(features[0] || features[1]);
     features[2] = !flow_control_ ? 1.0 : 0.0;
     features[3] = flow_control_ ? 1.0 : 0.0;
-    CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
     features[6] = lanes();
     features[7] = max_delay_;
     features[8] = links_[1].size();
@@ -529,6 +523,8 @@ class ssfu : public ssnode {
     }
     std::cout << "\n";
   }
+
+  int get_register_file_size() { return this->register_file_size; }
 
   bool is_hanger() override { return in_links().size() <= 1 || out_links().size() < 1; }
 
@@ -626,7 +622,7 @@ class ssvport : public ssnode {
 
   int bitwidth_capability() {
     int res = 0;
-    CHECK((int)links_[0].empty() + (int)links_[1].empty() == 1);
+    DSA_CHECK((int)links_[0].empty() + (int)links_[1].empty() == 1);
     for (auto& elem : links_) {
       for (auto link : elem) {
         res += link->bitwidth();

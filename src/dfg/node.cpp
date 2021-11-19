@@ -8,7 +8,7 @@ namespace dfg {
 
 int Node::slot_for_use(dsa::dfg::Edge* edge, int node_slot) {
   int slot = node_slot + edge->l / 8;
-  CHECK(slot < 8);
+  DSA_CHECK(slot < 8);
   return slot;
 }
 
@@ -73,7 +73,7 @@ bool Operand::ready() {
 }
 
 uint64_t Operand::poll() {
-  CHECK(ready());
+  DSA_CHECK(ready());
   uint64_t res = 0;
   for (int i = fifos.size() - 1; i >= 0; --i) {
     auto* e = &parent->edges[edges[i]];
@@ -85,14 +85,14 @@ uint64_t Operand::poll() {
 }
 
 void Operand::pop() {
-  CHECK(ready());
+  DSA_CHECK(ready());
   for (auto& elem : fifos) {
     elem.pop();
   }
 }
 
 bool Operand::predicate() {
-  CHECK(ready());
+  DSA_CHECK(ready());
   for (int i = fifos.size() - 1; i >= 0; --i) {
     if (!fifos[i].front().valid) {
       return false;

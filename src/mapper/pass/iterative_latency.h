@@ -28,16 +28,16 @@ inline void inject_noop_impl(SSDfg* dfg, int eid, Instruction* inst) {
    *          |            |
    *          +---------> inst -> ...
    */
-  CHECK(eid < dfg->edges.size());
+  DSA_CHECK(eid < dfg->edges.size());
   if (inst) {
     auto& e0 = dfg->edges[eid];
     // If we already have a noop, we need sanity check if it is a noop
-    CHECK(inst->inst() == dsa::SS_NONE && inst->ops().size() == 1)
+    DSA_CHECK(inst->inst() == dsa::SS_NONE && inst->ops().size() == 1)
         << "The injected instruction should be a noop.";
     auto& e1 = dfg->edges[inst->ops()[0].edges[0]];
     // CHECK(e0.sid == e1.sid && e0.vid == e1.vid && e0.l == e1.l && e0.r == e1.r) <<
     //   e0.name() << " " << e1.name();
-    CHECK(inst->values.size() == 1);
+    DSA_CHECK(inst->values.size() == 1);
   } else {
     // Create a noop instruction.
     dfg->emplace_back<Instruction>(dfg, SS_NONE);
@@ -59,7 +59,7 @@ inline void inject_noop_impl(SSDfg* dfg, int eid, Instruction* inst) {
       found = true;
     }
   }
-  CHECK(found) << "The value used by this edge not found!";
+  DSA_CHECK(found) << "The value used by this edge not found!";
   // Change the edge source to the noop.
   dfg->edges[eid].sid = inst->id();
   dfg->edges[eid].vid = 0;
@@ -78,7 +78,7 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
     auto f = [sched, &mapping, &i](Node* node) {
       auto loc = sched->locationOf(node);
       if (loc.node()) {
-        CHECK(node->id() < mapping.size());
+        DSA_CHECK(node->id() < mapping.size());
         mapping[node->id()] = {loc.lane(), loc.node()->id()};
       }
     };
@@ -101,7 +101,7 @@ inline void inject_passthrus(SSDfg* dfg, Schedule* sched, std::vector<int>& edge
           }
         } else {
           auto inst = dynamic_cast<Instruction*>(dfg->nodes[iter->second]);
-          CHECK(inst);
+          DSA_CHECK(inst);
           inject_noop_impl(dfg, i, inst);
         }
         DSA_LOG(EDGES) << dfg->edges.back().name() << " " << dfg->edges.back().id;
@@ -362,10 +362,14 @@ inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_te
                          std::vector<int>& edge_latency, std::vector<int>& edge_delay,
                          std::vector<int>& latency, int& max_lat, int& max_lat_mis,
                          int& total_vio, std::vector<int>& group_mismatch,
-                         std::vector<int>& node_violation) {
+                         std::vector<int>& node_violation,
+                         std::pair<int, int>& delay_violation) {
   max_lat = max_lat_mis = total_vio = 0;
   group_mismatch.resize(dfg->meta.size());
   node_violation.resize(dfg->nodes.size());
+  for (auto node : node_violation) {
+    node = 0;
+  }
   std::fill(group_mismatch.begin(), group_mismatch.end(), 0);
   std::fill(node_violation.begin(), node_violation.end(), 0);
 
@@ -378,7 +382,7 @@ inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_te
         Node* origNode = edge->def();
 
         // If routing latency is 0, then its okay to assume minimum
-        CHECK(eid >= 0 && eid < edge_latency.size()) << eid << " " << edge_latency.size();
+        DSA_CHECK(eid >= 0 && eid < edge_latency.size()) << eid << " " << edge_latency.size();
         int routing_latency = edge_latency[eid];
         if (routing_latency == 0) {
           routing_latency = min_expect;
@@ -386,7 +390,7 @@ inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_te
 
         if (origNode != nullptr) {
           int edge_lat = edge_delay[eid] + routing_latency - 1;
-          CHECK(edge_lat >= 0);
+          DSA_CHECK(edge_lat >= 0);
           int lat = latency[origNode->id()] + edge_lat;
 
           if (lat > up_lat) up_lat = lat;
@@ -410,16 +414,24 @@ inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_te
     int new_lat = node->lat_of_inst() + up_lat;
     
     latency[node->id()] = new_lat;
-    //int delay = sched->nod
-    //->delay_fifo_depth();
+    int violation = node_violation[node->id()];
+    int delay_fifo_depth = 0;
 
-    if (max_lat < new_lat) max_lat = new_lat;
+    if (sched->vex_prop().size() > node->id() && sched->is_scheduled(node)) {
+      delay_fifo_depth = sched->locationOf(node).node()->delay_fifo_depth();
+    }
+
+
+    if (max_lat < new_lat) {
+      max_lat = new_lat;
+      delay_violation = std::make_pair(violation, delay_fifo_depth);
+    }
   }
 }
 
 inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
                                int& total_vio, std::vector<int>& group_mismatch,
-                               bool is_export) {
+                               bool is_export, std::pair<int, int>& delay_violation) {
   SSDfg dfg_(*sched->ssdfg());
   // Inject passthrough noops into the DFG.
   std::vector<std::vector<int>> edge_groups;
@@ -432,7 +444,7 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
       DSA_LOG(LAT_PASS) << lp.first << " " << lp.second->name();
     }
   }
-  CHECK(edge_length.size() == dfg_.edges.size())
+  DSA_CHECK(edge_length.size() == dfg_.edges.size())
       << edge_length.size() << " " << dfg_.edges.size();
   // Sort the new DFG nodes in topological order.
   auto ordered = reversed_topology(&dfg_);
@@ -463,7 +475,7 @@ inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
   // Migrate legacy violation calculation here.
   std::vector<int> node_vio;
   calc_mis_vio(&dfg_, sched, non_temp, edge_length, edge_delay, latency, max_lat, max_lat_mis,
-               total_vio, group_mismatch, node_vio);
+               total_vio, group_mismatch, node_vio, delay_violation);
   // Commit results to the schedule.
   for (auto elem : sched->ssdfg()->nodes) {
     int id = elem->id();

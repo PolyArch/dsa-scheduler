@@ -30,9 +30,9 @@ CollectRedundancy(SSDfg* dfg) {
         for (auto eid : value.uses) {
           auto* edge = &dfg->edges[eid];
           users[node->id()].push_back(edge);
-          CHECK(edge->parent == node->ssdfg())
+          DSA_CHECK(edge->parent == node->ssdfg())
               << edge->parent << " " << node->ssdfg() << " " << dfg;
-          CHECK(edge->def() == node);
+          DSA_CHECK(edge->def() == node);
           DSA_LOG(COLLECT) << node->name() << " -> " << eid;
           DSA_LOG(COLLECT) << edge->name();
         }

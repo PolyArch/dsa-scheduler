@@ -44,9 +44,9 @@ class LOGGER {
 };
 }
 
-#define CHECK(COND) \
+#define DSA_CHECK(COND) \
   if (!(COND)) dsa::LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
-  
+
 #define DSA_WARNING dsa::LOGGER("[WARNING]", __FILE__, __LINE__, false)
 
 #define DSA_INFO dsa::LOGGER("[INFO]", __FILE__, __LINE__, false)
@@ -59,4 +59,3 @@ class LOGGER {
   if (int ret = system(CMD))                        \
     dsa::LOGGER("[SHELL]", __FILE__, __LINE__, true) \
       << "Failed command: " << (CMD) << ", code" << ret
-

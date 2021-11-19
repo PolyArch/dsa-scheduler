@@ -136,7 +136,7 @@ class SymbolTable {
   SymbolTable();
 
   void Set(const std::string& s, ParseResult* pr) {
-    CHECK(!Has(s)) << "Duplicated Symbol: " << s;
+    DSA_CHECK(!Has(s)) << "Duplicated Symbol: " << s;
     table_[s] = pr;
   }
 
@@ -150,7 +150,7 @@ class SymbolTable {
   static RegisterEntry isLocalRegister(const std::string &s);
 
   ParseResult* Get(const std::string& s) {
-    CHECK(Has(s)) << "Symbol " << s << " not found";
+    DSA_CHECK(Has(s)) << "Symbol " << s << " not found";
     return table_[s];
   }
 

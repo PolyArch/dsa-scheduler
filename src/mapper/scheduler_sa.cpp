@@ -58,9 +58,10 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
 std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched, SchedStats& s) {
   int num_left = sched->num_left();
   bool succeed_sched = (num_left == 0);
+  std::pair<int, int> delay_violation = std::make_pair(0, 0);
 
   sched->get_overprov(s.ovr, s.agg_ovr, s.max_util);
-  sched->fixLatency(s.lat, s.latmis);
+  sched->fixLatency(s.lat, s.latmis, delay_violation);
 
   int violation = sched->violation();
 
@@ -236,6 +237,7 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
     for (Schedule& sr : ws.sched_array) {
       workers.push([this, &sr](int id) {
         Schedule* sched = &sr;
+        DSA_CHECK(sched->ssModel() == _ssModel);
 
         SchedStats s;
         std::stringstream startStream;
@@ -414,7 +416,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
 struct CandidateFinder : dfg::Visitor {
   CandidateFinder(Schedule* sched_) : sched(sched_) {
-    CHECK(sched->ssModel())
+    DSA_CHECK(sched->ssModel())
         << "The given schedule should have an underlying spatial architecture!";
     model = sched->ssModel();
   }
@@ -483,7 +485,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
           }
         }
       }
-      CHECK(sched->locationOf(node).node());
+      DSA_CHECK(sched->locationOf(node).node());
     }
     if (dummy && success) {
       return 1;
@@ -618,7 +620,7 @@ int SchedulerSimulatedAnnealing::route(
   std::vector<std::vector<std::pair<int, sslink*>>> came_from(n_nodes);
 
   for (ssnode* n : sched->ssModel()->subModel()->node_list()) {
-    CHECK(n->id() >= 0 && n->id() < n_nodes);
+    DSA_CHECK(n->id() >= 0 && n->id() < n_nodes);
     node_dist[n->id()] = std::vector<int>(n->lanes(), -1);
     came_from[n->id()] = std::vector<std::pair<int, sslink*>>(n->lanes(), {-1, nullptr});
     done[n->id()] = std::vector<int>(n->lanes(), false);
@@ -634,7 +636,7 @@ int SchedulerSimulatedAnnealing::route(
   // if(!path_lengthen) sched->edge_prop()[edge->id()].sched_index.clear();
   // sched->edge_prop()[edge->id()].sched_index.push_back(_route_times);
 
-  CHECK(path_lengthen || sched->link_count(edge) == 0)
+  DSA_CHECK(path_lengthen || sched->link_count(edge) == 0)
       << "Edge: " << edge->name() << " is already routed!";
 
   // Distance, random priority, slot, node
@@ -715,7 +717,8 @@ int SchedulerSimulatedAnnealing::route(
           // next->set_done(next_slot, new_rand_prio);
           done[next->id()][next_slot] = new_rand_prio;
 
-          openset.emplace(new_dist, new_rand_prio, next_slot, next);
+
+          openset.emplace(new_dist, new_rand_prio, next_slot % next->lanes(), next);
 
           node_dist[next->id()][next_slot] = new_dist;
           came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
@@ -793,7 +796,7 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
     int n = edge_.size();                                                 \
     for (int i = 0; i < n; ++i) {                                         \
       auto edge = edges[i];                                               \
-      CHECK(sched->link_count(edge) == 0)                                 \
+      DSA_CHECK(sched->link_count(edge) == 0)                                 \
           << "Edge: " << edge->name() << " is already routed!\n";         \
       auto n = edge->node_();                                             \
       if (sched->is_scheduled(n)) {                                       \

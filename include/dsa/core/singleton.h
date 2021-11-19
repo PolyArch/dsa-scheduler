@@ -53,6 +53,7 @@ struct ContextFlags {
    * \brief The budget of design space exploration.
    */
   adg::estimation::Resource *budget{nullptr};
+  adg::estimation::Resource *core_resources{nullptr};
 
   ContextFlags();
 

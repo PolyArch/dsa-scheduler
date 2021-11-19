@@ -35,7 +35,7 @@ struct BitstreamWriter : Visitor {
       // config_bits += `curr_util`;
     }
     // -- config the ID
-    CHECK(!sw->parent->node_list().empty()) << "number of node not parsed?";
+    DSA_CHECK(!sw->parent->node_list().empty()) << "number of node not parsed?";
     uint64_t num_id_bit = log2ceil((int)sw->parent->node_list().size());
     config_bits = config_bits << num_id_bit;
     left_bits -= num_id_bit;
@@ -73,7 +73,7 @@ struct BitstreamWriter : Visitor {
       // config_bits += `curr_util`;
     }
     // -- config the ID
-    CHECK(!fu->parent->node_list().empty()) << "number of node not parsed?";
+    DSA_CHECK(!fu->parent->node_list().empty()) << "number of node not parsed?";
     uint64_t num_id_bit = log2ceil((int)fu->parent->node_list().size());
     config_bits = config_bits << num_id_bit;
     left_bits -= num_id_bit;

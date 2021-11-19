@@ -83,7 +83,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   template <typename T>
   bool scheduleHere(Schedule* sched, const std::vector<T>& nodes,
                     const std::vector<mapper::Slot<ssnode*>>& cand) {
-    CHECK(cand.size() == nodes.size());
+    DSA_CHECK(cand.size() == nodes.size());
     for (int i = 0; i < (int)nodes.size(); ++i) {
       if (!scheduleHere(sched, nodes[i], cand[i])) {
         for (int j = 0; j < i; ++j) {

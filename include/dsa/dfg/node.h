@@ -79,12 +79,12 @@ struct Operand {
   bool isReg();
 
   int regIdx() { 
-    CHECK(isReg());
+    DSA_CHECK(isReg());
     return imm & (~((uint32_t) 0));
   }
 
   int regDtype() {
-    CHECK(isReg());
+    DSA_CHECK(isReg());
     return (imm >> 32) & (~((uint32_t) 0));
   }
 
@@ -198,7 +198,7 @@ class Node {
   //---------------------------------------------------------------------------
 
   V_TYPE type() {
-    CHECK(_vtype != V_INVALID);
+    DSA_CHECK(_vtype != V_INVALID);
     return _vtype;
   }
 

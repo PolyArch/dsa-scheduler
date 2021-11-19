@@ -102,9 +102,9 @@ statement_list: statement
 	            | statement_list statement;
 
 statement: INPUT ':' io_def  eol {
-  CHECK($3->penetrate.empty()) << "Input port cannot have penetration.";
+  DSA_CHECK($3->penetrate.empty()) << "Input port cannot have penetration.";
   auto name = $3->name;
-  CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
+  DSA_CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
   int len = $3->length;
   bool tagged = $3->isTagged;
   int width = $1;
@@ -132,7 +132,7 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | OUTPUT ':' io_def eol {
-  CHECK(!$3->isTagged) << "An output cannot be tagged!";
+  DSA_CHECK(!$3->isTagged) << "An output cannot be tagged!";
   using T = dsa::dfg::OutputPort;
   auto name = $3->name;
   int len = $3->length;
@@ -151,7 +151,7 @@ statement: INPUT ':' io_def  eol {
     auto sym = p->symbols.Get(ss.str()); // check in a symbols array?
     if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>(sym)) {
       int num_entries = ce->entries.size();
-      CHECK(num_entries > 0 && num_entries <= 16);
+      DSA_CHECK(num_entries > 0 && num_entries <= 16);
       std::vector<int> es;
       for (auto elem : ce->entries) {
         // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
@@ -170,7 +170,7 @@ statement: INPUT ':' io_def  eol {
     std::string state = "$" + $3->penetrate + "State";
     auto *entry = p->symbols.Get(state);
     auto *ve = dynamic_cast<dsa::dfg::ValueEntry*>(entry);
-    CHECK(ve);
+    DSA_CHECK(ve);
     out.state_id = p->dfg->nodes.size();
     p->dfg->emplace_back<T>(
       /*Lanes*/1, /*Scalar Dtype*/8, "$" + name + "Penetrate", p->dfg, p->meta);
@@ -254,15 +254,15 @@ statement: INPUT ':' io_def  eol {
       auto iter = p->regs.find((*$1)[i]);
       if (iter != p->regs.end()) {
         p->regs.erase(iter);
-        CHECK(sscanf(iter->second.c_str() + 4, "%d", &node->values[i].reg) == 1);
+        DSA_CHECK(sscanf(iter->second.c_str() + 4, "%d", &node->values[i].reg) == 1);
       }
     }
   } else if (dynamic_cast<ConvergeEntry*>($3) || dynamic_cast<ValueEntry*>($3)) {
     // Converge all the space-separated values
-    CHECK($1->size() == 1);
+    DSA_CHECK($1->size() == 1);
     p->symbols.Set((*$1)[0], $3);
   } else {
-    CHECK(false) << "Unknown type of entry!";
+    DSA_CHECK(false) << "Unknown type of entry!";
   }
   delete $1;
 }
@@ -279,7 +279,7 @@ statement: INPUT ':' io_def  eol {
   delete $3;
 }
 | PRAGMA IDENT IDENT I_CONST eol {
-  CHECK(*$2 == "group");
+  DSA_CHECK(*$2 == "group");
   std::ostringstream oss;
   oss << $4;
   p->dfg->set_pragma(*$3, oss.str());
@@ -316,23 +316,23 @@ io_def: IDENT {
   delete $1;
 }
 | IDENT IDENT {
-  CHECK(*$2 == "stated") << "'stated' expected";
+  DSA_CHECK(*$2 == "stated") << "'stated' expected";
   $$ = new IODef(*$1, 0, true, "");
   delete $1;
 }
 | IDENT '[' I_CONST ']' IDENT {
-  CHECK(*$5 == "stated") << "'stated' expected";
+  DSA_CHECK(*$5 == "stated") << "'stated' expected";
   $$ = new IODef(*$1, $3, true, "");
   delete $1;
 }
 | IDENT IDENT '=' IDENT {
-  CHECK(*$2 == "state") << "'state=' expected";
+  DSA_CHECK(*$2 == "state") << "'state=' expected";
   $$ = new IODef(*$1, 0, false, *$4);
   delete $1;
   delete $4;
 }
 | IDENT '[' I_CONST ']' IDENT '=' IDENT {
-  CHECK(*$5 == "stated") << "'state=' expected";
+  DSA_CHECK(*$5 == "stated") << "'state=' expected";
   $$ = new IODef(*$1, $3, false, *$7);
   delete $1;
   delete $7;
@@ -506,18 +506,18 @@ edge_list: edge {
   } else if (auto re = dynamic_cast<dsa::dfg::RegisterEntry*>($1)) {
     $$ = re;
   } else {
-    CHECK(0) << "Not supported edge list type!";
+    DSA_CHECK(0) << "Not supported edge list type!";
   }
 }
 | edge_list edge {
   auto res = dynamic_cast<dsa::dfg::ConvergeEntry*>($1);
-  CHECK(res);
+  DSA_CHECK(res);
   if (auto ne = dynamic_cast<dsa::dfg::ValueEntry*>($2)) {
     res->entries.push_back(ne);
   } else if (auto ce = dynamic_cast<dsa::dfg::ConvergeEntry*>($2)) {
     res->entries.insert(res->entries.end(), ce->entries.begin(), ce->entries.end());
   } else {
-    CHECK(0) << "Not supported edge list type!";
+    DSA_CHECK(0) << "Not supported edge list type!";
   }
   $$ = res;
 };
@@ -529,7 +529,7 @@ edge: IDENT {
   }
 | IDENT ':' I_CONST ':' I_CONST {
   auto ne = dynamic_cast<dsa::dfg::ValueEntry*>(p->symbols.Get(*$1));
-  CHECK(ne) << "For now only result values supports slicing!";
+  DSA_CHECK(ne) << "For now only result values supports slicing!";
   if (ne->l == (int) $3 && ne->r == (int) $5) {
     $$ = ne;
   } else {
@@ -563,5 +563,5 @@ int parse_dfg(const char* filename, SSDfg* _dfg) {
 
 static void yyerror(struct parse_param* p, char const* s) {
   fprintf(stderr, "Error parsing DFG at line %d: %s\n", yylineno, s);
-  CHECK(0);
+  DSA_CHECK(0);
 }

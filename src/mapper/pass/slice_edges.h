@@ -10,7 +10,7 @@ void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
   int r = edges[eid].r;
   auto& uses = dfg->nodes[edges[eid].sid]->values[edges[eid].vid].uses;
   auto use_idx = std::find(uses.begin(), uses.end(), eid) - uses.begin();
-  CHECK(use_idx != uses.size());
+  DSA_CHECK(use_idx != uses.size());
 
   Operand* op = nullptr;
   int op_idx = -1;
@@ -23,7 +23,7 @@ void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
         break;
       }
     }
-    CHECK(op && op_idx != -1);
+    DSA_CHECK(op && op_idx != -1);
   }
 
   auto& edge = edges[eid];
@@ -83,7 +83,7 @@ inline void SliceOverlappedEdges(SSDfg* dfg) {
         for (auto elem : v) {
           DSA_LOG(SLICE) << elem;
         }
-        CHECK(v.size() % 2 == 0) << v.size();
+        DSA_CHECK(v.size() % 2 == 0) << v.size();
         split_edge(v, dfg, i);
         split_edge(v, dfg, j);
 #undef PUSH_POINT

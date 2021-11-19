@@ -41,14 +41,14 @@ void SSDfg::check_for_errors() {
       return ok;
     }
     void Visit(dsa::dfg::InputPort* vi) {
-      CHECK(HasUse(vi)) << "No user on input " << vi->name();
+      DSA_CHECK(HasUse(vi)) << "No user on input " << vi->name();
     }
     void Visit(dsa::dfg::OutputPort* vo) {
-      CHECK(HasOperands(vo)) << "No operand on output " << vo->name();
+      DSA_CHECK(HasOperands(vo)) << "No operand on output " << vo->name();
     }
     void Visit(dsa::dfg::Instruction* inst) {
-      CHECK(HasUse(inst)) << "No user on instruction " << inst->name();
-      CHECK(HasOperands(inst)) << "No operand on instruction " << inst->name();
+      DSA_CHECK(HasUse(inst)) << "No user on instruction " << inst->name();
+      DSA_CHECK(HasOperands(inst)) << "No operand on instruction " << inst->name();
     }
   };
   ErrorChecker ec;

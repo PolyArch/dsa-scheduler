@@ -15,7 +15,7 @@ SpatialFabric* Import(std::string filename) {
   Json::parseFromStream(crb, ifs, cgra, &errs);
   FILE* fjson = fopen(filename.c_str(), "r");
   auto res = new SpatialFabric();
-  CHECK(cgra->isObject());
+  DSA_CHECK(cgra->isObject());
 
   std::vector<ssnode*> sym_tab;
   {
@@ -27,7 +27,7 @@ SpatialFabric* Import(std::string filename) {
     int num_inputs = 0;
     int num_outputs = 0;  // Calculate the num of Input and Output in the fabric
 
-    CHECK(jsonNodes.isArray());
+    DSA_CHECK(jsonNodes.isArray());
     sym_tab.resize(jsonNodes.size(), nullptr);
 
     // Go over all nodes
@@ -42,7 +42,7 @@ SpatialFabric* Import(std::string filename) {
         node = new ssswitch(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
                             cgranode["max_util"].asInt(), /*dynamic timing=*/true, /*fifo depth=*/2);
       } else if (nodeType == "processing element" || nodeType == "function unit") {
-        CHECK(cgranode["instructions"].isArray());
+        DSA_CHECK(cgranode["instructions"].isArray());
         bool fu_array = cgranode["fu count"].isArray();
         // CHECK(cgranode["fu count"].isArray());
         auto &insts = cgranode["instructions"];
@@ -85,34 +85,34 @@ SpatialFabric* Import(std::string filename) {
         vp->port(port_num);
         node = vp;
       } else {
-        CHECK(false) << id << "has unknown type" << nodeType << "\n";
+        DSA_CHECK(false) << id << "has unknown type" << nodeType << "\n";
       }
       sf->add_node(node);
-      CHECK(id == node->id());
+      DSA_CHECK(id == node->id());
       sym_tab[id] = node;
     }
-    CHECK(num_outputs > 0);
-    CHECK(num_inputs > 0);
+    DSA_CHECK(num_outputs > 0);
+    DSA_CHECK(num_inputs > 0);
   }
 
   {
     auto &jsonNodes = cgra->operator[]("links");
     auto sf = res;
     // Go over all links
-    CHECK(jsonNodes.isArray());
+    DSA_CHECK(jsonNodes.isArray());
     for (int i = 0; i < jsonNodes.size(); ++i) {
       auto &cgralink = jsonNodes[i];
-      CHECK(cgralink.isObject());
+      DSA_CHECK(cgralink.isObject());
       auto &source = cgralink["source"];
-      CHECK(source.isArray());
+      DSA_CHECK(source.isArray());
       auto &sink = cgralink["sink"];
-      CHECK(sink.isArray());
+      DSA_CHECK(sink.isArray());
       int source_id = source[0].asInt();
       int sink_id = sink[0].asInt();
 
       ssnode* from_module = sym_tab[source_id];
       ssnode* to_module = sym_tab[sink_id];
-      CHECK(from_module && to_module);
+      DSA_CHECK(from_module && to_module);
       // connect
       from_module->add_link(to_module);
     }

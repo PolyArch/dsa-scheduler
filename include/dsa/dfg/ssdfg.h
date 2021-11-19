@@ -216,7 +216,7 @@ class SSDfg {
 
 template <>
 inline std::vector<dsa::dfg::Node>& SSDfg::type_filter() {
-  CHECK(false) << "Should not be called!";
+  DSA_CHECK(false) << "Should not be called!";
   throw;
 }
 template <>

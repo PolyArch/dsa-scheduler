@@ -114,7 +114,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
             auto iter = std::find_if(
                 capability.begin(), capability.end(),
                 [opcode](const Capability::Entry& entry) { return entry.op == opcode; });
-            CHECK(iter != capability.end());
+            DSA_CHECK(iter != capability.end());
             cnt[iter - capability.begin()] -= tmp->cnt[j];
           }
         }

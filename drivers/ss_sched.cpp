@@ -28,7 +28,6 @@ int main(int argc, char* argv[]) {
   cxxopts::Options
     options(EXECUTABLE,
             "Mapping data dependence graph of instructions onto spatial architectures.");
-
   auto default_false = cxxopts::value<bool>()->default_value("false");
   auto default_24_36 = cxxopts::value<int>()->default_value(std::to_string(24 * 3600));
   auto default_20000 = cxxopts::value<int>()->default_value("20000");
@@ -84,7 +83,6 @@ int main(int argc, char* argv[]) {
   // Evlove the underlying hardware.
   ENFORCED_SYSTEM("mkdir -p .sched");
   if (parsed.count("design-explore")) {
-    // ENFORCED_SYSTEM("rm -rf viz;");
     ENFORCED_SYSTEM("mkdir -p viz; mkdir -p viz/iters; touch viz/objectives.csv");
     dsa::DesignSpaceExploration(ssmodel, args[1]);
     return 0;
@@ -103,7 +101,7 @@ int main(int argc, char* argv[]) {
 
   // Map the DFG to the spatial architecture.
 
-  CHECK(args.size() == 2);
+  DSA_CHECK(args.size() == 2);
   std::string dfg_file = args[1];
   SSDfg dfg(dfg_file);
   scheduler = new SchedulerSimulatedAnnealing(&ssmodel, "", false);

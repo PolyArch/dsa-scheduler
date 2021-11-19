@@ -19,8 +19,8 @@ using namespace std;
 using namespace dsa;
 
 SSModel::SSModel(SpatialFabric* subModel) {
-  CHECK(subModel);
-  _subModel = subModel;
+  DSA_CHECK(subModel);
+  _subModel = new SpatialFabric(*subModel);
 }
 
 void SSModel::setMaxEdgeDelay(int d) {
@@ -44,7 +44,7 @@ void SSModel::parse_exec(std::istream& istream) {
     }
 
     if (param == string("CMD_DISPATCH")) {
-      CHECK(value == "INORDER" || value == "OOO");
+      DSA_CHECK(value == "INORDER" || value == "OOO");
       set_dispatch_inorder(value == "INORDER");
     } else if (param == string("CMD_DISPATCH_WIDTH")) {
       istringstream(value) >> _dispatch_width;
@@ -92,7 +92,7 @@ void ParseCapabilities(Capability& fu, string& cap_string) {
       continue;
     }
 
-    CHECK(pss.good()) << "Opcode with no encoding!";
+    DSA_CHECK(pss.good()) << "Opcode with no encoding!";
     unsigned encoding;
     pss >> encoding;
     fu.Add(ss_inst, encoding);
@@ -126,7 +126,7 @@ std::vector<Capability*> ParseFuType(std::istream& istream) {
       ParseCapabilities(*res.back(), value);
 
     } else if (ModelParsing::StartsWith(param, "SWITCH_TYPE")) {
-      CHECK(false);
+      DSA_CHECK(false);
     }
   }
 
@@ -137,7 +137,7 @@ std::vector<Capability*> ParseFuType(std::istream& istream) {
 SSModel::SSModel(const char* filename_) : filename(filename_) {
   ifstream ifs(filename, ios::in);
   string param, value;
-  CHECK(ifs.good()) << "Could Not Open: " << filename << "\n";
+  DSA_CHECK(ifs.good()) << "Could Not Open: " << filename << "\n";
 
   // Parse the JSON-format IR
   if (string_utils::String(filename).EndsWith(".json")) {

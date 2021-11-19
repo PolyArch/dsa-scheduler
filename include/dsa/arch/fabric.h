@@ -16,6 +16,8 @@ class SpatialFabric {
 
   SpatialFabric() {}
 
+  SpatialFabric(const SpatialFabric& c);
+
   SpatialFabric(std::istream& istream, const std::vector<Capability*>&);
 
   SpatialFabric(int x, int y, PortType pt = PortType::opensp, int ips = 2, int ops = 2);
@@ -179,7 +181,7 @@ class SpatialFabric {
 
   ssvport* add_vport(bool is_input, int port_num) {
     ssvport* vport = add_vport(is_input);
-    CHECK(!_ssio_interf.vports_map[is_input].count(port_num))
+    DSA_CHECK(!_ssio_interf.vports_map[is_input].count(port_num))
         << "Error: Multiple " << (is_input ? "input" : "output")
         << " ports with port number " << port_num << "created\n\n";
     _ssio_interf.vports_map[is_input][port_num] = vport;
@@ -187,7 +189,7 @@ class SpatialFabric {
     return vport;
   }
 
-  // Creates a copy of the datastructre which gaurantees ordering
+   // Creates a copy of the datastructre which gaurantees ordering
   // within the *_list datastructures (so they can be used for matching)
   SpatialFabric* copy() {
     SpatialFabric* copy_sub = new SpatialFabric();
@@ -202,6 +204,7 @@ class SpatialFabric {
     for (int i = 0, n = _node_list.size(); i < n; ++i) {
       auto node = _node_list[i];
       copy_sub->_node_list[i] = node->copy();
+      node->parent = this;
     }
 
     for (unsigned i = 0; i < _link_list.size(); ++i) {
@@ -229,6 +232,7 @@ class SpatialFabric {
 
     return copy_sub;
   }
+  
 
   // Efficient bulk delete from vector based on indices (O(n))
   template <typename T>
@@ -253,13 +257,13 @@ class SpatialFabric {
     vec.resize(vec.size() - diff);
   }
 
-  // These we can use the faster bulk vec delete
-  void delete_nodes(std::vector<int> v) {
-    vec_delete_by_id(_node_list, v);
+  void delete_node(int node_index) {
+    delete_by_id(_node_list, node_index);
     fix_id(_node_list);
   }
-  void delete_links(std::vector<int> v) {
-    vec_delete_by_id(_link_list, v);
+
+  void delete_link(int link_index) {
+    delete_by_id(_link_list, link_index);
     fix_id(_link_list);
   }
 
@@ -271,6 +275,22 @@ class SpatialFabric {
     // if (auto in = dynamic_cast<ssvport*>(dst)) {
     //   CHECK(!in->in_links().empty());
     // }
+    // Check if a self-link
+    if (src->id() == dst->id())
+      return nullptr;
+    
+    // Check if a link already exists
+    for (auto link : src->out_links())
+      if (link->sink()->id() == dst->id()) 
+        return nullptr;
+    
+    if (dynamic_cast<ssvport*>(src))
+      if (src->out_links().size() == 8)
+        return nullptr;
+    
+    if (dynamic_cast<ssvport*>(dst))
+      if (dst->in_links().size() == 8)
+        return nullptr;
 
     sslink* link = src->add_link(dst);
     link->id(_link_list.size());

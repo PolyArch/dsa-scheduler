@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <iomanip>
+#include <algorithm>
 #include <vector>
 
 #include "dsa/core/singleton.h"
@@ -14,7 +15,52 @@ namespace adg {
 namespace estimation {
 
 
-double ASICResource::normalize() {
+void ASICResource::normalize() {
+  auto resource = ContextFlags::Global().budget;
+  if (auto ar = dynamic_cast<ASICResource*>(resource))
+    return;
+  DSA_CHECK(false);
+  return;
+}
+
+void FPGAResource::normalize() {
+  auto budget = ContextFlags::Global().budget;
+  auto core = ContextFlags::Global().core_resources;
+  if (auto fpga_budget = dynamic_cast<FPGAResource*>(budget)) {
+    if (auto fpga_core = dynamic_cast<FPGAResource*>(core)) {
+      total_lut = total_lut / (fpga_budget->total_lut - fpga_core->total_lut);
+      logic_lut = logic_lut / (fpga_budget->logic_lut - fpga_core->logic_lut);
+      ram_lut = ram_lut / (fpga_budget->ram_lut - fpga_core->ram_lut);
+      srl = srl / (fpga_budget->srl - fpga_core->srl);
+      ff = ff / (fpga_budget->ff - fpga_core->ff);
+      ramb32 = ramb32 / (fpga_budget->ramb32 - fpga_core->ramb32);
+      ramb18 = ramb18 / (fpga_budget->ramb18 - fpga_core->ramb18);
+      uram = uram / (fpga_budget->uram - fpga_core->uram);
+      dsp =  dsp / (fpga_budget->dsp - fpga_core->dsp);
+      return;
+    }
+  }
+  DSA_CHECK(false);
+  return;
+}
+
+// gets the nth largest resource
+double FPGAResource::constrained_resource(int n) {
+  auto budget = ContextFlags::Global().budget;
+  if (auto fpga_budget = dynamic_cast<FPGAResource*>(budget)) {
+    std::vector<double> resources = {
+      logic_lut, ram_lut, srl, ff, ramb32, ramb18, uram, dsp
+    };
+    DSA_CHECK(resources.size() > n);
+    std::sort(resources.begin(), resources.end(), std::greater<double>());
+    return resources[n] < 1 ? resources[n] : -1;
+  }
+  DSA_CHECK(false);
+  return 0;
+}
+
+// Returns Area
+double ASICResource::constrained_resource(int n) {
   auto resource = ContextFlags::Global().budget;
   if (auto ar = dynamic_cast<ASICResource*>(resource)) {
     if (std::abs(ar->area) < 1e-6) {
@@ -22,18 +68,37 @@ double ASICResource::normalize() {
     }
     return area < ar->area ? area / ar->area : -1;
   }
-  CHECK(false);
+  DSA_CHECK(false);
   return 0;
 }
 
-double FPGAResource::normalize() {
+std::string ASICResource::constrained_resource_name(int n) {
   auto resource = ContextFlags::Global().budget;
-  if (auto fr = dynamic_cast<FPGAResource*>(resource)) {
-    auto res = std::max(total_lut / fr->total_lut, ff / fr->ff);
-    return res < 1 ? res : -1;
+  if (auto ar = dynamic_cast<ASICResource*>(resource)) {
+    return "area";
   }
-  CHECK(false);
-  return 0;
+  DSA_CHECK(false);
+  return "";
+}
+
+// gets the name of the nth largest resource
+std::string FPGAResource::constrained_resource_name(int n) {
+  std::vector<double> resources = {
+    logic_lut, ram_lut, srl, ff, ramb32, ramb18, uram, dsp
+  };
+  DSA_CHECK(resources.size() > n);
+  std::vector<int> indices(resources.size());
+  std::vector<std::string> names = {
+    "ram_lut", "srl", "ff", "ramb32", "ramb18", "uram", "dsp"
+  };
+  std::sort(indices.begin(), indices.end(), [&](int lhs, int rhs) {
+      return resources[lhs] < resources[rhs];
+  });
+  std::vector<std::string> res(indices.size());
+  for (std::size_t i = 0; i != indices.size(); ++i) {
+      res[indices[i]] = names[i];
+  }
+  return res[n];
 }
 
 std::string ASICResource::dump() {
@@ -68,7 +133,7 @@ const std::map<std::pair<int, int>, std::pair<double, double>> MEMORY_DATA = {
 };
 
 double DecomposeCoef(int x) {
-  CHECK(x == (x & -x)) << "Only power of 2 supported!";
+  DSA_CHECK(x == (x & -x)) << "Only power of 2 supported!";
   if (x == 1 || x == 2) {
     x -= 1;
   } else if (x == 4) {
@@ -76,7 +141,7 @@ double DecomposeCoef(int x) {
   } else if (x == 8) {
     x = 3;
   } else {
-    CHECK(false) << "Unsupported yet!";
+    DSA_CHECK(false) << "Unsupported yet!";
   }
   // std::cout << x << ": " << pow(1.1, x) << std::endl;
   return pow(DECOMP_COEF, x);
@@ -93,12 +158,12 @@ std::pair<double, double> FIFOEst(int depth) {
 
 struct Estimator : Visitor {
   Estimator(SSModel* arch_, Hardware hw_) : arch(arch_), hw(hw_){
-    auto iter = MEMORY_DATA.find({arch->memory_size, arch->io_ports});
-    CHECK(iter != MEMORY_DATA.end());
-    double power = iter->second.second + (arch->indirect() == 2) * 18.1 + 9.3;
-    double area = iter->second.first + (arch->indirect() == 2) * 88800 + 5200;
     switch (hw) {
       case Hardware::ASIC: {
+        auto iter = MEMORY_DATA.find({arch->memory_size, arch->io_ports});
+        DSA_CHECK(iter != MEMORY_DATA.end());
+        double power = iter->second.second + (arch->indirect() == 2) * 18.1 + 9.3;
+        double area = iter->second.first + (arch->indirect() == 2) * 88800 + 5200;
         res.add(Breakdown::Memory, power, area);
         break;
       }
@@ -120,17 +185,19 @@ struct Estimator : Visitor {
         break;
       }
       case Hardware::FPGA: {
+        /* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
         std::vector<float> model_inputs{
-          (float) sw->max_delay(), 
+          (float) sw->delay_fifo_depth(), 
           (float) sw->lanes(), 
           (float) sw->in_links().size(), 
           (float) sw->max_util() > 1 ? (float) 1 : (float) 0, 
           (float) sw->out_links().size(), 
           (float) sw->flow_control() ? (float) 1 : (float) 0};
         
-        auto of = router_area_predict_fpga(model_inputs);
-        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-        res.add(Breakdown::Network, od);
+        auto predicted = router_area_predict_fpga(model_inputs);
+        std::vector<double> output(predicted.begin(), predicted.end());
+
+        res.add(Breakdown::Network, output);
         break;
       }
     }
@@ -141,12 +208,10 @@ struct Estimator : Visitor {
       case Hardware::FPGA: {
         std::vector<float> model_inputs{
           (float) vp->in_links().size(), 
-          (float) vp->out_links().size(), 
-          (float) vp->datawidth(), 
-          (float) vp->delay_fifo_depth() };
-        auto of = vport_area_predict_fpga(model_inputs);
-        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-        res.add(Breakdown::Sync, od);
+          (float) vp->out_links().size()};
+        auto predicted = vport_area_predict_fpga(model_inputs);
+        std::vector<double> output(predicted.begin(), predicted.end());
+        res.add(Breakdown::Sync, output);
         break;
       }
       case Hardware::ASIC: {
@@ -165,18 +230,19 @@ struct Estimator : Visitor {
   void Visit(ssfu* fu) {
     switch (hw) {
       case Hardware::FPGA: {
+        /* Input Parameters {decomposer delay_fifo_depth num_input_ports isShared num_output_ports output_select_mode protocol register_file_size} */
         std::vector<float> model_inputs{
           (float) fu->lanes(),
-          (float) fu->max_delay(), 
+          (float) fu->delay_fifo_depth(), 
           (float) fu->in_links().size(),
           (float) fu->max_util() > 1 ? (float) 1 : (float) 0,
           (float) fu->out_links().size(), 
           (float) 0 /*features[4]*/, 
           (float) fu->flow_control() ? (float) 1 : (float) 0, 
-          (float) fu->delay_fifo_depth()};
-        auto of = pe_area_predict_fpga(model_inputs);
-        std::vector<double> od{(double) of[0], (double) of[1], (double) of[2], (double) of[3]};
-        res.add(Breakdown::FU, od);
+          (float) fu->get_register_file_size()};
+        auto predicted = pe_area_predict_fpga(model_inputs);
+        std::vector<double> output(predicted.begin(), predicted.end());
+        res.add(Breakdown::FU, output);
         break;
       }
       case Hardware::ASIC: {
@@ -215,6 +281,10 @@ void Result::Dump(std::ostream& os) {
   }
 }
 
+void Result::Dump_all_resources(std::ostream& os) {
+  os << this->sum()->dump();
+}
+
 std::map<Hardware, std::function<Resource*()>> Result::RESOURCE_CONSTRUCTOR = {
   {Hardware::FPGA, []() -> Resource* { return new FPGAResource(); }},
   {Hardware::ASIC, []() -> Resource* { return new ASICResource(); }},
@@ -229,45 +299,61 @@ Result::Result() {
 
 void Result::add(Breakdown k, double power, double area) {
   auto asic = dynamic_cast<ASICResource*>(brkd[(int) k]);
-  CHECK(asic);
+  DSA_CHECK(asic);
   asic->power += power;
   asic->area += area;
 }
 
 void Result::add(Breakdown k, const std::vector<double> &v) {
   auto fpga = dynamic_cast<FPGAResource*>(brkd[(int) k]);
-  CHECK(fpga);
+  DSA_CHECK(fpga);
   fpga->total_lut += v[0];
   fpga->logic_lut += v[1];
   fpga->ram_lut += v[2];
-  fpga->ff += v[3];
+  fpga->srl += v[3];
+  fpga->ff += v[4];
+  fpga->ramb32 += v[5];
+  fpga->ramb18 += v[6];
+  fpga->uram += v[7];
+  fpga->dsp += v[8];
+}
+
+
+Resource *Result::resource_bd(int breakdown) {
+  return brkd[breakdown];
 }
 
 Resource *Result::sum() {
   switch (ContextFlags::Global().dse_target) {
-  case Hardware::ASIC: {
-    ASICResource *res = new ASICResource();
-    for (int i = 0; i < (int) brkd.size(); ++i) {
-      auto *asic = dynamic_cast<ASICResource*>(brkd[i]);
-      res->power += asic->power;
-      res->area += asic->area;
+    case Hardware::ASIC: {
+      ASICResource *res = new ASICResource();
+      for (int i = 0; i < (int) brkd.size(); ++i) {
+        auto *asic = dynamic_cast<ASICResource*>(brkd[i]);
+        res->power += asic->power;
+        res->area += asic->area;
+      }
+      res->area /= 1e6;
+      return res;
     }
-    res->area /= 1e6;
-    return res;
-  }
-  case Hardware::FPGA: {
-    FPGAResource *res = new FPGAResource();
-    for (int i = 0; i < (int) this->brkd.size(); ++i) {
-      auto *fpga = dynamic_cast<FPGAResource*>(brkd[i]);
-      res->total_lut += fpga->total_lut;
-      res->logic_lut += fpga->logic_lut;
-      res->ram_lut += fpga->ram_lut;
-      res->ff += fpga->ff;
+    case Hardware::FPGA: {
+      FPGAResource *res = new FPGAResource();
+      for (int i = 0; i < (int) this->brkd.size(); ++i) {
+        auto *fpga = dynamic_cast<FPGAResource*>(brkd[i]);
+        // total_lut, logic_lut, ram_lut, srl, ff, ramb32, ramb18, uram, dsp;
+        res->total_lut += fpga->total_lut;
+        res->logic_lut += fpga->logic_lut;
+        res->ram_lut += fpga->ram_lut;
+        res->srl += fpga->srl;
+        res->ff += fpga->ff;
+        res->ramb32 += fpga->ramb32;
+        res->ramb18 += fpga->ramb18;
+        res->uram += fpga->uram;
+        res->dsp += fpga->dsp;
+      }
+      return res;
     }
-    return res;
   }
-  }
-  CHECK(false);
+  DSA_CHECK(false);
   return nullptr;
 }
 

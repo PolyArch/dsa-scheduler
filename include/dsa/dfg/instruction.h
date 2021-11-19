@@ -88,7 +88,7 @@ struct CtrlBits {
     if (s == "d") return Discard;
     if (s == "r") return Reset;
     if (s == "a") return Abstain;
-    CHECK(false) << "Not a valid command";
+    DSA_CHECK(false) << "Not a valid command";
     abort();
   }
 };
@@ -201,7 +201,7 @@ class Operation : public Node {
   /*! \brief The number of compute resources required. */
   std::vector<int> cnt;
 
-  void forward() override { CHECK(false) << "Operation node is for scheduling only!"; }
+  void forward() override { DSA_CHECK(false) << "Operation node is for scheduling only!"; }
 };
 
 }  // namespace dfg

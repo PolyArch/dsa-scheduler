@@ -35,7 +35,7 @@ std::vector<int> CtrlBits::encode() {
 }
 
 CtrlBits::CtrlBits(const std::vector<int> &a) {
-  CHECK(a.size() % 2 == 0);
+  DSA_CHECK(a.size() % 2 == 0);
   for (int i = 0; i < (int) a.size(); i += 2) {
     std::vector<CtrlBits::Control> v;
     for (int j = 0; j < CtrlBits::Control::Total; ++j) {
@@ -84,7 +84,7 @@ CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw) {
 
 Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
     : Node(ssdfg, V_INST), _reg(8, 0), opcode(inst) {
-  CHECK(values.empty());
+  DSA_CHECK(values.empty());
   int n = dsa::num_values(opcode);
   for (int i = 0; i < n; ++i) {
     values.emplace_back(ssdfg, id(), i);
@@ -109,7 +109,7 @@ void Instruction::forward() {
   // Check the avaiability of output buffer
   if (!values.front().fifo.empty()) {
     for (auto& elem : values) {
-      CHECK(!elem.fifo.empty());
+      DSA_CHECK(!elem.fifo.empty());
       if (!elem.forward(true)) {
         DSA_LOG(FORWARD) << _ssdfg->cur_cycle() << ": " << name()
                      << " Cannot forward because of " << elem.name();
@@ -117,12 +117,12 @@ void Instruction::forward() {
       }
     }
     for (auto& elem : values) {
-      CHECK(elem.forward(false));
+      DSA_CHECK(elem.forward(false));
     }
     return;
   }
 
-  CHECK(_ops.size() <= 3);
+  DSA_CHECK(_ops.size() <= 3);
 
   // Check all the operands ready to go!
   for (size_t i = 0; i < _ops.size(); ++i) {
@@ -226,7 +226,7 @@ void Instruction::forward() {
   }
 
   for (auto& elem : values) {
-    CHECK(elem.forward(false));
+    DSA_CHECK(elem.forward(false));
   }
 }
 
@@ -246,7 +246,7 @@ int Instruction::lane() {
     while (i >= 0 && isdigit(name[i])) {
       --i;
     }
-    CHECK(i >= 0) << name;
+    DSA_CHECK(i >= 0) << name;
     std::string laneno(name.begin() + i + 1, name.end());
     if (!laneno.empty()) {
       std::istringstream iss(laneno);
@@ -285,7 +285,7 @@ uint64_t Instruction::do_compute(bool& discard, std::vector<bool> &backpressure)
 
 #undef EXECUTE
 
-  CHECK(false) << "Weird bitwidth: " << bitwidth() << "\n";
+  DSA_CHECK(false) << "Weird bitwidth: " << bitwidth() << "\n";
   throw;
 }
 

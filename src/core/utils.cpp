@@ -17,7 +17,7 @@ Json::Value LoadJsonFromFile(const std::string &fname) {
   Json::Value res;
   Json::CharReaderBuilder crb;
   std::ifstream ifs(fname);
-  CHECK(ifs.good()) << "Cannot open " << fname;
+  DSA_CHECK(ifs.good()) << "Cannot open " << fname;
   std::string errs;
   Json::parseFromStream(crb, ifs, &res, &errs);
   return res;
