@@ -346,10 +346,10 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
         auto sched = best_ci->res[x];
         std::cout << "Dumping " << sched->ssdfg()->filename << "at" << path << "/" << x << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
         ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-        std::string filename = path + "/" + sched->ssdfg()->filename;
-        sched->printGraphviz((path + "/graph.gv").c_str());
+        std::string filename = path + "/" + std::to_string(x);
+        sched->printGraphviz((path + "/" + sched->ssdfg()->filename + ".gv").c_str());
         std::ofstream ofs(filename + ".dfg.h");
-        sched->printConfigHeader(ofs, sched->ssdfg()->filename );
+        sched->printConfigHeader(ofs, std::to_string(x));
       }
 
       // Modify the temperature
@@ -413,10 +413,10 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     auto sched = best_ci->res[x];
     std::cout << "Dumping " << sched->ssdfg()->filename << " " << path << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
     ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-    std::string filename = path + "/" + sched->ssdfg()->filename ;
-    sched->printGraphviz((path + "/graph.gv").c_str());
+    std::string filename = path + "/" + std::to_string(x);
+    sched->printGraphviz((path + "/" + sched->ssdfg()->filename + ".gv").c_str());
     std::ofstream ofs(filename + ".dfg.h");
-    sched->printConfigHeader(ofs, sched->ssdfg()->filename);
+    sched->printConfigHeader(ofs, std::to_string(x));
   }
 
   best_ci->ss_model()->subModel()->DumpHwInJson("viz/pruned.json");

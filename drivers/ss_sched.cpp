@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
   SSModel ssmodel(adg_file.c_str());
 
   // Evlove the underlying hardware.
-  ENFORCED_SYSTEM("mkdir -p .sched");
+  ENFORCED_SYSTEM("mkdir -p .sched;");
   if (parsed.count("design-explore")) {
     ENFORCED_SYSTEM("mkdir -p viz; mkdir -p viz/iters; touch viz/objectives.csv");
     dsa::DesignSpaceExploration(ssmodel, args[1]);
