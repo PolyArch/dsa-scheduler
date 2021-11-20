@@ -209,6 +209,7 @@ void SSDfg::Apply(dsa::dfg::Visitor* visitor) {
 }
 
 int SSDfg::forward(bool asap) {
+  DSA_LOG(FORWARD) << "Fowarding DFG... " << asap;
   clear_issued();
   std::vector<bool> group_ready(true, meta.size());
   int old[2] = {dyn_issued[0], dyn_issued[1]};
@@ -234,9 +235,13 @@ int SSDfg::forward(bool asap) {
   for (auto elem : nodes) {
     if (auto vec = dynamic_cast<dsa::dfg::VectorPort*>(elem)) {
       if (asap || group_ready[elem->group_id()]) {
-        elem->forward();
+        DSA_LOG(FORWARD) << "Tick "<< elem->name();
+        vec->forward();
+      } else {
+        DSA_LOG(FORWARD) << "Not ticked: " << elem->name();
       }
     } else {
+      DSA_LOG(FORWARD) << "Tick "<< elem->name();
       elem->forward();
     }
   }

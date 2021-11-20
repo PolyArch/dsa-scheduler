@@ -1,5 +1,7 @@
 #include <cstdint>
 
+#include "cxxopts.hpp"
+
 #include "dsa/debug.h"
 #include "dsa/core/singleton.h"
 
@@ -30,6 +32,7 @@ void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
   this->dse_target = parsed.count("fpga") ? Hardware::FPGA : Hardware::ASIC;
   this->budget = Result::RESOURCE_CONSTRUCTOR[dse_target]();
   this->core_resources = Result::RESOURCE_CONSTRUCTOR[dse_target]();
+  this->adg_compat = parsed["compat-adg"].as<bool>();
   if (dse_target == Hardware::FPGA) {
     auto *budget = dynamic_cast<adg::estimation::FPGAResource*>(this->budget);
     auto *core_resources = dynamic_cast<adg::estimation::FPGAResource*>(this->core_resources);

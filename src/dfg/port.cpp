@@ -37,32 +37,12 @@ VectorPort::VectorPort(V_TYPE v, int len, int bitwidth, const std::string& name,
     : Node(ssdfg, v, name), bitwidth_(bitwidth), meta(meta_, this) {}
 
 InputPort::InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
-                     const dsa::dfg::MetaPort& meta)
-    : VectorPort(V_INPUT, len, width, name, ssdfg, meta) {
+                     const dsa::dfg::MetaPort& meta, bool stated)
+    : VectorPort(V_INPUT, len, width, name, ssdfg, meta), stated(stated) {
   int n = std::max(1, len);
-  for (int i = 0; i < n; ++i) {
+  for (int i = 0; i < n + stated; ++i) {
     values.emplace_back(ssdfg, id(), i);
   }
-}
-
-InputPort* InputPort::stated() {
-  if (state_id != -1) {
-    auto *nptr = ssdfg()->nodes[state_id];
-    auto *res = dynamic_cast<InputPort*>(nptr);
-    DSA_CHECK(res);
-    return res;
-  }
-  return nullptr;
-}
-
-OutputPort* OutputPort::stated() {
-  if (state_id != -1) {
-    auto *nptr = ssdfg()->nodes[state_id];
-    auto *res = dynamic_cast<OutputPort*>(nptr);
-    DSA_CHECK(res);
-    return res;
-  }
-  return nullptr;
 }
 
 void InputPort::forward() {
@@ -76,7 +56,10 @@ void InputPort::forward() {
   }
 
   for (auto& elem : values) {
-    if (!elem.forward(true)) return;
+    if (!elem.forward(true)) {
+      DSA_LOG(FORWARD) << name() << " cannot forward because " << elem.name();
+      return;
+    }
   }
   for (auto& elem : values) {
     DSA_CHECK(elem.forward(false));

@@ -26,8 +26,8 @@ ControlEntry::ControlEntry(const std::string& s, ParseResult* controller_)
 
 ControlEntry::ControlEntry(const std::string& s,
                            std::map<int, std::vector<std::string>>& bits_,
-                           ParseResult* controller_)
-    : controller(controller_), raw(bits_) {
+                           ParseResult* controller_, int bmss)
+    : controller(controller_), raw(bits_), bmss(bmss) {
   flag = Str2Flag(s);
 }
 
@@ -72,12 +72,12 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       if (ce->controller) {
         auto ne = dynamic_cast<ValueEntry*>(ce->controller);
         dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
-        inst->predicate = CtrlBits(ce->raw);
+        inst->predicate = CtrlBits(ce->raw, ce->bmss);
         std::vector<int> es{dfg->edges.back().id};
         inst->ops().emplace_back(dfg, es, ce->flag);
       } else {
         // Self control
-        inst->self_predicate = CtrlBits(ce->raw);
+        inst->self_predicate = CtrlBits(ce->raw, -1);
       }
     } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);

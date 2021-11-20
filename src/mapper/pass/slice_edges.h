@@ -4,7 +4,7 @@ namespace dsa {
 namespace dfg {
 namespace pass {
 
-void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
+inline void split_edge(const std::vector<int>& v, SSDfg* dfg, int eid) {
   std::vector<Edge>& edges = dfg->edges;
   int l = edges[eid].l;
   int r = edges[eid].r;
@@ -46,7 +46,7 @@ inline void SliceOverlappedEdges(SSDfg* dfg) {
   //auto& nodes = dfg->nodes;
   for (int i = 0, n = edges.size(); i < n; ++i) {
     for (int j = i + 1; j < n; ++j) {
-      if (edges[i].sid == edges[j].sid && edges[j].vid == edges[j].vid) {
+      if (edges[i].val() == edges[j].val()) {
         if (edges[i].r < edges[j].l || edges[j].r < edges[i].l) {
           continue;
         }

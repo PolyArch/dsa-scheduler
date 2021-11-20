@@ -12,5 +12,21 @@ namespace adg {
  */
 SpatialFabric* Import(std::string filename);
 
+enum ADGKEY {
+    #define MACRO(x, y) x,
+    #include "./adg.ref"
+    #undef MACRO  
+};
+
+/**
+ * @brief This is the set for the name of the key in Architecture Description Graph
+ * 
+ */
+const char* const ADGKEY_NAMES[]{
+    #define MACRO(x, y) #y,
+    #include "./adg.ref"
+    #undef MACRO
+};
+
 }  // namespace adg
 }  // namespace dsa

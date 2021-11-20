@@ -106,40 +106,51 @@ statement: INPUT ':' io_def  eol {
   auto name = $3->name;
   DSA_CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
   int len = $3->length;
-  bool tagged = $3->isTagged;
+  bool stated = $3->isTagged;
   int width = $1;
   int n = std::max(1, len);
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, stated);
+  /*
+   * If the a port is stated, the identifier of the port should be ${PortName}State.
+   * It will be come a standalone port with this identifier in the DFG data structure representation.
+   */
+  if (stated) {
+    auto symbol_id = "$" + name + "State";
+    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
+  }
   for (int i = 0, cnt = 0; i < n; ++i) {
     std::stringstream ss;
     ss << name;
     if (len) ss << cnt++;
     // TODO(@were): Do I need to modularize these two clean up segment?
-    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i, 0, width - 1));
+    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i + stated, 0, width - 1));
   }
   p->meta.clear();
-  /*
-   * If the a port is stated, the identifier of the port should be ${PortName}State.
-   * It will be come a standalone port with this identifier in the DFG data structure representation.
-   */
-  if (tagged) {
-    p->dfg->vins.back().state_id = p->dfg->nodes.size();
-    auto symbol_id = "$" + name + "State";
-    p->dfg->emplace_back<dsa::dfg::InputPort>(
-      /*VecLanes*/1, /*Scalar Type*/8, /*Name*/symbol_id, p->dfg, p->meta);
-    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
-  }
   delete $3;
 }
 | OUTPUT ':' io_def eol {
-  DSA_CHECK(!$3->isTagged) << "An output cannot be tagged!";
+  DSA_CHECK(!$3->isTagged) << "An output cannot be stated!";
   using T = dsa::dfg::OutputPort;
   auto name = $3->name;
   int len = $3->length;
   int width = $1;
   int n = std::max(1, len);
-  // I think it's somewhat likely i am breaking decomposability
-  p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta);
+  int penetrate = -1;
+  dsa::dfg::ValueEntry *pve = nullptr;
+  if (!$3->penetrate.empty()) {
+    std::string state = "$" + $3->penetrate + "State";
+    auto *entry = p->symbols.Get(state);
+    pve = dynamic_cast<dsa::dfg::ValueEntry *>(entry);
+    DSA_CHECK(pve);
+    penetrate = pve->nid;
+  }
+  p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta, penetrate);
+  if (penetrate != -1) {
+    p->dfg->edges.emplace_back(
+      p->dfg, pve->nid, pve->vid, p->dfg->vouts.back().id(), pve->l, pve->r);
+    std::vector<int> es{p->dfg->edges.back().id};
+    p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+  }
   auto &out = p->dfg->vouts.back();
   int left_len = 0;
   for (int i = 0, cnt = 0; i < n; ++i) {
@@ -166,19 +177,6 @@ statement: INPUT ':' io_def  eol {
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
     }
   }
-  if (!$3->penetrate.empty()) {
-    std::string state = "$" + $3->penetrate + "State";
-    auto *entry = p->symbols.Get(state);
-    auto *ve = dynamic_cast<dsa::dfg::ValueEntry*>(entry);
-    DSA_CHECK(ve);
-    out.state_id = p->dfg->nodes.size();
-    p->dfg->emplace_back<T>(
-      /*Lanes*/1, /*Scalar Dtype*/8, "$" + name + "Penetrate", p->dfg, p->meta);
-    p->dfg->edges.emplace_back(
-      p->dfg, ve->nid, ve->vid, p->dfg->vouts.back().id(), ve->l, ve->r);
-    std::vector<int> es{p->dfg->edges.back().id};
-    p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
-  }
   p->meta.clear();
   delete $3;
 }
@@ -190,8 +188,8 @@ statement: INPUT ':' io_def  eol {
   int slice = 64 / width;
   
   // add input/output ports
-  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta);
-  p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta);
+  p->dfg->emplace_back<dsa::dfg::InputPort>(n, width, name, p->dfg, p->meta, false);
+  p->dfg->emplace_back<dsa::dfg::OutputPort>(n, width, name, p->dfg, p->meta, -1);
   //, true);
   
   // std::stringstream ss;
@@ -392,7 +390,6 @@ expr: I_CONST {
   auto &opcode = *$1;
   auto &args = *$3;
 
-
   dsa::OpCode op = dsa::inst_from_string(opcode.c_str());
   p->dfg->emplace_back<dsa::dfg::Instruction>(p->dfg, op);
   auto *inst = &p->dfg->type_filter<dsa::dfg::Instruction>().back();
@@ -430,12 +427,20 @@ arg_expr : expr {
 }
 | IDENT '=' expr '{' ctrl_list  '}' {
   $$ = new dsa::dfg::ControlEntry(*$1, *$5, $3);
+  delete $1;
   delete $5;
 }
 | IDENT '=' '{' ctrl_list  '}' {
   $$ = new dsa::dfg::ControlEntry(*$1, *$4, nullptr);
+  delete $1;
   delete $4;
-};
+}
+| IDENT '=' expr '&' I_CONST '{' ctrl_list  '}' {
+  $$ = new dsa::dfg::ControlEntry(*$1, *$7, $3, $5);
+  delete $1;
+  delete $7;
+}
+;
 
 arg_list: arg_expr {
   $$ = new std::vector<dsa::dfg::ParseResult*>();

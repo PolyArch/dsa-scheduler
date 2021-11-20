@@ -59,7 +59,7 @@ bool Operand::ready() {
   for (size_t i = 0; i < fifos.size(); ++i) {
     auto* e = &parent->edges[edges[i]];
     if (fifos[i].empty()) {
-      DSA_LOG(FORWARD) << "fifo (" << &fifos[i] << ") " << i << " no element!";
+      DSA_LOG(FORWARD) << "fifo (" << e->name() << ") " << i << " no element!";
       return false;
     }
     if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
@@ -106,11 +106,21 @@ Edge::Edge(SSDfg* parent, int sid, int vid, int uid, int l, int r)
   id = parent->edges.size();
 }
 
-Node* Edge::def() const { return parent->nodes[sid]; }
+Node* Edge::def() const {
+  DSA_CHECK(sid >= 0 && sid < parent->nodes.size()) << sid << " " << parent->nodes.size();
+  return parent->nodes[sid];
+}
 
-Value* Edge::val() const { return &parent->nodes[sid]->values[vid]; }
+Value* Edge::val() const {
+  auto node = def();
+  DSA_CHECK(vid < node->values.size()) << vid << " " << node->values.size();
+  return &node->values[vid];
+}
 
-Node* Edge::use() const { return parent->nodes[uid]; }
+Node* Edge::use() const {
+  DSA_CHECK(uid >= 0 && uid < parent->nodes.size());
+  return parent->nodes[uid];
+}
 
 Node* Edge::get(int x) const {
   return x ? use() : def();

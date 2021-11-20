@@ -43,7 +43,7 @@ struct CtrlBits {
    * \brief Construct a new CtrlBits with a parsed raw map.
    * \param raw The parsed raw map from the control list.
    */
-  CtrlBits(const std::map<int, std::vector<std::string>>& raw);
+  CtrlBits(const std::map<int, std::vector<std::string>>& raw, int bmss);
 
 
   /*!
@@ -54,7 +54,7 @@ struct CtrlBits {
   /*!
    * \brief Assignment constructor.
    */
-  CtrlBits &operator=(const CtrlBits &b) { lut = b.lut; return *this; }
+  CtrlBits &operator=(const CtrlBits &b) { bmss = b.bmss; lut = b.lut; return *this; }
 
 
   /*!
@@ -67,6 +67,11 @@ struct CtrlBits {
    */
   std::vector<int> encode();
 
+  /*!
+   * \brief The subset of the bitmask for lut.
+   */
+  int bmss{-1};
+
   /*! \brief Construct an empty CtrlBits object. */
   CtrlBits() {}
 
@@ -78,10 +83,9 @@ struct CtrlBits {
   void test(uint64_t val, Behavior &b);
 
   const bool is_dynamic{false};
-
- private:
   std::map<int, std::vector<Control>> lut;
 
+ private:
   static Control str_to_enum(const std::string& s) {
     if (s == "b1") return B1;
     if (s == "b2") return B2;

@@ -7,9 +7,17 @@
 
 #define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
 
-/* Input Parameters {decomposer delay_fifo_depth num_input_ports isShared 
-                num_output_ports output_select_mode protocol register_file_size} */
-/* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
+/*
+Input: [decomposer, delay_fifo_depth, num_input_ports, isShared,
+        num_output_ports, output_select_mode, protocol, regFileSize]
+OutputSelectMode:
+    0 = Individual
+    1 = Universal
+Protocol:
+    0 = Data
+    1 = DataValidReady
+Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
+*/
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
   torch::jit::script::Module module;
   try {

@@ -95,8 +95,9 @@ struct ControlEntry : ParseResult {
   ControlEntry(const std::string& s, ParseResult* controller_);
 
   ControlEntry(const std::string& s, std::map<int, std::vector<std::string>>& bits_,
-               ParseResult* controller_);
+               ParseResult* controller_, int bmss = -1);
 
+  int bmss;
   OperandType flag;
   ParseResult* controller;
   std::map<int, std::vector<std::string>> raw;

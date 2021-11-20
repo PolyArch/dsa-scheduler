@@ -26,7 +26,7 @@ class LOGGER {
     while (i >= 0 && file[i] != '/') {
       --i;
     }
-    DSA_OSTREAM << reason << " " << file.substr(i + 1) << ":" << lineno << ": ";
+    DSA_OSTREAM << reason << file.substr(i + 1) << ":" << lineno << ": ";
   }
 
   ~LOGGER() noexcept(false) {
@@ -45,7 +45,7 @@ class LOGGER {
 }
 
 #define DSA_CHECK(COND) \
-  if (!(COND)) dsa::LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << #COND << " "
+  if (!(COND)) dsa::LOGGER("[CHECK FAIL]", __FILE__, __LINE__, true) << "(" << #COND << ") "
 
 #define DSA_WARNING dsa::LOGGER("[WARNING]", __FILE__, __LINE__, false)
 

@@ -170,110 +170,193 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   }
   os << "\n";
 
-  if (use_cheat) {
+  if (!ContextFlags::Global().bitstream) {
     printConfigCheat(os, cfg_name);
   } else {
     // For each edge, find out the passthrough node
     int edge_idx = 0;
     SSDfg* ssDFG = ssdfg();
-    auto edge_list = ssDFG->edges;
-    auto vertex_list = ssDFG->nodes;
-    std::vector<std::map<int, dsa::adg::bitstream::NodeInfo>> info(
-        this->ssModel()->subModel()->node_list().size());
-    std::vector<int> opcodes(this->ssModel()->subModel()->node_list().size());
+    auto &edge_list = ssDFG->edges;
+    auto &vertex_list = ssDFG->nodes;
+
+    // This is the collection of node info, size of #node, 
+    std::vector<dsa::adg::bitstream::NodeInfo> info( 
+      this->ssModel()->subModel()->node_list().size());
     for (auto& ep : _edgeProp) {
+    
       dsa::dfg::Edge* edge = &edge_list[edge_idx];
       os << "// -------- EDGE:" << edge_idx << ", extra_lat = " << ep.extra_lat
          << " -------- " << endl;
-      // loop for every link
-      auto link_iter = ep.links.begin();
-      while ((++link_iter) != ep.links.end()) {
-        sslink* in_link = (--link_iter)->second;
-        sslink* out_link = (++link_iter)->second;
-        ssswitch* switch_node = dynamic_cast<ssswitch*>(in_link->sink());
-        ssfu* fu_node = dynamic_cast<ssfu*>(out_link->sink());
-        // config the switch
-        DSA_CHECK(switch_node) << "edge can only be routed by switch";
-        // TODO(@sihao): Support passthru.
-        {
-          os << "//   config " << switch_node->name() << endl;
-          int in_idx = dsa::vector_utils::indexing(in_link, switch_node->in_links());
-          int out_idx = dsa::vector_utils::indexing(out_link, switch_node->out_links());
-          info[switch_node->id()][in_idx].route = out_idx;
-          // os << "input size = " << switch_node -> in_links().size()
-          //   << ", output size = " << switch_node -> out_links().size()<< endl;
-          os << "//     route input port " << in_idx << " to output port " << out_idx
+
+      // loop for every link on this edge
+      for(auto link_iter = ep.links.begin(); link_iter < ep.links.end(); link_iter++){
+        sslink* currLink = link_iter->second;
+        sslink* nextLink;
+        if(link_iter+1 != ep.links.end()){
+          nextLink = (link_iter+1)->second;
+        }
+
+        // Get the source of current link, source of one link can be SW, FU and IVP
+        ssswitch* sourceSwNode = dynamic_cast<ssswitch*>(currLink->source());
+        ssfu*     sourceFuNode = dynamic_cast<ssfu*>(currLink->source());
+        ssvport*  sourceIVPNode = dynamic_cast<ssvport*>(currLink->source());
+
+        // Get the sink of current link, sink of one link can be SW, FU and OVP
+        ssswitch* sinkSwNode = dynamic_cast<ssswitch*>(currLink->sink());
+        ssfu*     sinkFuNode = dynamic_cast<ssfu*>(currLink->sink());
+        ssvport*  sinkOVPNode = dynamic_cast<ssvport*>(currLink->sink());
+        
+        // if current link points from switch, nothing to be handled
+        if(sourceSwNode != nullptr){}
+        // if current link points to switch
+        if(sinkSwNode != nullptr){
+          int sw_id = sinkSwNode->id();
+          os << "//\tconfig " << sinkSwNode->name() << endl;
+          int in_idx = dsa::vector_utils::indexing(currLink, sinkSwNode->in_links());
+          DSA_CHECK(nextLink) << "Switch cannot be the end node of one edge, only OVP or PE can";
+          int out_idx = dsa::vector_utils::indexing(nextLink, sinkSwNode->out_links());
+          DSA_CHECK(in_idx >= 0);
+          DSA_CHECK(out_idx >= 0);
+          info[sw_id].outputRoute[out_idx] = (in_idx + 1); // + 1 since 0 means ground
+          // os << "input size = " << sinkSwNode -> in_links().size()
+          //   << ", output size = " << sinkSwNode -> out_links().size()<< endl;
+          os << "//\t\troute input port " << in_idx << " to output port " << out_idx
              << endl;
         }
-        // config the fu
-        if (fu_node != nullptr) {
+        
+        // if current link points to fu, we should encode every info except
+        // output routing here
+        if (sinkFuNode != nullptr) {
           // the final destination is function unit
-          int fu_id = fu_node->id();
+          int fu_id = sinkFuNode->id();
           // TODO: Sihao no decomposability supported, so I just take first slot
           // TODO: and first vertex
           auto* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
           // int vertex_idx = vertex_pair.second;
-          int edge_of_vertex_idx = vector_utils::indexing(edge, operands[vertex->id()]);
+          int operandIdx = vector_utils::indexing(edge, operands[vertex->id()]);
           // which input port does this edge used
-          int input_port_idx = dsa::vector_utils::indexing(out_link, fu_node->in_links());
+          int input_port_idx = dsa::vector_utils::indexing(currLink, sinkFuNode->in_links());
+          // Get Encode
           DSA_CHECK(input_port_idx >= 0) << "not found input port";
-          DSA_CHECK(edge_of_vertex_idx >= 0) << "This edge's destination is fu but not used?";
+          DSA_CHECK(operandIdx >= 0) << "This edge's destination is fu but not used?";
           {
-            os << "//   config " << fu_node->name() << endl
-               << "//     add extra delay " << ep.extra_lat << " for operand "
-               << edge_of_vertex_idx << endl
-               << "//     route input port " << input_port_idx << " to operand "
-               << edge_of_vertex_idx << endl;
-            info[fu_node->id()][edge_of_vertex_idx].delay = ep.extra_lat;
-            info[fu_node->id()][edge_of_vertex_idx].operand = input_port_idx;
+            os << "//\tconfig " << sinkFuNode->name() << endl
+               << "//\t\tadd extra delay " << ep.extra_lat << " for operand "
+               << operandIdx << endl
+               << "//\t\troute input port " << input_port_idx << " to operand "
+               << operandIdx << endl;
+            if(operandIdx < 2){
+              info[fu_id].operandDelay[operandIdx] = ep.extra_lat;
+              info[fu_id].operandRoute[operandIdx] = input_port_idx + 1; // + 1 since 0 means grounded
+            }else{
+              // Encode input control selection, if this is the third operand
+              DSA_CHECK(operandIdx == 2);
+              info[fu_id].inputCtrlRoute = input_port_idx + 1;
+            }
           }
-          auto* inst_node = dynamic_cast<dsa::dfg::Instruction*>(vertex);
-          DSA_CHECK(inst_node) << "why a non-instruction node will be mapped to fu";
-          int local_opcode = fu_node->fu_type_.get_encoding(inst_node->inst());
-          opcodes[fu_node->id()] = local_opcode;
-          os << "//     set current opcode to " << local_opcode << " means "
-             << name_of_inst(inst_node->inst()) << endl;
+          // Encode the Opcode for PE
+          auto* inst = dynamic_cast<dsa::dfg::Instruction*>(vertex);
+          DSA_CHECK(inst) << "why a non-instruction node will be mapped to fu";
+          int local_opcode = sinkFuNode->fu_type_.get_encoding(inst->inst());
+          os << "//\t\tset current opcode to " << local_opcode << " means "
+             << name_of_inst(inst->inst()) << endl;
+          info[fu_id].opcode = local_opcode;
+          // Encode the control mode
+          int ctrlMode = 0;
+          info[fu_id].ctrlLUT.resize(sinkFuNode->ctrlLUTSize());
+          if(!inst->predicate.encode().empty()){
+            ctrlMode = 1;
+            // Encode control entry
+            for(auto ctrlEntry = inst->predicate.lut.begin(); ctrlEntry != inst->predicate.lut.end(); ctrlEntry++){
+              int entryIdx = ctrlEntry->first;
+              info[fu_id].ctrlLUT[entryIdx].valid = true;
+              for(auto ctrlBit : ctrlEntry->second){
+                if(ctrlBit == 0){
+                  info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
+                }else if(ctrlBit == 1){
+                  info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
+                }else if(ctrlBit == 2){
+                  info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
+                }else if(ctrlBit == 3){
+                  info[fu_id].ctrlLUT[entryIdx].registerReset = true;
+                }else if(ctrlBit == 4){
+                  info[fu_id].ctrlLUT[entryIdx].abstain = true;
+                }
+              }
+            }
+          }else if(!inst->self_predicate.encode().empty()){
+            ctrlMode = 2;
+            // Encode control entry            
+            for(auto ctrlEntry = inst->self_predicate.lut.begin(); ctrlEntry != inst->self_predicate.lut.end(); ctrlEntry++){
+              int entryIdx = ctrlEntry->first;
+              info[fu_id].ctrlLUT[entryIdx].valid = true;
+              for(auto ctrlBit : ctrlEntry->second){
+                if(ctrlBit == 0){
+                  info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
+                }else if(ctrlBit == 1){
+                  info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
+                }else if(ctrlBit == 2){
+                  info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
+                }else if(ctrlBit == 3){
+                  info[fu_id].ctrlLUT[entryIdx].registerReset = true;
+                }else if(ctrlBit == 4){
+                  info[fu_id].ctrlLUT[entryIdx].abstain = true;
+                }
+              }
+            }
+          }
+          info[fu_id].ctrlMode = ctrlMode;
+          // Encode the Destination Register
+          for(int resultIdx = 0; resultIdx < inst->values.size(); resultIdx++){
+            if(inst->values[resultIdx].reg != -1){
+              info[fu_id].resultRegRoute[resultIdx] = inst->values[resultIdx].reg;
+            }
+          }
+        }// End of encoding sink Function Unit
+
+        // if current link points from fu, we should encode output routing info
+        if(sourceFuNode != nullptr){
+          // Get the fu id
+          int fu_id = sourceFuNode->id();
+          // Get the output port of result
+          int output_port_idx = dsa::vector_utils::indexing(currLink, sourceFuNode->out_links());
+          // Since we only produce one output, let use zero for now.
+          info[fu_id].resultOutRoute[0] = output_port_idx;
+          // Write comment to header file
+          os << "//\tconfig " << sourceFuNode->name() << endl
+               << "//\t\troute result 0 to output port " << output_port_idx << endl;
         }
       }
       edge_idx++;
     }
-
     // print out the config bits for every ssnode
+    // DSA_INFO << "Number of node = " << ssModel()->subModel()->node_list().size();
+
+    // Count the configuration word
+    int configWords = 0;
     for (auto& node : ssModel()->subModel()->node_list()) {
-      dsa::adg::bitstream::BitstreamWriter bw(info[node->id()], opcodes[node->id()]);
+      // DSA_INFO << "Generate Bitstream for " << node->name();
+      dsa::adg::bitstream::BitstreamWriter bw(info[node->id()]);
       node->Accept(&bw);
-      uint64_t config_bits = 0;
-      std::bitset<64> b_config_bit(config_bits);
-      os << node->name() << " " << config_bits << " " << b_config_bit << endl;
+      configWords += bw.configBitsVec.size();
     }
-
-    /*
-    int vertex_idx = 0;
-    for(auto & vp : _vertexProp){
-      os << "// vertex:" <<vertex_idx++<<endl;
-      auto node = vp.node;
-      os << "//   "<< node->name()
-         << ", min_lat = " <<vp.min_lat
-         << ", max_lat = " <<vp.max_lat
-         << ", lat = " << vp.lat
-         << ", vio = " <<vp.vio
-         << endl;
-    }
-
-    int node_idx = 0;
-    for(auto & np : _nodeProp){
-      os <<"//  node:"<<node_idx++<<endl;
-      for(int slot_idx = 0; slot_idx <8;slot_idx++){
-        auto & vertices = np.slots[slot_idx].vertices;
-        for(auto & vertex : vertices){
-          os<< "//    slot:" << slot_idx
-            << "  " << vertex.first->name()<<endl;
-        }
+    os << endl;
+    os << "#include <cstdint>" << std::endl;
+    os << "#define " << cfg_name << "_size " << configWords << "\n\n";
+    os << "uint64_t " << cfg_name << "_config[" << cfg_name << "_size] = {" << endl;
+    for (auto& node : ssModel()->subModel()->node_list()) {
+      // DSA_INFO << "Generate Bitstream for " << node->name();
+      dsa::adg::bitstream::BitstreamWriter bw(info[node->id()]);
+      node->Accept(&bw);
+      for(int cfgIdx = 0; cfgIdx < bw.configBitsVec.size(); cfgIdx ++){
+        uint64_t config_bits = bw.configBitsVec[cfgIdx];
+        std::bitset<64> b_config_bit(config_bits);
+        os << "\t\t0b" << b_config_bit << ", //" << node->name() << " " << config_bits << endl;
+        // os << "\t" << config_bits << ", //" << node->name() << endl;
       }
     }
-    */
+    os << "};";
   }
-
 }
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
@@ -460,7 +543,7 @@ void Schedule::stat_printOutputLatency() {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
     auto loc = locationOf(vec_out);
     ssvport* vport = dynamic_cast<ssvport*>(loc.node());
-    DSA_CHECK(vport) << this;
+    DSA_CHECK(vport) << loc.node()->name();
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : operands[vec_out->id()]) {
       int routing_latency = edge_latency(inc_edge);

@@ -88,6 +88,7 @@ M   [-]
 ";"                                     { return ';'; }
 ("{")                                   { return '{'; }
 ("}")                                   { return '}'; }
+("&")                                   { return '&'; }
 ","                                     { return ','; }
 ":"                                     { return ':'; }
 "="                                     { return '='; }

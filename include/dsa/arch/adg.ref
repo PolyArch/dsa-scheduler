@@ -1,0 +1,206 @@
+/**
+ * @brief DSAGen Global Parameters
+ */
+MACRO(DSANODES, DSAGenNodes)                                    // Key to the set of DSAGen nodes
+MACRO(DSAEDGES, DSAGenEdges)                                    // Key to the set of DSAGen links
+MACRO(NODETYPE, nodeType)                                       // Parameter: node type (PE, SW, IVP, OVP, DMA etc.)
+MACRO(NODEID,   nodeId)                                         // Parameter: local node ID
+MACRO(PE_TYPE,  ProcessingElement)                              // Node Type: Processing Element
+MACRO(SW_TYPE,  Switch)                                         // Node Type: Switch
+MACRO(IVP_TYPE, InputVectorPort)                                // Node Type: Input Vector Port
+MACRO(OVP_TYPE, OutputVectorPort)                               // Node Type: Output Vector Port
+MACRO(DMA_TYPE, DirectMemoryAccess)                             // Node Type : Direct Memory Access
+MACRO(SPM_TYPE, ScratchpadMemory)                               // Node Type : Scratchpad Memory
+MACRO(REC_TYPE, RecurrenceEngine)                               // Node Type : Recurrence Engine
+MACRO(DIS_TYPE, DiscardEngine)                                  // Node Type : Discard Engine
+MACRO(GEN_TYPE, GenerateEngine)                                 // Node Type : Generate Engine
+MACRO(REG_TYPE, RegisterEngine)                                 // Node Type : Register Engine
+
+/**
+ * @brief DSAGen Link Parsing Parameter
+ */
+MACRO(SOURCENODETYPE, SourceNodeType)                           // Source Node Type
+MACRO(SOURCENODEID, SourceNodeId)                               // Source Node Id (local)
+MACRO(SOURCEINDEX, SourceIndex)                                 // Source Node Index
+MACRO(SINKNODETYPE, SinkNodeType)                               // Sink Node Type
+MACRO(SINKNODEID, SinkNodeId)                                   // Sink Node Id (local)
+MACRO(SINKINDEX, SinkIndex)                                     // Sink Node Index
+
+/**
+ * @brief Compute Node Common Parameters
+ * Current Configuration Group: Data Granularity, Output Buffer, Configuration Encoding, Misc.
+ */
+MACRO(COMP_NODE, dsagen2.comp.config.CompKeys$CompNode$)        // Key to compute node parameter
+MACRO(COMP_PRED, predicated)                                    // Parameter: bool, true means support predication
+MACRO(COMP_BITS, compBits)                                      // Parameter: uint, compute data bits
+MACRO(COMP_UNITBITS, compUnitBits)                              // Parameter: uint, compute unit bits (decomposability)
+MACRO(COMP_NODEACTIVE, supportNodeActive)                       // Parameter: bool, true means support node activity 
+                                                                //  is reported to neighboring node. (Power saving)
+
+// Field that stores the bitstream encoding format
+MACRO(COMP_BITENC, ConfigBitEncode)                             // Key to config bitstream encoding
+
+// Compute Node Output Buffer for both PE and Switch
+MACRO(COMP_OUTBUFF, dsagen2.comp.config.CompKeys$OutputBuffer$) // Key to the output buffer parameter
+MACRO(COMP_OUTBUFF_DEPTH, outputBufferDepth)                    // Parameter: uint, output buffer depth
+MACRO(COMP_OUTBUFF_STATIC, staticOutputBuffer)                  // Parameter: bool, whether output buffer is static 
+                                                                //  just a single cycle delay register
+                                                                 
+/**
+ * @brief Switch Parameter Definition
+ * Current Configuratino Group: Routing
+ */
+MACRO(SW_ROUTE, dsagen2.comp.config.CompKeys$SwitchRouting$)    // Key to the switch routing parameter
+MACRO(SW_ROUTE_FULLMAT, initFullMatrix)                         // Parameter: bool[][], connectivity matrix of 
+                                                                //  size : #output*#subnet X #input*#subnet
+                                                                //  (#subnet = compBits / compUnitBits)
+                                                                //  if this parameter is used, sanity check should
+                                                                //  be done to make sure that size is matched
+MACRO(SW_ROUTE_INDIMAT, initIndividualMatrix)                   // Parameter: bool[][], connectivity matrix of 
+                                                                //  size : #subnet X $subnet
+                                                                //  If the full connectivity matrix is not defined
+                                                                //  or it is not legal (like size does not match)
+                                                                //  this individual connectivity matrix will be used
+                                                                //  for each output <- input pair, and eventually
+                                                                //  form a new full connectivity matrix
+
+/**
+ * @brief Processing Element Parameter Definition
+ * Current Configuration Group: Register, Controller, Operations
+ */
+MACRO(PE_REG, dsagen2.comp.config.CompKeys$RegFile$)            // Key to the PE's register file parameter
+MACRO(PE_REG_SIZE, numReg)                                      // Parameter: uint, size of register file
+MACRO(PE_REG_TYPE, asyncRF)                                     // Parameter: bool, whether register is async
+                                                                //  Async register means that you can read
+                                                                //  the value that is written at the same cycle
+                                                                //  but you can only read the new value at 
+                                                                //  the next cycle if the register type is sync
+MACRO(PE_REG_UPD, update)                                       // Parameter: bool, true means that register
+                                                                //  can be updated from reconfiguration port
+MACRO(PE_REG_RESET, resetRegIdx)                                // Parameter: uint[], index to the register that
+                                                                //  is resettable. Sanity check is required
+                                                                //  between size of register and this index array
+
+// PE Controller
+MACRO(PE_CTRL, dsagen2.comp.config.CompKeys$MetaControl$)       // Key to the PE's control parameter
+MACRO(PE_CTRL_INPUT, inputLSBCtrl)                              // Parameter: bool, true means control signal is from
+                                                                //  one of input ports
+MACRO(PE_CTRL_OUTPUT, outputLSBCtrl)                            // Parameter: bool, true means control signal is from
+                                                                //  LSB of arithmetic result
+MACRO(PE_CTRL_SIZE, sizeLUT)                                    // Parameter: uint, size of control lookup table
+MACRO(PE_CTRL_REUSE, reuseOperand)                              // Parameter: bool, true if control can reuse operand
+MACRO(PE_CTRL_DISCARD, discardResult)                           // Parameter: bool, true if control can discard result
+MACRO(PE_CTRL_RESET, resetRegister)                             // Parameter: bool, true if control can reset register
+MACRO(PE_CTRL_ABSTAIN, abstain)                                 // Parameter: bool, true if control can abstain operation
+// PE Control Entry Name in Encoding
+MACRO(PE_CTRL_ENC, MetaCtrlEntry_)
+MACRO(PE_CTRL_ENC_VALID, _valid)
+MACRO(PE_CTRL_ENC_REUSE, _reuseOperand)
+MACRO(PE_CTRL_ENC_DIS, _discardResult)
+MACRO(PE_CTRL_ENC_RESET, _resetReg)
+MACRO(PE_CTRL_ENC_ABS, _abstain)
+
+// ALU Operations
+MACRO(PE_OP, dsagen2.comp.config.CompKeys$DsaOperations$)       // Key to the PE's operation parameter
+MACRO(PE_OP_DYNA, isDynamic)                                    // Parameter: bool, true if operation is fired dynamically
+MACRO(PE_OP_TYPEENC, OperationDataTypeSet)                      // Parameter: string[], operation list
+                                                                //  name+dataType to opcode (e.g. ADD_U64:5)
+MACRO(PE_OP_DEFLAT, definedLatency)                             // Parameter: uint, defined max latency for operation. 
+                                                                //  Each operation has its own internal defined latency,
+                                                                //  but user is allowed to add extra latency to operation, 
+                                                                //  and this is the upper bound of this latency
+MACRO(PE_OP_INSTSIZE, instSlotSize)                             // Parameter: unit, instruction slot size. The max number 
+                                                                //  of instruction that can be supported by this processing
+                                                                //  element per reconfiguration period
+MACRO(PE_OP_FIFODEP, maxFifoDepth)                              // Parameter: uint, max delay fifo depth to buffer the operands
+                                                                //  before sending to ALU. For dynamic PE, this will be depth for
+                                                                //  standard fifo queue. For static PE, this is the max cycle
+                                                                //  delay that can be applied to each operand.
+MACRO(PE_OP_REPEAT, maxInstRepeatTime)                          // Parameter: uint, maximum repeat for each instruction
+// PE Instruction Name in Encoding
+MACRO(PE_INST, Instruction_)                                // Prefix of instruction Field
+MACRO(PE_INST_VALID, _Valid)
+MACRO(PE_INST_OPERAND_SEL, _OperandSel_)
+MACRO(PE_INST_CTRLMODE, _CtrlMode)
+MACRO(PE_INST_CTRLINPUT, _CtrlInputSel)
+MACRO(PE_INST_OPCODE, _Opcode)
+MACRO(PE_INST_RES_OUT, _ResultOut_)
+MACRO(PE_INST_RES_REG, _ResultReg_)
+
+/**
+ * @brief Input Vector Port Parameter Definition
+ */
+MACRO(IVP_NODE, dsagen2.sync.config.SyncKeys$IVPNode$)          // Key to the IVP's parameters
+MACRO(IVP_BROADCAST, streamBroadcast)                           // Parameter: bool, true if input vector port support broadcast
+MACRO(IVP_PRED, predicated)                                     // Parameter: bool, trun if IVP support predication
+MACRO(IVP_SUGGEST_DEPTH, suggestDepth)                          // Parameter: uint, unit in byte, suggested depth of vector
+                                                                //  to buffer data between memory and compute system. This is
+                                                                //  just suggested depth. The minimum depth (in byte) at least
+                                                                //  need to buffer two vector (one for memory, one for compute)
+                                                                //  if the suggest depth is smaller than minimum depth, hardware
+                                                                //  generator will use the minimum depth instead.
+MACRO(IVP_REPEAT, streamRepeated)                               // Parameter: bool, true if IVP support repeat vector
+MACRO(IVP_STR_STATE, streamStated)                              // Parameter: bool, true if IVP support stream state
+
+/**
+ * @brief Output Vector Port Parameter Definition
+ */
+MACRO(OVP_NODE, dsagen2.sync.config.SyncKeys$OVPNode$)          // Key to Output Vector Port's Parameters
+MACRO(OVP_SUGGEST_DEPTH, suggestDepth)                          // Parameter: uint, suggest depth like IVP above
+MACRO(OVP_STR_STATE, streamStated)                              // Parameter: bool, true if OVP support stream state
+MACRO(OVP_PRED, predicated)                                     // Parameter: bool, true if OVP support predication
+MACRO(OVP_TASKFLOW, taskflow)                                   // TODO: Parameter: bool, support task scheduling at OVP
+
+/**
+ * @brief Memory Node Parameter Definition
+ */
+MACRO(MEM_NODE, dsagen2.mem.config.MemKeys$MemNode$)            // Key to Memory Node Parameters
+MACRO(MEM_UNITBITS, memUnitBits)                                // Parameter: uint, Minimum cell of memory, in unit of bit; For byte-addressable memory, it is 8
+                                                                //  Actually this is min(minimum_granularity_of_stream, minimum_granularity_of_memory)
+                                                                //  DMA: Min(MainMemoryCellBitwidth, SupportedMinimumStreamDataType)
+                                                                //  SPM: Min(SpadMemoryCellBitwidth, SupportedMinimumStreamDataType)
+                                                                //  REC: SupportedMinimumStreamDataType
+                                                                //  DIS: SupportedMinimumStreamDataType
+                                                                //  GEN: SupportedMinimumStreamDataType
+                                                                //  REG: XLEN
+MACRO(NUM_MEM_DATATYPE, numMemDataTypeExp)                      // Parameter: uint, number of memory data type supported
+                                                                /**
+                                                                 * This is purely defined by users. For example, if memUnitBits = 8, numMemUnitBitsExp 4.
+                                                                 * It means that we support byte/half-word/word/double-word in total four kinds of stream.
+                                                                 */
+MACRO(MEM_READ_WIDTH, readWidth)                                // Parameter: uint, memory read width in [[MEM_UNITBITS]]
+MACRO(MEM_WRITE_WIDTH, writeWidth)                              // Parameter: uint, memory write width in [[MEM_UNITBITS]]
+MACRO(NUM_MEM_WRITE, numWrite)                                  // Parameter: uint, number of write operation can be supported
+                                                                //  at the same cycle
+MACRO(NUM_MEM_READ, numRead)                                    // Parameter: uint, number of read operation can be supported
+                                                                //  at the same cycle
+MACRO(MEM_CAP, capacity)                                        // Parameter: uint, memory capacity in [[MEM_UNITBITS]]
+MACRO(MEM_PRED, predicated)                                     // Parameter: bool, true if memory support predication generation
+MACRO(MEM_STR_STATE, streamStated)                              // Parameter: bool, true if memory support stream state
+MACRO(MEM_PADDING, LinearPadding)                               // Parameter: bool, true if memory support linear vector padding
+MACRO(MEM_MAX_L1D, MaxLength1D)                                 // Parameter: uint, maximum length for 1D stream
+MACRO(MEM_MAX_ABS_STRIDE1D, MaxAbsStride1D)                     // Parameter: sint, maximum absolute value for Stride1D
+                                                                //  for all following maximum absolute value:
+                                                                //  max absolute = 0; value = [0]
+                                                                //  max absolute = 1; value = [0, 1]
+                                                                //  max absolute = 2; value = [-1, 0, 1]
+                                                                //  max absolute = 3; value = [-2, -1, 0, 1, 2]
+                                                                //  max absolute = m; -m < value < m
+MACRO(MEM_MAX_L2D, MaxLength2D)                                 // Parameter: uint, maximum length of 2D stream
+MACRO(MEM_MAX_ABS_STRETCH2D, MaxAbsStretch2D)                   // Parameter: sint, maximum stretch applied to 1D stream
+MACRO(MEM_MAX_ABS_STRIDE2D, MaxAbsStride2D)                     // Parameter: sint, maximum stride applied to 1D stream
+MACRO(MEM_MAX_L3D, MaxLength3D)                                 // Parameter: uint, maximum length of 3D stream
+MACRO(MEM_MAX_ABS_STRETCH3D2D, MaxAbsStretch3D2D)               // Parameter: sint, maximum stretch applied to 2D stream
+MACRO(MEM_MAX_ABS_STRETCH3D1D, MaxAbsStretch3D1D)               // Parameter: sint, maximum stretch applied to 1D stream
+MACRO(MEM_MAX_ABS_DELTA_STRIDE2D, MaxAbsDeltaStride2D)          // Parameter: sint, maximum delta applied to [[MaxAbsStride2D]]
+MACRO(MEM_MAX_ABS_DELTA_STRETCH2D, MaxAbsDeltaStretch2D)        // Parameter: sint, maximum delta applied to [[MaxAbsStretch2D]]
+MACRO(MEM_MAX_ABS_STRIDE3D, MaxAbsStride3D)                     // Parameter: sint, maximum stride applied to 1D stream
+MACRO(MEM_INDIRECT_INDEX, IndirectIndexStream)                  // Parameter: bool, true if indirect index stream supported
+MACRO(MEM_INDIRECT_L1D, IndirectLength1DStream)                 // Parameter: bool, true if indirect length 1D stream supported
+MACRO(MEM_INDIRECT_S2D, IndirectStride2DStream)                 // Parameter: bool, true if indirect stride 2D stream supported
+MACRO(MEM_LINEAR_S2D, LinearStride2DStream)                     // Parameter: bool, true if linear stride 2D stream is derived for start address
+MACRO(MEM_LINEAR_L1D, LinearLength1DStream)                     // Parameter: bool, true if linear length 1D stream is derived from stretch2D
+MACRO(MEM_ATOMIC_OP, AtomicOperations)                          // Parameter: string[], up to six atomic operation supported by 
+                                                                //  scratchpad memory. All fixed point operation: Add, Sub,
+                                                                //  Mul, Div, Mod, Min, Max, BNot, BOr, BAnd, BXor, LNot, 
+                                                                //  LAnd, LOr, LXor, Comp

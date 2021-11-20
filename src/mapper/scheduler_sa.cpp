@@ -242,16 +242,15 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
         SchedStats s;
         std::stringstream startStream;
         startStream << "### Start Schedule (" << 
-          sched->ssdfg()->filename << "): (Thread " << id << ") ###"
-          << std::endl;
-        std::cout << startStream.str();
+          sched->ssdfg()->filename << "): (Thread " << id << ") ###";
+        DSA_INFO << startStream.str();
 
         schedule(sched->ssdfg(), sched);
         auto p = obj(sched, s);
         
         std::stringstream endStream;
-        endStream <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
-        << -p.second << " (Thread "<< id << ") ###" << std::endl;
+        DSA_INFO <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
+                 << -p.second << " (Thread "<< id << ") ###";
         std::cout << endStream.str();
       });
     }
@@ -790,29 +789,30 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
   }*/
   std::vector<dsa::dfg::Edge*> to_revert;
 
-#define process(edge_, node_, src, dest)                                  \
-  do {                                                                    \
-    auto& edges = edge_;                                                  \
-    int n = edge_.size();                                                 \
-    for (int i = 0; i < n; ++i) {                                         \
-      auto edge = edges[i];                                               \
-      DSA_CHECK(sched->link_count(edge) == 0)                                 \
-          << "Edge: " << edge->name() << " is already routed!\n";         \
-      auto n = edge->node_();                                             \
-      if (sched->is_scheduled(n)) {                                       \
-        auto loc = sched->locationOf(n);                                  \
-        if (!route(sched, edge, src, dest, nullptr, 0)) {                 \
-          DSA_LOG(ROUTE)                                                  \
-            << "Cannot route " << edge->name() << " " << src.node()->id() \
-            << " -> " << dest.node()->id() << ":"                         \
-            << sched->distances[src.node()->id()][dest.node()->id()];     \
-          for (auto revert : to_revert) sched->unassign_edge(revert);     \
-          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);     \
-          sched->unassign_dfgnode(node);                                  \
-          return false;                                                   \
-        }                                                                 \
-      }                                                                   \
-    }                                                                     \
+#define process(edge_, node_, src, dest)                              \
+  do {                                                                \
+    auto& edges = edge_;                                              \
+    int n = edge_.size();                                             \
+    for (int i = 0; i < n; ++i) {                                     \
+      auto edge = edges[i];                                           \
+      DSA_CHECK(sched->link_count(edge) == 0)                         \
+          << "Edge: " << edge->name() << " is already routed!\n";     \
+      auto n = edge->node_();                                         \
+      if (sched->is_scheduled(n)) {                                   \
+        auto loc = sched->locationOf(n);                              \
+        if (!route(sched, edge, src, dest, nullptr, 0)) {             \
+          DSA_LOG(ROUTE)                                              \
+            << "Cannot route [" << edge->id << ", " << edge->name()   \
+            << "] " << src.node()->id()                               \
+            << " -> " << dest.node()->id() << ", dist: "              \
+            << sched->distances[src.node()->id()][dest.node()->id()]; \
+          for (auto revert : to_revert) sched->unassign_edge(revert); \
+          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]); \
+          sched->unassign_dfgnode(node);                              \
+          return false;                                               \
+        }                                                             \
+      }                                                               \
+    }                                                                 \
   } while (false)
 
   sched->assign_node(node, {here.lane_no, here.ref});

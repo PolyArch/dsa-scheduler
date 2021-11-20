@@ -2,9 +2,13 @@
 
 #include <cstdint>
 
-#include "cxxopts.hpp"
-
 #include "dsa/arch/estimation.h"
+
+namespace cxxopts {
+
+class ParseResult;
+
+}
 
 namespace dsa {
 
@@ -53,7 +57,14 @@ struct ContextFlags {
    * \brief The budget of design space exploration.
    */
   adg::estimation::Resource *budget{nullptr};
+  /*!
+   * \brief Resources occupied by the host core.
+   */
   adg::estimation::Resource *core_resources{nullptr};
+  /*!
+   * \brief Parse the adg in compatible mode.
+   */
+  bool adg_compat{false};
 
   ContextFlags();
 

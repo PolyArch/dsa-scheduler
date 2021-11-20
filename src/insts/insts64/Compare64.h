@@ -2,15 +2,19 @@ auto a = ops[0];
 auto b = ops[1];
 
 if (ops.size() == 3) {
+  // G E L
+  // 4 2 1
   int pred = ops[2];
-  // U L G E
-  if ((pred & 1) && (a == b)) {
+  // G
+  if ((pred & 4) && (a > b)) {
     return true;
   }
-  if ((pred & 2) && (a > b)) {
+  // E
+  if ((pred & 2) && (a == b)) {
     return true;
   }
-  if ((pred & 4) && (a < b)) {
+  // L
+  if ((pred & 1) && (a < b)) {
     return true;
   }
   return false;

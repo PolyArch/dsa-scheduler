@@ -16,6 +16,7 @@
 #include "fu_model.h"
 #include "json/value.h"
 
+
 #define DEF_ATTR(attr)                         \
   decltype(attr##_) attr() { return attr##_; } \
   void attr(const decltype(attr##_) & new_value) { attr##_ = new_value; }
@@ -23,10 +24,9 @@
 namespace dsa {
 
 namespace adg {
-
 class Visitor;
-
 }
+
 
 class SpatialFabric;
 
@@ -211,6 +211,11 @@ class ssnode {
    * \brief The identifier of this node.
    */
   int id_{-1};
+  /**
+   * @brief Local Node Id, ID per node type
+   * 
+   */
+  int localId_{-1};
   /*!
    * \brief The coordination of this node in a mesh. If the topology is
    *        irregular, these two numbers are set to -1.
@@ -252,6 +257,7 @@ class ssnode {
    * \brief Get set/attributes
    */
   DEF_ATTR(id)
+  DEF_ATTR(localId)
   DEF_ATTR(x)
   DEF_ATTR(y)
   DEF_ATTR(datawidth)
@@ -272,18 +278,18 @@ class ssswitch : public ssnode {
   void Accept(adg::Visitor* visitor) override;
 
   ssnode* copy() override {
-    auto res = new ssswitch();
+    auto *res = new ssswitch();
     *res = *this;
     return res;
   }
 
   virtual std::string name() const override {
     std::stringstream ss;
-    ss << "SW_";
+    ss << "SW";
     if (x_ != -1 && y_ != -1) {
-      ss << x_ << "_" << y_;
+      ss << "_" << x_ << "_" << y_;
     } else {
-      ss << id_;
+      ss << localId_;
     }
     return ss.str();
   }
@@ -378,11 +384,6 @@ class ssswitch : public ssnode {
 
  protected:
   double features[9];
-  // Sihao: routing_lookup = {0->3, 1->4, 3->1}
-  // means output0 receive input3
-  //       output1 receive input4
-  //       output3 receive input1
-  // for those output port not mapped, they are connect to ground
 };
 
 class ssfu : public ssnode {
@@ -390,8 +391,7 @@ class ssfu : public ssnode {
   ssfu() : ssnode() {}
 
   ssfu(int datawidth, int granularity, int util, bool dynamic_timing, int fifo,
-       const Capability& fu_type)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
+       const Capability& fu_type) : ssnode(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
 
   ssnode* copy() override {
     auto res = new ssfu();
@@ -430,7 +430,7 @@ class ssfu : public ssnode {
     // max delay fifo depth
     os << "\"max_delay_fifo_depth\" : " << max_delay_ << ",\n";
     // number of register
-    os << "\"num_register\" : " << register_file_size << ",\n";
+    os << "\"num_register\" : " << regFileSize() << ",\n";
     // Instructions
     os << "\"instructions\" : [";
     int idx_inst = 0;
@@ -473,7 +473,7 @@ class ssfu : public ssnode {
     if (x_ != -1 && y_ != -1) {
       ss << "FU" << x_ << "_" << y_;
     } else {
-      ss << "FU" << id_;
+      ss << "FU" << localId_;
     }
     return ss.str();
   }
@@ -490,7 +490,7 @@ class ssfu : public ssnode {
     features[7] = max_delay_;
     features[8] = links_[1].size();
     features[9] = links_[0].size();
-    features[10] = register_file_size;
+    features[10] = regFileSize();
     features[11] = max_util_;
 
     // print_features();
@@ -524,18 +524,64 @@ class ssfu : public ssnode {
     std::cout << "\n";
   }
 
-  int get_register_file_size() { return this->register_file_size; }
+  int get_register_file_size() { return this->regFileSize_; }
 
   bool is_hanger() override { return in_links().size() <= 1 || out_links().size() < 1; }
 
   Capability fu_type_;
 
- protected:
-  double features[12];
-  int register_file_size = 4;
 
- private:
-  friend class SpatialFabric;
+ protected:
+  // Function Unit related parameter
+  int maxOpRepeat_{1};
+  int definedLatency_{1};
+  int instSlotSize_{1};
+  // bool fuOpDynamic = dynamic_timing // use ssnode parameter for this
+  // int instDelayFifoDepth_{} // use ssnode delay fifo depth
+
+
+  // Register File related parameter
+  int regFileSize_{0};
+  bool asyncReg_{false};
+  bool updReg_{false};
+  std::vector<int> resettableRegIdx_{0};
+  
+  // Control related parameter
+  bool inputCtrl_{false};
+  bool outputCtrl_{false};
+  int ctrlLUTSize_{0};
+  bool operandReuse_{false};
+  bool resultDiscard_{false};
+  bool registerReset_{false};
+  bool abstain_{false};
+
+  // Feature Collection
+  double features[12];
+
+  private:
+    friend class SpatialFabric;
+
+  public:
+    // Function Unit Parameter Get/Set
+    DEF_ATTR(maxOpRepeat);
+    DEF_ATTR(definedLatency);
+    DEF_ATTR(instSlotSize);
+
+    // Register Parameter Get/Set
+    DEF_ATTR(regFileSize);
+    DEF_ATTR(asyncReg);
+    DEF_ATTR(updReg);
+    DEF_ATTR(resettableRegIdx);
+    
+    // Control Parameter Get/Set
+    DEF_ATTR(inputCtrl);
+    DEF_ATTR(outputCtrl);
+    DEF_ATTR(ctrlLUTSize);
+    DEF_ATTR(operandReuse);
+    DEF_ATTR(resultDiscard);
+    DEF_ATTR(registerReset);
+    DEF_ATTR(abstain);
+
 };
 
 // This should be improved later

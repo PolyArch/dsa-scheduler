@@ -8,6 +8,7 @@ namespace dsa {
 namespace dfg {
 
 void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {
+  val &= bmss;
   auto iter = lut.find(val);
   if (iter == lut.end()) return;
   auto f = [iter](CtrlBits::Control cc) {
@@ -66,7 +67,7 @@ std::string CtrlBits::toString() const {
   return oss.str();
 }
 
-CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw) {
+CtrlBits::CtrlBits(const std::map<int, std::vector<std::string>>& raw, int bmss_) : bmss(bmss_) {
   for (auto& elem : raw) {
     std::vector<CtrlBits::Control> v;
     for (auto& s : elem.second) {

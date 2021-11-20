@@ -60,6 +60,7 @@ struct Exporter : Visitor {
       return res;
     };
     current["ctrl"] = f(inst->predicate.encode());
+    current["bmss"] = inst->predicate.bmss;
     current["self"] = f(inst->self_predicate.encode());
     Json::Value value_info(Json::ValueType::arrayValue);
     for (int i = 0; i < (int) inst->values.size(); ++i) {
@@ -69,9 +70,16 @@ struct Exporter : Visitor {
     current["value_info"] = value_info;
     Visit(static_cast<Node*>(inst));
   }
+  void Visit(InputPort *ip) override {
+    current["stated"] = ip->stated;
+    Visit(static_cast<VectorPort*>(ip));
+  }
+  void Visit(OutputPort *op) override {
+    current["penetrate"] = op->penetrated_state;
+    Visit(static_cast<VectorPort*>(op));
+  }
   void Visit(VectorPort* vp) override {
     current["width"] = vp->bitwidth();
-    current["state"] = vp->state_id;
     current["lanes"] = vp->vectorLanes();
     Visit(static_cast<Node*>(vp));
   }
@@ -320,11 +328,11 @@ SSDfg* Import(const std::string& s) {
         int length = node["lanes"].asInt();
         int width = node["width"].asInt();
         if (inputs.empty()) {
-          res->emplace_back<InputPort>(length, width, name, res, meta);
-          res->vins.back().state_id = node["state"].asInt();
+          bool stated = node["stated"].asBool();
+          res->emplace_back<InputPort>(length, width, name, res, meta, stated);
         } else {
-          res->emplace_back<OutputPort>(length, width, name, res, meta);
-          res->vouts.back().state_id = node["state"].asInt();
+          int penetrate = node["penetrate"].asInt();
+          res->emplace_back<OutputPort>(length, width, name, res, meta, penetrate);
         }
       } else if (node.isMember("op")) {
         int opcode = node["op"].asInt();
@@ -343,6 +351,7 @@ SSDfg* Import(const std::string& s) {
         };
         if (node.isMember("ctrl")) {
           inst.predicate = CtrlBits(f(node["ctrl"]));
+          inst.predicate.bmss = node["bmss"].asInt();
         }
         if (node.isMember("self")) {
           inst.self_predicate = CtrlBits(f(node["self"]));

@@ -52,6 +52,7 @@ void SSModel::parse_exec(std::istream& istream) {
   }
 }
 
+// Sihao @ Jian: I found this function is never used, can we delete it?
 ssnode* if_isVector(ssnode* n, std::string portname) {
   // In case source is a vector port, get I/O node instead
   ssvport* s_vp = dynamic_cast<ssvport*>(n);

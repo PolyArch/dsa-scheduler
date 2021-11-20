@@ -49,11 +49,6 @@ class VectorPort : public Node {
   /*! \brief The bandwidth of this port. */
   int bandwidth() { return is_temporal() ? bitwidth() : bitwidth() * vectorLanes(); }
 
-  /*!
-   * \brief The id of the state port.
-   */
-  int state_id{-1};
-
  protected:
   int bitwidth_{INT_MAX / 8};  // element bitwidth
   bool _indirect=false;
@@ -64,6 +59,8 @@ class VectorPort : public Node {
 
 class InputPort : public VectorPort {
  public:
+  bool stated;
+
   static std::string Suffix() { return ""; }
   static bool IsInput() { return true; }
 
@@ -73,18 +70,13 @@ class InputPort : public VectorPort {
 
   InputPort() {}
 
-  InputPort(int len, int width, const std::string& name, SSDfg* ssdfg, const MetaPort& meta);
+  InputPort(int len, int width, const std::string& name, SSDfg* ssdfg, const MetaPort& meta,
+            bool stated);
 
   /*!
    * \brief The vector lanes of this i/o.
    */
-  int vectorLanes() override { return values.size(); }
-
-  /*!
-   * \brief If this port is stated, return the input port of the state.
-   *        If not, return null.
-   */
-  InputPort *stated();
+  int vectorLanes() override { return values.size() - stated; }
 
   // @{
   // Simulation stuff.
@@ -96,6 +88,11 @@ class InputPort : public VectorPort {
 
 class OutputPort : public VectorPort {
  public:
+  /*!
+   * \brief If this port should penetrate the state.
+   */
+  int penetrated_state;
+
   static std::string Suffix() { return "_out"; }
   static bool IsInput() { return false; }
 
@@ -104,23 +101,17 @@ class OutputPort : public VectorPort {
   OutputPort() {}
 
   OutputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
-             const MetaPort& meta)
-      : VectorPort(V_OUTPUT, len, width, name, ssdfg, meta) {}
+             const MetaPort& meta, int sid)
+      : VectorPort(V_OUTPUT, len, width, name, ssdfg, meta), penetrated_state(sid) {}
 
   void Accept(Visitor*) override;
 
   /*!
    * \brief The vector lanes of this i/o.
    */
-  int vectorLanes() override { return _ops.size(); }
+  int vectorLanes() override { return _ops.size() - (penetrated_state != -1); }
 
   virtual int slot_for_op(Edge* edge, int node_slot) override;
-
-  /*!
-   * \brief If this port is state-penetrated, return the output port of the state.
-   *        If not, return null.
-   */
-  OutputPort *stated();
 
   // @{
   // Simulation stuff.

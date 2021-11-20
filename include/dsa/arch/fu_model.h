@@ -32,6 +32,7 @@ class Capability {
    * \param count The number of FU's.
    */
   void Add(OpCode op, int count) {
+    DSA_CHECK(op != SS_ERR);
     for (auto& elem : capability) {
       if (elem.op == op) {
         DSA_WARNING << name_of_inst(op) << " already added to " << name << "! "
@@ -84,7 +85,7 @@ class Capability {
 
   std::string name;
   int max_num_operand{0};
-  std::vector<Entry> capability{Entry(SS_Copy, 1)};
+  std::vector<Entry> capability;
 
   // Area and Power
   double area();

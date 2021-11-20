@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
     ("dse-timeout", "The timeout cut-off for design space exploration.", default_neg_1)
     ("w,sched-workers", "The number of workers for scheduling.", default_1)
     ("route-along", "Route along with a master lane when scheduling deomposable arch.", default_d0)
+    ("a,compat-adg", "Parse the ADG in compatible version.", default_false)
     ("h,help", "Print the help information.");
   
   options.allow_unrecognised_options();
