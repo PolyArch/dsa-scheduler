@@ -877,6 +877,7 @@ double Schedule::estimated_performance() {
 
   double overall = 0.0;
 
+  int fifo = violation_penalty.second;
   for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
     double v =
         std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
@@ -885,7 +886,7 @@ double Schedule::estimated_performance() {
                     << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/"
                     << rec_lat[i] << ", Overall: " << v
                     << ", Performance Coef: " << coef[i];
-    overall += v * coef[i];
+    overall += v * coef[i] * ((double)fifo / (_groupMismatch[i] + fifo));
   }
 
   return overall;

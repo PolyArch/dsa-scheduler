@@ -122,7 +122,7 @@ std::string basedir(const std::string& filename) {
   return filename.substr(0, lastindex);
 }
 
-Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
+int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   bool succeed_sched = false;
   Schedule* sched = nullptr;
 
@@ -199,7 +199,7 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   if (!succeed_sched || sched == nullptr) {
     cout << "Cannot be scheduled, try a smaller DFG!\n\n";
-    return nullptr;
+    return 1;
   }
 
   // TODO: Print Hardware Config Information @ Sihao
@@ -221,5 +221,5 @@ Schedule* Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     sched->printConfigHeader(oshb, dfg_base, true);
   }
 
-  return sched;  // just to calm HEAPCHECK
+  return succeed_sched ? 0 : 2;  // just to calm HEAPCHECK
 }

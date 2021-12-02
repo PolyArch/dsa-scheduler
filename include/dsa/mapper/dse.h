@@ -699,7 +699,8 @@ class CodesignInstance {
     SchedStats s;
     int num_left = sched->num_left();
     bool succeed_sched = (num_left == 0);
-    std::pair<int, int> delay_violation = std::make_pair(0, 0);
+    auto &delay_violation = sched->violation_penalty;
+    delay_violation = std::make_pair(0, 0);
 
     sched->get_overprov(s.ovr, s.agg_ovr, s.max_util);
     sched->fixLatency(s.lat, s.latmis, delay_violation);

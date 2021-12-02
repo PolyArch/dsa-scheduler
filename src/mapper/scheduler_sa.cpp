@@ -58,10 +58,10 @@ void SchedulerSimulatedAnnealing::initialize(SSDfg* ssDFG, Schedule*& sched) {
 std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched, SchedStats& s) {
   int num_left = sched->num_left();
   bool succeed_sched = (num_left == 0);
-  std::pair<int, int> delay_violation = std::make_pair(0, 0);
+  sched->violation_penalty = pair<int, int>(0, 0);
 
   sched->get_overprov(s.ovr, s.agg_ovr, s.max_util);
-  sched->fixLatency(s.lat, s.latmis, delay_violation);
+  sched->fixLatency(s.lat, s.latmis, sched->violation_penalty);
 
   int violation = sched->violation();
 

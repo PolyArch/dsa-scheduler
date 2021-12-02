@@ -78,7 +78,10 @@ class Scheduler {
   bool running() { return !_should_stop; }
   void stop() { _should_stop = true; }
 
-  Schedule* invoke(SSModel* model, SSDfg* dfg);
+  /*!
+   * \return 0: done, 1: count failed, 2: routing failed
+   */
+  int invoke(SSModel* model, SSDfg* dfg);
 
  protected:
   dsa::SSModel* getSSModel() { return _ssModel; }

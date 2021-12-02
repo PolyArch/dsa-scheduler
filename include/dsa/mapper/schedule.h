@@ -931,6 +931,10 @@ class Schedule {
   int total_passthrough{0};
   /*! \brief It normalizes the results of passes, and sync the DFG with the schedule. */
   void normalize();
+  /*!
+   * \brief The throughput penalty of violation.
+   */
+  std::pair<int, int> violation_penalty;
 
  private:
   /*! \brief The pointer to the spatial architecture. */
@@ -959,6 +963,7 @@ class Schedule {
   std::vector<NodeProp> _nodeProp;
   /*! \brief The software information of each occupied spatial hardware link. */
   std::vector<LinkProp> _linkProp;
+
 
   /*! \brief Expected edge latency used by timing. */
   // TODO(@were): Move these two to some constants.

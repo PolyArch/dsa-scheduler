@@ -106,7 +106,6 @@ int main(int argc, char* argv[]) {
   std::string dfg_file = args[1];
   SSDfg dfg(dfg_file);
   scheduler = new SchedulerSimulatedAnnealing(&ssmodel, "", false);
-  Schedule* sched = scheduler->invoke(&ssmodel, &dfg);
 
-  return 0;
+  return scheduler->invoke(&ssmodel, &dfg);
 }
