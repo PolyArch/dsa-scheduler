@@ -146,7 +146,6 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
   // Step 1: Write the vector port mapping
-  // TODO(@Sihao): print out the real config bit stream
   os << "#pragma once\n";
 
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
@@ -179,17 +178,20 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     auto &edge_list = ssDFG->edges;
     auto &vertex_list = ssDFG->nodes;
 
-    // This is the collection of node info, size of #node, 
+    // This is the collection of node configuration, size of #node
+    // Please use global id to access it
     std::vector<dsa::adg::bitstream::NodeInfo> info( 
       this->ssModel()->subModel()->node_list().size());
     for (auto& ep : _edgeProp) {
-    
+
+      // Traverse all edges to gather all node reconfiguration
       dsa::dfg::Edge* edge = &edge_list[edge_idx];
       os << "// -------- EDGE:" << edge_idx << ", extra_lat = " << ep.extra_lat
          << " -------- " << endl;
 
-      // loop for every link on this edge
+      // Loop over all links on this edge
       for(auto link_iter = ep.links.begin(); link_iter < ep.links.end(); link_iter++){
+        // Get the current link and next link
         sslink* currLink = link_iter->second;
         sslink* nextLink;
         if(link_iter+1 != ep.links.end()){
@@ -197,17 +199,56 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         }
 
         // Get the source of current link, source of one link can be SW, FU and IVP
-        ssswitch* sourceSwNode = dynamic_cast<ssswitch*>(currLink->source());
-        ssfu*     sourceFuNode = dynamic_cast<ssfu*>(currLink->source());
-        ssvport*  sourceIVPNode = dynamic_cast<ssvport*>(currLink->source());
+        ssswitch* sourceSwNode =  dynamic_cast<ssswitch*> (currLink->source());
+        ssfu*     sourceFuNode =  dynamic_cast<ssfu*>     (currLink->source());
+        ssvport*  sourceIVPNode = dynamic_cast<ssvport*>  (currLink->source());
 
         // Get the sink of current link, sink of one link can be SW, FU and OVP
-        ssswitch* sinkSwNode = dynamic_cast<ssswitch*>(currLink->sink());
-        ssfu*     sinkFuNode = dynamic_cast<ssfu*>(currLink->sink());
-        ssvport*  sinkOVPNode = dynamic_cast<ssvport*>(currLink->sink());
+        ssswitch* sinkSwNode =    dynamic_cast<ssswitch*>(currLink->sink());
+        ssfu*     sinkFuNode =    dynamic_cast<ssfu*>(currLink->sink());
+        ssvport*  sinkOVPNode =   dynamic_cast<ssvport*>(currLink->sink());
         
-        // if current link points from switch, nothing to be handled
+        /* Source Input Vector Port --> CurrLink */
+        // Set the physical port to order in stream routing
+        if(sourceIVPNode != nullptr){
+          // Get the order in stream
+          int vid = edge->vid;
+          // Get the physcial port index
+          int pid = dsa::vector_utils::indexing(currLink,sourceIVPNode->out_links());
+          // Check the pid and vid
+          DSA_CHECK(vid >= 0) << "Vector Index cannot be negative";
+          DSA_CHECK(pid >= 0) << "Physical Port Index cannot be negative";
+          // Record the mapping, +1 since zero means connected to ground
+          // Please be attention: for IVP, this is physical port to order in stream mapping
+          info[sourceIVPNode->id()].vectorRoute[pid] = vid + 1;
+          // Write comment to header file
+          os << "//\tconfig " << sourceIVPNode->name() << endl
+               << "//\t\troute value[" << vid << "] to vport[" << pid << "]" << endl;
+        }
+
+        /* Source Switch --> CurrLink */
+        // Nothing to be set
         if(sourceSwNode != nullptr){}
+
+        /* Source Function Unit --> CurrLink */
+        // Set the output routing for source FU
+
+        // if current link points from fu, we should encode output routing info
+        if(sourceFuNode != nullptr){
+          // Get the fu id
+          int fu_id = sourceFuNode->id();
+          // Get the output port of result
+          int output_port_idx = dsa::vector_utils::indexing(currLink, sourceFuNode->out_links());
+          // Since we only produce one output, let use zero for now.
+          info[fu_id].resultOutRoute[0] = output_port_idx;
+          // Write comment to header file
+          os << "//\tconfig " << sourceFuNode->name() << endl
+               << "//\t\troute result 0 to output port " << output_port_idx << endl;
+        }
+        
+        /* CurrLink --> Sink Switch --> NextLink*/
+        // Set the routing configuration for Sink Switch
+        
         // if current link points to switch
         if(sinkSwNode != nullptr){
           int sw_id = sinkSwNode->id();
@@ -224,12 +265,17 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
              << endl;
         }
         
+        /* --> CurrLink --> Sink Function Unit */
+        // Set operand selection
+        // Set operand delay
+        // Set function unit opcode
+        
         // if current link points to fu, we should encode every info except
         // output routing here
         if (sinkFuNode != nullptr) {
           // the final destination is function unit
           int fu_id = sinkFuNode->id();
-          // TODO: Sihao no decomposability supported, so I just take first slot
+          // TODO: Sihao: no decomposability supported, so I just take first slot
           // TODO: and first vertex
           auto* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
           // int vertex_idx = vertex_pair.second;
@@ -263,48 +309,70 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           info[fu_id].opcode = local_opcode;
           // Encode the control mode
           int ctrlMode = 0;
+          // DSA_INFO << "Resize the Control LUT for " << sinkFuNode->name() 
+          // << " to " << sinkFuNode->ctrlLUTSize();
           info[fu_id].ctrlLUT.resize(sinkFuNode->ctrlLUTSize());
           if(!inst->predicate.encode().empty()){
+            // Predication comes from other nodes, which means one of the input ports is used as control signal, which is input ctrl
             ctrlMode = 1;
+            os << "\t\tset the control mode to input-controlled mode" << endl;
             // Encode control entry
             for(auto ctrlEntry = inst->predicate.lut.begin(); ctrlEntry != inst->predicate.lut.end(); ctrlEntry++){
               int entryIdx = ctrlEntry->first;
               info[fu_id].ctrlLUT[entryIdx].valid = true;
+              os << "\t\tenable input control for " << entryIdx << "(th) control entry" << endl;
               for(auto ctrlBit : ctrlEntry->second){
                 if(ctrlBit == 0){
+                  os << "\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
+                  os << "\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
+                  os << "\t\tenable the result discard for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
+                  os << "\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].registerReset = true;
                 }else if(ctrlBit == 4){
+                  os << "\t\tenable operation abstain for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].abstain = true;
                 }
               }
             }
           }else if(!inst->self_predicate.encode().empty()){
+            // Self Predication means the control signal is produced by itself, which means output (arithmetic output) controlled
             ctrlMode = 2;
+            os << "\t\tset the control mode to output-controlled mode" << endl;
             // Encode control entry            
             for(auto ctrlEntry = inst->self_predicate.lut.begin(); ctrlEntry != inst->self_predicate.lut.end(); ctrlEntry++){
+              // Control Entry Index is being used as key index for accessing the control LUT
               int entryIdx = ctrlEntry->first;
+              // Enable this control LUT
+              os << "\t\tenable output control for " << entryIdx << "(th) control entry" << endl;
               info[fu_id].ctrlLUT[entryIdx].valid = true;
+              // The control signal type is enumeration
               for(auto ctrlBit : ctrlEntry->second){
-                if(ctrlBit == 0){
+                if(ctrlBit == 0){   
+                  os << "\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
+                  os << "\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
+                  os << "\t\tenable the result discard for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
+                  os << "\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].registerReset = true;
                 }else if(ctrlBit == 4){
+                  os << "\t\tenable operation abstain for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].abstain = true;
                 }
               }
             }
           }
+          // Set the control mode for this PE
           info[fu_id].ctrlMode = ctrlMode;
           // Encode the Destination Register
           for(int resultIdx = 0; resultIdx < inst->values.size(); resultIdx++){
@@ -314,45 +382,68 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           }
         }// End of encoding sink Function Unit
 
-        // if current link points from fu, we should encode output routing info
-        if(sourceFuNode != nullptr){
-          // Get the fu id
-          int fu_id = sourceFuNode->id();
-          // Get the output port of result
-          int output_port_idx = dsa::vector_utils::indexing(currLink, sourceFuNode->out_links());
-          // Since we only produce one output, let use zero for now.
-          info[fu_id].resultOutRoute[0] = output_port_idx;
+        /* CurrLink --> Sink Output Vector Port */
+        // Set the order in stream to physical port routing
+        if(sinkOVPNode != nullptr){
+          // Get the physical port index
+          int pid = dsa::vector_utils::indexing(currLink,sinkOVPNode->in_links());
+          // Get the output of DFG: an edge whose last link points to OVP means such edge must points to OutputPort (DFG)
+          dsa::dfg::OutputPort * outNdoe = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
+          // Get the operands of this output node
+          std::vector<dsa::dfg::Operand> operands = outNdoe->ops();
+          // Get the order in stream 
+          int vid = -1;
+          for (int i = 0; i < operands.size(); ++i) {
+            if(edge->id == operands[i].edges[0]){
+              vid = i;
+              break;
+            }
+          }
+          // Make sure that each edge has a non-negative vid
+          DSA_CHECK(vid >= 0) << "The order in stream for edge connected to OVP cannot be negative";
+          DSA_CHECK(pid >= 0) << "The index of physical port cannot be negative";
+          // Record the mapping, + 1 since zero means connected to ground
+          // Please be attention: for OVP, this is order in stream to physical mapping
+          info[sinkOVPNode->id()].vectorRoute[vid] = pid + 1;
           // Write comment to header file
-          os << "//\tconfig " << sourceFuNode->name() << endl
-               << "//\t\troute result 0 to output port " << output_port_idx << endl;
+          os << "//\tconfig " << sinkOVPNode->name() << endl
+               << "//\t\troute vport[" << pid << "] to value[" << vid << "]" << endl;
         }
-      }
+      }// Loop end for all links on this edge
       edge_idx++;
-    }
-    // print out the config bits for every ssnode
+    }// Loop end for all edges
+
+    // Debug Print
     // DSA_INFO << "Number of node = " << ssModel()->subModel()->node_list().size();
+    // DSA_INFO << "Start Counting the Configuration Words";
 
     // Count the configuration word
     int configWords = 0;
     for (auto& node : ssModel()->subModel()->node_list()) {
-      // DSA_INFO << "Generate Bitstream for " << node->name();
       dsa::adg::bitstream::BitstreamWriter bw(info[node->id()]);
       node->Accept(&bw);
       configWords += bw.configBitsVec.size();
     }
     os << endl;
+    
+    // Debug
+    // DSA_INFO << "Finish Counting the Configuration Words";
+
+    // Print the header file
+    // TODO: this part can be merged together with above, we should not do bitstream generation twice
+    // and the first one is just for counting the number of configuration word
     os << "#include <cstdint>" << std::endl;
     os << "#define " << cfg_name << "_size " << configWords << "\n\n";
+    os << "//\tTyp|Node_ID|G|Idx|-------------- Configuration Bits --------------" << endl;
     os << "uint64_t " << cfg_name << "_config[" << cfg_name << "_size] = {" << endl;
     for (auto& node : ssModel()->subModel()->node_list()) {
-      // DSA_INFO << "Generate Bitstream for " << node->name();
       dsa::adg::bitstream::BitstreamWriter bw(info[node->id()]);
       node->Accept(&bw);
       for(int cfgIdx = 0; cfgIdx < bw.configBitsVec.size(); cfgIdx ++){
         uint64_t config_bits = bw.configBitsVec[cfgIdx];
         std::bitset<64> b_config_bit(config_bits);
-        os << "\t\t0b" << b_config_bit << ", //" << node->name() << " " << config_bits << endl;
-        // os << "\t" << config_bits << ", //" << node->name() << endl;
+        os << "\t0b" << b_config_bit // Print the binary of config bitstream
+          << ", //" << node->name() << " " << config_bits << endl;
       }
     }
     os << "};";

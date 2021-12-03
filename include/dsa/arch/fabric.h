@@ -1,8 +1,8 @@
 #pragma once
 
 #include <iostream>
-
 #include "dsa/arch/sub_model.h"
+#include "dsa/core/singleton.h"
 
 namespace dsa {
 
@@ -27,69 +27,76 @@ class SpatialFabric {
   void PrintGraphviz(std::ostream& os);
 
   void DumpHwInJson(const char* name) {
+    // Sanity Check for the output stream file
     ofstream os(name);
-    std::cout << "Hardware JSON file: " << name << std::endl;
-    if (!os.good()) {
-      return;
-    }
+    DSA_CHECK(os.good()) << "ADG (json) File has bas output stream";
+    DSA_INFO << "Emit ADG (Json) File: " << name;
 
-    os << "{\n";  // Start of the JSON file
-    // Instruction Set
-    int start_enc = 3;
-    std::set<OpCode> ss_inst_set;
-    os << "\"Instruction Set\" : {\n";
-    for (ssnode* node : node_list()) {
-      ssfu* fu_node = dynamic_cast<ssfu*>(node);
-      if (fu_node != nullptr) {
-        for (auto& elem : fu_node->fu_type_.capability) {
-          ss_inst_set.insert(elem.op);
+    // Check the version of ADG (new version: include the Memory Node Info; legacy version: just CGRA)
+    bool newVersionADG = !ContextFlags::Global().adg_compat;
+
+    // Switch between the different version of ADG
+    if (newVersionADG) {
+
+    } else {
+      os << "{\n";  // Start of the JSON file
+      // Instruction Set
+      int start_enc = 3;
+      std::set<OpCode> ss_inst_set;
+      os << "\"Instruction Set\" : {\n";
+      for (ssnode* node : node_list()) {
+        ssfu* fu_node = dynamic_cast<ssfu*>(node);
+        if (fu_node != nullptr) {
+          for (auto& elem : fu_node->fu_type_.capability) {
+            ss_inst_set.insert(elem.op);
+          }
         }
       }
-    }
-    int num_total_inst = ss_inst_set.size();
-    int idx_inst = 0;
-    for (OpCode inst : ss_inst_set) {
-      os << "\"" << dsa::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
-      if (idx_inst < num_total_inst) {
-        os << ",";
+      int num_total_inst = ss_inst_set.size();
+      int idx_inst = 0;
+      for (OpCode inst : ss_inst_set) {
+        os << "\"" << dsa::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
+        if (idx_inst < num_total_inst) {
+          os << ",";
+        }
+        os << "\n";
       }
-      os << "\n";
-    }
-    os << "},\n";
+      os << "},\n";
 
-    // Links
-    os << "\"links\" : [\n";  // The Start of Links
-    int idx_link = 0;
-    int size_links = link_list().size();
-    for (auto link : link_list()) {
-      os << "{\n";
-      os << "\"source\":";
-      link->source()->dumpIdentifier(os);
-      os << ",\n";
-      os << "\"sink\":";
-      link->sink()->dumpIdentifier(os);
-      os << "}";
-      if (idx_link < size_links - 1) {
-        idx_link++;
-        os << ",\n";  // Seperate the links
-      }
-    }
-    os << "],\n";  // The End of Links
-
-    // Nodes
-    os << "\"nodes\" : [\n";  // The Start of Nodes
-    int idx_node = 0;
-    int size_nodes = node_list().size();
-    for (auto node : node_list()) {
-      node->dumpFeatures(os);
-      if (idx_node < size_nodes - 1) {
-        idx_node++;
+      // Links
+      os << "\"links\" : [\n";  // The Start of Links
+      int idx_link = 0;
+      int size_links = link_list().size();
+      for (auto link : link_list()) {
+        os << "{\n";
+        os << "\"source\":";
+        link->source()->dumpIdentifier(os);
         os << ",\n";
+        os << "\"sink\":";
+        link->sink()->dumpIdentifier(os);
+        os << "}";
+        if (idx_link < size_links - 1) {
+          idx_link++;
+          os << ",\n";  // Seperate the links
+        }
       }
-    }
-    os << "]\n";  // The End of Nodes
+      os << "],\n";  // The End of Links
 
-    os << "}\n";  // End of the JSON file
+      // Nodes
+      os << "\"nodes\" : [\n";  // The Start of Nodes
+      int idx_node = 0;
+      int size_nodes = node_list().size();
+      for (auto node : node_list()) {
+        node->dumpFeatures(os);
+        if (idx_node < size_nodes - 1) {
+          idx_node++;
+          os << ",\n";
+        }
+      }
+      os << "]\n";  // The End of Nodes
+
+      os << "}\n";  // End of the JSON file
+    }
   }
 
   int sizex() { return _sizex; }
@@ -189,7 +196,7 @@ class SpatialFabric {
     return vport;
   }
 
-   // Creates a copy of the datastructre which gaurantees ordering
+  // Creates a copy of the datastructre which gaurantees ordering
   // within the *_list datastructures (so they can be used for matching)
   SpatialFabric* copy() {
     SpatialFabric* copy_sub = new SpatialFabric();
@@ -232,7 +239,6 @@ class SpatialFabric {
 
     return copy_sub;
   }
-  
 
   // Efficient bulk delete from vector based on indices (O(n))
   template <typename T>
@@ -276,21 +282,17 @@ class SpatialFabric {
     //   CHECK(!in->in_links().empty());
     // }
     // Check if a self-link
-    if (src->id() == dst->id())
-      return nullptr;
-    
+    if (src->id() == dst->id()) return nullptr;
+
     // Check if a link already exists
     for (auto link : src->out_links())
-      if (link->sink()->id() == dst->id()) 
-        return nullptr;
-    
+      if (link->sink()->id() == dst->id()) return nullptr;
+
     if (dynamic_cast<ssvport*>(src))
-      if (src->out_links().size() == 8)
-        return nullptr;
-    
+      if (src->out_links().size() == 8) return nullptr;
+
     if (dynamic_cast<ssvport*>(dst))
-      if (dst->in_links().size() == 8)
-        return nullptr;
+      if (dst->in_links().size() == 8) return nullptr;
 
     sslink* link = src->add_link(dst);
     link->id(_link_list.size());

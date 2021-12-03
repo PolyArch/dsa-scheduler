@@ -1,11 +1,17 @@
 #pragma once
 
+#include <functional>
 #include <iostream>
 #include <vector>
+#include <map>
 
-#include "dsa/arch/model.h"
+
+#include "dsa/debug.h"
 
 namespace dsa {
+
+class SSModel;
+
 namespace adg {
 namespace estimation {
 

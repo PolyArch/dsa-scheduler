@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "dsa/core/singleton.h"
+#include "dsa/arch/model.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/arch/predict.h"
 #include "dsa/debug.h"

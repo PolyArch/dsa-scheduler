@@ -24,13 +24,16 @@ SpatialFabric* Import(std::string filename) {
   DSA_CHECK(cgra->isObject());
 
   // Create Global Node Id -> Node Table (legacy)
+  // Should only be used for Legacy JSON File
   std::vector<ssnode*> sym_tab;
+  
   // Create Local Node Id -> Node Table
   std::vector<ssnode*> fu_tab;
   std::vector<ssnode*> sw_tab;
   std::vector<ssnode*> ivp_tab;
   std::vector<ssnode*> ovp_tab;
 
+  // Check whether compatiable ADG Mode is selected
   bool newVersionADG = !ContextFlags::Global().adg_compat;
   if (newVersionADG) {
     // Parse all DSAGen Nodes
@@ -46,13 +49,13 @@ SpatialFabric* Import(std::string filename) {
       sw_tab.resize(jsonNodes.size(), nullptr);
       ivp_tab.resize(jsonNodes.size(), nullptr);
       ovp_tab.resize(jsonNodes.size(), nullptr);
+
       // Loop over all nodes
-      for (Json::Value::iterator dsaNode = jsonNodes.begin(); dsaNode != jsonNodes.end();
-           ++dsaNode) {
+      for (Json::Value::iterator dsaNode = jsonNodes.begin(); dsaNode != jsonNodes.end(); ++dsaNode) {
         // Get the name of the DSANode
         String nodeName(dsaNode.key().asString());
         // Split the name to get the node type and node local id
-        std::vector<String> nodeTypeLocalId = nodeName.Split('_');
+        std::vector<String> nodeTypeLocalId = nodeName.Split('.');
         // Get the nodeType from first String
         std::string nodeType = nodeTypeLocalId[0];
         // Get the local node from the second string
@@ -60,7 +63,7 @@ SpatialFabric* Import(std::string filename) {
         int localNodeId = stoi(localNodeIdStr);
         // Create different ssnode based on the node Type
         ssnode* node;
-        DSA_INFO << "Create Node: " << nodeType << "_" << localNodeId;
+        DSA_INFO << "Create DSA Node: " << nodeType << "." << localNodeId;
         if (nodeType == ADGKEY_NAMES[PE_TYPE]) {
           // Get the node parameter first
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
@@ -145,13 +148,13 @@ SpatialFabric* Import(std::string filename) {
           auto& insts = aluParam[ADGKEY_NAMES[PE_OP_TYPEENC]];
           DSA_CHECK(insts.isArray());
           // Construct the name of FU
-          std::string fuName = nodeType + "_" + localNodeIdStr + "_FU";
+          std::string fuName = nodeType + "." + localNodeIdStr + " (Function Unit)";
           // Create Function Unit Capability, name it by using PE's name as prefix
           Capability fu_type(fuName);
           for (int instIdx = 0; instIdx < insts.size(); instIdx++) {
             // Get the opcode for this instruction
             std::string opName = insts[instIdx].asString();
-            DSA_INFO << "Add Operation " << opName << " to " << fuName;
+            DSA_INFO << "Add Operation [ " << opName << " ] to " << fuName;
             fu_type.Add(dsa::inst_from_string(opName.c_str()), 1 /*instruction count*/);
           }
 
@@ -370,8 +373,11 @@ SpatialFabric* Import(std::string filename) {
         }
       }  // End of loop over all links
     }    // End of parsing all json links
-
   } else {
+
+    /** 
+     * Parsing ADG by using the legacy ADG Format
+     */
     auto& jsonNodes = cgra->operator[]("nodes");
     auto sf = res;
     // Vector Port Parameter

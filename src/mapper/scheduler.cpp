@@ -202,10 +202,6 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     return 1;
   }
 
-  // TODO: Print Hardware Config Information @ Sihao
-  // string hw_config_filename = model_rawname + ".xml";
-  // sched -> printConfigBits_Hw(hw_config_filename);
-
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);
   DSA_CHECK(osh.good());

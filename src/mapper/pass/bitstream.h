@@ -3,14 +3,14 @@
 #include "dsa/arch/sub_model.h"
 #include "dsa/arch/visitor.h"
 
-#define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x-1)) + 1)
+#define log2ceil(x) (63U - __builtin_clzl(static_cast<uint64_t>(x - 1)) + 1)
 
 namespace dsa {
 namespace adg {
 namespace bitstream {
 
 // Entry of Control Lookup Table
-struct ControlEntry{
+struct ControlEntry {
   bool valid{false};
   bool operand0Reuse{false};
   bool operand1Reuse{false};
@@ -18,13 +18,19 @@ struct ControlEntry{
   bool registerReset{false};
   bool abstain{false};
 };
+
+// Struct that collects all node configuration
 struct NodeInfo {
-  // ---------- Switch Only ----------
-  // output[i] --> input[j]
+  // ---------- Switch Configuration Info ----------
+
+  // ----- Switch Routing Configuration -----
+  // Coarse grained output port based routing info (TODO: subnet level routing to be
+  // included) output[i] --> input[j]
   std::map<int, int> outputRoute{{-1, -1}};
 
-  // ---------- Processing Element Only ----------
-  // ----- Per instruction info -----
+  // ---------- Processing Element Configuration Info ----------
+
+  // ----- PE instruction info -----
   // Operand Route and Delay: operandIdx -> input/delay
   std::map<int, int> operandRoute{{-1, -1}};
   std::map<int, int> operandDelay{{-1, -1}};
@@ -35,16 +41,30 @@ struct NodeInfo {
   // Result Output Route: result[i] -> output[j]
   std::map<int, int> resultOutRoute{{-1, -1}};
   std::map<int, int> resultRegRoute{{-1, -1}};
+
   // ----- Per control entry info -----
   std::vector<ControlEntry> ctrlLUT;
+
+  // ---------- Vector Port ----------
+
+  // Mapping between physical port index and order in stream
+  // IVP : Physical Port Index -> Order in Stream
+  // OVP : Order in Stream -> Physical Port Index
+  std::map<int, int> vectorRoute{{-1, -1}};
 };
 
+// Enumeration for all node type that can be reconfigured
+enum ReconfNodeType { PE_NODE_TYPE, SW_NODE_TYPE, IVP_NODE_TYPE, OVP_NODE_TYPE };
+
 struct BitstreamWriter : Visitor {
-  int nodeTypeBits = 2;
-  int nodeIdBits = 8;
-  int cfgGroupBits = 2;
-  int cfgIndexBits = 4;
-  int cfgInfoBits = 48;
+  // The protocol of reconfiguration
+  int nodeTypeBits = 2;  // configBits[63:62]
+  int nodeIdBits = 8;    // configBits[61:54]
+  int cfgGroupBits = 2;  // configBits[53:52]
+  int cfgIndexBits = 4;  // configBits[51:48]
+  int cfgInfoBits = 48;  // configBits[47: 0]
+
+  // Total number of bits should be 64
   int totalBits = nodeTypeBits + nodeIdBits + cfgGroupBits + cfgIndexBits + cfgInfoBits;
   int nodeTypeLow = totalBits - nodeTypeBits;
   int nodeIdLow = nodeTypeLow - nodeIdBits;
@@ -59,34 +79,40 @@ struct BitstreamWriter : Visitor {
     // Calculate the selection bit for output port
     int selBits = log2ceil(sw->in_links().size() + 1);
     // Loop from highest output port to lowest port
-    for(int outIdx = (sw->out_links().size() - 1); outIdx >= 0; outIdx --){
-      for(int subIdx = ((sw->datawidth() / sw->granularity()) - 1); subIdx >= 0; subIdx --){
+    for (int outIdx = (sw->out_links().size() - 1); outIdx >= 0; outIdx--) {
+      // Loop from the highest subnet to the lowest subnet
+      for (int subIdx = ((sw->datawidth() / sw->granularity()) - 1); subIdx >= 0;
+           subIdx--) {
         // DSA_INFO << "Output Index = " << outIdx << ", subnet index = " << subIdx;
         cfgInfoBitset <<= selBits;
         // DSA_INFO << "cfgInfoBitset = " << cfgInfoBitset;
         // Get the routing selection from nodeInfo
-        if(ni.outputRoute.count(outIdx)){
-          // DSA_INFO << "Route " << (ni.outputRoute[outIdx] - 1) << " input port to output port " << outIdx;
+        if (ni.outputRoute.count(outIdx)) {
+          // DSA_INFO << "Route input port " << (ni.outputRoute[outIdx] - 1) << " to
+          // output port " << outIdx;
           cfgInfoBitset |= ni.outputRoute[outIdx];
+          // DSA_INFO << "cfgInfoBitset = " << cfgInfoBitset;
         }
       }
     }
     // Set the lowest bit to turn on the node
-    if(cfgInfoBitset.any()){
-      cfgInfoBitset = cfgInfoBitset << 1;
+    if (cfgInfoBitset.any()) {
+      cfgInfoBitset <<= 1;
       cfgInfoBitset.set(0);
     }
 
     // Group the cfgInfoBitset by [[cfgInfoBits]]
     int cfgIdx = 0;
-    while(cfgInfoBitset.any()){
+    // Loop while there are still bits to be grouped
+    while (cfgInfoBitset.any()) {
       // DSA_INFO << cfgIdx << "th Routing Bitstream for " << sw->name();
       // Get the first configuration by taking the lower [[cfgInfoBits]]
       uint64_t currCfgInfo = (cfgInfoBitset & cfgInfoMask).to_ulong();
-      currCfgInfo = currCfgInfo | ((uint64_t)1 << nodeTypeLow); // Write the node type
-      currCfgInfo = currCfgInfo | ((uint64_t)(sw->localId()) << nodeIdLow); // Write the node local Id
-      currCfgInfo = currCfgInfo | ((uint64_t)0 << cfgGroupLow); // Switch only have one configuration group
-      currCfgInfo = currCfgInfo | ((uint64_t)cfgIdx << cfgIndexLow); // Set configuration index
+      currCfgInfo |= ((uint64_t)SW_NODE_TYPE << nodeTypeLow);   // Write the node type
+      currCfgInfo |= ((uint64_t)(sw->localId()) << nodeIdLow);  // Write the node local Id
+      currCfgInfo |=
+          ((uint64_t)0 << cfgGroupLow);  // Switch only have one configuration group
+      currCfgInfo |= ((uint64_t)cfgIdx << cfgIndexLow);  // Set configuration index
       // Push it into the configuration bit vector
       configBitsVec.push_back(currCfgInfo);
       // Right Shift the Bitset and update the currCfgInfo]
@@ -95,27 +121,105 @@ struct BitstreamWriter : Visitor {
     }
   }
 
-  // Print Configuration Bitstream for Switch
-  void Visit(ssfu* fu) {
-    // Encode the control LUT table
-    // DSA_INFO << fu->name() << " generate bitstream for LUT";
-    for(int entryIdx = fu->ctrlLUTSize(); entryIdx >=0 ; entryIdx--){
-      cfgInfoBitset |= ni.ctrlLUT[entryIdx].abstain;
-      cfgInfoBitset <<= 1;
-      cfgInfoBitset |= ni.ctrlLUT[entryIdx].registerReset;
-      cfgInfoBitset <<= 1;
-      cfgInfoBitset |= ni.ctrlLUT[entryIdx].resultDiscard;
-      cfgInfoBitset <<= 1;
-      cfgInfoBitset |= ni.ctrlLUT[entryIdx].operand1Reuse;
-      cfgInfoBitset <<= 1;
-      cfgInfoBitset |= ni.ctrlLUT[entryIdx].operand0Reuse;
+  // Print Configuration Bitstream for Vector Port
+  void Visit(ssvport* vport) {
+    // Generate bitstream for input vector port
+    if (vport->isInputPort()) {
+      // Calculate the selection bits for input vector port, +1 for selection of ground
+      int selBits = log2ceil(vport->out_links().size() + 1);
+      // DSA_INFO << vport->name() << " has " << vport->out_links().size() << " outputs";
+      // DSA_INFO << vport->name() << " selection bits = " << selBits;
+      // Loop from the highest physical port to lowest port
+      for (int portIdx = (vport->out_links().size() - 1); portIdx >= 0; portIdx--) {
+        // Left shift to make room for new selection bits
+        cfgInfoBitset <<= selBits;
+        if (ni.vectorRoute.count(portIdx)) {
+          cfgInfoBitset |= ni.vectorRoute[portIdx];
+        }
+      }
+    } else if (vport->isOutputPort()) {
+      // Calculate the selection bits for output vector port, +1 for selection of ground
+      int selBits = log2ceil(vport->in_links().size() + 1);
+      // DSA_INFO << vport->name() << " has " << vport->in_links().size() << " inputs";
+      // DSA_INFO << vport->name() << " selection bits = " << selBits;
+      // Generate bitstream for output vector port
+      for (int vecIdx = (vport->in_links().size() - 1); vecIdx >= 0; vecIdx--) {
+        // Left shift to make room for new selection bits
+        cfgInfoBitset <<= selBits;
+        if (ni.vectorRoute.count(vecIdx)) {
+          cfgInfoBitset |= ni.vectorRoute[vecIdx];
+        }
+      }
+    } else {
+      DSA_CHECK(false) << "The direction of vector port is problematic";
     }
-    
+
+    // Set the lower bit to enable the vector port
+    if (cfgInfoBitset.any()) {
+      cfgInfoBitset <<= 1;
+      cfgInfoBitset.set(0);
+    }
+
+    // Group the configuration into by [[cfgInfoBits]]
+    int cfgIdx = 0;
+    // Loop while there are still bits to be grouped
+    while (cfgInfoBitset.any()) {
+      // Taking the lower bits of configuration info bitset
+      uint64_t currCfgInfo = (cfgInfoBitset & cfgInfoMask).to_ulong();
+      // Write the node type
+      currCfgInfo |= ((uint64_t)(vport->isInputPort() ? IVP_NODE_TYPE : OVP_NODE_TYPE)
+                      << nodeTypeLow);
+      // Write the node local id
+      currCfgInfo |= ((uint64_t)(vport->localId()) << nodeIdLow);
+      // Set the configuration group index
+      currCfgInfo |= ((uint64_t)0 << cfgGroupLow);
+      // Set the configuration index
+      currCfgInfo |= ((uint64_t)cfgIdx << cfgIndexLow);  // Set configuration index
+      // Push it into the configuration bit vector
+      configBitsVec.push_back(currCfgInfo);
+      // Right shift the bitset to clear the grouped configuration info
+      cfgInfoBitset >>= cfgInfoBits;
+      cfgIdx++;
+    }
+  }
+
+  // Print Configuration Bitstream for Function Unit
+  void Visit(ssfu* fu) {
+
+    // Encode the control LUT table
+    if (ni.ctrlLUT.size() > 0) {
+      // The Control LUT size in node info can be zero if this node is not used
+      // If it is not zero, then it must be same as the one in parameter
+      DSA_CHECK(ni.ctrlLUT.size() == fu->ctrlLUTSize())
+          << "Size of LUT is " << ni.ctrlLUT.size() << ", but it is " << fu->ctrlLUTSize()
+          << " in FU parameters";
+      for (int entryIdx = fu->ctrlLUTSize() - 1; entryIdx >= 0; entryIdx--) {
+        // Abstain
+        cfgInfoBitset <<= 1;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].abstain;
+        // Register Reset
+        cfgInfoBitset <<= 1;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].registerReset;
+        // Result Discard
+        cfgInfoBitset <<= 1;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].resultDiscard;
+        // Operand Reuse
+        cfgInfoBitset <<= 2;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].operand1Reuse;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].operand0Reuse;
+        // Valid of control entry
+        cfgInfoBitset <<= 1;
+        cfgInfoBitset |= ni.ctrlLUT[entryIdx].valid;
+        // Debug
+        // DSA_INFO << fu->name() << "'s config bits for LUT's entry" << entryIdx;
+      }
+    }
+
     // Encode the instruction slot
     // DSA_INFO << fu->name() << " generate bitstream for instruction";
-    for(int instIdx = fu->instSlotSize(); instIdx >= 0; instIdx--){
+    for (int instIdx = fu->instSlotSize() - 1; instIdx >= 0; instIdx--) {
       // Write register selection bits
-      if(fu->regFileSize() > 0){
+      if (fu->regFileSize() > 0) {
         // Calculate the register selection bit
         int regSelBits = log2ceil(1 + fu->regFileSize());
         cfgInfoBitset <<= regSelBits;
@@ -130,52 +234,56 @@ struct BitstreamWriter : Visitor {
       cfgInfoBitset <<= opcodeSelBits;
       cfgInfoBitset |= ni.opcode;
       // Write the delay fifo cycle
-      if(!fu->flow_control()){
+      if (!fu->flow_control()) {
         int delayCycleBits = log2ceil(fu->delay_fifo_depth() + 1);
-        for(int operIdx = 1; operIdx >= 0; operIdx --){
+        for (int operIdx = 1; operIdx >= 0; operIdx--) {
           cfgInfoBitset <<= delayCycleBits;
-          if(ni.operandDelay.count(operIdx))
-            cfgInfoBitset |= ni.operandDelay[operIdx];
+          if (ni.operandDelay.count(operIdx)) cfgInfoBitset |= ni.operandDelay[operIdx];
         }
       }
       // Write Controlled input selection bit
-      if(fu->inputCtrl()){
+      if (fu->inputCtrl()) {
         int inputCtrlSelBit = log2ceil(fu->in_links().size() + 1);
         cfgInfoBitset <<= inputCtrlSelBit;
         cfgInfoBitset |= ni.inputCtrlRoute;
       }
       // Write Controlled mode
-      if(fu->inputCtrl() || fu->outputCtrl()){
+      if (fu->inputCtrl() || fu->outputCtrl()) {
         cfgInfoBitset <<= 2;
         cfgInfoBitset |= ni.ctrlMode;
       }
-      // Write the Operand
-      int operInputSelBits = log2ceil(fu->in_links().size() + 1);
-      for(int operIdx = 1; operIdx >= 0; operIdx --){
+      // Write the Operand Selection (Input Ports / Register / Ground)
+      int operInputSelBits = log2ceil(fu->in_links().size() + fu->regFileSize() + 1);
+      for (int operIdx = 1; operIdx >= 0; operIdx--) {
         cfgInfoBitset <<= operInputSelBits;
-        if(ni.operandRoute.count(operIdx))
-          cfgInfoBitset |= ni.operandRoute[operIdx];
+        if (ni.operandRoute.count(operIdx)) cfgInfoBitset |= ni.operandRoute[operIdx];
       }
       // Write the instruction valid, since we only have one, it is always valid
-      if(cfgInfoBitset.any()){
+      if (cfgInfoBitset.any()) {
         cfgInfoBitset <<= 1;
         cfgInfoBitset.set(0);
       }
+      // Debug
+      // DSA_INFO << fu->name() << "'s config bits for instSlot[" << instIdx << "]";
     }
+
     // Enable the node
-    if(cfgInfoBitset.any()){
+    if (cfgInfoBitset.any()) {
       cfgInfoBitset <<= 1;
       cfgInfoBitset.set(0);
     }
+    
     // Group the cfgInfoBitset by [[cfgInfoBits]]
     int cfgIdx = 0;
-    while(cfgInfoBitset.any()){
+    while (cfgInfoBitset.any()) {
+      // Debug
+      // DSA_INFO << "Construct configuration bits for " << fu->name();
       // Get the first configuration by taking the lower [[cfgInfoBits]]
       uint64_t currCfgInfo = (cfgInfoBitset & cfgInfoMask).to_ulong();
-      currCfgInfo = currCfgInfo | ((uint64_t)0 << nodeTypeLow); // Write the node type
-      currCfgInfo = currCfgInfo | ((uint64_t)(fu->localId()) << nodeIdLow); // Write the node local Id
-      currCfgInfo = currCfgInfo | ((uint64_t)0 << cfgGroupLow); // Switch only have one configuration group
-      currCfgInfo = currCfgInfo | ((uint64_t)cfgIdx << cfgIndexLow); // Set configuration index
+      currCfgInfo |= ((uint64_t)PE_NODE_TYPE   << nodeTypeLow);  // Write the node type
+      currCfgInfo |= ((uint64_t)(fu->localId())<< nodeIdLow);    // Write the node local Id
+      currCfgInfo |= ((uint64_t)0              << cfgGroupLow);  // TODO: Reg Update Group (11) 2b add
+      currCfgInfo |= ((uint64_t)cfgIdx         << cfgIndexLow);  // Set configuration index
       // Push it into the configuration bit vector
       configBitsVec.push_back(currCfgInfo);
       // Right Shift the Bitset and update the currCfgInfo]
@@ -187,7 +295,7 @@ struct BitstreamWriter : Visitor {
   std::vector<uint64_t> configBitsVec;
   NodeInfo& ni;
 
-  BitstreamWriter(NodeInfo& ni) : ni(ni){}
+  BitstreamWriter(NodeInfo& ni) : ni(ni) {}
 };
 
 }  // namespace bitstream

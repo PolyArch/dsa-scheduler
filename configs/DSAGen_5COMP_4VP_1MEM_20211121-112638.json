@@ -1,0 +1,456 @@
+{
+  "DSAGenNodes" : {
+    "Switch_3" : {
+      "ConfigBitEncode" : {
+        "Enabled" : [ 0, 0 ],
+        "SwitchRouting$_0_SubNet_0" : [ 2, 1 ],
+        "SwitchRouting$_1_SubNet_0" : [ 4, 3 ],
+        "SwitchRouting$_2_SubNet_0" : [ 6, 5 ],
+        "SwitchRouting$_3_SubNet_0" : [ 8, 7 ],
+        "SwitchRouting$_4_SubNet_0" : [ 10, 9 ]
+      },
+      "dsagen2.comp.config.CompKeys$CompNode$" : {
+        "predicated" : false,
+        "compBits" : 64,
+        "comment" : "",
+        "parameterClassName" : "dsagen2.comp.config.CompNodeParameters",
+        "compUnitBits" : 64,
+        "nodeType" : "Switch",
+        "nodeId" : 3,
+        "supportNodeActive" : true
+      },
+      "dsagen2.comp.config.CompKeys$OutputBuffer$" : {
+        "outputBufferDepth" : 1,
+        "parameterClassName" : "dsagen2.comp.config.common.CompNodeOutputBufferParameters",
+        "staticOutputBuffer" : false
+      },
+      "dsagen2.comp.config.CompKeys$SwitchRouting$" : {
+        "initFullMatrix" : [ ],
+        "parameterClassName" : "dsagen2.comp.config.switch.SWRoutingParameters",
+        "initIndividualMatrix" : [ ]
+      }
+    },
+    "Switch_2" : {
+      "ConfigBitEncode" : {
+        "Enabled" : [ 0, 0 ],
+        "SwitchRouting$_0_SubNet_0" : [ 2, 1 ],
+        "SwitchRouting$_1_SubNet_0" : [ 4, 3 ],
+        "SwitchRouting$_2_SubNet_0" : [ 6, 5 ],
+        "SwitchRouting$_3_SubNet_0" : [ 8, 7 ],
+        "SwitchRouting$_4_SubNet_0" : [ 10, 9 ]
+      },
+      "dsagen2.comp.config.CompKeys$CompNode$" : {
+        "predicated" : false,
+        "compBits" : 64,
+        "comment" : "",
+        "parameterClassName" : "dsagen2.comp.config.CompNodeParameters",
+        "compUnitBits" : 64,
+        "nodeType" : "Switch",
+        "nodeId" : 2,
+        "supportNodeActive" : true
+      },
+      "dsagen2.comp.config.CompKeys$OutputBuffer$" : {
+        "outputBufferDepth" : 1,
+        "parameterClassName" : "dsagen2.comp.config.common.CompNodeOutputBufferParameters",
+        "staticOutputBuffer" : false
+      },
+      "dsagen2.comp.config.CompKeys$SwitchRouting$" : {
+        "initFullMatrix" : [ ],
+        "parameterClassName" : "dsagen2.comp.config.switch.SWRoutingParameters",
+        "initIndividualMatrix" : [ ]
+      }
+    },
+    "Switch_1" : {
+      "ConfigBitEncode" : {
+        "Enabled" : [ 0, 0 ],
+        "SwitchRouting$_0_SubNet_0" : [ 3, 1 ],
+        "SwitchRouting$_1_SubNet_0" : [ 6, 4 ],
+        "SwitchRouting$_2_SubNet_0" : [ 9, 7 ]
+      },
+      "dsagen2.comp.config.CompKeys$CompNode$" : {
+        "predicated" : false,
+        "compBits" : 64,
+        "comment" : "",
+        "parameterClassName" : "dsagen2.comp.config.CompNodeParameters",
+        "compUnitBits" : 64,
+        "nodeType" : "Switch",
+        "nodeId" : 1,
+        "supportNodeActive" : true
+      },
+      "dsagen2.comp.config.CompKeys$OutputBuffer$" : {
+        "outputBufferDepth" : 1,
+        "parameterClassName" : "dsagen2.comp.config.common.CompNodeOutputBufferParameters",
+        "staticOutputBuffer" : false
+      },
+      "dsagen2.comp.config.CompKeys$SwitchRouting$" : {
+        "initFullMatrix" : [ ],
+        "parameterClassName" : "dsagen2.comp.config.switch.SWRoutingParameters",
+        "initIndividualMatrix" : [ ]
+      }
+    },
+    "Switch_0" : {
+      "ConfigBitEncode" : {
+        "Enabled" : [ 0, 0 ],
+        "SwitchRouting$_0_SubNet_0" : [ 3, 1 ],
+        "SwitchRouting$_1_SubNet_0" : [ 6, 4 ],
+        "SwitchRouting$_2_SubNet_0" : [ 9, 7 ]
+      },
+      "dsagen2.comp.config.CompKeys$CompNode$" : {
+        "predicated" : false,
+        "compBits" : 64,
+        "comment" : "",
+        "parameterClassName" : "dsagen2.comp.config.CompNodeParameters",
+        "compUnitBits" : 64,
+        "nodeType" : "Switch",
+        "nodeId" : 0,
+        "supportNodeActive" : true
+      },
+      "dsagen2.comp.config.CompKeys$OutputBuffer$" : {
+        "outputBufferDepth" : 1,
+        "parameterClassName" : "dsagen2.comp.config.common.CompNodeOutputBufferParameters",
+        "staticOutputBuffer" : false
+      },
+      "dsagen2.comp.config.CompKeys$SwitchRouting$" : {
+        "initFullMatrix" : [ ],
+        "parameterClassName" : "dsagen2.comp.config.switch.SWRoutingParameters",
+        "initIndividualMatrix" : [ ]
+      }
+    },
+    "ProcessingElement_0" : {
+      "ConfigBitEncode" : {
+        "Enabled" : [ 0, 0 ],
+        "Instruction_0_Valid" : [ 1, 1 ],
+        "Instruction_0_OperandSel_0" : [ 4, 2 ],
+        "Instruction_0_OperandSel_1" : [ 7, 5 ],
+        "Instruction_0_CtrlMode" : [ 9, 8 ],
+        "Instruction_0_CtrlInputSel" : [ 12, 10 ],
+        "Instruction_0_Opcode" : [ 15, 13 ],
+        "Instruction_0_ResultOut_0" : [ 16, 16 ],
+        "Instruction_0_ResultReg_0" : [ 17, 17 ],
+        "MetaCtrlEntry_0_valid" : [ 18, 18 ],
+        "MetaCtrlEntry_0_reuseOperand" : [ 20, 19 ],
+        "MetaCtrlEntry_0_discardResult" : [ 21, 21 ],
+        "MetaCtrlEntry_0_resetReg" : [ 22, 22 ],
+        "MetaCtrlEntry_0_abstain" : [ 23, 23 ],
+        "MetaCtrlEntry_1_valid" : [ 24, 24 ],
+        "MetaCtrlEntry_1_reuseOperand" : [ 26, 25 ],
+        "MetaCtrlEntry_1_discardResult" : [ 27, 27 ],
+        "MetaCtrlEntry_1_resetReg" : [ 28, 28 ],
+        "MetaCtrlEntry_1_abstain" : [ 29, 29 ],
+        "MetaCtrlEntry_2_valid" : [ 30, 30 ],
+        "MetaCtrlEntry_2_reuseOperand" : [ 32, 31 ],
+        "MetaCtrlEntry_2_discardResult" : [ 33, 33 ],
+        "MetaCtrlEntry_2_resetReg" : [ 34, 34 ],
+        "MetaCtrlEntry_2_abstain" : [ 35, 35 ],
+        "MetaCtrlEntry_3_valid" : [ 36, 36 ],
+        "MetaCtrlEntry_3_reuseOperand" : [ 38, 37 ],
+        "MetaCtrlEntry_3_discardResult" : [ 39, 39 ],
+        "MetaCtrlEntry_3_resetReg" : [ 40, 40 ],
+        "MetaCtrlEntry_3_abstain" : [ 41, 41 ]
+      },
+      "dsagen2.comp.config.CompKeys$CompNode$" : {
+        "predicated" : false,
+        "compBits" : 64,
+        "comment" : "",
+        "parameterClassName" : "dsagen2.comp.config.CompNodeParameters",
+        "compUnitBits" : 64,
+        "nodeType" : "ProcessingElement",
+        "nodeId" : 0,
+        "supportNodeActive" : true
+      },
+      "dsagen2.comp.config.CompKeys$OutputBuffer$" : {
+        "outputBufferDepth" : 1,
+        "parameterClassName" : "dsagen2.comp.config.common.CompNodeOutputBufferParameters",
+        "staticOutputBuffer" : false
+      },
+      "dsagen2.comp.config.CompKeys$RegFile$" : {
+        "numReg" : 1,
+        "asyncRF" : true,
+        "update" : true,
+        "parameterClassName" : "dsagen2.comp.config.processing_element.PERegFileParameters",
+        "resetRegIdx" : [ 0 ]
+      },
+      "dsagen2.comp.config.CompKeys$MetaControl$" : {
+        "outputLSBCtrl" : true,
+        "sizeLUT" : 4,
+        "abstain" : true,
+        "parameterClassName" : "dsagen2.comp.config.processing_element.PEMetaCtrlParameters",
+        "inputLSBCtrl" : true,
+        "reuseOperand" : true,
+        "resetRegister" : true,
+        "discardResult" : true
+      },
+      "dsagen2.comp.config.CompKeys$DsaOperations$" : {
+        "isDynamic" : true,
+        "OperationDataTypeSet" : [ "Copy", "Add_I64", "FAdd_D64", "FMul_D64", "Mul_I64" ],
+        "maxInstRepeatTime" : 0,
+        "definedLatency" : 0,
+        "parameterClassName" : "dsagen2.comp.config.processing_element.PEDsaOperationParameters",
+        "instSlotSize" : 1,
+        "maxFifoDepth" : 8
+      }
+    },
+    "DirectMemoryAccess_0" : {
+      "dsagen2.mem.config.MemKeys$MemNode$" : {
+        "numWrite" : 1,
+        "memUnitBits" : 8,
+        "numRead" : 1,
+        "MaxLength1D" : 2147483646,
+        "parameterClassName" : "dsagen2.mem.config.MemNodeParameters",
+        "MaxLength3D" : 2147483646,
+        "capacity" : 1099511627776,
+        "LinearLength1DStream" : false,
+        "NumPendingDMARequest" : 16,
+        "LinearPadding" : false,
+        "MaxAbsStretch3D2D" : 0,
+        "NumLength1DUnitBitsExp" : 0,
+        "MaxAbsStride3D" : 1073741822,
+        "MaxAbsStride1D" : 1,
+        "IndirectStride2DStream" : false,
+        "AtomicOperations" : [ ],
+        "NumIdxUnitBitsExp" : 0,
+        "MaxAbsDeltaStride2D" : 0,
+        "predicated" : true,
+        "NumSpadBank" : 0,
+        "LinearStride2DStream" : false,
+        "MaxLength2D" : 2147483646,
+        "MaxAbsStretch2D" : 1073741822,
+        "nodeType" : "DirectMemoryAccess",
+        "NumConstUnitBitsExp" : 0,
+        "numMemUnitBitsExp" : 4,
+        "MaxAbsStretch3D1D" : 0,
+        "IndirectIndexStream" : false,
+        "NumStride2DUnitBitsExp" : 0,
+        "writeWidth" : 16,
+        "MaxAbsStride2D" : 1073741822,
+        "readWidth" : 16,
+        "nodeId" : 0,
+        "streamStated" : true,
+        "IndirectLength1DStream" : false,
+        "MaxAbsDeltaStretch2D" : 0
+      }
+    },
+    "InputVectorPort_1" : {
+      "dsagen2.sync.config.SyncKeys$IVPNode$" : {
+        "streamBroadcast" : false,
+        "predicated" : false,
+        "suggestDepth" : 2,
+        "streamRepeated" : false,
+        "parameterClassName" : "dsagen2.sync.config.IVPNodeParameters",
+        "nodeType" : "InputVectorPort",
+        "nodeId" : 1,
+        "streamStated" : false
+      }
+    },
+    "InputVectorPort_0" : {
+      "dsagen2.sync.config.SyncKeys$IVPNode$" : {
+        "streamBroadcast" : false,
+        "predicated" : false,
+        "suggestDepth" : 2,
+        "streamRepeated" : false,
+        "parameterClassName" : "dsagen2.sync.config.IVPNodeParameters",
+        "nodeType" : "InputVectorPort",
+        "nodeId" : 0,
+        "streamStated" : false
+      }
+    },
+    "OutputVectorPort_1" : {
+      "dsagen2.sync.config.SyncKeys$OVPNode$" : {
+        "predicated" : false,
+        "suggestDepth" : 2,
+        "taskflow" : false,
+        "parameterClassName" : "dsagen2.sync.config.OVPNodeParameters",
+        "nodeType" : "OutputVectorPort",
+        "nodeId" : 1,
+        "streamStated" : false
+      }
+    },
+    "OutputVectorPort_0" : {
+      "dsagen2.sync.config.SyncKeys$OVPNode$" : {
+        "predicated" : false,
+        "suggestDepth" : 2,
+        "taskflow" : false,
+        "parameterClassName" : "dsagen2.sync.config.OVPNodeParameters",
+        "nodeType" : "OutputVectorPort",
+        "nodeId" : 0,
+        "streamStated" : false
+      }
+    }
+  },
+  "DSAGenEdges" : [ {
+    "SourceNodeType" : "InputVectorPort",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "OutputVectorPort",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "DirectMemoryAccess",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "DirectMemoryAccess",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "InputVectorPort",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 3,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "InputVectorPort",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "OutputVectorPort",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "DirectMemoryAccess",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "DirectMemoryAccess",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "InputVectorPort",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 2,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 3,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 2,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "InputVectorPort",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 2
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 2,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "OutputVectorPort",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "ProcessingElement",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 3,
+    "SinkIndex" : 2
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 0,
+    "SourceIndex" : 2,
+    "SinkNodeType" : "ProcessingElement",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "InputVectorPort",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 2
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 2,
+    "SourceIndex" : 2,
+    "SinkNodeType" : "OutputVectorPort",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 0
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 3,
+    "SourceIndex" : 0,
+    "SinkNodeType" : "OutputVectorPort",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 1,
+    "SourceIndex" : 2,
+    "SinkNodeType" : "ProcessingElement",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 2,
+    "SourceIndex" : 3,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 3
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 3,
+    "SourceIndex" : 1,
+    "SinkNodeType" : "OutputVectorPort",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 2,
+    "SourceIndex" : 4,
+    "SinkNodeType" : "ProcessingElement",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 2
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 3,
+    "SourceIndex" : 2,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 1,
+    "SinkIndex" : 3
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 3,
+    "SourceIndex" : 3,
+    "SinkNodeType" : "Switch",
+    "SinkNodeId" : 2,
+    "SinkIndex" : 1
+  }, {
+    "SourceNodeType" : "Switch",
+    "SourceNodeId" : 3,
+    "SourceIndex" : 4,
+    "SinkNodeType" : "ProcessingElement",
+    "SinkNodeId" : 0,
+    "SinkIndex" : 3
+  } ]
+}

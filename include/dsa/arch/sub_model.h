@@ -614,6 +614,15 @@ class ssvport : public ssnode {
     return ss.str();
   }
 
+  // Check the direction of vector port, whether or not is input vector port
+  bool isInputPort(){
+    DSA_CHECK((links_[0].size() > 0 && links_[1].size() == 0) || (links_[0].size() == 0 && links_[1].size() > 0)) 
+      << "For vector port, it must have one side links to be empty";
+    return links_[0].size() > 0;
+  }
+  // Check whether it is output vector port
+  bool isOutputPort(){return !isInputPort();}
+
   void dumpIdentifier(ostream& os) override {
     os << "[" + std::to_string(id_) + ",\"vector port\"" + "]";
   }
