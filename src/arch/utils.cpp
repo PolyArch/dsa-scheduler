@@ -23,6 +23,9 @@ SpatialFabric* Import(std::string filename) {
   auto res = new SpatialFabric();
   DSA_CHECK(cgra->isObject());
 
+  // Debug verbose print
+  bool verbose = dsa::ContextFlags::Global().verbose;
+
   // Create Global Node Id -> Node Table (legacy)
   // Should only be used for Legacy JSON File
   std::vector<ssnode*> sym_tab;
@@ -63,7 +66,7 @@ SpatialFabric* Import(std::string filename) {
         int localNodeId = stoi(localNodeIdStr);
         // Create different ssnode based on the node Type
         ssnode* node;
-        DSA_INFO << "Create DSA Node: " << nodeType << "." << localNodeId;
+        if(verbose) DSA_INFO << "\tCreate:\t" << nodeType << "." << localNodeId;
         if (nodeType == ADGKEY_NAMES[PE_TYPE]) {
           // Get the node parameter first
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
@@ -154,7 +157,7 @@ SpatialFabric* Import(std::string filename) {
           for (int instIdx = 0; instIdx < insts.size(); instIdx++) {
             // Get the opcode for this instruction
             std::string opName = insts[instIdx].asString();
-            DSA_INFO << "Add Operation [ " << opName << " ] to " << fuName;
+            if(verbose) DSA_INFO << "\t\tAdd Operation [ " << opName << " ] to " << fuName;
             fu_type.Add(dsa::inst_from_string(opName.c_str()), 1 /*instruction count*/);
           }
 
@@ -365,7 +368,8 @@ SpatialFabric* Import(std::string filename) {
         // <-> SW -> OVP I don't know why sourceModule && sinkModule not work, should it
         // be nullptr if it is memory node?
         if (sourceDefined && sinkDefined) {
-          DSA_INFO << "Connect: " << sourceNodeType << "." << sourceNodeId << "["
+          if(verbose)
+            DSA_INFO << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId << "["
                    << sourceIndex << "]"
                    << " --> " << sinkNodeType << "." << sinkNodeId << "[" << sinkIndex
                    << "]";
