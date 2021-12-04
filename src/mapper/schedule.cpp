@@ -145,9 +145,11 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
 
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
-  // Step 1: Write the vector port mapping
-  os << "#pragma once\n";
-
+  os << "#pragma once" << std::endl;
+  // Header file for data type
+  os <<"// Header File for Data Type" <<std::endl<< "#include <cstdint>" 
+      << std::endl << std::endl;
+  os << "// Input Vector Ports" <<std::endl ;
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
     if (pv.name()[0] == '$') {
@@ -156,18 +158,19 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     if(pv.indirect()) {
       os << "#define P_" << cfg_name << "_" << pv.name() << "_in" << " " << (pn+NUM_IN_PORTS) << "\n";
     } else {
-      os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
+      os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << std::endl;
     }
   }
-  os << "\n";
+
+  os << "// Output Vector Ports" <<std::endl ;
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::OutputPort>()) {
     int pn = vecPortOf(&pv);
     if (pv.name()[0] == '$') {
       continue;
     }
-    os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << "\n";
+    os << "#define P_" << cfg_name << "_" << pv.name() << " " << pn << std::endl;
   }
-  os << "\n";
+  os << std::endl;
 
   if (!ContextFlags::Global().bitstream) {
     printConfigCheat(os, cfg_name);
@@ -315,27 +318,27 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           if(!inst->predicate.encode().empty()){
             // Predication comes from other nodes, which means one of the input ports is used as control signal, which is input ctrl
             ctrlMode = 1;
-            os << "\t\tset the control mode to input-controlled mode" << endl;
+            os << "//\t\tset the control mode to input-controlled mode" << endl;
             // Encode control entry
             for(auto ctrlEntry = inst->predicate.lut.begin(); ctrlEntry != inst->predicate.lut.end(); ctrlEntry++){
               int entryIdx = ctrlEntry->first;
               info[fu_id].ctrlLUT[entryIdx].valid = true;
-              os << "\t\tenable input control for " << entryIdx << "(th) control entry" << endl;
+              os << "//\t\tenable input control for " << entryIdx << "(th) control entry" << endl;
               for(auto ctrlBit : ctrlEntry->second){
                 if(ctrlBit == 0){
-                  os << "\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
-                  os << "\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
-                  os << "\t\tenable the result discard for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the result discard for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
-                  os << "\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].registerReset = true;
                 }else if(ctrlBit == 4){
-                  os << "\t\tenable operation abstain for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable operation abstain for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].abstain = true;
                 }
               }
@@ -343,30 +346,30 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           }else if(!inst->self_predicate.encode().empty()){
             // Self Predication means the control signal is produced by itself, which means output (arithmetic output) controlled
             ctrlMode = 2;
-            os << "\t\tset the control mode to output-controlled mode" << endl;
+            os << "//\t\tset the control mode to output-controlled mode" << endl;
             // Encode control entry            
             for(auto ctrlEntry = inst->self_predicate.lut.begin(); ctrlEntry != inst->self_predicate.lut.end(); ctrlEntry++){
               // Control Entry Index is being used as key index for accessing the control LUT
               int entryIdx = ctrlEntry->first;
               // Enable this control LUT
-              os << "\t\tenable output control for " << entryIdx << "(th) control entry" << endl;
+              os << "//\t\tenable output control for " << entryIdx << "(th) control entry" << endl;
               info[fu_id].ctrlLUT[entryIdx].valid = true;
               // The control signal type is enumeration
               for(auto ctrlBit : ctrlEntry->second){
                 if(ctrlBit == 0){   
-                  os << "\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
-                  os << "\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
-                  os << "\t\tenable the result discard for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the result discard for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
-                  os << "\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].registerReset = true;
                 }else if(ctrlBit == 4){
-                  os << "\t\tenable operation abstain for control entry " << entryIdx <<endl;
+                  os << "//\t\tenable operation abstain for control entry " << entryIdx <<endl;
                   info[fu_id].ctrlLUT[entryIdx].abstain = true;
                 }
               }
@@ -432,10 +435,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     // Print the header file
     // TODO: this part can be merged together with above, we should not do bitstream generation twice
     // and the first one is just for counting the number of configuration word
-    os << "#include <cstdint>" << std::endl;
-    os << "#define " << cfg_name << "_size " << configWords << "\n\n";
-    os << "//\tTyp|Node_ID|G|Idx|-------------- Configuration Bits --------------" << endl;
-    os << "uint64_t " << cfg_name << "_config[" << cfg_name << "_size] = {" << endl;
+    os << "#define " << cfg_name << "_size " << configWords << std::endl;
+    os << "//\tTyp|Node_ID|G|Idx|-------------- Configuration Bits --------------" << std::endl;
+    os << "uint64_t " << cfg_name << "_config[" << cfg_name << "_size] = {" << std::endl;
     for (auto& node : ssModel()->subModel()->node_list()) {
       dsa::adg::bitstream::BitstreamWriter bw(info[node->id()]);
       node->Accept(&bw);
@@ -443,7 +445,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         uint64_t config_bits = bw.configBitsVec[cfgIdx];
         std::bitset<64> b_config_bit(config_bits);
         os << "\t0b" << b_config_bit // Print the binary of config bitstream
-          << ", //" << node->name() << " " << config_bits << endl;
+          << ", //" << node->name() << " " << config_bits << std::endl;
       }
     }
     os << "};";
