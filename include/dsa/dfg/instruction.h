@@ -82,6 +82,14 @@ struct CtrlBits {
    * */
   void test(uint64_t val, Behavior &b);
 
+  /**
+   * @brief Convert entry index to LUT index
+   * 
+   * @param entryIdx 
+   * @return int 
+   */
+  int entryIdx2lutIdx(int entryIdx);
+
   const bool is_dynamic{false};
   std::map<int, std::vector<Control>> lut;
 

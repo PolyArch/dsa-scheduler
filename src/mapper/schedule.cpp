@@ -315,31 +315,37 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // DSA_INFO << "Resize the Control LUT for " << sinkFuNode->name() 
           // << " to " << sinkFuNode->ctrlLUTSize();
           info[fu_id].ctrlLUT.resize(sinkFuNode->ctrlLUTSize());
+          DSA_CHECK(fu_id >= 0 && fu_id < info.size()) << "FU_ID = " << fu_id << " access out of range";
           if(!inst->predicate.encode().empty()){
             // Predication comes from other nodes, which means one of the input ports is used as control signal, which is input ctrl
             ctrlMode = 1;
             os << "//\t\tset the control mode to input-controlled mode" << endl;
             // Encode control entry
             for(auto ctrlEntry = inst->predicate.lut.begin(); ctrlEntry != inst->predicate.lut.end(); ctrlEntry++){
+              // Get the entry index that is not scrashed
               int entryIdx = ctrlEntry->first;
-              info[fu_id].ctrlLUT[entryIdx].valid = true;
-              os << "//\t\tenable input control for " << entryIdx << "(th) control entry" << endl;
+              // Convery entry index to LUT index
+              int lutIdx = inst->predicate.entryIdx2lutIdx(entryIdx);
+              DSA_CHECK(lutIdx >= 0 && lutIdx < info[fu_id].ctrlLUT.size()) << "LUT Index = " 
+                << lutIdx << " access out of range";
+              info[fu_id].ctrlLUT[lutIdx].valid = true;
+              os << "//\t\tenable input control for " << lutIdx << "(th) control entry" << endl;
               for(auto ctrlBit : ctrlEntry->second){
                 if(ctrlBit == 0){
-                  os << "//\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
+                  os << "//\t\tenable the first operand reuse for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
-                  os << "//\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
+                  os << "//\t\tenable the second operand reuse for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
-                  os << "//\t\tenable the result discard for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
+                  os << "//\t\tenable the result discard for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
-                  os << "//\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].registerReset = true;
+                  os << "//\t\tenable the register (acc) reset for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].registerReset = true;
                 }else if(ctrlBit == 4){
-                  os << "//\t\tenable operation abstain for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].abstain = true;
+                  os << "//\t\tenable operation abstain for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].abstain = true;
                 }
               }
             }
@@ -351,26 +357,30 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
             for(auto ctrlEntry = inst->self_predicate.lut.begin(); ctrlEntry != inst->self_predicate.lut.end(); ctrlEntry++){
               // Control Entry Index is being used as key index for accessing the control LUT
               int entryIdx = ctrlEntry->first;
+              // Convert entry index to LUT index by combining with BMSS
+              int lutIdx = inst->self_predicate.entryIdx2lutIdx(entryIdx);
+              DSA_CHECK(lutIdx >= 0 && lutIdx < info[fu_id].ctrlLUT.size()) << "LUT Index = " 
+                << lutIdx << " access out of range";
               // Enable this control LUT
-              os << "//\t\tenable output control for " << entryIdx << "(th) control entry" << endl;
-              info[fu_id].ctrlLUT[entryIdx].valid = true;
+              os << "//\t\tenable output control for " << lutIdx << "(th) control entry" << endl;
+              info[fu_id].ctrlLUT[lutIdx].valid = true;
               // The control signal type is enumeration
               for(auto ctrlBit : ctrlEntry->second){
                 if(ctrlBit == 0){   
-                  os << "//\t\tenable the first operand reuse for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].operand0Reuse = true;
+                  os << "//\t\tenable the first operand reuse for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].operand0Reuse = true;
                 }else if(ctrlBit == 1){
-                  os << "//\t\tenable the second operand reuse for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].operand1Reuse = true;
+                  os << "//\t\tenable the second operand reuse for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].operand1Reuse = true;
                 }else if(ctrlBit == 2){
-                  os << "//\t\tenable the result discard for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].resultDiscard = true;
+                  os << "//\t\tenable the result discard for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].resultDiscard = true;
                 }else if(ctrlBit == 3){
-                  os << "//\t\tenable the register (acc) reset for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].registerReset = true;
+                  os << "//\t\tenable the register (acc) reset for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].registerReset = true;
                 }else if(ctrlBit == 4){
-                  os << "//\t\tenable operation abstain for control entry " << entryIdx <<endl;
-                  info[fu_id].ctrlLUT[entryIdx].abstain = true;
+                  os << "//\t\tenable operation abstain for control entry " << lutIdx <<endl;
+                  info[fu_id].ctrlLUT[lutIdx].abstain = true;
                 }
               }
             }

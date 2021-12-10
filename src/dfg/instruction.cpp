@@ -7,6 +7,30 @@
 namespace dsa {
 namespace dfg {
 
+int CtrlBits::entryIdx2lutIdx(int entryIdx) {
+  // Calculate the log2 
+  auto log2 = [](int val) {
+    return ((val) ? ((31) - __builtin_clz((uint32_t)(val))) : 0);
+  };
+  // Extract true from BMSS
+  std::vector<int> extracted_bits;
+  while (bmss) {
+    auto bit = bmss & -bmss; // lsb 1
+    int idx = log2(bit);
+    extracted_bits.push_back(idx);
+    bmss -= bit;
+  }
+  int lutIdx = 0;
+  for (int i = 0; i < extracted_bits.size(); ++i) {
+    if (entryIdx >> extracted_bits[i] & 1) {
+      lutIdx |= (1 << i);
+    }
+  }
+  DSA_CHECK(lutIdx >=0 && lutIdx < 8) << "LUT index is not legal : " << lutIdx;
+  return lutIdx;
+
+}
+
 void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {
   val &= bmss;
   auto iter = lut.find(val);
