@@ -14,11 +14,12 @@ int CtrlBits::entryIdx2lutIdx(int entryIdx) {
   };
   // Extract true from BMSS
   std::vector<int> extracted_bits;
-  while (bmss) {
-    auto bit = bmss & -bmss; // lsb 1
+  int tempBMSS = bmss;
+  while (tempBMSS) {
+    auto bit = tempBMSS & -tempBMSS; // lsb 1
     int idx = log2(bit);
     extracted_bits.push_back(idx);
-    bmss -= bit;
+    tempBMSS -= bit;
   }
   int lutIdx = 0;
   for (int i = 0; i < extracted_bits.size(); ++i) {
@@ -26,6 +27,9 @@ int CtrlBits::entryIdx2lutIdx(int entryIdx) {
       lutIdx |= (1 << i);
     }
   }
+  // DSA_INFO << "Entry Idx = " << entryIdx << ", BMSS = " << bmss << ", LUTIdx = " << lutIdx;
+  DSA_CHECK(bmss > 0) << "BMSS is not positive, means that control is not enabled, 
+    but the function to dump bitstream for control is called";
   DSA_CHECK(lutIdx >=0 && lutIdx < 8) << "LUT index is not legal : " << lutIdx;
   return lutIdx;
 
