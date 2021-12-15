@@ -28,8 +28,8 @@ int CtrlBits::entryIdx2lutIdx(int entryIdx) {
     }
   }
   // DSA_INFO << "Entry Idx = " << entryIdx << ", BMSS = " << bmss << ", LUTIdx = " << lutIdx;
-  DSA_CHECK(bmss > 0) << "BMSS is not positive, means that control is not enabled, 
-    but the function to dump bitstream for control is called";
+  DSA_CHECK(bmss > 0) << "BMSS is not positive, means that control is not enabled," 
+                      << "but the function to dump bitstream for control is called";
   DSA_CHECK(lutIdx >=0 && lutIdx < 8) << "LUT index is not legal : " << lutIdx;
   return lutIdx;
 
