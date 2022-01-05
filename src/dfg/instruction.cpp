@@ -32,7 +32,6 @@ int CtrlBits::entryIdx2lutIdx(int entryIdx) {
                       << "but the function to dump bitstream for control is called";
   DSA_CHECK(lutIdx >=0 && lutIdx < 8) << "LUT index is not legal : " << lutIdx;
   return lutIdx;
-
 }
 
 void CtrlBits::test(uint64_t val, CtrlBits::Behavior &b) {

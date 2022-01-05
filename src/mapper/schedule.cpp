@@ -145,6 +145,7 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
 
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
+  DSA_INFO << cfg_name << ": bitstream is being generated";
   os << "#pragma once" << std::endl;
   // Header file for data type
   os <<"// Header File for Data Type" <<std::endl<< "#include <cstdint>" 
@@ -272,20 +273,20 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         // Set operand selection
         // Set operand delay
         // Set function unit opcode
+        // Set control entry
         
         // if current link points to fu, we should encode every info except
         // output routing here
         if (sinkFuNode != nullptr) {
           // the final destination is function unit
           int fu_id = sinkFuNode->id();
-          // TODO: Sihao: no decomposability supported, so I just take first slot
-          // TODO: and first vertex
+          // TODO: Sihao: no decomposability supported, so I just take first slot and first vertex
           auto* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
           // int vertex_idx = vertex_pair.second;
           int operandIdx = vector_utils::indexing(edge, operands[vertex->id()]);
           // which input port does this edge used
           int input_port_idx = dsa::vector_utils::indexing(currLink, sinkFuNode->in_links());
-          // Get Encode
+          // Get Encode for Operands Routing
           DSA_CHECK(input_port_idx >= 0) << "not found input port";
           DSA_CHECK(operandIdx >= 0) << "This edge's destination is fu but not used?";
           {
@@ -320,6 +321,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
             // Predication comes from other nodes, which means one of the input ports is used as control signal, which is input ctrl
             ctrlMode = 1;
             os << "//\t\tset the control mode to input-controlled mode" << endl;
+            os << "//\t\tset bitmask of control bits of interested (BMSS) = " << inst->predicate.bmss << endl;
+            info[fu_id].bmss = inst->predicate.bmss;
             // Encode control entry
             for(auto ctrlEntry = inst->predicate.lut.begin(); ctrlEntry != inst->predicate.lut.end(); ctrlEntry++){
               // Get the entry index that is not scrashed
@@ -353,6 +356,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
             // Self Predication means the control signal is produced by itself, which means output (arithmetic output) controlled
             ctrlMode = 2;
             os << "//\t\tset the control mode to output-controlled mode" << endl;
+            os << "//\t\tset bitmask of control bits of interested (BMSS) = " << inst->self_predicate.bmss << endl;
+            info[fu_id].bmss = inst->self_predicate.bmss;
             // Encode control entry            
             for(auto ctrlEntry = inst->self_predicate.lut.begin(); ctrlEntry != inst->self_predicate.lut.end(); ctrlEntry++){
               // Control Entry Index is being used as key index for accessing the control LUT
@@ -390,7 +395,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Encode the Destination Register
           for(int resultIdx = 0; resultIdx < inst->values.size(); resultIdx++){
             if(inst->values[resultIdx].reg != -1){
-              info[fu_id].resultRegRoute[resultIdx] = inst->values[resultIdx].reg;
+              int regIdx = inst->values[resultIdx].reg;
+              os << "//\t\twrite "<< resultIdx << "th result to register " << regIdx <<endl;
+              info[fu_id].resultRegRoute[resultIdx] = regIdx;
             }
           }
         }// End of encoding sink Function Unit
@@ -460,6 +467,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     }
     os << "};";
   }
+  DSA_INFO << cfg_name << ": bitstream generated";
 }
 
 void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {

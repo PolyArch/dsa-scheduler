@@ -5,16 +5,18 @@ MACRO(DSANODES, DSAGenNodes)                                    // Key to the se
 MACRO(DSAEDGES, DSAGenEdges)                                    // Key to the set of DSAGen links
 MACRO(NODETYPE, nodeType)                                       // Parameter: node type (PE, SW, IVP, OVP, DMA etc.)
 MACRO(NODEID,   nodeId)                                         // Parameter: local node ID
+// Compute Node
 MACRO(PE_TYPE,  ProcessingElement)                              // Node Type: Processing Element
 MACRO(SW_TYPE,  Switch)                                         // Node Type: Switch
+// Synchronization Node
 MACRO(IVP_TYPE, InputVectorPort)                                // Node Type: Input Vector Port
 MACRO(OVP_TYPE, OutputVectorPort)                               // Node Type: Output Vector Port
-MACRO(DMA_TYPE, DirectMemoryAccess)                             // Node Type : Direct Memory Access
-MACRO(SPM_TYPE, ScratchpadMemory)                               // Node Type : Scratchpad Memory
-MACRO(REC_TYPE, RecurrenceEngine)                               // Node Type : Recurrence Engine
-MACRO(DIS_TYPE, DiscardEngine)                                  // Node Type : Discard Engine
-MACRO(GEN_TYPE, GenerateEngine)                                 // Node Type : Generate Engine
-MACRO(REG_TYPE, RegisterEngine)                                 // Node Type : Register Engine
+// Memory Node
+MACRO(DMA_TYPE, DirectMemoryAccess)                             // Node Type: Direct Memory Access
+MACRO(SPM_TYPE, ScratchpadMemory)                               // Node Type: Scratchpad Memory
+MACRO(REC_TYPE, RecurrenceEngine)                               // Node Type: Recurrence Engine
+MACRO(GEN_TYPE, GenerateEngine)                                 // Node Type: Generate Engine
+MACRO(REG_TYPE, RegisterEngine)                                 // Node Type: Register Engine
 
 /**
  * @brief DSAGen Link Parsing Parameter
@@ -127,29 +129,32 @@ MACRO(PE_INST_OPCODE, _Opcode)
 MACRO(PE_INST_RES_OUT, _ResultOut_)
 MACRO(PE_INST_RES_REG, _ResultReg_)
 
+
 /**
- * @brief Input Vector Port Parameter Definition
+ * @brief Common Vector Port Parameter Definition
  */
-MACRO(IVP_NODE, dsagen2.sync.config.SyncKeys$IVPNode$)          // Key to the IVP's parameters
-MACRO(IVP_BROADCAST, streamBroadcast)                           // Parameter: bool, true if input vector port support broadcast
-MACRO(IVP_PRED, predicated)                                     // Parameter: bool, trun if IVP support predication
-MACRO(IVP_SUGGEST_DEPTH, suggestDepth)                          // Parameter: uint, unit in byte, suggested depth of vector
+MACRO(DEPTH_BYTE, depthByte)                                    // Parameter: uint, unit in byte, suggested depth of vector
                                                                 //  to buffer data between memory and compute system. This is
                                                                 //  just suggested depth. The minimum depth (in byte) at least
                                                                 //  need to buffer two vector (one for memory, one for compute)
                                                                 //  if the suggest depth is smaller than minimum depth, hardware
                                                                 //  generator will use the minimum depth instead.
-MACRO(IVP_REPEAT, streamRepeated)                               // Parameter: bool, true if IVP support repeat vector
-MACRO(IVP_STR_STATE, streamStated)                              // Parameter: bool, true if IVP support stream state
+MACRO(VP_IMPL, vpImpl)                                          // Parameter: int, Full XBar (0); Limited XBar (1); Non XBar (2)
+MACRO(VP_STATE, vpStated)                                       // Parameter: bool, true if VP support stream state
+
+/**
+ * @brief Input Vector Port Parameter Definition
+ */
+MACRO(IVP_NODE, dsagen2.sync.config.SyncKeys$IVPNode$)          // Key to the IVP's parameters
+MACRO(IVP_BROADCAST, broadcastIVP)                              // Parameter: bool, true if input vector port support broadcast
+MACRO(IVP_REPEAT, repeatedIVP)                                  // Parameter: bool, true if IVP support repeat vector
 
 /**
  * @brief Output Vector Port Parameter Definition
  */
 MACRO(OVP_NODE, dsagen2.sync.config.SyncKeys$OVPNode$)          // Key to Output Vector Port's Parameters
-MACRO(OVP_SUGGEST_DEPTH, suggestDepth)                          // Parameter: uint, suggest depth like IVP above
-MACRO(OVP_STR_STATE, streamStated)                              // Parameter: bool, true if OVP support stream state
-MACRO(OVP_PRED, predicated)                                     // Parameter: bool, true if OVP support predication
-MACRO(OVP_TASKFLOW, taskflow)                                   // TODO: Parameter: bool, support task scheduling at OVP
+MACRO(OVP_DISCARD, discardOVP)                                  // TODO: Parameter: bool, support discard at OVP
+MACRO(OVP_TASKFLOW, taskOVP)                                    // TODO: Parameter: bool, support task scheduling at OVP
 
 /**
  * @brief Memory Node Parameter Definition
@@ -175,7 +180,6 @@ MACRO(NUM_MEM_WRITE, numWrite)                                  // Parameter: ui
 MACRO(NUM_MEM_READ, numRead)                                    // Parameter: uint, number of read operation can be supported
                                                                 //  at the same cycle
 MACRO(MEM_CAP, capacity)                                        // Parameter: uint, memory capacity in [[MEM_UNITBITS]]
-MACRO(MEM_PRED, predicated)                                     // Parameter: bool, true if memory support predication generation
 MACRO(MEM_STR_STATE, streamStated)                              // Parameter: bool, true if memory support stream state
 MACRO(MEM_PADDING, LinearPadding)                               // Parameter: bool, true if memory support linear vector padding
 MACRO(MEM_MAX_L1D, MaxLength1D)                                 // Parameter: uint, maximum length for 1D stream

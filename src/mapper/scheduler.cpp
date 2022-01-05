@@ -127,6 +127,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   Schedule* sched = nullptr;
 
   // the name without preceeding dirs or file extension
+  bool verbose = dsa::ContextFlags::Global().verbose;
   string dfg_base = basename(dfg->filename);
   string pdg_dir = basedir(dfg->filename);  // preceeding directories only
   if (pdg_dir[pdg_dir.length() - 1] != '\\' || pdg_dir[pdg_dir.length() - 1] != '/') {
@@ -149,7 +150,10 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   if (check_feasible(dfg, model)) {
     auto sigint_handler = [](int) { exit(1); };
-    std::cout << "feasible checked" << std::endl;
+    if(verbose) {
+      DSA_INFO << "DFG=" << dfg_base << ", ADG=" << model_base;
+      DSA_INFO << "Feasibility checked, scheduling ... ";
+    }
 
     // Setup signal so we can stop if we need to
     struct sigaction sigIntHandler;
@@ -200,8 +204,11 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   if (!succeed_sched || sched == nullptr) {
     cout << "Cannot be scheduled, try a smaller DFG!\n\n";
     return 1;
+  }else{
+    if(verbose) DSA_INFO << "Spatial scheduling finished!";
   }
 
+  // Scheduling Finished
   std::string config_header = pdg_rawname + ".dfg.h";
   std::ofstream osh(config_header);
   DSA_CHECK(osh.good());

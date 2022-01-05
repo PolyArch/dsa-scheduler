@@ -21,35 +21,52 @@ struct ControlEntry {
 
 // Struct that collects all node configuration
 struct NodeInfo {
-  // ---------- Switch Configuration Info ----------
+  
+  /////////////////////////////
+  /////////  Switch  //////////
+  /////////////////////////////
 
-  // ----- Switch Routing Configuration -----
-  // Coarse grained output port based routing info (TODO: subnet level routing to be
-  // included) output[i] --> input[j]
+  // Routing configuration per output port
+  // TODO: subnet-level routing info is missing here
   std::map<int, int> outputRoute{{-1, -1}};
 
-  // ---------- Processing Element Configuration Info ----------
-
-  // ----- PE instruction info -----
-  // Operand Route and Delay: operandIdx -> input/delay
+  //////////////////////////////
+  //// Processing Element //////
+  //////////////////////////////
+  
+  /*- Instruction: operation that applies to operands
+    - Control lookup table: control behavior related to instruction
+    - Control bitmask: select bit of interest to access control lookup table */
+  
+  // Input Ports / Registers -> Operands (zero means select null)
   std::map<int, int> operandRoute{{-1, -1}};
+  // Delay of Operands for static PE (dynamic PE will not have this fields)
   std::map<int, int> operandDelay{{-1, -1}};
-  // Control Configuration
+  // Control Mode: Self-controlled (self-produced result as control key); Input-controlled
   int ctrlMode{0};
+  // Input Ports -> Input-controlled predicate (zero means select null)
   int inputCtrlRoute{0};
+  // Opcode per instruction
   int opcode{0};
-  // Result Output Route: result[i] -> output[j]
+  // Results -> Output Ports
   std::map<int, int> resultOutRoute{{-1, -1}};
+  // Results -> Registers
   std::map<int, int> resultRegRoute{{-1, -1}};
-
-  // ----- Per control entry info -----
+  
+  // Vector of Control Lookup Table
   std::vector<ControlEntry> ctrlLUT;
+  // Bitmask to filter out the bit of interests in predicate to access control LUT
+  int bmss{0};
 
-  // ---------- Vector Port ----------
+//////////////////////////////////////
+/// Input/Output Vector Port  ////////
+//////////////////////////////////////
+/**
+ * @brief Vector Port Configuration Info
+ * - Mapping between physical port index and order in stream
+ */
 
-  // Mapping between physical port index and order in stream
-  // IVP : Physical Port Index -> Order in Stream
-  // OVP : Order in Stream -> Physical Port Index
+  // IVP : Physical Port Index -> Order in Stream; OVP : Order in Stream -> Physical Port Index
   std::map<int, int> vectorRoute{{-1, -1}};
 };
 
@@ -58,11 +75,11 @@ enum ReconfNodeType { PE_NODE_TYPE, SW_NODE_TYPE, IVP_NODE_TYPE, OVP_NODE_TYPE }
 
 struct BitstreamWriter : Visitor {
   // The protocol of reconfiguration
-  int nodeTypeBits = 2;  // configBits[63:62]
-  int nodeIdBits = 8;    // configBits[61:54]
-  int cfgGroupBits = 2;  // configBits[53:52]
-  int cfgIndexBits = 4;  // configBits[51:48]
-  int cfgInfoBits = 48;  // configBits[47: 0]
+  int nodeTypeBits  = 2;  // configBits[63:62]
+  int nodeIdBits    = 8;  // configBits[61:54]
+  int cfgGroupBits  = 2;  // configBits[53:52]
+  int cfgIndexBits  = 4;  // configBits[51:48]
+  int cfgInfoBits   = 48; // configBits[47: 0]
 
   // Total number of bits should be 64
   int totalBits = nodeTypeBits + nodeIdBits + cfgGroupBits + cfgIndexBits + cfgInfoBits;
@@ -70,7 +87,7 @@ struct BitstreamWriter : Visitor {
   int nodeIdLow = nodeTypeLow - nodeIdBits;
   int cfgGroupLow = nodeIdLow - cfgGroupBits;
   int cfgIndexLow = cfgGroupLow - cfgIndexBits;
-  // 768 means 16 * 48 bit configuration per group
+  // 768 means 16 * 48 bit configuration per group (which is the maximum bit for a reconfigurable node)
   std::bitset<768> cfgInfoBitset{0};
   std::bitset<768> cfgInfoMask{0xFFFFFFFFFFFF};
 
@@ -193,6 +210,9 @@ struct BitstreamWriter : Visitor {
       DSA_CHECK(ni.ctrlLUT.size() == fu->ctrlLUTSize())
           << "Size of LUT is " << ni.ctrlLUT.size() << ", but it is " << fu->ctrlLUTSize()
           << " in FU parameters";
+      // Write BMSS to bitstream, the width of BMSS is fixed to 6 for now
+      cfgInfoBitset <<= 6;
+      cfgInfoBitset |= ni.bmss;
       for (int entryIdx = fu->ctrlLUTSize() - 1; entryIdx >= 0; entryIdx--) {
         // Abstain
         cfgInfoBitset <<= 1;

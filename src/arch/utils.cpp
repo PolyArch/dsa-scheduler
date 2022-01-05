@@ -67,7 +67,12 @@ SpatialFabric* Import(std::string filename) {
         // Create different ssnode based on the node Type
         ssnode* node;
         if(verbose) DSA_INFO << "\tCreate:\t" << nodeType << "." << localNodeId;
+        // Create DSA node based on the node type
         if (nodeType == ADGKEY_NAMES[PE_TYPE]) {
+          //////////////////////////////
+          //// Processing Element //////
+          //////////////////////////////
+
           // Get the node parameter first
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
           // Get the node type and node Id from node parameter
@@ -191,7 +196,11 @@ SpatialFabric* Import(std::string filename) {
           DSA_CHECK(globalNodeId == node->id());
           globalNodeId++;
           fu_tab[localNodeId] = node;
-        } else if (nodeType == ADGKEY_NAMES[SW_TYPE]) {  // Create ssswitch
+        } else if (nodeType == ADGKEY_NAMES[SW_TYPE]) {
+          /////////////////////////////
+          /////////  Switch  //////////
+          /////////////////////////////
+
           // Get node parameter
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
           // Get the node type and node Id from node parameter
@@ -232,6 +241,10 @@ SpatialFabric* Import(std::string filename) {
           globalNodeId++;
           sw_tab[localNodeId] = node;
         } else if (nodeType == ADGKEY_NAMES[IVP_TYPE]) {
+          //////////////////////////////////////
+          ///////// Input Vector Port  /////////
+          //////////////////////////////////////
+
           // Get node parameter
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[IVP_NODE]];
           // Get the node type and node Id from node parameter
@@ -249,12 +262,24 @@ SpatialFabric* Import(std::string filename) {
           // Get the compute unit bits
           int compUnitBits = 8;  // defined by connected compute node, for now just 8
           // Get the suggest depth for the vector port
-          int suggestDepth = nodeParam[ADGKEY_NAMES[IVP_SUGGEST_DEPTH]].asInt();
+          int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
           auto vp = new ssvport(compBits, compUnitBits,
                                 /* max_util */ 1,
                                 /* dynamic timing */ true,
                                 /* fifo depth=*/suggestDepth);
+          // Set the vector port implementation
+          int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
+          vp->vp_impl(vpImpl);
+          // Set the stream-stated vector port
+          bool state = nodeParam[ADGKEY_NAMES[VP_STATE]].asBool();
+          vp->vp_stated(state);
+          // Set the repeat port (IVP only)
+          bool repeat = nodeParam[ADGKEY_NAMES[IVP_REPEAT]].asBool();
+          vp->repeatIVP(repeat);
+          // Set the broadcast port (IVP only)
+          bool broadcast = nodeParam[ADGKEY_NAMES[IVP_BROADCAST]].asBool();
+          vp->broadcastIVP(broadcast);
           // Add the node to spatial fabric
           vp->port(localNodeId);
           vp->localId(localNodeId);
@@ -265,6 +290,10 @@ SpatialFabric* Import(std::string filename) {
           globalNodeId++;
           ivp_tab[localNodeId] = node;
         } else if (nodeType == ADGKEY_NAMES[OVP_TYPE]) {
+          //////////////////////////////////////
+          ///////// Output Vector Port  ////////
+          //////////////////////////////////////
+
           // Get node parameter
           Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[OVP_NODE]];
           // Get the node type and node Id from node parameter
@@ -282,12 +311,24 @@ SpatialFabric* Import(std::string filename) {
           // Get the compute unit bits
           int compUnitBits = 8;  // defined by connected compute node, for now just 8
           // Get the suggest depth for the vector port
-          int suggestDepth = nodeParam[ADGKEY_NAMES[OVP_SUGGEST_DEPTH]].asInt();
+          int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
           auto vp = new ssvport(compBits, compUnitBits,
                                 /* max_util */ 1,
                                 /* dynamic timing */ true,
                                 /* fifo depth=*/suggestDepth);
+          // Set the vector port implementation
+          int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
+          vp->vp_impl(vpImpl);
+          // Set the stream-stated vector port properties
+          bool state = nodeParam[ADGKEY_NAMES[VP_STATE]].asBool();
+          vp-> vp_stated(state);
+          // Set taskflow properties
+          bool task = nodeParam[ADGKEY_NAMES[OVP_TASKFLOW]].asBool();
+          vp->taskOVP(task);
+          // Set discard properties
+          bool discard = nodeParam[ADGKEY_NAMES[OVP_DISCARD]].asBool();
+          vp->discardOVP(discard);
           // Add the node to spatial fabric
           vp->port(localNodeId);
           vp->localId(localNodeId);
@@ -297,18 +338,32 @@ SpatialFabric* Import(std::string filename) {
           globalNodeId++;
           ovp_tab[localNodeId] = node;
         } else if (nodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
-          // Create Direct Memory Access
+          /////////////////////////////////////////
+          ///////// Direct Memory Access  /////////
+          /////////////////////////////////////////
+
         } else if (nodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
-          // Create Scratchpad
+          //////////////////////////////////////
+          ///////// Scratchpad Memory  /////////
+          //////////////////////////////////////
+          
         } else if (nodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
-          // Create Recurrence Engine
-        } else if (nodeType.compare(ADGKEY_NAMES[DIS_TYPE]) == 0) {
-          // Create Discard Engine
+          //////////////////////////////////////
+          ///////// Recurrence Engine  /////////
+          //////////////////////////////////////
+
         } else if (nodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
-          // Create Generate Engine
+          //////////////////////////////////////
+          ///////// Generation Engine  /////////
+          //////////////////////////////////////
+
         } else {
           // If reach here, it must be register engine
           assert(nodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0);
+          //////////////////////////////////////
+          /////////  Register Engine   /////////
+          //////////////////////////////////////
+
         }
       }  // End of loop over all nodes
       DSA_CHECK(fu_tab.size() > 0);
