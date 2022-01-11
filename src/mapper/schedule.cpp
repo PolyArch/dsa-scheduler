@@ -223,7 +223,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         
         if(sourceIVPNode != nullptr){
           // Get the order in stream
-          int vid = edge->vid;
+          int vid = edge->vid + sourceIVPNode->vp_stated();
           // Get the physcial compute port index for this input vector port
           int pid = dsa::vector_utils::indexing(currLink,sourceIVPNode->out_links());
           // Check the pid and vid
@@ -233,7 +233,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Please be attention: for IVP, this mapping is physical port to order in stream mapping
           // + 1:           zero maps to null
           // + vp_stated(): if vector port is stated, Lowest port is left for state stream
-          info[sourceIVPNode->id()].vectorRoute[pid] = vid + 1 + sourceIVPNode->vp_stated();
+          info[sourceIVPNode->id()].vectorRoute[pid] = vid + 1;
           // Sanity check, stated edge should maps to stated vector port
           if(edge->sourceStated()){
             DSA_CHECK(sourceIVPNode->vp_stated()) << "Stated edge comes from non-stated vector port";
@@ -438,7 +438,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Get the output of DFG: an edge whose last link points to OVP means such edge must points to OutputPort (DFG)
           dsa::dfg::OutputPort* outNdoe = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
           // Get the source index of this edge
-          int sourceIdx = outNdoe->sourceEdgeIdx(edge);
+          // The source index should be combined with state: 
+          // if the edge is not stated defined by sink node, source Index should + 1 if sink OVP is stated
+          int sourceIdx = outNdoe->sourceEdgeIdx(edge) + (!edge->sinkStated() ? sinkOVPNode->vp_stated() : 0);
           // Make sure that each edge has a non-negative sourceIdx
           DSA_CHECK(sourceIdx >= 0) << "The order in stream for edge connected to OVP cannot be negative";
           DSA_CHECK(pid >= 0) << "The index of physical port cannot be negative";

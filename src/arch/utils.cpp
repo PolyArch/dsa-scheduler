@@ -286,7 +286,8 @@ SpatialFabric* Import(std::string filename) {
           node = vp;
           sf->add_node(node);
           DSA_CHECK(globalNodeId == node->id())
-              << "Global ID = " << globalNodeId << ", node->id() = " << node->id();
+              << "Global ID = " << globalNodeId << ", node->id() = " << node->id()
+              << ", localNodeId = " << localNodeId << ", vp->localId() = " << vp->localId();
           globalNodeId++;
           ivp_tab[localNodeId] = node;
         } else if (nodeType == ADGKEY_NAMES[OVP_TYPE]) {
@@ -335,6 +336,9 @@ SpatialFabric* Import(std::string filename) {
           node = vp;
           sf->add_node(node);
           DSA_CHECK(globalNodeId == node->id());
+          DSA_CHECK(globalNodeId == node->id())
+              << "Global ID = " << globalNodeId << ", node->id() = " << node->id()
+              << ", localNodeId = " << localNodeId << ", vp->localId() = " << vp->localId();
           globalNodeId++;
           ovp_tab[localNodeId] = node;
         } else if (nodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
