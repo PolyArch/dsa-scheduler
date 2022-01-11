@@ -182,10 +182,13 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     auto &edge_list = ssDFG->edges;
     auto &vertex_list = ssDFG->nodes;
 
-    // This is the collection of node configuration, size of #node
-    // Please use global id to access it
-    std::vector<dsa::adg::bitstream::NodeInfo> info( 
-      this->ssModel()->subModel()->node_list().size());
+    // This is the collection of node configuration, size of #node, global node id needed
+    std::vector<dsa::adg::bitstream::NodeInfo> info(this->ssModel()->subModel()->node_list().size());
+    
+    /////////////////////////////////////////////
+    //////////// Loop over all edges ////////////
+    /////////////////////////////////////////////
+
     for (auto& ep : _edgeProp) {
 
       // Traverse all edges to gather all node reconfiguration
@@ -193,7 +196,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
       os << "// -------- EDGE:" << edge_idx << ", extra_lat = " << ep.extra_lat
          << " -------- " << endl;
 
-      // Loop over all links on this edge
+      // Loop over all physical links on this edge
       for(auto link_iter = ep.links.begin(); link_iter < ep.links.end(); link_iter++){
         // Get the current link and next link
         sslink* currLink = link_iter->second;
@@ -212,29 +215,45 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         ssfu*     sinkFuNode =    dynamic_cast<ssfu*>(currLink->sink());
         ssvport*  sinkOVPNode =   dynamic_cast<ssvport*>(currLink->sink());
         
-        /* Source Input Vector Port --> CurrLink */
+        ///////////////////////////////////////////////
+        //// Source Input Vector Port --> CurrLink ////
+        ///////////////////////////////////////////////
+        
         // Set the physical port to order in stream routing
+        
         if(sourceIVPNode != nullptr){
           // Get the order in stream
           int vid = edge->vid;
-          // Get the physcial port index
+          // Get the physcial compute port index for this input vector port
           int pid = dsa::vector_utils::indexing(currLink,sourceIVPNode->out_links());
           // Check the pid and vid
           DSA_CHECK(vid >= 0) << "Vector Index cannot be negative";
           DSA_CHECK(pid >= 0) << "Physical Port Index cannot be negative";
-          // Record the mapping, +1 since zero means connected to ground
-          // Please be attention: for IVP, this is physical port to order in stream mapping
-          info[sourceIVPNode->id()].vectorRoute[pid] = vid + 1;
+          // Record the mapping
+          // Please be attention: for IVP, this mapping is physical port to order in stream mapping
+          // + 1:           zero maps to null
+          // + vp_stated(): if vector port is stated, Lowest port is left for state stream
+          info[sourceIVPNode->id()].vectorRoute[pid] = vid + 1 + sourceIVPNode->vp_stated();
+          // Sanity check, stated edge should maps to stated vector port
+          if(edge->sourceStated()){
+            DSA_CHECK(sourceIVPNode->vp_stated()) << "Stated edge comes from non-stated vector port";
+          }
           // Write comment to header file
           os << "//\tconfig " << sourceIVPNode->name() << endl
                << "//\t\troute value[" << vid << "] to vport[" << pid << "]" << endl;
         }
 
-        /* Source Switch --> CurrLink */
-        // Nothing to be set
+        ////////////////////////////////////
+        //// Source Switch --> CurrLink ////
+        ////////////////////////////////////
+        
+        // Nothing to be done: handled at sink switch 
         if(sourceSwNode != nullptr){}
-
-        /* Source Function Unit --> CurrLink */
+        
+        ///////////////////////////////////////////
+        //// Source Function Unit --> CurrLink ////
+        ///////////////////////////////////////////
+        
         // Set the output routing for source FU
 
         // if current link points from fu, we should encode output routing info
@@ -249,8 +268,11 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           os << "//\tconfig " << sourceFuNode->name() << endl
                << "//\t\troute result 0 to output port " << output_port_idx << endl;
         }
+
+        ///////////////////////////////////////////////
+        //// CurrLink --> Sink Switch --> NextLink ////
+        ///////////////////////////////////////////////
         
-        /* CurrLink --> Sink Switch --> NextLink*/
         // Set the routing configuration for Sink Switch
         
         // if current link points to switch
@@ -269,7 +291,10 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
              << endl;
         }
         
-        /* --> CurrLink --> Sink Function Unit */
+        /////////////////////////////////////////////
+        //// --> CurrLink --> Sink Function Unit ////
+        /////////////////////////////////////////////
+
         // Set operand selection
         // Set operand delay
         // Set function unit opcode
@@ -282,9 +307,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           int fu_id = sinkFuNode->id();
           // TODO: Sihao: no decomposability supported, so I just take first slot and first vertex
           auto* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
-          // int vertex_idx = vertex_pair.second;
+          // Found the index of this edge (the index of operand)
           int operandIdx = vector_utils::indexing(edge, operands[vertex->id()]);
-          // which input port does this edge used
+          // Found the index of physical port that this edge maps to
           int input_port_idx = dsa::vector_utils::indexing(currLink, sinkFuNode->in_links());
           // Get Encode for Operands Routing
           DSA_CHECK(input_port_idx >= 0) << "not found input port";
@@ -402,36 +427,42 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           }
         }// End of encoding sink Function Unit
 
-        /* CurrLink --> Sink Output Vector Port */
+        //////////////////////////////////////////////
+        //// CurrLink --> Sink Output Vector Port ////
+        //////////////////////////////////////////////
+
         // Set the order in stream to physical port routing
         if(sinkOVPNode != nullptr){
           // Get the physical port index
           int pid = dsa::vector_utils::indexing(currLink,sinkOVPNode->in_links());
           // Get the output of DFG: an edge whose last link points to OVP means such edge must points to OutputPort (DFG)
-          dsa::dfg::OutputPort * outNdoe = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
-          // Get the operands of this output node
-          std::vector<dsa::dfg::Operand> operands = outNdoe->ops();
-          // Get the order in stream 
-          int vid = -1;
-          for (int i = 0; i < operands.size(); ++i) {
-            if(edge->id == operands[i].edges[0]){
-              vid = i;
-              break;
-            }
-          }
-          // Make sure that each edge has a non-negative vid
-          DSA_CHECK(vid >= 0) << "The order in stream for edge connected to OVP cannot be negative";
+          dsa::dfg::OutputPort* outNdoe = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
+          // Get the source index of this edge
+          int sourceIdx = outNdoe->sourceEdgeIdx(edge);
+          // Make sure that each edge has a non-negative sourceIdx
+          DSA_CHECK(sourceIdx >= 0) << "The order in stream for edge connected to OVP cannot be negative";
           DSA_CHECK(pid >= 0) << "The index of physical port cannot be negative";
           // Record the mapping, + 1 since zero means connected to ground
           // Please be attention: for OVP, this is order in stream to physical mapping
-          info[sinkOVPNode->id()].vectorRoute[vid] = pid + 1;
+          info[sinkOVPNode->id()].vectorRoute[sourceIdx] = pid + 1;
+          // Sanity check: stated edge
+          if(edge->sourceStated()){
+            // Stated edge should goes to a output port (software) which is penetrated
+            DSA_CHECK(edge->sinkStated()) << "Source stated edge goes to output port, but not stated to output port";
+            // Stated edge should goes to lowest position
+            DSA_CHECK(sourceIdx == 0) << "Stated edge goes to output vector port, but stream position is not zero";
+          }
           // Write comment to header file
           os << "//\tconfig " << sinkOVPNode->name() << endl
-               << "//\t\troute vport[" << pid << "] to value[" << vid << "]" << endl;
+               << "//\t\troute vport[" << pid << "] to value[" << sourceIdx << "]" << endl;
         }
       }// Loop end for all links on this edge
       edge_idx++;
-    }// Loop end for all edges
+    }
+
+    /////////////////////////////////////////////
+    ////////////  Loop end all edges ////////////
+    /////////////////////////////////////////////
 
     // Debug Print
     // DSA_INFO << "Number of node = " << ssModel()->subModel()->node_list().size();
@@ -446,7 +477,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     }
     os << endl;
     
-    // Debug
+    // Debug Print
     // DSA_INFO << "Finish Counting the Configuration Words";
 
     // Print the header file

@@ -78,14 +78,14 @@ struct Operand {
   /*! \brief If this operand is a register. */
   bool isReg();
 
-  int regIdx() { 
+  int regIdx() {
     DSA_CHECK(isReg());
-    return imm & (~((uint32_t) 0));
+    return imm & (~((uint32_t)0));
   }
 
   int regDtype() {
     DSA_CHECK(isReg());
-    return (imm >> 32) & (~((uint32_t) 0));
+    return (imm >> 32) & (~((uint32_t)0));
   }
 
   /*! \brief The DFG this edge belongs to. */
@@ -140,14 +140,24 @@ struct Edge {
   std::string name() const;
   /*! \brief The bitwidth of this data path. */
   int bitwidth() { return r - l + 1; }
-  
+  /*! \brief Helper function to check whether an edge is stated as defined by source node
+   */
+  bool sourceStated();
+  /*! \brief Helper function to check whether an edge is stated as defined by sink node */
+  bool sinkStated();
+
   /*! \brief The index of the edge in the parent's edge list. */
   int id{-1};
   /*! \brief The DFG this edge belongs to. */
   SSDfg* parent{nullptr};
-  /*! \brief The node produces the source value. */
+  /*! \brief The node produces the source value. 
+   * sid: The id of source node to this edge
+   * vid: The output index of this edge to its source node
+  */
   int sid{-1}, vid{-1};
-  /*! \brief The consumer of this edge. */
+  /*! \brief The consumer of this edge. 
+   * uid: The node id of sink node to this edge
+  */
   int uid{-1};
   /*! \brief The slicing applied on the source value. */
   int l{-1}, r{-1};
@@ -189,6 +199,9 @@ class Node {
   int id() { return _ID; }
 
   virtual void forward() = 0;
+
+  // Helper function to get the index of source edge to this node
+  int sourceEdgeIdx(dsa::dfg::Edge* sourceEdge);
 
   //--------------------------------------------
 

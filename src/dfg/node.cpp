@@ -30,6 +30,30 @@ dsa::dfg::Edge* Node::getLinkTowards(Node* to) {
   return nullptr;
 }
 
+/**
+ * @brief Helper function to get the index of source edge to this node
+ * @param sourceEdge Edge that may point to this node
+ * @return int: index of this edge that points to this node
+ *  -1 means that this edge does not point to this node
+ */
+int Node::sourceEdgeIdx(dsa::dfg::Edge* sourceEdge) {
+  // Get the operands of this node
+  std::vector<dsa::dfg::Operand> operands = ops();
+  // Set the initial index of given edge
+  int idx = -1;
+  // Loop over all operands to see if edge id match
+  for (int i = 0; i < operands.size(); ++i) {
+    if (sourceEdge->id == operands[i].edges[0]) {
+      idx = i;
+      break;
+    }
+  }
+  // return index found
+  return idx;
+}
+
+// For each edge, the vid (valud id) is sinkEdgeIdx, so no helper function needed
+
 Operand::Operand(SSDfg* parent, const std::vector<int>& es, OperandType type_)
     : parent(parent), edges(es), type(type_), fifos(es.size()) {
   for (auto eid : es) {
@@ -38,15 +62,16 @@ Operand::Operand(SSDfg* parent, const std::vector<int>& es, OperandType type_)
   }
 }
 
-Operand::Operand(SSDfg *parent_, uint64_t imm_) :
-  parent(parent_), imm(imm_), type(OperandType::data) {}
+Operand::Operand(SSDfg* parent_, uint64_t imm_)
+    : parent(parent_), imm(imm_), type(OperandType::data) {}
 
-Operand::Operand(SSDfg *parent_, OperandType ty, uint64_t imm_) :
-  parent(parent_), imm(imm_), type(ty) {}
+Operand::Operand(SSDfg* parent_, OperandType ty, uint64_t imm_)
+    : parent(parent_), imm(imm_), type(ty) {}
 
-Operand::Operand(SSDfg *parent_, int dtype, int idx) :
-  parent(parent_), imm((((uint64_t) dtype) << 32) | idx), type(OperandType::local_reg) {
-}
+Operand::Operand(SSDfg* parent_, int dtype, int idx)
+    : parent(parent_),
+      imm((((uint64_t)dtype) << 32) | idx),
+      type(OperandType::local_reg) {}
 
 bool Operand::isImm() { return type == OperandType::data && edges.empty(); }
 
@@ -63,9 +88,8 @@ bool Operand::ready() {
       return false;
     }
     if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
-      DSA_LOG(FORWARD)
-        << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
-        << fifos[i].front().available_at;
+      DSA_LOG(FORWARD) << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
+                       << fifos[i].front().available_at;
       return false;
     }
   }
@@ -111,6 +135,34 @@ Node* Edge::def() const {
   return parent->nodes[sid];
 }
 
+/**
+ * @brief Helper function that tells whether this edge is stated edge defined by source
+ * node
+ * @return true: source node is input port and port is stated and vid of this edge is 0
+ * @return false: Other cases
+ */
+bool Edge::sourceStated() {
+  // Get the source node and cast it to input port
+  dsa::dfg::InputPort* ip = dynamic_cast<dsa::dfg::InputPort*>(def());
+  return ip != nullptr && ip->stated && vid == 0;
+}
+
+/**
+ * @brief Helper function that tells whether this edge is stated edge defined by sink node
+ * @return true: sink node is output port whose penetrate_state is not -1 and this edge is
+ * first edge to this port
+ * @return false: other case
+ */
+bool Edge::sinkStated() {
+  // Get the sink node and cast it into output port
+  dsa::dfg::OutputPort* op = dynamic_cast<dsa::dfg::OutputPort*>(use());
+  // Get the source side index of this edge to output port
+  int sourceEdgeIdx = op->sourceEdgeIdx(this);
+  // Edge is stated defined by sink node
+  // Sink node is output port, output port is penetratable, edge index to sink node is 0
+  return op != nullptr && (op->penetrated_state >=0) && sourceEdgeIdx == 0;
+}
+
 Value* Edge::val() const {
   auto node = def();
   DSA_CHECK(vid < node->values.size()) << vid << " " << node->values.size();
@@ -122,9 +174,7 @@ Node* Edge::use() const {
   return parent->nodes[uid];
 }
 
-Node* Edge::get(int x) const {
-  return x ? use() : def();
-}
+Node* Edge::get(int x) const { return x ? use() : def(); }
 
 std::string Edge::name() const {
   std::stringstream ss;
@@ -154,13 +204,14 @@ bool Value::forward(bool attempt) {
           if ((int)operand.fifos[i].size() + 1 < edge->buf_len
               /*FIXME: The buffer size should be something more serious*/) {
             if (!attempt) {
-              sim::SpatialPacket entry(data.available_at + edge->delay, data.value, data.valid);
-              DSA_LOG(FORWARD)
-                << parent->cur_cycle() << ": " << name() << " pushes "
-                << data.value << "(" << data.valid << ")"
-                << "to " << user->use()->name() << "'s " << j << "th operand "
-                << operand.fifos[i].size() + 1 << "/" << edge->buf_len
-                << " in " << edge->delay << " cycles(" << entry.available_at << ")";
+              sim::SpatialPacket entry(data.available_at + edge->delay, data.value,
+                                       data.valid);
+              DSA_LOG(FORWARD) << parent->cur_cycle() << ": " << name() << " pushes "
+                               << data.value << "(" << data.valid << ")"
+                               << "to " << user->use()->name() << "'s " << j
+                               << "th operand " << operand.fifos[i].size() + 1 << "/"
+                               << edge->buf_len << " in " << edge->delay << " cycles("
+                               << entry.available_at << ")";
               operand.fifos[i].push(entry);
             }
           } else {

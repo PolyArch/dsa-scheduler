@@ -703,11 +703,11 @@ class ssvport : public ssnode {
  protected:
   // Vector Port Implementation (Both input and output vector port)
   // Example: A 8-wide vector port is used as a 4-wide vector port
-  // 0 : Full XBar Implementation
+  // 0 : Full XBar Implementation: Any-to-any connection
   //     Memory A[3:0] -> Compute [ A[1], [X], A[3], [X], [X], [X], A[2], A[0] ]
-  // 1 : Limited XBar Implementation
+  // 1 : Limited XBar Implementation: To any port, but ordered
   //     Memory A[3:0] -> Compute [ A[3], [X], A[2], [X], [X], [X], A[1], A[0] ]
-  // 2 : Non-XBar Implementation
+  // 2 : Non-XBar Implementation: Only go to lowest ports
   //     Memory A[3:0] -> Compute [ [X], [X], [X], [X], A[3], A[2], A[1], A[0] ]
   int vp_impl_{0};
 
@@ -733,7 +733,7 @@ class ssvport : public ssnode {
  public:
   DEF_ATTR(port)
   DEF_ATTR(vp_impl)       // IVP & OVP
-  DEF_ATTR(vp_stated)        // IVP & OVP
+  DEF_ATTR(vp_stated)     // IVP & OVP
   DEF_ATTR(repeatIVP)     // IVP
   DEF_ATTR(broadcastIVP)  // IVP
   DEF_ATTR(taskOVP)       // OVP

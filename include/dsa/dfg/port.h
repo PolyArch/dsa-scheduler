@@ -91,7 +91,7 @@ class OutputPort : public VectorPort {
   /*!
    * \brief If this port should penetrate the state.
    */
-  int penetrated_state;
+  int penetrated_state{-1};
 
   static std::string Suffix() { return "_out"; }
   static bool IsInput() { return false; }
