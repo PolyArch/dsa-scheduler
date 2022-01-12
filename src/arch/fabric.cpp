@@ -375,7 +375,9 @@ sslink* ssnode::add_link(ssnode* node) {
 
   link->subnet.resize(link->bitwidth() / link->source()->granularity());
   link->subnet[0] = ~0ull >> (64 - link->bitwidth());
-  link->subnet[1] = ~0ull >> (64 - link->bitwidth());
+  if (link->sink()->lanes() > 1) {
+    link->subnet[1] = ~0ull >> (64 - link->bitwidth());
+  }
 
   DSA_LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
 

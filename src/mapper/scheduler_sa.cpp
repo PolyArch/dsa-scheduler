@@ -701,6 +701,8 @@ int SchedulerSimulatedAnnealing::route(
 
         // int next_dist = next->node_dist(next_slot);
         int next_dist = node_dist[next->id()][next_slot];
+        DSA_CHECK(next_slot < node_dist[next->id()].size())
+          << next_slot << " >= " << node_dist[next->id()].size();
 
         bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
 
@@ -720,7 +722,11 @@ int SchedulerSimulatedAnnealing::route(
           openset.emplace(new_dist, new_rand_prio, next_slot % next->lanes(), next);
 
           node_dist[next->id()][next_slot] = new_dist;
+          DSA_CHECK(next_slot < node_dist[next->id()].size())
+            << next_slot << " >= " << node_dist[next->id()].size();
           came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
+          DSA_CHECK(next_slot < came_from[next->id()].size())
+            << next_slot << " >= " << came_from[next->id()].size();
         }
       }
     }
@@ -741,6 +747,7 @@ int SchedulerSimulatedAnnealing::route(
 
   while (x != source || (path_lengthen && count == 0)) {
     count++;
+    DSA_CHECK(x.first >= 0 && x.first < came_from[x.second->id()].size());
     link = came_from[x.second->id()][x.first];
 
     auto link_backup = link;
@@ -751,6 +758,7 @@ int SchedulerSimulatedAnnealing::route(
       break;
     }
 
+    DSA_CHECK(idx >= 0 && idx <= sched->links_of(edge).size());
     insert_edge(link, sched, edge, sched->links_of(edge).begin() + idx, dest, x);
 
     x = std::make_pair(link_backup.first, link.second->source());
@@ -763,6 +771,7 @@ int SchedulerSimulatedAnnealing::route(
     auto& alt_links = sched->links_of(alt_edge);
     for (auto alt_link : alt_links) {
       x = std::make_pair(alt_link.first, alt_link.second->source());
+      DSA_CHECK(idx >= 0 && idx <= sched->links_of(edge).size());
       insert_edge(alt_link, sched, edge, sched->links_of(edge).begin() + idx, dest, x);
       idx++;
 
