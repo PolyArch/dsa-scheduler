@@ -657,7 +657,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
         }
         ofs << "    };\n";
       } else {
-        ofs << "DSA_CHECK(false) << \"Instruction Not Implemented, add it to insts folder\";";
+        ofs << "DSA_CHECK(false) << name_of_inst(inst) << \" not implemented, add it to insts folder\";";
         ofs << "};\n";
       }
     }

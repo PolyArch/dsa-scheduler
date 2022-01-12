@@ -61,6 +61,8 @@ class InputPort : public VectorPort {
  public:
   bool stated;
 
+  int stationary_shift{-1};
+
   static std::string Suffix() { return ""; }
   static bool IsInput() { return true; }
 

@@ -146,6 +146,16 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
     for (auto fu : subModel()->fu_list()) {
       fu_types.push_back(new Capability(fu->fu_type_));
     }
+
+    // TODO(@were): Deprecate this shit.
+    {
+      Json::CharReaderBuilder crb;
+      std::ifstream ifs(filename);
+      std::string errs;
+      Json::Value* cgra = new Json::Value();
+      Json::parseFromStream(crb, ifs, cgra, &errs);
+      indirect((*cgra)["indirect"].asInt());
+    }
     return;
   }
 

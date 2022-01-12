@@ -257,6 +257,9 @@ struct Estimator : Visitor {
         res.add(Breakdown::Sync, sync.first, sync.second);
         std::pair<double, double> fupa(fu->fu_type_.power(), fu->fu_type_.area());
         res.add(Breakdown::FU, fupa.first, fupa.second);
+        if (fu->max_util() != 1) {
+          res.add(Breakdown::FU, 14.1, 16581.0);
+        }
         break;
       }
     }

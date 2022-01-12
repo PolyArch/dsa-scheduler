@@ -156,7 +156,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
         if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
           spots.emplace_back(0, Slot<ssnode*>(0, cand));
         } else {
-          spots.emplace_back(0, Slot<ssnode*>(0, cand));
+          bad.emplace_back(0, Slot<ssnode*>(0, cand));
         }
       }
     }

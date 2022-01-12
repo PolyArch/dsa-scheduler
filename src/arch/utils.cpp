@@ -19,7 +19,6 @@ SpatialFabric* Import(std::string filename) {
   std::string errs;
   Json::Value* cgra = new Json::Value();
   Json::parseFromStream(crb, ifs, cgra, &errs);
-  FILE* fjson = fopen(filename.c_str(), "r");
   auto res = new SpatialFabric();
   DSA_CHECK(cgra->isObject());
 
@@ -461,10 +460,12 @@ SpatialFabric* Import(std::string filename) {
       ssnode* node;
       // Initialize Different Module
       if (nodeType == "switch") {
+        bool timing = cgranode["flow_control"].asBool();
         node = new ssswitch(cgranode["data_width"].asInt(),
                             cgranode["granularity"].asInt(), cgranode["max_util"].asInt(),
-                            /*dynamic timing=*/true, /*fifo depth=*/2);
+                            /*dynamic timing=*/timing, /*fifo depth=*/2);
       } else if (nodeType == "processing element" || nodeType == "function unit") {
+        bool timing = cgranode["flow_control"].asBool();
         DSA_CHECK(cgranode["instructions"].isArray());
         bool fu_array = cgranode["fu count"].isArray();
         // DSA_CHECK(cgranode["fu count"].isArray());
@@ -481,8 +482,7 @@ SpatialFabric* Import(std::string filename) {
         }
         node = new ssfu(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
                         cgranode["max_util"].asInt(),
-                        /*dynamic timing=*/true,
-                        /*fifo depth=*/2,
+                        /*dynamic timing=*/timing, /*fifo depth=*/2,
                         /*fu capability=*/fu_type);
       } else if (nodeType == "vector port") {
         bool is_input = false;
