@@ -223,7 +223,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         
         if(sourceIVPNode != nullptr){
           // Get the order in stream
-          int vid = edge->vid + sourceIVPNode->vp_stated();
+          int vid = edge->vid + (!edge->sourceStated() ? sourceIVPNode->vp_stated() : 0);
           // Get the physcial compute port index for this input vector port
           int pid = dsa::vector_utils::indexing(currLink,sourceIVPNode->out_links());
           // Check the pid and vid
