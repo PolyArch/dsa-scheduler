@@ -143,6 +143,28 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
   DSA_CHECK(ofs.good()) << "Cannot open " << mapping_filename;
 }
 
+int valueOperandIndex(dfg::Node *node, int edgeId) {
+  int n = node->ops().size();
+  for (int i = 0; i < n; ++i) {
+    if (node->ops()[i].edges.size() == 1) {
+      if (node->ops()[i].edges[0] == edgeId) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+int registerOperandIndex(dfg::Node *node) {
+  int n = node->ops().size();
+  for (int i = 0; i < n; ++i) {
+    if (node->ops()[i].isReg()) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Write to a header file
 void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_cheat) {
   DSA_INFO << cfg_name << ": bitstream is being generated";
@@ -222,8 +244,13 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         // Set the physical port to order in stream routing
         
         if(sourceIVPNode != nullptr){
-          // Get the order in stream
-          int vid = edge->vid + (!edge->sourceStated() ? sourceIVPNode->vp_stated() : 0);
+          // Get the raw position in stream
+          int vid = edge->vid;
+          // The source software node of an edge whose source hardware node is IVP should be input port
+          dsa::dfg::InputPort* sourceSwIVPNode = dynamic_cast<dsa::dfg::InputPort*>(edge->def());
+          DSA_CHECK(sourceSwIVPNode != nullptr) << "Should be Input Port";
+          // If edge from non-state vp is mapped to state vp, then stream position should be added by 1
+          if(sourceIVPNode->vp_stated() && !sourceSwIVPNode->stated) vid++;
           // Get the physcial compute port index for this input vector port
           int pid = dsa::vector_utils::indexing(currLink,sourceIVPNode->out_links());
           // Check the pid and vid
@@ -306,24 +333,43 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // the final destination is function unit
           int fu_id = sinkFuNode->id();
           // TODO: Sihao: no decomposability supported, so I just take first slot and first vertex
-          auto* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
-          // Found the index of this edge (the index of operand)
-          int operandIdx = vector_utils::indexing(edge, operands[vertex->id()]);
+          dsa::dfg::Node* vertex = _nodeProp[fu_id].slots[0].vertices[0].first;
+          // Initialize the index of operand
+          int operandIdx = valueOperandIndex(vertex, edge->id);
           // Found the index of physical port that this edge maps to
           int input_port_idx = dsa::vector_utils::indexing(currLink, sinkFuNode->in_links());
           // Get Encode for Operands Routing
           DSA_CHECK(input_port_idx >= 0) << "not found input port";
           DSA_CHECK(operandIdx >= 0) << "This edge's destination is fu but not used?";
           {
-            os << "//\tconfig " << sinkFuNode->name() << endl
-               << "//\t\tadd extra delay " << ep.extra_lat << " for operand "
-               << operandIdx << endl
-               << "//\t\troute input port " << input_port_idx << " to operand "
-               << operandIdx << endl;
+            os << "//\tconfig " << sinkFuNode->name() << endl;
             if(operandIdx < 2){
+              // Print comment for data edge
+              os << "//\t\tadd extra delay " << ep.extra_lat << " for operand " << operandIdx << endl
+                 << "//\t\troute input port " << input_port_idx << " to operand " << operandIdx << endl;
               info[fu_id].operandDelay[operandIdx] = ep.extra_lat;
               info[fu_id].operandRoute[operandIdx] = input_port_idx + 1; // + 1 since 0 means grounded
+              // Check whether this function unit has register operand
+              int regOperIdx = registerOperandIndex(vertex);
+              // Add to bitstream encoding
+              if(regOperIdx >= 0){
+                // Get the index of register
+                int regIdx = vertex->ops()[regOperIdx].regIdx();
+                // Check the register index
+                DSA_CHECK(regIdx >= 0) << "Register index cannot be negative, but it is " << regIdx;
+                // Calculate the correct source index by taking amount of input ports and 1 (ground) into account
+                int actualRegIdx = 1 + sinkFuNode->in_links().size() + regIdx;
+                // Add it to bitstream encoding
+                info[fu_id].operandDelay[regOperIdx] = 0; // Register operand does not have delay
+                info[fu_id].operandRoute[regOperIdx] = actualRegIdx;
+                // Print out comment in bitstream hearder file
+                os << "//\t\tadd delay " << 0 << " for register operand " << regOperIdx << endl
+                   << "//\t\troute register " << regIdx << ", source " << actualRegIdx <<" to operand " << regOperIdx << endl;
+              }
             }else{
+              // Print comment for control edge
+              os << "//\t\tadd extra delay " << ep.extra_lat << " for controlled input (operand) " << operandIdx << endl
+                 << "//\t\troute input port " << input_port_idx << " controlled input " << operandIdx << endl;
               // Encode input control selection, if this is the third operand
               DSA_CHECK(operandIdx == 2);
               info[fu_id].inputCtrlRoute = input_port_idx + 1;
@@ -420,8 +466,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Encode the Destination Register
           for(int resultIdx = 0; resultIdx < inst->values.size(); resultIdx++){
             if(inst->values[resultIdx].reg != -1){
-              int regIdx = inst->values[resultIdx].reg;
-              os << "//\t\twrite "<< resultIdx << "th result to register " << regIdx <<endl;
+              int regIdx = inst->values[resultIdx].reg + 1; // 0 means do not write to register
+              os << "//\t\twrite "<< resultIdx << "th result to register " << regIdx-1 <<endl;
               info[fu_id].resultRegRoute[resultIdx] = regIdx;
             }
           }
