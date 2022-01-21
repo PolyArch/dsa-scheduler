@@ -83,6 +83,7 @@ int main(int argc, char* argv[]) {
 
   // Evlove the underlying hardware.
   ENFORCED_SYSTEM("mkdir -p .sched;");
+  ENFORCED_SYSTEM("mkdir -p viz;");
   if (parsed.count("design-explore")) {
     ENFORCED_SYSTEM("mkdir -p viz; mkdir -p viz/iters; touch viz/objectives.csv");
     dsa::DesignSpaceExploration(ssmodel, args[1]);

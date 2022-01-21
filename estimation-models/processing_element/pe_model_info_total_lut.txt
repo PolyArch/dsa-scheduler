@@ -1,0 +1,17 @@
+PE Model, trained on 11808 samples
+Trained using Pytorch, RayTune, and SciOptimize
+Output Target: total_lut
+
+Parameters
+   Learning Rate: 0.028854162266906805
+   Batch Size: 8
+   Epochs: 180
+Best trial final validation loss: 39353.926713483444
+Best trial l1 loss: tensor([148.4450])
+
+Average Loss with L1 [150.27068]
+Average Loss with MSE loss: [40463.297]
+Average Loss with RMS Loss: [150.27055]
+
+Average Model: [1379.5392]
+Real: [1378.298]

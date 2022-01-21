@@ -34,6 +34,8 @@ SpatialFabric* Import(std::string filename) {
   std::vector<ssnode*> sw_tab;
   std::vector<ssnode*> ivp_tab;
   std::vector<ssnode*> ovp_tab;
+  std::vector<ssnode*> dma_tab;
+  std::vector<ssnode*> sp_tab;
 
   // Check whether compatiable ADG Mode is selected
   bool newVersionADG = !ContextFlags::Global().adg_compat;
@@ -51,6 +53,8 @@ SpatialFabric* Import(std::string filename) {
       sw_tab.resize(jsonNodes.size(), nullptr);
       ivp_tab.resize(jsonNodes.size(), nullptr);
       ovp_tab.resize(jsonNodes.size(), nullptr);
+      dma_tab.resize(jsonNodes.size(), nullptr);
+      sp_tab.resize(jsonNodes.size(), nullptr);
 
       // Loop over all nodes
       for (Json::Value::iterator dsaNode = jsonNodes.begin(); dsaNode != jsonNodes.end(); ++dsaNode) {
@@ -344,11 +348,220 @@ SpatialFabric* Import(std::string filename) {
           /////////////////////////////////////////
           ///////// Direct Memory Access  /////////
           /////////////////////////////////////////
+          /*
+          
+          // Get node parameter
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
+          // Get the node type and node Id from node parameter
+          std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
+          // Node Type in Node Definition is different from the one in Node Name
+          DSA_CHECK(nodeTypeParam == nodeType) << nodeTypeParam << " " << nodeType;
+          int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
+          // Node ID from node parameter should be same as the one from Node Name
+          DSA_CHECK(nodeIdParam == localNodeId);
 
+          auto dma = new ssdma();
+          
+          int numWrite = nodeParam[ADGKEY_NAMES[NUM_MEM_WRITE]].asInt();
+          dma->numWrite(numWrite);
+          int memUnitBits = nodeParam[ADGKEY_NAMES[MEM_UNITBITS]].asInt();
+          dma->memUnitBits(memUnitBits);
+          int numRead = nodeParam[ADGKEY_NAMES[NUM_MEM_READ]].asInt();
+          dma->numRead(numRead);
+          int maxLength1D = nodeParam[ADGKEY_NAMES[MEM_MAX_L1D]].asInt();
+          dma->maxLength1D(maxLength1D);
+          //DEF_ATTR(maxLength3D);
+          int maxLength3D = nodeParam[ADGKEY_NAMES[MEM_MAX_L3D]].asInt();
+          dma->maxLength3D(maxLength3D);
+          //DEF_ATTR(capacity);
+          int capacity = nodeParam[ADGKEY_NAMES[MEM_CAP]].asInt();
+          dma->capacity(capacity);
+          //DEF_ATTR(linearLength1DStream);
+          bool linearLength1DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          dma->linearLength1DStream(linearLength1DStream);
+          //DEF_ATTR(numGenDataType);
+          int numGenDataType = nodeParam[ADGKEY_NAMES[NUM_MEM_DATATYPE]].asInt();
+          dma->numGenDataType(numGenDataType);
+          //DEF_ATTR(linearPadding);
+          bool linearPadding = nodeParam[ADGKEY_NAMES[MEM_PADDING]].asBool();
+          dma->linearPadding(linearPadding);
+          //DEF_ATTR(numPendingRequest);
+          int numPendingRequest = nodeParam[ADGKEY_NAMES[MEM_NUM_PENDING_REQUEST]].asInt();
+          dma->numPendingRequest(numPendingRequest);
+          //DEF_ATTR(numLength1DUnitBitsExp);
+          int numLength1DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_L1DUNITBITSEXP]].asInt();
+          dma->numLength1DUnitBitsExp(numLength1DUnitBitsExp);
+          //DEF_ATTR(maxAbsStride3D);
+          int maxAbsStride3D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRIDE3D]].asInt();
+          dma->maxAbsStride3D(maxAbsStride3D);
+          //DEF_ATTR(maxAbsStride1D);
+          int maxAbsStride1D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRIDE1D]].asInt();
+          dma->maxAbsStride1D(maxAbsStride1D);
+          //DEF_ATTR(indirectStride2DStream);
+          int indirectStride2DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asInt();
+          dma->indirectStride2DStream(indirectStride2DStream);
+          //DEF_ATTR(numIdxUnitBitsExp);
+          int numIdxUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_IDXUNITBITSEXP]].asInt();
+          dma->numIdxUnitBitsExp(numIdxUnitBitsExp);
+          //DEF_ATTR(maxAbsDeltaStride2D);
+          int maxAbsDeltaStride2D= nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_DELTA_STRIDE2D]].asInt();
+          dma->maxAbsDeltaStride2D(maxAbsDeltaStride2D);
+          //DEF_ATTR(linearStride2DStream);
+          bool linearStride2DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asBool();
+          dma->linearStride2DStream(linearStride2DStream);
+          //DEF_ATTR(maxLength2D);
+          int maxLength2D = nodeParam[ADGKEY_NAMES[MEM_MAX_L2D]].asInt();
+          dma->maxLength2D(maxLength2D);
+          //DEF_ATTR(numMemUnitBitsExp);
+          int numMemUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_UNITBITS]].asInt();
+          dma->numMemUnitBitsExp(numMemUnitBitsExp);
+          //DEF_ATTR(maxAbsStretch3D1D);
+          int maxAbsStretch3D1D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH3D1D]].asInt();
+          dma->maxAbsStretch3D1D(maxAbsStretch3D1D);
+          //DEF_ATTR(indirectIndexStream);
+          int indirectIndexStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_INDEX]].asInt();
+          dma->indirectIndexStream(indirectIndexStream);
+          //DEF_ATTR(numStride2DUnitBitsExp);
+          int numStride2DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_STRIDE2DUnitBitsExp]].asInt();
+          dma->numStride2DUnitBitsExp(numStride2DUnitBitsExp);
+          //DEF_ATTR(writeWidth);
+          int writeWidth = nodeParam[ADGKEY_NAMES[MEM_WRITE_WIDTH]].asInt();
+          dma->writeWidth(writeWidth);
+          //DEF_ATTR(maxAbsStride2D);
+          int maxAbsStretch2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH2D]].asInt();
+          dma->maxAbsStride2D(maxAbsStretch2D);
+          //DEF_ATTR(readWidth);
+          int readWidth = nodeParam[ADGKEY_NAMES[MEM_READ_WIDTH]].asInt();
+          dma->readWidth(readWidth);
+          //DEF_ATTR(streamStated);
+          bool streamStated = nodeParam[ADGKEY_NAMES[MEM_STR_STATE]].asBool();
+          dma->streamStated(streamStated);
+          //DEF_ATTR(numSpmBank);
+          int numSpmBank = nodeParam[ADGKEY_NAMES[MEM_NUM_SPM_BANK]].asInt();
+          dma->numSpmBank(numSpmBank);
+          //DEF_ATTR(indirectLength1DStream);
+          bool indirectLength1DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          dma->indirectLength1DStream(indirectLength1DStream);
+
+
+          node = dma;
+          sf->add_node(node);
+          DSA_CHECK(globalNodeId == node->id());
+          DSA_CHECK(globalNodeId == node->id())
+              << "Global ID = " << globalNodeId << ", node->id() = " << node->id()
+              << ", localNodeId = " << localNodeId << ", vp->localId() = " << dma->localId();
+          globalNodeId++;
+          dma_tab[localNodeId] = node;
+          */
+          
         } else if (nodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
           //////////////////////////////////////
           ///////// Scratchpad Memory  /////////
           //////////////////////////////////////
+          /*
+          // Get node parameter
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[COMP_NODE]];
+          // Get the node type and node Id from node parameter
+          std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
+          // Node Type in Node Definition is different from the one in Node Name
+          DSA_CHECK(nodeTypeParam == nodeType);
+          int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
+          // Node ID from node parameter should be same as the one from Node Name
+          DSA_CHECK(nodeIdParam == localNodeId);
+          
+          auto sp = new ssscratchpad();
+          
+          //DEF_ATTR(numWrite);
+          int numWrite = nodeParam[ADGKEY_NAMES[NUM_MEM_WRITE]].asInt();
+          sp->numWrite(numWrite);
+          //DEF_ATTR(memUnitBits);
+          int memUnitBits = nodeParam[ADGKEY_NAMES[MEM_UNITBITS]].asInt();
+          sp->memUnitBits(memUnitBits);
+          //DEF_ATTR(numRead);
+          int numRead = nodeParam[ADGKEY_NAMES[NUM_MEM_READ]].asInt();
+          sp->numRead(numRead);
+          //DEF_ATTR(maxLength1D);
+          int maxLength1D = nodeParam[ADGKEY_NAMES[MEM_MAX_L1D]].asInt();
+          sp->maxLength1D(maxLength1D);
+          //DEF_ATTR(maxLength3D);
+          int maxLength3D = nodeParam[ADGKEY_NAMES[MEM_MAX_L3D]].asInt();
+          sp->maxLength3D(maxLength3D);
+          //DEF_ATTR(capacity);
+          int capacity = nodeParam[ADGKEY_NAMES[MEM_CAP]].asInt();
+          sp->capacity(capacity);
+          //DEF_ATTR(linearLength1DStream);
+          bool linearLength1DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          sp->linearLength1DStream(linearLength1DStream);
+          //DEF_ATTR(numGenDataType);
+          int numGenDataType = nodeParam[ADGKEY_NAMES[NUM_MEM_DATATYPE]].asInt();
+          sp->numGenDataType(numGenDataType);
+          //DEF_ATTR(linearPadding);
+          bool linearPadding = nodeParam[ADGKEY_NAMES[MEM_PADDING]].asBool();
+          sp->linearPadding(linearPadding);
+          //DEF_ATTR(maxAbsStretch3D2D);
+          int maxAbsStretch3D2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH3D2D]].asInt();
+          sp->maxAbsStretch3D2D(maxAbsStretch3D2D);
+          //DEF_ATTR(numPendingRequest);
+          int numPendingRequest = nodeParam[ADGKEY_NAMES[MEM_NUM_PENDING_REQUEST]].asInt();
+          sp->numPendingRequest(numPendingRequest);
+          //DEF_ATTR(numLength1DUnitBitsExp);
+          int numLength1DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_L1DUNITBITSEXP]].asInt();
+          sp->numLength1DUnitBitsExp(numLength1DUnitBitsExp);
+          //DEF_ATTR(maxAbsStride3D);
+          int maxAbsStride3D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRIDE3D]].asInt();
+          sp->maxAbsStride3D(maxAbsStride3D);
+          //DEF_ATTR(maxAbsStride1D);
+          int maxAbsStride1D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRIDE1D]].asInt();
+          sp->maxAbsStride1D(maxAbsStride1D);
+          //DEF_ATTR(indirectStride2DStream);
+          int indirectStride2DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asInt();
+          sp->indirectStride2DStream(indirectStride2DStream);
+          //DEF_ATTR(numIdxUnitBitsExp);
+          int numIdxUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_IDXUNITBITSEXP]].asInt();
+          sp->numIdxUnitBitsExp(numIdxUnitBitsExp);
+          //DEF_ATTR(maxAbsDeltaStride2D);
+          int maxAbsDeltaStride2D= nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_DELTA_STRIDE2D]].asInt();
+          sp->maxAbsDeltaStride2D(maxAbsDeltaStride2D);
+          //DEF_ATTR(linearStride2DStream);
+          bool linearStride2DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asBool();
+          sp->linearStride2DStream(linearStride2DStream);
+          //DEF_ATTR(maxLength2D);
+          int maxLength2D = nodeParam[ADGKEY_NAMES[MEM_MAX_L2D]].asInt();
+          sp->maxLength2D(maxLength2D);
+          //DEF_ATTR(numMemUnitBitsExp);
+          int numMemUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_UNITBITS]].asInt();
+          sp->numMemUnitBitsExp(numMemUnitBitsExp);
+          //DEF_ATTR(maxAbsStretch3D1D);
+          int maxAbsStretch3D1D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH3D1D]].asInt();
+          sp->maxAbsStretch3D1D(maxAbsStretch3D1D);
+          //DEF_ATTR(indirectIndexStream);
+          int indirectIndexStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_INDEX]].asInt();
+          sp->indirectIndexStream(indirectIndexStream);
+          //DEF_ATTR(numStride2DUnitBitsExp);
+          int numStride2DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_STRIDE2DUnitBitsExp]].asInt();
+          sp->numStride2DUnitBitsExp(numStride2DUnitBitsExp);
+          //DEF_ATTR(writeWidth);
+          int writeWidth = nodeParam[ADGKEY_NAMES[MEM_WRITE_WIDTH]].asInt();
+          sp->writeWidth(writeWidth);
+          //DEF_ATTR(maxAbsStride2D);
+          int maxAbsStretch2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH2D]].asInt();
+          sp->maxAbsStride2D(maxAbsStretch2D);
+          //DEF_ATTR(readWidth);
+          int readWidth = nodeParam[ADGKEY_NAMES[MEM_READ_WIDTH]].asInt();
+          sp->readWidth(readWidth);
+          //DEF_ATTR(streamStated);
+          bool streamStated = nodeParam[ADGKEY_NAMES[MEM_STR_STATE]].asBool();
+          sp->streamStated(streamStated);
+          //DEF_ATTR(numSpmBank);
+          int numSpmBank = nodeParam[ADGKEY_NAMES[MEM_NUM_SPM_BANK]].asInt();
+          sp->numSpmBank(numSpmBank);
+          //DEF_ATTR(indirectLength1DStream);
+          bool indirectLength1DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          sp->indirectLength1DStream(indirectLength1DStream);
+          //DEF_ATTR(maxAbsDeltaStrectch2D);
+          int maxAbsDeltaStretch2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_DELTA_STRETCH2D]].asInt();
+          sp->maxAbsDeltaStrectch2D(maxAbsDeltaStretch2D);
+          */
           
         } else if (nodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
           //////////////////////////////////////
@@ -489,6 +702,8 @@ SpatialFabric* Import(std::string filename) {
         int in_vec_width = cgranode["num_input"].asInt();
         int out_vec_width = cgranode["num_output"].asInt();
         int port_num = -1;
+        bool stated = false;
+
         // whether is a input/output vector port
         if (in_vec_width > 0) {
           is_input = false;
@@ -507,6 +722,10 @@ SpatialFabric* Import(std::string filename) {
                         /*dynamic timing=*/true,
                         /*fifo depth=*/2);
         vp->port(port_num);
+        if (num_inputs + num_outputs == 1)
+          vp->vp_stated(false);
+        else
+          vp->vp_stated(true);
         node = vp;
       } else {
         DSA_CHECK(false) << id << "has unknown type" << nodeType << "\n";

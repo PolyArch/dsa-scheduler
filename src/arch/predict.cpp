@@ -19,44 +19,69 @@ Protocol:
 Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
 */
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
-  torch::jit::script::Module module;
+  torch::jit::script::Module total_lut;
+  torch::jit::script::Module logic_lut;
+  torch::jit::script::Module lut_ram;
+  torch::jit::script::Module ff;
   try {
-    module = torch::jit::load(TORCH_MODEL_PREFIX "/pe_model.pt");
+    total_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_total_lut.pt");
+    logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_logic_lut.pt");
+    lut_ram = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ram_lut.pt");
+    ff = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ff.pt");
   }
   catch (const c10::Error& e) {
     DSA_CHECK(false)
-      << "Error Loading FPGA Processing Element Model: " << TORCH_MODEL_PREFIX "/pe_model.pt";
+      << "Error Loading FPGA Processing Element Model: " << TORCH_MODEL_PREFIX "processing_element/";
   }
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
 
-  at::Tensor output = module.forward(inputs).toTensor();
+  at::Tensor total_lut_output = total_lut.forward(inputs).toTensor();
+  at::Tensor logic_lut_output = logic_lut.forward(inputs).toTensor();
+  at::Tensor lut_ram_output = lut_ram.forward(inputs).toTensor();
+  at::Tensor ff_output = ff.forward(inputs).toTensor();
 
-  std::vector<float> predicted_resources(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
-
-  return {predicted_resources[0], predicted_resources[1], predicted_resources[2], 0, predicted_resources[3], 0, 0, 0, 0};;
+  return {total_lut_output[0].item<float>(), 
+          logic_lut_output[0].item<float>(), 
+          lut_ram_output[0].item<float>(), 
+          0, 
+          ff_output[0].item<float>(), 
+          0, 0, 0, 0};;
 }
 
 /* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
 /* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameters){
-  torch::jit::script::Module module;
+  torch::jit::script::Module total_lut;
+  torch::jit::script::Module logic_lut;
+  torch::jit::script::Module lut_ram;
+  torch::jit::script::Module ff;
   try {
-    module = torch::jit::load(TORCH_MODEL_PREFIX "/router_model.pt");
+    total_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_total_lut.pt");
+    logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_logic_lut.pt");
+    lut_ram = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ram_lut.pt");
+    ff = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ff.pt");
   }
   catch (const c10::Error& e) {
-    DSA_CHECK(false) << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "/router_model.pt";
+    DSA_CHECK(false)
+      << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "switch/";
   }
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
 
-  at::Tensor output = module.forward(inputs).toTensor();
+  at::Tensor total_lut_output = total_lut.forward(inputs).toTensor();
+  at::Tensor logic_lut_output = logic_lut.forward(inputs).toTensor();
+  at::Tensor lut_ram_output = lut_ram.forward(inputs).toTensor();
+  at::Tensor ff_output = ff.forward(inputs).toTensor();
 
-  std::vector<float> predicted_resources(output.data_ptr<float>(), output.data_ptr<float>() + output.numel());
-
-  return {predicted_resources[0], predicted_resources[1], predicted_resources[2], 0, predicted_resources[3], 0, 0, 0, 0};
+  return {total_lut_output[0].item<float>(), 
+          logic_lut_output[0].item<float>(), 
+          lut_ram_output[0].item<float>(), 
+          0, 
+          ff_output[0].item<float>(), 
+          0, 0, 0, 0};
 }
 
 /* Input Parameters {num_input num_output} */

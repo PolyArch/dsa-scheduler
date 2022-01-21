@@ -52,6 +52,13 @@ void fix_id(std::vector<T>& vec) {
 }
 
 template <typename T>
+void fix_local_id(std::vector<T> vec) {
+  for (int i = 0, n = vec.size(); i < n; ++i) {
+    vec[i]->localId(i);
+  }
+}
+
+template <typename T>
 void delete_by_id(std::vector<T>& vec, int index) {
   vec.erase(vec.begin() + index);
 }
@@ -152,6 +159,18 @@ class ssnode {
 
   // TODO(@were): Deprecate this in the visitor pattern.
   virtual ssnode* copy() = 0;
+
+  /*!
+   * \brief Overload Equality operators
+   */
+  bool operator==(const ssnode& other) {
+    return this->id_ == other.id_;
+  }
+
+  bool operator!=(const ssnode& other) {
+    return this->id_ != other.id_;
+  }
+
 
   /*!
    * \brief The entrance for visitor pattern.
@@ -524,8 +543,6 @@ class ssfu : public ssnode {
     std::cout << "\n";
   }
 
-  int get_register_file_size() { return this->regFileSize_; }
-
   bool is_hanger() override { return in_links().size() <= 1 || out_links().size() < 1; }
 
   Capability fu_type_;
@@ -603,6 +620,7 @@ class ssvport : public ssnode {
   std::vector<int>& port_vec() { return _port_vec; }
   void set_port_vec(std::vector<int> p) { _port_vec = p; }
   size_t size() { return _port_vec.size(); }
+  
   std::string name() const override {
     std::stringstream ss;
     ss << "OI"[links_[0].size() > 0];
@@ -676,14 +694,25 @@ class ssvport : public ssnode {
   }
 
   int bitwidth_capability() {
-    int res = 0;
-    DSA_CHECK((int)links_[0].empty() + (int)links_[1].empty() == 1);
-    for (auto& elem : links_) {
-      for (auto link : elem) {
-        res += link->bitwidth();
+    int result = 0;
+    if (isInputPort()) {
+      for (int i = 0; i < out_links().size(); ++i) {
+        // If this vectorport is stated, then the first link should be reserved
+        // for the stated edge and not count toward capability
+        if (i == 0 && vp_stated())
+          continue;
+        result += out_links()[i]->bitwidth();
+      }
+    } else {
+      for (int i = 0; i < in_links().size(); ++i) {
+        // If this vectorport is stated, then the first link should be reserved
+        // for the stated edge and not count toward capability
+        if (i == 0 && vp_stated())
+          continue;
+        result += in_links()[i]->bitwidth();
       }
     }
-    return res;
+    return result;
   }
 
   void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
@@ -709,12 +738,12 @@ class ssvport : public ssnode {
   //     Memory A[3:0] -> Compute [ A[3], [X], A[2], [X], [X], [X], A[1], A[0] ]
   // 2 : Non-XBar Implementation: Only go to lowest ports
   //     Memory A[3:0] -> Compute [ [X], [X], [X], [X], A[3], A[2], A[1], A[0] ]
-  int vp_impl_{0};
+  int vp_impl_{2};
 
   // Stream Stated Vector Port (Both input and output vector port)
   // Whether this vector port support state predication (for control),
   //  and padding (input vector port only) for no-balanced unrolling, which depends on state
-  bool vp_stated_{false};
+  bool vp_stated_{true};
 
   // Repeative Input Vector Port (Input Vector Port only)
   // Whether this input vector port is able to issue the vector in periodic way
@@ -738,6 +767,366 @@ class ssvport : public ssnode {
   DEF_ATTR(broadcastIVP)  // IVP
   DEF_ATTR(taskOVP)       // OVP
   DEF_ATTR(discardOVP)    // OVP
+};
+
+
+class ssscratchpad : public ssnode {
+ public:
+  ssscratchpad() : ssnode() {}
+
+  ssscratchpad(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* visitor) override;
+
+  ssnode* copy() override {
+    auto *res = new ssscratchpad();
+    *res = *this;
+    return res;
+  }
+
+  virtual std::string name() const override {
+    std::stringstream ss;
+    ss << "SP";
+    if (x_ != -1 && y_ != -1) {
+      ss << "_" << x_ << "_" << y_;
+    } else {
+      ss << localId_;
+    }
+    return ss.str();
+  }
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + to_string(id_) + ",\"ScratchPad\"" + "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"scratchpad\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+
+    os << "}\n";
+  }
+
+  void collect_features() {
+    features[0] = max_util_ > 1 ? 0.0 : 1.0;
+    features[1] = max_util_ > 1 ? 1.0 : 0.0;
+
+    DSA_CHECK(features[0] || features[1]);
+    features[2] = flow_control_ ? 0.0 : 1.0;
+    features[3] = flow_control_ ? 1.0 : 0.0;
+    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    features[4] = lanes();
+    features[5] = max_delay();
+    features[6] = links_[1].size();
+    features[7] = links_[0].size();
+    features[8] = max_util_;
+  }
+
+  virtual ~ssscratchpad() {}
+
+  void print_features() {
+    std::cout << "------ Features : >>>>>> ";
+    std::cout << "Not Shared ? " << features[0] << ", "
+              << "Shared ? " << features[1] << ", "
+              << "Not Flow Control ? " << features[2] << ", "
+              << "Flow Control ? " << features[3] << ", "
+              << "decomposer = " << features[4] << ", "
+              << "max fifo depth = " << features[5] << ", "
+              << "# input links = " << features[6] << ", "
+              << "# output links = " << features[7] << ", "
+              << "max util = " << features[8] << ", ";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+  }
+
+  void dump_features() {
+    for (int i = 0; i < 9; ++i) {
+      std::cout << features[i] << " ";
+    }
+    std::cout << "\n";
+  }
+
+ protected:
+  double features[9];
+
+  int numWrite_{1};
+  int memUnitBits_{8};
+  int numRead_{1};
+  int maxLength1D_{2147483646};
+  int maxLength3D_{2147483646};
+  int capacity_{1024};
+  bool linearLength1DStream_{true};
+  int numGenDataType_{1};
+  bool linearPadding_{true};
+  int maxAbsStretch3D2D_{1073741822};
+  int numPendingRequest_{16};
+  int numLength1DUnitBitsExp_{4};
+  int maxAbsStride3D_{1073741822};
+  int maxAbsStride1D_{1073741824};
+  bool indirectStride2DStream_{true};
+  int numIdxUnitBitsExp_{4};
+  int maxAbsDeltaStride2D_{1073741822};
+  bool linearStride2DStream_{true};
+  int maxLength2D_{2147483646};
+  int numMemUnitBitsExp_{4};
+  int maxAbsStretch3D1D_{1073741822};
+  bool indirectIndexStream_{true};
+  int numStride2DUnitBitsExp_{4};
+  int writeWidth_{32};
+  int maxAbsStride2D_{1073741822};
+  int readWidth_{32};
+  bool streamStated_{true};
+  int numSpmBank_{4};
+  bool indirectLength1DStream_{true};
+  int maxAbsDeltaStrectch2D_{1073741822};
+
+public:
+  DEF_ATTR(numWrite);
+  DEF_ATTR(memUnitBits);
+  DEF_ATTR(numRead);
+  DEF_ATTR(maxLength1D);
+  DEF_ATTR(maxLength3D);
+  DEF_ATTR(capacity);
+  DEF_ATTR(linearLength1DStream);
+  DEF_ATTR(numGenDataType);
+  DEF_ATTR(linearPadding);
+  DEF_ATTR(maxAbsStretch3D2D);
+  DEF_ATTR(numPendingRequest);
+  DEF_ATTR(numLength1DUnitBitsExp);
+  DEF_ATTR(maxAbsStride3D);
+  DEF_ATTR(maxAbsStride1D);
+  DEF_ATTR(indirectStride2DStream);
+  DEF_ATTR(numIdxUnitBitsExp);
+  DEF_ATTR(maxAbsDeltaStride2D);
+  DEF_ATTR(linearStride2DStream);
+  DEF_ATTR(maxLength2D);
+  DEF_ATTR(numMemUnitBitsExp);
+  DEF_ATTR(maxAbsStretch3D1D);
+  DEF_ATTR(indirectIndexStream);
+  DEF_ATTR(numStride2DUnitBitsExp);
+  DEF_ATTR(writeWidth);
+  DEF_ATTR(maxAbsStride2D);
+  DEF_ATTR(readWidth);
+  DEF_ATTR(streamStated);
+  DEF_ATTR(numSpmBank);
+  DEF_ATTR(indirectLength1DStream);
+  DEF_ATTR(maxAbsDeltaStrectch2D);
+
+};
+
+class ssdma : public ssnode {
+ public:
+  ssdma() : ssnode() {}
+
+  ssdma(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* visitor) override;
+
+  ssnode* copy() override {
+    auto *res = new ssdma();
+    *res = *this;
+    return res;
+  }
+
+  virtual std::string name() const override {
+    std::stringstream ss;
+    ss << "DMA";
+    if (x_ != -1 && y_ != -1) {
+      ss << "_" << x_ << "_" << y_;
+    } else {
+      ss << localId_;
+    }
+    return ss.str();
+  }
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + to_string(id_) + ",\"ScratchPad\"" + "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"scratchpad\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+
+    os << "}\n";
+  }
+
+  void collect_features() {
+    features[0] = max_util_ > 1 ? 0.0 : 1.0;
+    features[1] = max_util_ > 1 ? 1.0 : 0.0;
+
+    DSA_CHECK(features[0] || features[1]);
+    features[2] = flow_control_ ? 0.0 : 1.0;
+    features[3] = flow_control_ ? 1.0 : 0.0;
+    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
+    features[4] = lanes();
+    features[5] = max_delay();
+    features[6] = links_[1].size();
+    features[7] = links_[0].size();
+    features[8] = max_util_;
+  }
+
+  virtual ~ssdma() {}
+
+  void print_features() {
+    std::cout << "------ Features : >>>>>> ";
+    std::cout << "Not Shared ? " << features[0] << ", "
+              << "Shared ? " << features[1] << ", "
+              << "Not Flow Control ? " << features[2] << ", "
+              << "Flow Control ? " << features[3] << ", "
+              << "decomposer = " << features[4] << ", "
+              << "max fifo depth = " << features[5] << ", "
+              << "# input links = " << features[6] << ", "
+              << "# output links = " << features[7] << ", "
+              << "max util = " << features[8] << ", ";
+    std::cout << " ------ Feature Ends <<<<<<\n";
+  }
+
+  void dump_features() {
+    for (int i = 0; i < 9; ++i) {
+      std::cout << features[i] << " ";
+    }
+    std::cout << "\n";
+  }
+
+ protected:
+  double features[9];
+
+  int numWrite_{1};
+  int memUnitBits_{8};
+  int numRead_{1};
+  int maxLength1D_{2147483646};
+  int maxLength3D_{2147483646};
+  int capacity_{2147483646};
+  bool linearLength1DStream_{true};
+  int numGenDataType_{0};
+  bool linearPadding_{true};
+  int maxAbsStrectch3D2D_{2147483646};
+  int numPendingRequest_{16};
+  int numLength1DUnitBitsExp_{4};
+  int maxAbsStride3D_{1073741822};
+  int maxAbsStride1D_{1073741824};
+  bool indirectStride2DStream_{true};
+  //std::string atomicOperations_[] = {"Add", "Sub", "Min", "Max"};
+  int numIdxUnitBitsExp_{4};
+  int maxAbsDeltaStride2D_{1073741822};
+  bool linearStride2DStream_{true};
+  int maxLength2D_{2147483646};
+  int maxAbsStretch2D_{1073741822};
+  int numMemUnitBitsExp_{4};
+  int maxAbsStretch3D1D_{1073741822};
+  bool indirectIndexStream_{true};
+  int numStride2DUnitBitsExp_{4};
+  int writeWidth_{16};
+  int maxAbsStride2D_{1073741822};
+  int readWidth_{16};
+  bool streamStated_{true};
+  int numSpmBank_{0};
+  bool indirectLength1DStream_{true};
+  int maxAbsDeltaStretch2D_{1073741822};
+
+public:
+  DEF_ATTR(numWrite);
+  DEF_ATTR(memUnitBits);
+  DEF_ATTR(numRead);
+  DEF_ATTR(maxLength1D);
+  DEF_ATTR(maxLength3D);
+  DEF_ATTR(capacity);
+  DEF_ATTR(linearLength1DStream);
+  DEF_ATTR(numGenDataType);
+  DEF_ATTR(linearPadding);
+  DEF_ATTR(maxAbsStrectch3D2D);
+  DEF_ATTR(numPendingRequest);
+  DEF_ATTR(numLength1DUnitBitsExp);
+  DEF_ATTR(maxAbsStride3D);
+  DEF_ATTR(maxAbsStride1D);
+  DEF_ATTR(indirectStride2DStream);
+  DEF_ATTR(numIdxUnitBitsExp);
+  DEF_ATTR(maxAbsDeltaStride2D);
+  DEF_ATTR(linearStride2DStream);
+  DEF_ATTR(maxLength2D);
+  DEF_ATTR(maxAbsStretch2D);
+  DEF_ATTR(numMemUnitBitsExp);
+  DEF_ATTR(maxAbsStretch3D1D);
+  DEF_ATTR(indirectIndexStream);
+  DEF_ATTR(numStride2DUnitBitsExp);
+  DEF_ATTR(writeWidth);
+  DEF_ATTR(maxAbsStride2D);
+  DEF_ATTR(readWidth);
+  DEF_ATTR(streamStated);
+  DEF_ATTR(numSpmBank);
+  DEF_ATTR(indirectLength1DStream);
+  DEF_ATTR(maxAbsDeltaStretch2D);
+
 };
 
 }  // namespace dsa

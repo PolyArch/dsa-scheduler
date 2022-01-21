@@ -68,11 +68,14 @@ int sslink::slots(int slot, int width) {
 }
 
 sslink::~sslink() {
+  // Lamda function for deleting link from node link lists
   auto f = [this](std::vector<sslink*>& links) {
     auto iter = std::find(links.begin(), links.end(), this);
     DSA_CHECK(iter != links.end()) << "Cannot find this link!";
     links.erase(iter);
   };
+  
+  // delete links
   f(source()->links_[0]);
   f(sink()->links_[1]);
 }

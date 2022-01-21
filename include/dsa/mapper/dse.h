@@ -15,6 +15,17 @@ class WorkloadSchedules {
   float estimate_performance() { return 0; }
 };
 
+static unsigned int log2 (unsigned int val) {
+    if (val == 0) return -1;
+    if (val == 1) return 0;
+    unsigned int ret = 0;
+    while (val > 1) {
+        val >>= 1;
+        ret++;
+    }
+    return ret;
+};
+
 class SchedStats {
  public:
   int lat = INT_MAX, latmis = INT_MAX;
@@ -51,6 +62,13 @@ class CodesignInstance {
   std::vector<int> weight;
 
   std::vector<Schedule*> res;
+
+  /*
+    Vector of unused nodes and links.
+    The nodes and links are in the order of the original ADG.
+    False means the node or link is used
+    True means the node or link is unused
+  */
   std::vector<bool> unused_nodes;
   std::vector<bool> unused_links;
 
@@ -95,6 +113,9 @@ class CodesignInstance {
     for (auto& node : _ssModel.subModel()->node_list()) {
       if (auto fu = dynamic_cast<ssfu*>(node)) {
         DSA_CHECK(!fu->fu_type_.capability.empty());
+      } else if (auto vport  = dynamic_cast<ssvport*>(node)) {
+        if (vport->vp_stated())
+          DSA_CHECK(vport->out_links().size() + vport->in_links().size() > 1);
       }
       //DSA_CHECK(node->parent == _ssModel.subModel());
       DSA_CHECK(node == _ssModel.subModel()->node_list()[node->id()]);
@@ -122,8 +143,6 @@ class CodesignInstance {
   */
   std::string get_changes_log(bool cout = false) {
     std::ostringstream s;
-    if (!cout)
-      s << "\"";
     for(auto it = dse_changes_log.begin(); it != dse_changes_log.end(); ++it) {
       s << *it;
       if (cout)
@@ -131,15 +150,11 @@ class CodesignInstance {
       else if (std::next(it) != dse_changes_log.end())
         s << ",";
     }
-    if (!cout)
-      s << "\"";
     return s.str();
   }
 
   std::string get_workload_weights(bool cout=false) {
     std::ostringstream s;
-    if (!cout)
-      s << "\"";
     for(auto it = workload_weights.begin(); it != workload_weights.end(); ++it) {
       s << *it;
       if (cout)
@@ -147,15 +162,11 @@ class CodesignInstance {
       else if (std::next(it) != workload_weights.end())
         s << ",";
     }
-    if (!cout)
-      s << "\"";
     return s.str();
   }
 
   std::string get_workload_performances(bool cout=false) {
     std::ostringstream s;
-    if (!cout)
-      s << "\"";
     for(auto it = workload_performances.begin(); it != workload_performances.end(); ++it) {
       s << *it;
       if (cout)
@@ -163,15 +174,11 @@ class CodesignInstance {
       else if (std::next(it) != workload_performances.end())
         s << ",";
     }
-    if (!cout)
-      s << "\"";
     return s.str();
   }
 
   std::string get_dfg_performances(bool cout=false) {
     std::ostringstream s;
-    if (!cout)
-      s << "\"";
     for(auto it = dfg_performances.begin(); it != dfg_performances.end(); ++it) {
       for(auto next = it->begin(); next != it->end(); ++next) {
         s << next->first << ": " << next->second;
@@ -181,8 +188,6 @@ class CodesignInstance {
           s << ",";
       }
     }
-    if (!cout)
-      s << "\"";
     return s.str();
   }
 
@@ -208,6 +213,9 @@ class CodesignInstance {
 
       if (src == n) continue;
       sub->add_link(src, n);
+      check_stated(src);
+      
+
     }
     int n_outs = rand() % (max_out - min_out) + min_out;
     for (int i = 0, j = 0; i < n_outs && j < n_outs * 10 && n->out_links().size() <= 4;
@@ -220,7 +228,10 @@ class CodesignInstance {
       }
 
       if (n == dst) continue;
+
       sub->add_link(n, dst);
+      check_stated(dst);
+      
     }
   }
 
@@ -238,7 +249,12 @@ class CodesignInstance {
     return res;
   }
 
-  // Delete FUs, Switches, and Vports that can't possible be useful
+  /**
+   * @brief Deletes Links and Nodes that can't be useful
+   * 
+   * @return true if something is deleted
+   * @return false otherwise
+   */
   bool delete_hangers() {
     bool deleted_something = false;
 
@@ -286,44 +302,44 @@ class CodesignInstance {
   }
 
   void prune_all_unused() {
-    utilization();
+    // First Prune all current Hangers
     while (delete_hangers()) {  }
 
-    //TODO: Convert from set once memory is added
-    std::unordered_set<sslink*> links_to_delete;
-    std::unordered_set<ssnode*> nodes_to_delete;
+    // Now get the utilization
+    auto util = utilization();
+    
+    // If there is no utilization, then we shouldn't be pruning
+    if (std::get<2>(util) == 0) {
+      DSA_LOG("No utilization, not pruning");
+      return;
+    }
 
     auto* sub = _ssModel.subModel();
 
-    for (int j = 0, n = sub->link_list().size(); j < n; ++j) {
-      if (unused_links[j])
-        links_to_delete.insert(sub->link_list()[j]);
-    }
-    for (int j = 0, n = sub->switch_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->switch_list()[j]->id()]) 
-        nodes_to_delete.insert(sub->switch_list()[j]);
-    }
-    for (int j = 0, n = sub->fu_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->fu_list()[j]->id()]) 
-        nodes_to_delete.insert(sub->fu_list()[j]);
-    }
-    for (int j = 0, n = sub->input_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->input_list()[j]->id()]) 
-        nodes_to_delete.insert(sub->input_list()[j]);
-    }
-    for (int j = 0, n = sub->output_list().size(); j < n; ++j) {
-      if (unused_nodes[sub->output_list()[j]->id()]) 
-        nodes_to_delete.insert(sub->output_list()[j]);
+    std::vector<ssnode*> nodes_to_delete;
+    std::vector<sslink*> links_to_delete;
+    
+    // Add all links that are unused to a vector then delete them
+    // Note: Links must be deleted before nodes
+    for (int i = 0; i < unused_links.size(); i++) {
+      if (unused_links[i])
+        links_to_delete.push_back(sub->link_list()[i]);
     }
 
-    for (auto& link : links_to_delete) {
+    for (auto link : links_to_delete) {
       delete_link(link);
     }
-    for (auto& node : nodes_to_delete) {
-      delete_node(node);
+
+    // Add all nodes that are unused to a vector then delete them
+    for (int i = 0; i < unused_nodes.size(); i++) {
+      if (unused_nodes[i]) 
+        nodes_to_delete.push_back(sub->node_list()[i]);
     }
 
-    // delete all hangers arising from situation
+    for (auto node : nodes_to_delete) {
+      delete_node(node);
+    }
+    
     while (delete_hangers()) {  }
   }
 
@@ -366,10 +382,18 @@ class CodesignInstance {
     }
   }
 
-  /*
-  * Adds a new node to the ADG.
-  * Returns true if the node was added, false otherwise.
-  */
+  /**
+   * @brief Adds some hardware to the ADG
+   * 
+   * 65% chance to add a random link
+   * 15% chance to add a random switch
+   * 10% chance to add a random FU
+   * 5% chance to add a random input vport
+   * 5% chance to add a random output vport
+   * 
+   * @param item_class A random number with the item to modified
+   * @return bool whether something was succesfully added in this call.
+   */
   bool add_something(int item_class) {
     std::ostringstream s;
     auto* sub = _ssModel.subModel();
@@ -386,7 +410,12 @@ class CodesignInstance {
         return false;
       }
       if (src == dst) return false;
+
+      
       sub->add_link(src, dst);
+      check_stated(src);
+      check_stated(dst);
+
       s << "add link from " << src->name() << " to " << dst->name();
     } else if (item_class < 80) { // 15% to add a random switch
       ssswitch* sw = sub->add_switch();
@@ -416,10 +445,18 @@ class CodesignInstance {
     return true;
   }
 
-  /*
-  * Deletes a node from the ADG.
-  * Returns true if a node was deleted, false otherwise.
-  */
+  /**
+   * @brief Removes something from the ADG
+   * 
+   * 60% Chance to remove a random link
+   * 15% Chance to remove a random switch
+   * 15% Chance to remove a random FU
+   * 5% Chance to remove a random input vector port
+   * 5% Chance to remove a random output vector port
+   * 
+   * @param item_class A random number with the item to remove
+   * @return bool whether something was succesfully removed in this call.
+   */
   bool remove_something(int item_class) {
     std::ostringstream s;
     auto* sub = _ssModel.subModel();
@@ -445,14 +482,14 @@ class CodesignInstance {
       dse_changes_log.push_back(s.str());
       delete_node(fu, true, false, false);
     } else if (item_class < 95) { // 5% to remove a random input vector port
-      if (sub->input_list().size() == 0) return false;
+      if (sub->input_list().size() <= 1) return false;
       int index = non_uniform_random(sub->input_list(), unused_nodes);
       ssvport* vport = sub->input_list()[index];
       s << "remove input vport "<< vport->name();
       dse_changes_log.push_back(s.str());
       delete_node(vport, false, false, false);
     } else { // 5% to remove a random output vector port
-      if (sub->output_list().size() == 0) return false;
+      if (sub->output_list().size() <= 1) return false;
       int index = non_uniform_random(sub->output_list(), unused_nodes);
       ssvport* vport = sub->output_list()[index];
       s << "remove output vport "<< vport->name();
@@ -464,10 +501,20 @@ class CodesignInstance {
     return true;
   }
 
-  /*
-  * Modifies a node in the ADG.
-  * Returns true if a node was modified, false otherwise.
-  */
+  /**
+   * @brief Modifies a node in the ADG
+   * 
+   * 15% to change flow control
+   * 5% to change the utilization of a functional unit
+   * 30% chance to change the fifo depth
+   * 20% chance to change a functional units fu type
+   * 20% chance to change a nodes granularity
+   * 5% to change input vport stated
+   * 5% to change output vport stated
+   * 
+   * @param item_class A random number with the item to modified
+   * @return bool whether something was succesfully modified in this call.
+   */
   bool modify_something(int item_class) {
     std::ostringstream s;
     auto* sub = _ssModel.subModel();
@@ -491,7 +538,7 @@ class CodesignInstance {
           }
         });
       }
-    } else if (item_class < 30) { // 15% to change the name of a node
+    } else if (item_class < 20) { // 5% to change the name of a node
       return false;
 
       if (sub->fu_list().empty()) return false;
@@ -514,16 +561,10 @@ class CodesignInstance {
       // if we are constraining the problem, then lets re-assign anything
       // mapped to this FU
       if (new_util < old_util) {
-        for_each_sched([&](Schedule& sched) {
-          for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
-            for (auto& p : sched.dfg_nodes_of(slot, fu)) {
-              sched.unassign_dfgnode(p.first);
-            }
-          }
-        });
+        unassign_node(fu);
       }
 
-    } else if (item_class < 60) { // 30% to change fu fifo depth
+    } else if (item_class < 50) { // 30% to change fu fifo depth
       if (sub->fu_list().empty()) return false;
       int diff = -(rand() % 3 + 1);
       if (rand() & 1) diff *= -1;
@@ -551,23 +592,22 @@ class CodesignInstance {
           }
         }
       });
-
-    } else if (item_class < 80) { // 20% to change a node's fu_type
+    } else if (item_class < 70) { // 20% to change a node's fu_type
       if (sub->fu_list().empty()) return false;
       int index = rand() % sub->fu_list().size();
       auto fu = sub->fu_list()[index];
 
       if (rand() & 1) {
-          s << "add FU " << fu->name() << " operation";
-          dse_changes_log.push_back(s.str());
+        s << "add FU " << fu->name() << " operation";
+        dse_changes_log.push_back(s.str());
 
-          fu->fu_type_ = *ss_model()->fu_types[rand() % ss_model()->fu_types.size()];
-        } else if (fu->fu_type_.capability.size() > 1) {
-          int j = rand() % fu->fu_type_.capability.size();
-          s << "remove FU " << fu->name() << " operation " << dsa::name_of_inst(fu->fu_type_.capability.at(j).op);
-          dse_changes_log.push_back(s.str());
-          fu->fu_type_.Erase(j);
-        }
+        fu->fu_type_ = *ss_model()->fu_types[rand() % ss_model()->fu_types.size()];
+      } else if (fu->fu_type_.capability.size() > 1) {
+        int j = rand() % fu->fu_type_.capability.size();
+        s << "remove FU " << fu->name() << " operation " << dsa::name_of_inst(fu->fu_type_.capability.at(j).op);
+        dse_changes_log.push_back(s.str());
+        fu->fu_type_.Erase(j);
+      }
 
       for_each_sched([&](Schedule& sched) {
         for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
@@ -580,7 +620,7 @@ class CodesignInstance {
           }
         }
       });
-    } else { // 20% to change node granularity
+    } else if (item_class < 90) { // 20% to change node granularity
       return false;
       int index = rand() % sub->node_list().size();
       auto fu = sub->node_list()[index];
@@ -617,11 +657,35 @@ class CodesignInstance {
 
       s << "change FU " << fu->name() << " granularity from " << fu->granularity() << " to " << new_one;
       fu->granularity(new_one);
+    } else if (item_class < 95) { // 5% to change a input Vports stated
+      int index = rand() % sub->input_list().size();
+      auto vport = sub->input_list()[index];
+
+      if (vport->out_links().size() < 2) return false;
+      
+      vport->vp_stated(!vport->vp_stated());
+      unassign_node(vport);
+      s << "change Input vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
+    } else { // 5% to change a output Vports stated
+      int index = rand() % sub->output_list().size();
+      auto vport = sub->output_list()[index];
+
+      if (vport->in_links().size() < 2) return false;
+      
+      vport->vp_stated(!vport->vp_stated());
+      unassign_node(vport);
+      s << "change Output vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
     }
     dse_changes_log.push_back(s.str());
     return true;
   }
 
+
+  /**
+   * @brief Lambda function to loop through all schedules
+   * 
+   * @param f 
+   */
   void for_each_sched(const std::function<void(Schedule&)>& f) {
     for (auto& ws : workload_array) {
       for (Schedule& sched : ws.sched_array) {
@@ -630,7 +694,12 @@ class CodesignInstance {
     }
   }
 
-  // Overide copy constructor to enable deep copies
+  /**
+   * @brief Construct a new Codesign Instance object
+   * 
+   * @param c other codesign instance
+   * @param from_scratch whether to restart from scratch
+   */
   CodesignInstance(const CodesignInstance& c, bool from_scratch) : _ssModel(c._ssModel){
     weight = c.weight;
     
@@ -649,21 +718,18 @@ class CodesignInstance {
         sched.set_model(&_ssModel);
       });
     }
-    
-   /*
-    for (auto& work : c.workload_array) {
-      workload_array.emplace_back();
-      for (auto& elem : work.sched_array) {
-        workload_array.back().sched_array.emplace_back(elem, &_ssModel);
-      }
-    }
-    */
 
     unused_nodes = c.unused_nodes;
     unused_links = c.unused_links;
+
     dse_obj();
   }
 
+  /**
+   * @brief Unassigns a link from all schedules
+   * 
+   * @param link the link to unassign
+   */
   void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
       int slots = link->source()->datawidth() / link->source()->granularity();
@@ -680,15 +746,64 @@ class CodesignInstance {
     });
   }
 
-  // Delete link on every schedule
+  /**
+   * @brief Unassigns a node from all schedules
+   * 
+   * @param node the node to unassign 
+   */
+  void unassign_node(ssnode* node) {
+    for_each_sched([&](Schedule& sched) {
+      for (int slot = 0; slot < sched.num_slots(node); ++slot) {
+        for (auto& p : sched.dfg_nodes_of(slot, node)) {
+          if (p.first)
+            sched.unassign_dfgnode(p.first); 
+        }
+      }
+    });
+  }
+
+  /**
+   * @brief Checks whether vector port needs to change its stated value
+   * 
+   * @param node the node to check
+   * @param deleting whether a link will be deleted from the schedule
+   */
+  void check_stated(ssnode* node, bool deleting=false) {
+    if (auto vport = dynamic_cast<ssvport*>(node)) {
+      bool prev_stated = vport->vp_stated();
+      if (vport->in_links().size() + vport->out_links().size() > (1 + deleting)) {
+        vport->vp_stated(true);
+      } else {
+        vport->vp_stated(false);
+      }
+
+      if (deleting)
+        unassign_node(vport);
+        
+      else if (prev_stated != vport->vp_stated())
+        unassign_node(vport);
+    }
+  }
+
+  /**
+   * @brief Delete a link on every schedule
+   * 
+   * @param link link to delete
+   */
   void delete_link(sslink* link) {
     verify();
     
     auto* sub = _ssModel.subModel();
+    check_stated(link->source(), true);
+    check_stated(link->sink(), true);
+
     // remove it from every schedule
     unassign_link(link);
     sub->delete_link(link->id());
-    for_each_sched([&](Schedule& sched) { sched.remove_link(link->id()); });
+    for_each_sched([&](Schedule& sched) { 
+      sched.remove_link(link->id());
+    });
+
     delete link;
     verify();
   }
@@ -786,49 +901,72 @@ class CodesignInstance {
 
   float weight_obj() { return dse_obj(); }
 
+
+  /**
+   * @brief Gets the utilization ratio of the current codesign instance
+   * 
+   * @return std::tuple<float, float, float>, the overall, node, and
+   * link utilization ratio, respectively of current codesign instance
+   */
   std::tuple<float, float, float> utilization() {
-    if (abs(dse_obj()) < (1.0 + 1e-3) || !res[0]) {
+    // If DSE_OBJ is horrible return nothing
+    if (abs(dse_obj()) < (1.0 + 1e-3)) {
       return {0, 0, 0};
     }
-    unused_nodes =
-        std::vector<bool>(res[0]->ssModel()->subModel()->node_list().size(), true);
-    unused_links =
-        std::vector<bool>(res[0]->ssModel()->subModel()->link_list().size(), true);
+    
+    // Check to see if there is a working schedule
+    bool meaningful = false;
+    for (auto sched : res) {
+      if (sched != nullptr) {
+        meaningful = true;
+        break;
+      }
+    }
+
+    // If there is no schedules, return nothing
+    if (!meaningful) {
+      return {0, 0, 0};
+    }
+
+    auto sub = _ssModel.subModel();
+    
+
+    unused_nodes = std::vector<bool>(sub->node_list().size(), true);
+    unused_links = std::vector<bool>(sub->link_list().size(), true);
+
     for (size_t i = 0; i < res.size(); ++i) {
-      if (!res[i]) {
-        return {0, 0, 0};
-      }
-      for (size_t j = 0; j < res[i]->node_prop().size(); ++j) {
-        if (!unused_nodes[j]) {
-          continue;
-        }
-        for (int k = 0; k < 8; ++k) {
-          if (!res[i]->node_prop()[j].slots[k].vertices.empty() ||
-              res[i]->node_prop()[j].slots[k].passthrus.size()) {
-            unused_nodes[j] = false;
-          }
-        }
-      }
-      for (size_t j = 0; j < res[i]->link_prop().size(); ++j) {
-        for (int k = 0; k < 8; ++k) {
-          if (!res[i]->link_prop()[j].slots[k].edges.empty()) {
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->source()->id()] =
-                false;
-            unused_nodes[res[i]->ssModel()->subModel()->link_list()[j]->sink()->id()] =
-                false;
-            unused_links[j] = false;
+      auto sched = res[i];
+      if (sched != nullptr) {
+        for (auto& ep : sched->edge_prop()) {
+          for(auto link_iter = ep.links.begin(); link_iter < ep.links.end(); link_iter++) {
+            auto link = *link_iter;
+            unused_links[link.second->id()] = false;
+            unused_nodes[link.second->sink()->id()] = false;
+            unused_nodes[link.second->source()->id()] = false;
           }
         }
       }
     }
-    int cnt_nodes = 0, cnt_links = 0;
-    for (auto elem : unused_nodes) cnt_nodes += elem;
-    for (auto elem : unused_links) cnt_links += elem;
-    float overall =
-        (float)(cnt_nodes + cnt_links) / (unused_nodes.size() + unused_links.size());
-    float nodes_ratio = (float)(cnt_nodes) / (unused_nodes.size());
-    float links_ratio = (float)(cnt_links) / (unused_links.size());
-    return {overall, nodes_ratio, links_ratio};
+
+    float node_count = unused_nodes.size();
+    float link_count = unused_links.size();
+    float unused_node_count = 0;
+    float unused_link_count = 0;
+
+    // Go through and count how many are true
+    for (int i = 0; i < unused_nodes.size(); i++) {
+      if (!unused_nodes[i]) unused_node_count++;
+    }
+
+    for (int i = 0; i < unused_links.size(); i++) {
+      if (!unused_links[i]) unused_link_count++;
+    }
+
+    // do calculations to determine unitilization
+    float overall_usage = (unused_node_count + unused_link_count) / (node_count + link_count);
+    float nodes_usage = unused_node_count / node_count;
+    float links_usage = unused_link_count / link_count;
+    return {overall_usage, nodes_usage, links_usage};
   }
 
   void dump_breakdown(bool verbose) {
@@ -846,29 +984,116 @@ class CodesignInstance {
     }
   }
 
- private:
+  /**
+   * @brief Checks to see if a flip-flop can be removed without causing
+   * a cycle in the hardware graph
+   * 
+   * @param n the node to check 
+   * @return true if there will be no cycle created by removing the node
+   * @return false if there will be a cycle created by removing the node
+   */
+  bool check_remove_flipflop(ssnode* n) {
+    std::vector<bool> visited(ss_model()->node_list().size(), false);
 
+    // Check upstream for cycles
+    if (!check_remove_helper(n, visited, true))
+      return false;
+    
+    // Check downstream for cycles
+    if (!check_remove_helper(n, visited, false))
+      return false;
+    
+    // No cycles found, so removing flipflow is fine
+    return true;
+  }
+
+ private:
+  /**
+  * @brief Helper for check_remove_flipflop. Will recursively check all nodes
+  * to see if there is a cycle
+  * 
+  * @param n the node to check
+  * @param visited the set of nodes that have been visited
+  * @param down whether to check the upstream or downstream
+  * @return true if there is no cycle from removing this node
+  * @return false if there is a cycle from removing this node
+  */
+  bool check_remove_helper(ssnode* n, std::vector<bool>& visited, bool down) {
+    auto links = n->in_links();
+    if (down) {
+      links = n->out_links();
+    }
+
+    for (auto link : links) {
+      auto node = link->source();
+      if (down) {
+        node = link->sink();
+      }
+      
+      // If there is a delay then we can just continue
+      if (node->max_delay() > 0) 
+        continue;
+
+      // If we have already visited this node then we have a cycle
+      if (visited[node->id()])
+        return false;
+      visited[node->id()] = true;
+
+      // recursively check all the nodes connected to this node
+      if (!check_remove_helper(node, visited, down))
+        return false;
+    }
+    // No cycle found
+    return true;
+  }
+
+  /**
+   * @brief Collapses the links through a node, of a given edge
+   * 
+   * @param n node to collapse
+   * @param edge edge to collapse from
+   * @param sched currently used schedule
+   */
   void collapse_edge_links(ssnode* n, dsa::dfg::Edge edge, Schedule& sched) {
     auto* sub = _ssModel.subModel();
     auto& links = sched.links_of(&edge);
     for (auto it = links.begin(); it != links.end(); ++it) {
       //Check if link is the node to collapse
       if (it->second->sink()->id() == n->id() && std::next(it) != links.end()) {
-        sub->add_link(it->second->source(), std::next(it)->second->sink());
+        auto src = it->second->source();
+        auto dst = std::next(it)->second->sink();
+
+        sub->add_link(src, dst);
+        check_stated(src);
+        check_stated(dst);
         return;
       }
       
     }
   }
 
+  /**
+   * @brief Adds a fifo depth to all nodes after a given node in the given edge
+   * 
+   * TODO: Only Check the last node in an endge
+   * 
+   * @param fifos set of fu's that have already have their fifo depth added
+   * @param n node to collapse
+   * @param edge edge to check for functional units
+   * @param sched current schedule to use
+   */
   void add_fifo_edge(std::unordered_set<ssfu*>& fifos, ssnode* n, dsa::dfg::Edge edge, Schedule& sched) {
     bool found_node = false;
     for (auto link : sched.links_of(&edge)) {
       if (found_node) {
         if (auto fu = dynamic_cast<ssfu*>(link.second->sink())) {
+          // Check if node is already in the set or if it has too large a delay fifo
           if (fu->delay_fifo_depth() < 32 && fifos.find(fu) == fifos.end()) {
             fu->max_delay(fu->delay_fifo_depth() + 1);
             fifos.insert(fu);
+            // We don't need to reassign these to the schedule
+
+            return;
           }
         }
       } else if (link.second->sink()->id() == n->id()) {
@@ -877,19 +1102,153 @@ class CodesignInstance {
     }
   }
 
-  /*
-  void add_vport(std::unordered_set<ssnode*> nodes_forwarded, ssnode* n, dsa::dfg::Edge edge, Schedule& sched) {
-    for (auto link : sched.links_of(&edge)) {
+  /**
+   * @brief Collapses a vport
+   * TODO Fix this
+   * @param vport vport to collapse
+   */
+  void collapse_vport(ssvport* vport) {
+    // Get Links used in schedules
+    std::unordered_set<sslink*> links = useful_vport_links(vport);
+    // If no links are used in any schedule, we can just remove vport
+    if (links.size() == 0) return;
+
+    auto* sub = _ssModel.subModel();
+    ssvport* other_vport;
+    
+    if (vport->out_links().size() == 0) {
+      // Find another random VPort to collapse this one into
+      while (other_vport == nullptr || other_vport->id() == vport->id()) {
+        int index = non_uniform_random(sub->output_list(), unused_nodes);
+        other_vport = sub->output_list()[index];
+      }
+      // Check if width will go up by more than power of two
+      if (log2(other_vport->in_links().size()) == log2(links.size() + other_vport->in_links().size())) {
+        // Simply add links to this vport
+        for (auto& link : links) {
+          sub->add_link(link->source(), other_vport);
+        }
+      } else {
+        // Add Switches so VPort retains current power of two width
+        if (other_vport->in_links().size() > links.size()) {
+          for (auto& link : other_vport->in_links()) {
+            if (links.size() > 0) {
+              auto link_to_add = links.begin();
+              ssswitch* sw = sub->add_switch();
+              sub->add_link(sw, other_vport);
+              sub->add_link(link->source(), sw);
+              sub->add_link((* link_to_add)->source(), sw);
+              delete_link(link);
+              links.erase(link_to_add);
+            }
+          }
+        } else {
+          // First add
+          for (auto& link : other_vport->in_links()) {
+            ssswitch* sw = sub->add_switch();
+            sub->add_link(sw, other_vport);
+            sub->add_link(link->source(), sw);
+            delete_link(link);
+          }
+          // Now add to the switches
+          int link_index = 0;
+          for (auto& link : links) {
+            sub->add_link(link->source(), other_vport->in_links()[link_index]->source());
+            link_index++;
+            if (link_index == other_vport->in_links().size()) {
+              link_index = 0;
+            }
+          }
+        }
+      }
+    } else {
+      // Find another random VPort to collapse this one into
+      while (other_vport == nullptr || other_vport->id() == vport->id()) {
+        int index = non_uniform_random(sub->input_list(), unused_nodes);
+        other_vport = sub->input_list()[index];
+      }
+      // Check if width will go up by more than power of two
+      if (log2(other_vport->out_links().size()) == log2(links.size() + other_vport->out_links().size())) {
+        // Simply add links to this vport
+        for (auto& link : links) {
+          sub->add_link(other_vport, link->sink());
+        }
+      } else {
+        // Add Switches so VPort retains current power of two width
+        if (other_vport->out_links().size() > links.size()) {
+          for (auto& link : other_vport->out_links()) {
+            if (links.size() > 0) {
+              auto link_to_add = links.begin();
+              ssswitch* sw = sub->add_switch();
+              sub->add_link(other_vport, sw);
+              sub->add_link(sw, link->sink());
+              sub->add_link(sw, (* link_to_add)->sink());
+              delete_link(link);
+              links.erase(link_to_add);
+            }
+          }
+        } else {
+          // First add
+          for (auto& link : other_vport->out_links()) {
+            ssswitch* sw = sub->add_switch();
+            sub->add_link(sw, other_vport);
+            sub->add_link(sw, link->sink());
+            delete_link(link);
+          }
+          // Now add to the switches
+          int link_index = 0;
+          for (auto& link : links) {
+            sub->add_link(other_vport->out_links()[link_index]->sink(), link->sink());
+            link_index++;
+            if (link_index == other_vport->out_links().size()) {
+              link_index = 0;
+            }
+          }
+        }
+      }
     }
+    std::ostringstream s;
+    s << dse_changes_log.back() << " collapsed vport into " << other_vport->name();
+    dse_changes_log.back() = s.str();
   }
-  */
 
-
-
-  // When we delete a hardware element, we need to:
-  // 1. deschedule anything that was assigned to that element
-  // 2. remove the concept of that element from the schedule (consistency)
-  // 3. remove the element from the hardware description
+  std::unordered_set<sslink*> useful_vport_links(ssvport* n) {
+    std::unordered_set<sslink*> links;
+    for_each_sched([&](Schedule& sched) {
+      auto link_prop = sched.link_prop(); 
+      //Output Vector Port
+      if (n->out_links().size() == 0) {
+        for (auto& link : n->in_links()) {
+          auto link_slice = link_prop[link->id()];
+          if (link_slice.slots.size() > 0) {
+            links.insert(link);
+          }
+        }
+      } else {
+        for (auto& link : n->out_links()) {
+          auto link_slice = link_prop[link->id()];
+          if (link_slice.slots.size() > 0) {
+            links.insert(link);
+          }
+        }
+      }
+    });
+    return links;
+  }
+  
+  /**
+   * @brief Deletes a node
+   * 
+   * When we delete a hardware element, we need to:
+   *  1. deschedule anything that was assigned to that element
+   *  2. remove the concept of that element from the schedule (consistency)
+   *  3. remove the element from the hardware description
+   * 
+   * @param n node to delete
+   * @param collapse_links whether to collapse the links of node
+   * @param forward_vport whether to forward the links of vport
+   * @param add_fifo whether to add fifo depths to all nodes after
+   */
   void delete_node(ssnode* n, bool collapse_links=false, bool forward_vport=false, bool add_fifo=false) {
 
     auto* sub = _ssModel.subModel();
@@ -916,6 +1275,10 @@ class CodesignInstance {
         }
       }
     });
+
+    if (collapse_links && dynamic_cast<ssvport*>(n)) {
+      //collapse_vport(dynamic_cast<ssvport*>(n));
+    }
 
     if (links_collapsed > 0) {
       std::ostringstream s;

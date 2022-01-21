@@ -240,7 +240,7 @@ struct Estimator : Visitor {
           (float) fu->out_links().size(), 
           (float) 0 /*features[4]*/, 
           (float) fu->flow_control() ? (float) 1 : (float) 0, 
-          (float) fu->get_register_file_size()};
+          (float) fu->regFileSize()};
         auto predicted = pe_area_predict_fpga(model_inputs);
         std::vector<double> output(predicted.begin(), predicted.end());
         res.add(Breakdown::FU, output);

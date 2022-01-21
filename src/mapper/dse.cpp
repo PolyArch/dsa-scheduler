@@ -13,7 +13,7 @@ CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
 
 namespace dsa {
 
-const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Change Details,Current Resources,Current FU Resource,Current Switch Resource,Current VPort Resource,Current Mem Resource,Best Resources,Best FU Resource,Best Switch Resource,Best VPort Resource,Best Mem Resource,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances,DFG Names";
+const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Change Details,Current Resources,Current FU Resource,Current Switch Resource,Current VPort Resource,Current Mem Resource,Best Resources,Best FU Resource,Best Switch Resource,Best VPort Resource,Best Mem Resource,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances";
 
 // Print Resources for given type
 std::string resources(int type, dsa::adg::estimation::Result& estimated) {
@@ -70,6 +70,7 @@ std::string resources(int type, dsa::adg::estimation::Result& estimated) {
 
 
 std::string get_dfg_names(CodesignInstance* ci) {
+  ci->dse_obj();
   std::ostringstream s;
   for (int x = 0; x < ci->workload_array.size(); ++x) {
     s << ci->res[x]->ssdfg()->filename;
@@ -103,8 +104,8 @@ std::string dump_log(const double& time, const int& iteration, const int& last_i
     << std::get<2>(curr_util) << ","
     << std::get<0>(best_util) << ","
     << std::get<1>(best_util) << ","
-    << std::get<2>(best_util) << ","
-    << curr_ci->get_changes_log() << ",\"" 
+    << std::get<2>(best_util) << ",\""
+    << curr_ci->get_changes_log() << "\",\"" 
     << resources(0, curr_estimated) << "\",\"" 
     << resources(1, curr_estimated) << "\",\"" 
     << resources(2, curr_estimated) << "\",\"" 
@@ -114,14 +115,13 @@ std::string dump_log(const double& time, const int& iteration, const int& last_i
     << resources(1, best_estimated) << "\",\"" 
     << resources(2, best_estimated) << "\",\"" 
     << resources(3, best_estimated) << "\",\""
-    << resources(4, best_estimated) << "\"," 
-    << curr_ci->get_workload_weights() << ","
-    << best_ci->get_workload_weights() << ","
-    << curr_ci->get_workload_performances() << ","
-    << best_ci->get_workload_performances() << ","
-    << curr_ci->get_dfg_performances() << ","
-    << best_ci->get_dfg_performances() << ",\""
-    << get_dfg_names(best_ci) << "\"";
+    << resources(4, best_estimated) << "\",\"" 
+    << curr_ci->get_workload_weights() << "\",\""
+    << best_ci->get_workload_weights() << "\",\""
+    << curr_ci->get_workload_performances() << "\",\""
+    << best_ci->get_workload_performances() << "\",\""
+    << curr_ci->get_dfg_performances() << "\",\""
+    << best_ci->get_dfg_performances() << "\"";
   return s.str();
 }
 
@@ -144,6 +144,24 @@ void initialize_workloads(CodesignInstance*& ci, const std::string &pdg_filename
     } else {
       ci->workload_array.back().sched_array.emplace_back(ci->ss_model(), new SSDfg(curline));
     }
+  }
+}
+
+void dump_schedules(CodesignInstance*& ci, std::string base_path) {
+  for (int i = 0; i < ci->workload_array.size(); ++i) {
+    std::string path = base_path + std::to_string(i);
+    auto sched = ci->res[i];
+    if (sched == nullptr) continue;
+    
+    DSA_INFO << "Dumping "<< sched->ssdfg()->filename 
+              << " at " << path << " " << ci->dse_sched_obj(sched);
+    ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
+    std::string filename = path + "/" + std::to_string(i);
+    sched->printGraphviz((path + "/graph.gv").c_str());
+    std::ofstream ofs(filename + ".dfg.h");
+    DSA_CHECK(ofs.good()) << filename << ".dfg.h" << " not opened!";
+    sched->printConfigHeader(ofs, std::to_string(i));
+    ofs.close();
   }
 }
 
@@ -210,24 +228,13 @@ void filter_useless_function_units(CodesignInstance*& ci) {
   }
 }
 
-void dump_checkpoint(Schedule* sched, const std::string& filename, double performance, bool isFinal=false) {
-  if (!sched) return;
-  std::string path = "viz/iters/" + filename;
-  if (isFinal)
-    path = "viz/" + filename;
-  std::cout << "Dumping " << sched->ssdfg()->filename << path << "/ " << performance << std::endl;
-  ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-  sched->printGraphviz((path + "/graph.gv").c_str());
-  std::ofstream ofs(path + "/" + filename + ".dfg.h");
-  sched->printConfigHeader(ofs, filename);
-}
-
 void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   // Create Objective CSV File
   std::string path = "viz/objectives.csv";
-  ofstream ofs(path);
-  DSA_CHECK(ofs.good()) << path << " not opened!";
-  ofs << log_header << std::endl;
+  ofstream objectives(path);
+
+  DSA_CHECK(objectives.good()) << path << " not opened!";
+  objectives << log_header << std::endl;
 
   // Set up Scheduler
   auto &ci = dsa::ContextFlags::Global();
@@ -257,22 +264,22 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   double last_best_obj = -999;
 
   // Dump Start log and hw;
-  ofs << dump_log(static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC, i, last_improve, temperature, cur_ci, cur_ci) << std::endl;
+  objectives << dump_log(static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC, i, last_improve, temperature, cur_ci, cur_ci) << std::endl;
   dump_hw(cur_ci, i);
 
   // Start DSE Iterations. Will end if it doesn't improve in 750 meaningful iterations
   while (last_improve < 750) {
-    std::cout << " ### Begin DSE Iteration " << i << " (" << std::setprecision(2) <<temperature <<") ###" << std::endl;
+    DSA_INFO << "--- ### Begin DSE Iteration " << i << " (" << std::setprecision(2) <<temperature <<") ### ---";
 
     // Setup Next Iteration
     clock_t current_time = clock();
     double time_elps = static_cast<double>(current_time - start_time) / CLOCKS_PER_SEC;
     if (dsa::ContextFlags::Global().dse_timeout != -1) {
       if (time_elps > dsa::ContextFlags::Global().dse_timeout) {
-        std::cout
+        DSA_INFO
           << time_elps << "s elapsed, the cutoff is "
           << dsa::ContextFlags::Global().dse_timeout
-          << "s, break DSE" << std::endl;
+          << "s, break DSE";
         break;
       }
     }
@@ -292,9 +299,8 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     cand_ci->verify();
     
     // Print time for Modification
-    std::cout << "dse modification: "
-              << static_cast<double>(clock() - current_time) / CLOCKS_PER_SEC << "s"
-              << std::endl;
+    DSA_INFO << "dse modification: "
+              << static_cast<double>(clock() - current_time) / CLOCKS_PER_SEC << "s";
 
     // Schedule the Modification
     clock_t StartSchedule = clock();
@@ -310,17 +316,16 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     DSA_CHECK(best_obj > last_best_obj) << " best obj went down from " << last_best_obj << " to " << best_obj;
 
     // Print Objectives
-    std::cout << "DSE OBJ: " << std::setprecision(4) << new_obj << "(Best:" << best_obj << ") (Iteration:" << init_obj << ")" << std::endl;
+    DSA_INFO << "DSE OBJ: " << std::setprecision(4) << new_obj << "(Best:" << best_obj << ") (Iteration:" << init_obj << ")";
     
     auto util = cand_ci->utilization();
 
-    std::cout << std::setprecision(2)
+    DSA_INFO << std::setprecision(2)
               << "Utilization ratio overall: " << std::get<0>(util)
-              << ", nodes: " << std::get<1>(util) << ", links: " << std::get<2>(util)
-              << "\n"
-              << std::setprecision(7);
+              << ", nodes: " << std::get<1>(util) 
+              << ", links: " << std::get<2>(util) << std::setprecision(7);
 
-    ofs << dump_log(time_elps, i, last_improve, temperature, cand_ci, best_ci) << std::endl;
+    objectives << dump_log(time_elps, i, last_improve, temperature, cand_ci, best_ci) << std::endl;
 
     // Reject a bad modification that causes everything not to schedule
     
@@ -343,27 +348,17 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
       best_ci = cur_ci = cand_ci;
 
       // Print the Improvement
-      std::cout << "----------------- IMPROVED OBJ! --------------------" << std::endl;
-      std::cout << "New Objective: " << new_obj << " (from: " << best_obj << ")"<< std::endl;
-      std::cout << "Execution Time: " << std::setprecision(6)
+      DSA_INFO << "----------------- IMPROVED OBJ! --------------------\n" <<
+                  "New Objective: " << new_obj << " (from: " << best_obj << ")";
+      DSA_INFO << "Execution Time: " << std::setprecision(6)
                 << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC 
                 << ", "
-                << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC
-                << std::endl;
+                << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC;
 
       // dump the new hw json
       dump_hw(best_ci, i);
 
-      for (int x = 0; x < best_ci->workload_array.size(); ++x) {
-        std::string path = "viz/iters/iter_" + std::to_string(i);
-        auto sched = best_ci->res[x];
-        std::cout << "Dumping " << sched->ssdfg()->filename << "at" << path << "/" << x << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
-        ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-        std::string filename = path + "/" + std::to_string(x);
-        sched->printGraphviz((path + "/graph.gv").c_str());
-        std::ofstream ofs(filename + ".dfg.h");
-        sched->printConfigHeader(ofs, std::to_string(x));
-      }
+      dump_schedules(best_ci, "viz/iters/iter_");
 
       // Modify the temperature
       ++improv_iter;
@@ -401,56 +396,54 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   }
   // We have completed everything! Yay!
 
-  std::cout << "DSE Complete!\n";
-  std::cout << "Improv Iters: " << improv_iter << "\n";
+  DSA_INFO << "DSE Complete!";
+  DSA_INFO << "Improv Iters: " << improv_iter;
   best_ci->verify();
 
   // Print Final Results
   double best_obj = best_ci->weight_obj();
-  std::cout << "FINAL DSE OBJ: " << best_obj << "\n";
+  DSA_INFO << "FINAL DSE OBJ: " << best_obj;
   auto util = cur_ci->utilization();
-  std::cout << std::setprecision(2) << "Utilization ratio overall: " << std::get<0>(util)
-            << ", nodes: " << std::get<1>(util) << ", links: " << std::get<2>(util)
-            << "\n"
-            << std::setprecision(7);
+  DSA_INFO << std::setprecision(2) << "Utilization ratio overall: " 
+            << std::get<0>(util) << ", nodes: " 
+            << std::get<1>(util) << ", links: " 
+            << std::get<2>(util) << std::setprecision(7);
 
+  CodesignInstance* prunned_ci = new CodesignInstance(*best_ci, false);
+
+  prunned_ci->prune_all_unused();
+
+  double pruned_obj = prunned_ci->weight_obj();
+  auto final_util = best_ci->utilization();
+  auto pruned_util = prunned_ci->utilization();
+  DSA_INFO << "PRUNED DSE OBJ: " << pruned_obj;
+
+  DSA_INFO << std::setprecision(2) << "Prunned utilization ratio overall: " 
+           << std::get<0>(pruned_util) << ", nodes: " 
+           << std::get<1>(pruned_util) << ", links: " 
+           << std::get<2>(pruned_util) << std::setprecision(7);
+
+  DSA_INFO << "BEST CI DSE OBJ: " << best_obj;
+  DSA_INFO << std::setprecision(2) << "Best utilization ratio overall: " 
+           << std::get<0>(final_util) << ", nodes: " 
+           << std::get<1>(final_util) << ", links: " 
+           << std::get<2>(final_util) << std::setprecision(7);
+
+  dump_schedules(prunned_ci, "viz/final_prunned_");
+  dump_schedules(best_ci, "viz/final_");
+
+  best_ci->ss_model()->subModel()->DumpHwInJson("viz/final.json");
+  prunned_ci->ss_model()->subModel()->DumpHwInJson("viz/prunned.json");
   best_ci->dump_breakdown(ci.verbose);
 
-  // Prune finalized HW
-  best_ci->prune_all_unused();
-
-  double pruned_obj = best_ci->weight_obj();
-
-  for (int x = 0; x < best_ci->workload_array.size(); ++x) {
-    std::string path = "viz/final_" + std::to_string(x);
-    auto sched = best_ci->res[x];
-    std::cout << "Dumping " << sched->ssdfg()->filename << " " << path << " " <<  best_ci->dse_sched_obj(sched) << std::endl;
-    ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-    std::string filename = path + "/" + std::to_string(x);
-    sched->printGraphviz((path + "/graph.gv").c_str());
-    std::ofstream ofs(filename + ".dfg.h");
-    sched->printConfigHeader(ofs, std::to_string(x));
-  }
-
-  best_ci->ss_model()->subModel()->DumpHwInJson("viz/pruned.json");
-  std::cout << "Pruned DSE OBJ: " << best_ci->weight_obj() << "\n";
-  best_ci->dump_breakdown(ci.verbose);
-
-  std::cout << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::endl;
+  DSA_INFO << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC;
 
   // Clean up
-  ofs.close();
-  /*
-  for (auto work : cur_ci->workload_array) {
-    for (auto sched : work.sched_array) {
-      delete sched.ssdfg();
-    }
+  if (objectives.is_open()) {
+    objectives.close();
   }
-  for (auto capability : cur_ci->ss_model()->fu_types) {
-    delete capability;
-  }
-  */
   delete best_ci;
+  delete prunned_ci;
+  DSA_INFO << "DSE Finished!";
 }
-
 }

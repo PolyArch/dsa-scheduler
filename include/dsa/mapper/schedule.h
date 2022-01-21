@@ -533,6 +533,7 @@ class Schedule {
     assign_link_to_edge(dfgedge, slot, slink);
     int idx = it - _edgeProp[dfgedge->id].links.begin();
     DSA_CHECK(idx >= 0 && idx <= (int)_edgeProp[dfgedge->id].links.size()) << idx;
+    // TODO: Performance
     _edgeProp[dfgedge->id].links.insert(it, std::make_pair(slot, slink));
   }
 
@@ -680,14 +681,34 @@ class Schedule {
     return _nodeProp[node->id()].slots[slot].vertices;
   }
 
+  /**
+   * @brief Gets all the edges for a particular slot/link pair
+   * 
+   * @param slot the given slot
+   * @param link the given link 
+   * @return std::vector<EdgeSlice>& the set of edges for the given slot/link
+   * pair
+   */
   std::vector<EdgeSlice>& dfg_edges_of(int slot, sslink* link) {
     return _linkProp[link->id()].slots[slot].edges;
   }
 
-  // probably eventually we will need to change slots per node ...
+  /**
+   * @brief Get the Number of Slots for a Node
+   * 
+   * @param node the node to get the slots of
+   * @return int the slots for the given node
+   */
   int num_slots(ssnode* node) {
-    return node->datawidth() / node->granularity();
+    return _nodeProp[node->id()].slots.size();
   }
+
+  /**
+   * @brief Get the Number of Slots for a given Link
+   * 
+   * @param link the link to get the slots of
+   * @return int the slots for the given link
+   */
   int num_slots(sslink* link) {
     return num_slots(link->source());
   }
@@ -697,6 +718,12 @@ class Schedule {
     return _vertexProp[dfgnode->id()];
   }
 
+  /**
+   * @brief Gets if a dfgnode is currently schedule
+   * 
+   * @param dfgnode the dfgnode to check
+   * @return bool if the given dfgnode is scheduled
+   */
   bool is_scheduled(dsa::dfg::Node* dfgnode) {
     return _vertexProp[dfgnode->id()].node() != nullptr;
   }

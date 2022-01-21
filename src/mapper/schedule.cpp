@@ -170,9 +170,9 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   DSA_INFO << cfg_name << ": bitstream is being generated";
   os << "#pragma once" << std::endl;
   // Header file for data type
-  os <<"// Header File for Data Type" <<std::endl<< "#include <cstdint>" 
+  os << "// Header File for Data Type" << std::endl << "#include <cstdint>" 
       << std::endl << std::endl;
-  os << "// Input Vector Ports" <<std::endl ;
+  os << "// Input Vector Ports" << std::endl ;
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {
     int pn = vecPortOf(&pv);
     if (pv.name()[0] == '$') {
@@ -592,7 +592,7 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
       for (auto v : vertices) {
         if (!v->values.empty()) {
           ofs << "<tr><td port=\"" << v->name() << "\" border=\"1\" bgcolor=\"#"
-              << std::hex << colorOf(&v->values[0]) << std::dec << "\">" << v->name()
+              << std::hex << std::setfill('0') << std::setw(6) << colorOf(&v->values[0]) << std::dec << "\">" << v->name()
               << "</td></tr>";
         }
       }
@@ -710,9 +710,7 @@ void Schedule::printGraphviz(const char* name) {
 
   ofs << "digraph sched {\n";
 
-  for (auto* elem : sub->input_list()) {
-    printNodeGraphviz(ofs, elem);
-  }
+  for (auto* elem : sub->input_list()) printNodeGraphviz(ofs, elem);
 
   for (auto* elem : sub->output_list()) printNodeGraphviz(ofs, elem);
 

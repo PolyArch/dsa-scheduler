@@ -14,6 +14,8 @@
 #include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 #include "dsa/dfg/visitor.h"
+#include "dsa/dfg/node.h"
+#include "dsa/dfg/port.h"
 #include "dsa/mapper/schedule.h"
 #include "dsa/mapper/scheduler.h"
 #include "dsa/mapper/scheduler_sa.h"
@@ -230,34 +232,52 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
 
   is_dse = true;
   int num_workers = dsa::ContextFlags::Global().num_schedule_workers;
-  ctpl::thread_pool workers(num_workers);
-  std::cout << "Workers: " << num_workers << std::endl;
+  if (num_workers > 1) {
+    ctpl::thread_pool workers(num_workers);
+    std::cout << "Workers: " << num_workers << std::endl;
 
-  for (WorkloadSchedules& ws : inst.workload_array) {
-    for (Schedule& sr : ws.sched_array) {
-      workers.push([this, &sr](int id) {
+    for (WorkloadSchedules& ws : inst.workload_array) {
+      for (Schedule& sr : ws.sched_array) {
+        workers.push([this, &sr](int id) {
+          Schedule* sched = &sr;
+          DSA_CHECK(sched->ssModel() == _ssModel);
+
+          SchedStats s;
+          std::stringstream startStream;
+          startStream << "### Start Schedule (" << 
+            sched->ssdfg()->filename << "): (Thread " << id << ") ###\n";
+          std::cout << startStream.str(); // Can't USE DSA_INFO due to multithreading
+
+          schedule(sched->ssdfg(), sched);
+          auto p = obj(sched, s);
+          
+          std::stringstream endStream;
+          endStream <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
+                  << -p.second << " (Thread " << id << ") ###\n";
+          std::cout << endStream.str(); // Can't USE DSA_INFO due to multithreading
+        });
+      }
+    }
+    
+    workers.stop(true);
+  } else {
+    for (WorkloadSchedules& ws : inst.workload_array) {
+      for (Schedule& sr : ws.sched_array) {
         Schedule* sched = &sr;
         DSA_CHECK(sched->ssModel() == _ssModel);
 
         SchedStats s;
-        std::stringstream startStream;
-        startStream << "### Start Schedule (" << 
-          sched->ssdfg()->filename << "): (Thread " << id << ") ###";
-        DSA_INFO << startStream.str();
+        DSA_INFO << "### Start Schedule (" << 
+          sched->ssdfg()->filename << "): ###";
 
         schedule(sched->ssdfg(), sched);
         auto p = obj(sched, s);
-        
-        std::stringstream endStream;
+
         DSA_INFO <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
-                 << -p.second << " (Thread "<< id << ") ###";
-        std::cout << endStream.str();
-      });
+                 << -p.second << " ###";
+      }
     }
   }
-  
-  workers.stop(true);
-
   return true;
 }
 
@@ -433,10 +453,12 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   bool dummy = dsa::ContextFlags::Global().dummy;
   dsa::mapper::CandidateSpotVisitor cpv(sched, 50);
 
+  // Sort nodes based upon number of candidates for each of them
   std::sort(nodes.begin(), nodes.end(), [sched](dsa::dfg::Node* a, dsa::dfg::Node* b) {
     return sched->candidate_cnt[a->id()] < sched->candidate_cnt[b->id()];
   });
-
+  
+  // Shuffle nodes with same number of candidates
   int from = 0;
   for (int i = 1; i < n; ++i) {
     if (sched->candidate_cnt[nodes[i - 1]->id()] !=
@@ -447,9 +469,12 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
   }
   std::random_shuffle(nodes.begin() + from, nodes.begin() + n);
 
+  // Log the previous node candidate counts
   for (int i = 0; i < n; ++i) {
-    DSA_LOG(CAND) << nodes[i]->name() << " has " << sched->candidate_cnt[nodes[i]->id()]
-              << " candidate(s)";
+    DSA_LOG(CAND) << i << " node ("
+                  << nodes[i]->name() 
+                  << ") has " << sched->candidate_cnt[nodes[i]->id()]
+                  << " candidate(s)";
   }
 
   for (int i = 0; i < 3; ++i) {
@@ -462,6 +487,8 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       if (!sched->is_scheduled(node)) {
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
+        DSA_LOG(CAND) << i << " node ("<< node->name() << ") has " 
+                      << candidates.size() << " candidates";
         if (candidates.empty()) {
           DSA_LOG(CAND) << ssDFG->filename << ": " << "Cannot map " << node->name();
           success = false;
@@ -591,9 +618,22 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
   return t_cost;
 }
 
-void insert_edge(std::pair<int, sslink*> link, Schedule* sched, dsa::dfg::Edge* edge,
+/**
+ * @brief Insert a link into an edge
+ * 
+ * @param link the link to insert
+ * @param sched the schedule that contains edge
+ * @param edge the edge to insert the link into
+ * @param it position to insert the link
+ * @param dest the final link (to check for passthrus)
+ * @param x the current node and slot
+ */
+void insert_edge(std::pair<int, sslink*> link, 
+                 Schedule* sched, 
+                 dsa::dfg::Edge* edge,
                  std::vector<std::pair<int, sslink*>>::iterator it,
-                 std::pair<int, ssnode*> dest, std::pair<int, ssnode*> x) {
+                 std::pair<int, ssnode*> dest, 
+                 std::pair<int, ssnode*> x) {
   sched->assign_edgelink(edge, link.first, link.second, it);
 
   if (dynamic_cast<ssfu*>(link.second->sink())) {
@@ -603,11 +643,45 @@ void insert_edge(std::pair<int, sslink*> link, Schedule* sched, dsa::dfg::Edge* 
   }
 }
 
+/**
+ * @brief Insert a link into an edge
+ * 
+ * Different in that it doesn't check for passthrus
+ * 
+ * @param link the link to insert
+ * @param sched the schedule that contains edge
+ * @param edge the edge to insert the link into
+ * @param it position to insert the link
+ */
+void insert_edge(std::pair<int, sslink*> link, 
+                 Schedule* sched, 
+                 dsa::dfg::Edge* edge,
+                 std::vector<std::pair<int, sslink*>>::iterator it) {
+  sched->assign_edgelink(edge, link.first, link.second, it);
+}
+
+/**
+ * @brief The Routing Function
+ * 
+ * First perform Djikstra's algorithm to find the shortest path
+ * Then insert the shortest path into the edge
+ * 
+ * @param sched the schedule to use
+ * @param edge the edge to route
+ * @param vps source vertex
+ * @param vpd end vertex
+ * @param ins_it iterator for where to insert
+ * @param max_path_lengthen maximum path length
+ * @return int latency of the route
+ */
+
 int SchedulerSimulatedAnnealing::route(
-    Schedule* sched, dsa::dfg::Edge* edge,
+    Schedule* sched, 
+    dsa::dfg::Edge* edge,
     mapper::VertexProp &vps,
     mapper::VertexProp &vpd,
-    std::vector<std::pair<int, sslink*>>::iterator* ins_it, int max_path_lengthen) {
+    std::vector<std::pair<int, sslink*>>::iterator* ins_it, 
+    int max_path_lengthen) {
 
   std::pair<int, ssnode*> source = {vps.lane(), vps.node()};
   std::pair<int, ssnode*> dest = {vpd.lane(), vpd.node()};
@@ -617,6 +691,10 @@ int SchedulerSimulatedAnnealing::route(
   std::vector<std::vector<int>> node_dist(n_nodes);
   std::vector<std::vector<int>> done(n_nodes);
   std::vector<std::vector<std::pair<int, sslink*>>> came_from(n_nodes);
+
+  // Booleans for checking at end if we need to add in edge
+  std::pair<int, sslink*> removed_input_vport{-1, nullptr};
+  std::pair<int, sslink*> removed_output_vport{-1, nullptr};
 
   for (ssnode* n : sched->ssModel()->subModel()->node_list()) {
     DSA_CHECK(n->id() >= 0 && n->id() < n_nodes);
@@ -631,10 +709,6 @@ int SchedulerSimulatedAnnealing::route(
     return 1;
   }
 
-  // FIXME: comment/delete this later
-  // if(!path_lengthen) sched->edge_prop()[edge->id()].sched_index.clear();
-  // sched->edge_prop()[edge->id()].sched_index.push_back(_route_times);
-
   DSA_CHECK(path_lengthen || sched->link_count(edge) == 0)
       << "Edge: " << edge->name() << " is already routed!";
 
@@ -644,14 +718,69 @@ int SchedulerSimulatedAnnealing::route(
   if (!path_lengthen) source.first = edge->def()->slot_for_use(edge, source.first);
   dest.first = edge->use()->slot_for_op(edge, dest.first);
 
-  int new_rand_prio = 0;                                 // just pick zero
-  // source.second->set_done(source.first, new_rand_prio)
-  done[source.second->id()][source.first] = new_rand_prio;
-  openset.emplace(0, new_rand_prio, source.first, source.second);
+  int new_rand_prio = 0;
 
-  // source.second->update_dist(source.first, 0, 0, nullptr);
+  // Check to see if source is an Input Vector Port
+  if (auto vport = dynamic_cast<ssvport*>(source.second)) {
+    DSA_CHECK(!vport->vp_stated() || vport->in_links().size() + vport->out_links().size() != 1) << vport->vp_stated() << " " << vport->in_links().size() << " " << vport->out_links().size();
+    if (vport->vp_impl() == 2) {
+      auto* inNode = dynamic_cast<dsa::dfg::InputPort*> (edge->def());
+
+      // Get the index of the next node to route through
+      int slot = edge->vid;
+      
+
+      // If we are mapping a non-stated software input port to a stated hardware port
+      // then we must reserve the first slot of the input port
+      if (vport->vp_stated() && !inNode->stated)
+        slot++;
+
+      // Sanity check that the slot is valid
+      DSA_CHECK(slot >= 0 && slot < vport->out_links().size()) << "Invalid slot " << slot << " with size of " << vport->out_links().size() << ". Input vector port stated: " << vport->vp_stated() << ", inNode " << inNode->name() << " stated: " << inNode->stated << " capability " << vport->name() << ": " << vport->bitwidth_capability() << " input: " << inNode->bandwidth();
+
+      // Get node associated with slot
+      ssnode* next = vport->out_links()[slot]->sink();
+
+      // Bookkeeping to add in at the end
+      removed_output_vport = {slot, vport->out_links()[slot]};
+      
+      // Replace source with the next node
+      //source.first = slot;
+      source.second = next;
+    } 
+  }
+
+  // Check if destination is an output Vector Port
+  if (auto vport = dynamic_cast<ssvport*>(dest.second)) {
+    DSA_CHECK(!vport->vp_stated() || vport->in_links().size() + vport->out_links().size() != 1) << vport->vp_stated() << " " << vport->in_links().size() << " " << vport->out_links().size();
+    if (vport->vp_impl() == 2) {
+      // Get output dfg node
+      dsa::dfg::OutputPort* outNode = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
+
+      // get the slot that this edge must be mapped to
+      int sourceIdx = outNode->sourceEdgeIdx(edge);
+
+      if (vport->vp_stated() && outNode->penetrated_state == -1)
+        sourceIdx++;
+
+      // Sanity check that the slot is valid
+      DSA_CHECK(sourceIdx >= 0 && sourceIdx < vport->in_links().size()) << "Invalid slot " << sourceIdx << " with size of " << vport->in_links().size() << ". Input vector port stated: " << vport->vp_stated() << ", outNode " << outNode->name() << " stated: " << outNode->penetrated_state << " capability " << vport->name() << ": " << vport->bitwidth_capability() << " input: " << outNode->bandwidth();
+
+      // Bookkeeping for later
+      removed_output_vport = {sourceIdx, vport->in_links()[sourceIdx]};
+
+      // Replace destination with the node that should be routed
+      // dest.first = sourceIdx;
+      dest.second = vport->in_links()[sourceIdx]->source();
+    }
+  }
+
+  done[source.second->id()][source.first] = new_rand_prio;
   node_dist[source.second->id()][source.first] = 0;
   came_from[source.second->id()][source.first] = std::make_pair(0, nullptr);
+  openset.emplace(0, new_rand_prio, source.first, source.second);
+
+
 
   while (!openset.empty()) {
     auto &front_elem = *openset.begin();
@@ -680,6 +809,21 @@ int SchedulerSimulatedAnnealing::route(
         }
         sslink* next_link = link;
         ssnode* next = next_link->sink();
+        
+        // Check to see if next is a functional unit
+        if (auto fu = dynamic_cast<ssfu*>(next)) {
+          if (next != dest.second) {
+            // If it is a functional unit and already assigned as a passthrough, skip
+            if (sched->isPassthrough(next_slot, fu))
+              continue;
+            
+            // If it is a functional unit and already assigned as a computation to another edge, skip
+            if (!fu->is_shared() && sched->dfgNodeOf(next_slot, fu) != nullptr)
+              continue;
+          }
+        }
+        
+
         std::pair<int, sslink*> next_pair(next_slot, next_link);
 
         DSA_LOG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->source()->name()
@@ -699,10 +843,7 @@ int SchedulerSimulatedAnnealing::route(
 
         int new_dist = cur_dist + route_cost;
 
-        // int next_dist = next->node_dist(next_slot);
         int next_dist = node_dist[next->id()][next_slot];
-        DSA_CHECK(next_slot < node_dist[next->id()].size())
-          << next_slot << " >= " << node_dist[next->id()].size();
 
         bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
 
@@ -715,18 +856,13 @@ int SchedulerSimulatedAnnealing::route(
             if (iter != openset.end()) openset.erase(iter);
           }
           int new_rand_prio = rand() % 16;
-          // next->set_done(next_slot, new_rand_prio);
           done[next->id()][next_slot] = new_rand_prio;
 
 
           openset.emplace(new_dist, new_rand_prio, next_slot % next->lanes(), next);
 
           node_dist[next->id()][next_slot] = new_dist;
-          DSA_CHECK(next_slot < node_dist[next->id()].size())
-            << next_slot << " >= " << node_dist[next->id()].size();
           came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
-          DSA_CHECK(next_slot < came_from[next->id()].size())
-            << next_slot << " >= " << came_from[next->id()].size();
         }
       }
     }
@@ -737,31 +873,43 @@ int SchedulerSimulatedAnnealing::route(
     return false;  // routing failed, no routes exist!
   }
 
-  //auto it = ins_it ? *ins_it : sched->links_of(edge).begin();
   auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
-  auto x = dest;
+  
+  auto node_slot = dest;
 
   int count = 0;
   dsa::dfg::Edge* alt_edge = nullptr;
   pair<int, sslink*> link;
+  
+  // This means that we had an input vector port at beginnning of edge
+  if (removed_output_vport.second != nullptr) {
+    insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).begin() + idx);
+  }
+  
 
-  while (x != source || (path_lengthen && count == 0)) {
+  // Go through djikstra path in reverse order starting at dest
+  while (node_slot != source || (path_lengthen && count == 0)) {
+    // Increase Count of selected Nodes
     count++;
-    DSA_CHECK(x.first >= 0 && x.first < came_from[x.second->id()].size());
-    link = came_from[x.second->id()][x.first];
 
+    // Get the link, slot pair for next node
+    link = came_from[node_slot.second->id()][node_slot.first];
+
+    // save the slot
     auto link_backup = link;
+    
+    // Change the slot to be the previous slot
+    link.first = node_slot.first;
 
-    link.first = x.first;
-
+    // Check if theres an alternate edge
     if ((alt_edge = sched->alt_edge_for_link(link, edge))) {
       break;
     }
 
-    DSA_CHECK(idx >= 0 && idx <= sched->links_of(edge).size());
-    insert_edge(link, sched, edge, sched->links_of(edge).begin() + idx, dest, x);
+    // Insert link into the edge
+    insert_edge(link, sched, edge, sched->links_of(edge).begin() + idx, dest, node_slot);
 
-    x = std::make_pair(link_backup.first, link.second->source());
+    node_slot = std::make_pair(link_backup.first, link.second->source());
   }
 
   // Need to make sure we add back the other links in-order.
@@ -770,14 +918,19 @@ int SchedulerSimulatedAnnealing::route(
   if (alt_edge) {
     auto& alt_links = sched->links_of(alt_edge);
     for (auto alt_link : alt_links) {
-      x = std::make_pair(alt_link.first, alt_link.second->source());
-      DSA_CHECK(idx >= 0 && idx <= sched->links_of(edge).size());
-      insert_edge(alt_link, sched, edge, sched->links_of(edge).begin() + idx, dest, x);
+      node_slot = std::make_pair(alt_link.first, alt_link.second->source());
+      insert_edge(alt_link, sched, edge, sched->links_of(edge).begin() + idx, dest, node_slot);
       idx++;
 
       if (alt_link == link) break;  // we added the final link
     }
   }
+  
+  // This means that we had an input vector port at beginnning of edge
+  if (removed_input_vport.second != nullptr) {
+    insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin() + idx);
+  }
+  
   return count;
 }
 

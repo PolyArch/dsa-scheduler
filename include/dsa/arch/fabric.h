@@ -266,6 +266,9 @@ class SpatialFabric {
   void delete_node(int node_index) {
     delete_by_id(_node_list, node_index);
     fix_id(_node_list);
+    fix_local_id(fu_list());
+    fix_local_id(switch_list());
+    fix_local_id(vport_list());
   }
 
   void delete_link(int link_index) {
@@ -303,8 +306,25 @@ class SpatialFabric {
 
   // add node
   void add_node(ssnode* n) {
+    // Set ID
     n->id(_node_list.size());
+
+    
+    // Set Local ID
+    if (n->localId() == -1) {
+      if (auto fu = dynamic_cast<ssfu*>(n)) {
+        fu->localId(fu_list().size());
+      } else if (auto sw = dynamic_cast<ssswitch*>(n)) {
+        sw->localId(switch_list().size());
+      } else if (auto vport = dynamic_cast<ssvport*>(n)) {
+        vport->localId(vport_list().size());
+      }
+    }
+
+    // Set Parent
     n->parent = this;
+
+    // Push into node list
     _node_list.push_back(n);
   }
 

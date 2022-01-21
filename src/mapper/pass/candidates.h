@@ -21,12 +21,12 @@ struct CandidateSpotVisitor : dfg::Visitor {
       ssfu* cand_fu = fus[i];
 
       if (!cand_fu->fu_type_.Capable(inst->inst())) {
-        DSA_LOG(CAND) << "Not capable!";
+        //DSA_LOG(CAND) << "Not capable!";
         continue;
       }
       if (cand_fu->out_links().size() < inst->values.size()) {
-        DSA_LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
-                  << cand_fu->out_links().size() << " < " << inst->values.size();
+        //DSA_LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
+        //         << cand_fu->out_links().size() << " < " << inst->values.size();
         continue;
       }
 
@@ -141,8 +141,15 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
   }
   
-  // This is finding the candidates for input vector ports...
-  // possible numbers...condition for non-inclusiveness is somewhere else that uses these candidates...
+  /**
+   * @brief Finds Candidate Hardware Vector Ports for a given Input Port
+   * 
+   * Restrictions:
+   * A Stated Input Port must map to a stated Hardware Vector Port
+   * The Hardware Vector Port must be capable of handling the Input Port
+   * 
+   * @param input the given software input port
+   */
   void Visit(dfg::InputPort* input) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->input_list();
@@ -152,22 +159,43 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
-      if ((int)cand->bitwidth_capability() >= input->bandwidth()) {
-        if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.emplace_back(0, Slot<ssnode*>(0, cand));
-        } else {
-          bad.emplace_back(0, Slot<ssnode*>(0, cand));
+
+      if (cand->bitwidth_capability() >= input->bandwidth()) {
+        // Ensure that we are not mapping a stated software port to a non-stated hardware port
+        if (!input->stated || cand->vp_stated()) {
+          if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
+            spots.emplace_back(0, Slot<ssnode*>(0, cand));
+          } else {
+            spots.emplace_back(0, Slot<ssnode*>(0, cand));
+          }
         }
       }
     }
     if (spots.empty()) {
       spots = bad;
-      DSA_WARNING << input->bandwidth() << "-wide input port insufficient!";
+      if (input->stated)
+        DSA_WARNING << input->bandwidth() << "-wide stated input port insufficient!";
+      else
+        DSA_WARNING << input->bandwidth() << "-wide input port insufficient!";
     }
+    DSA_LOG(CAND) << "Input Port " << input->id() << " (" << input->name() << ") " << input->bandwidth() << " with " << spots.size() << " candidates";
+    for (auto candidate : spots) {
+      ssvport* vport = dynamic_cast<ssvport*>(candidate.slot.ref);
+      DSA_LOG(CAND) << "    " << vport->name() << " with bandwith " << vport->bitwidth_capability() << " and stated "<< vport->vp_stated();
+    }
+
     cnt[input->id()] = spots.size();
   }
 
-  // This is finding the candidates for output vector ports...
+  /**
+   * @brief Finds Candidate Hardware Vector Ports for a given Output Port
+   * 
+   * Restrictions:
+   * A Stated Output Port must map to a stated Hardware Vector Port
+   * The Hardware Vector Port must be capable of handling the Output Port
+   * 
+   * @param output the given software output port
+   */
   void Visit(dfg::OutputPort* output) override {
     auto fabric = sched->ssModel()->subModel();
     auto vports = fabric->output_list();
@@ -177,18 +205,29 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
-      if ((int)cand->bitwidth_capability() >= output->bandwidth()) {
-        if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-          spots.emplace_back(0, Slot<ssnode*>(0, cand));
-        } else {
-          bad.emplace_back(0, Slot<ssnode*>(0, cand));
+
+      if (cand->bitwidth_capability() >= output->bandwidth()) {
+        // Get whether this output-port is stated
+        bool stated = output->penetrated_state >= 0;
+
+        // Make sure we are not mapping a stated software port to a non-stated hardware vport
+        if (!stated || cand->vp_stated()) {
+          if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
+            spots.emplace_back(0, Slot<ssnode*>(0, cand));
+          } else {
+            bad.emplace_back(0, Slot<ssnode*>(0, cand));
+          }
         }
       }
     }
     if (spots.empty()) {
       spots = bad;
-      DSA_WARNING << output->bandwidth() << "-wide output port insufficient!";
+      if (output->penetrated_state >= 0)
+        DSA_WARNING << output->bandwidth() << "-wide stated input port insufficient!";
+      else
+        DSA_WARNING << output->bandwidth() << "-wide input port insufficient!";
     }
+
     cnt[output->id()] = spots.size();
   }
 
