@@ -993,7 +993,7 @@ class CodesignInstance {
    * @return false if there will be a cycle created by removing the node
    */
   bool check_remove_flipflop(ssnode* n) {
-    std::vector<bool> visited(ss_model()->node_list().size(), false);
+    std::vector<bool> visited(_ssModel.subModel()->node_list().size(), false);
 
     // Check upstream for cycles
     if (!check_remove_helper(n, visited, true))
