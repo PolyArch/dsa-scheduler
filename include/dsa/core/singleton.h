@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <torch/script.h>
 
 #include "dsa/arch/estimation.h"
 
@@ -65,6 +66,19 @@ struct ContextFlags {
    * \brief Parse the adg in compatible mode.
    */
   bool adg_compat{false};
+
+  torch::jit::script::Module pe_total_lut;
+  torch::jit::script::Module pe_logic_lut;
+  torch::jit::script::Module pe_ram_lut;
+  torch::jit::script::Module pe_flip_flop;
+
+
+  torch::jit::script::Module sw_total_lut;
+  torch::jit::script::Module sw_logic_lut;
+  torch::jit::script::Module sw_ram_lut;
+  torch::jit::script::Module sw_flip_flop;
+
+
 
   ContextFlags();
 

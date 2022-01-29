@@ -3,6 +3,7 @@
 #include <torch/script.h>
 #include <iostream>
 
+#include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 
 #define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
@@ -19,20 +20,10 @@ Protocol:
 Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
 */
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
-  torch::jit::script::Module total_lut;
-  torch::jit::script::Module logic_lut;
-  torch::jit::script::Module lut_ram;
-  torch::jit::script::Module ff;
-  try {
-    total_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_total_lut.pt");
-    logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_logic_lut.pt");
-    lut_ram = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ram_lut.pt");
-    ff = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ff.pt");
-  }
-  catch (const c10::Error& e) {
-    DSA_CHECK(false)
-      << "Error Loading FPGA Processing Element Model: " << TORCH_MODEL_PREFIX "processing_element/";
-  }
+  torch::jit::script::Module total_lut = dsa::ContextFlags::Global().pe_total_lut;
+  torch::jit::script::Module logic_lut = dsa::ContextFlags::Global().pe_logic_lut;
+  torch::jit::script::Module lut_ram = dsa::ContextFlags::Global().pe_ram_lut;
+  torch::jit::script::Module ff = dsa::ContextFlags::Global().pe_flip_flop;
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
@@ -53,20 +44,10 @@ std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
 /* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
 /* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameters){
-  torch::jit::script::Module total_lut;
-  torch::jit::script::Module logic_lut;
-  torch::jit::script::Module lut_ram;
-  torch::jit::script::Module ff;
-  try {
-    total_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_total_lut.pt");
-    logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_logic_lut.pt");
-    lut_ram = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ram_lut.pt");
-    ff = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ff.pt");
-  }
-  catch (const c10::Error& e) {
-    DSA_CHECK(false)
-      << "Error Loading FPGA Router Model: " << TORCH_MODEL_PREFIX "switch/";
-  }
+  torch::jit::script::Module total_lut = dsa::ContextFlags::Global().sw_total_lut;
+  torch::jit::script::Module logic_lut = dsa::ContextFlags::Global().sw_logic_lut;
+  torch::jit::script::Module lut_ram = dsa::ContextFlags::Global().sw_ram_lut;
+  torch::jit::script::Module ff = dsa::ContextFlags::Global().sw_flip_flop;
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));

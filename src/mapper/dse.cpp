@@ -410,8 +410,11 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
             << std::get<2>(util) << std::setprecision(7);
 
   CodesignInstance* prunned_ci = new CodesignInstance(*best_ci, false);
+  prunned_ci->verify();
 
   prunned_ci->prune_all_unused();
+
+  DSA_INFO << "Pruned DSE OBJ: " << prunned_ci->weight_obj();
 
   double pruned_obj = prunned_ci->weight_obj();
   auto final_util = best_ci->utilization();

@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 #include "fu_model.h"
 #include "json/value.h"
@@ -146,7 +147,7 @@ class sslink {
 
 class ssnode {
  public:
-  enum NodeType { FU, Switch, InPort, OutPort, Unknown };
+  enum NodeType { FU, Switch, InPort, OutPort, DMA, Unknown };
 
   ssnode() {}
 
@@ -180,7 +181,7 @@ class ssnode {
   /*!
    * \brief Connect this and the given node with a link.
    */
-  sslink* add_link(ssnode* node);
+  sslink* add_link(ssnode* node, int source_position=-1, int sink_position=-1);
 
   /*!
    * \brief The textformat of this node for the purpose of logging.
@@ -201,6 +202,18 @@ class ssnode {
    * \brief Out degrees of this node.
    */
   std::vector<sslink*>& out_links() { return links_[0]; }
+
+  /*!
+   * \brief Index of a link
+   */
+  int link_index(sslink* link, bool in_link) {
+    auto it = std::find(links_[in_link].begin(), links_[in_link].end(), link);
+    if (it != links_[in_link].end()) {
+      return std::distance(links_[in_link].begin(), it);
+    } else {
+      return -1;
+    }
+  }
 
   /*!
    * \brief The method of checking hanger node in the ADG used by DSE.
@@ -285,6 +298,88 @@ class ssnode {
   DEF_ATTR(flow_control)
   DEF_ATTR(max_delay)
   const std::vector<sslink*> &links(int x) { return links_[x]; }
+};
+
+class ssmemory : public ssnode {
+ public:
+  ssmemory(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  ssmemory() {}
+
+  virtual std::string name() const = 0;
+  virtual void Accept(adg::Visitor* visitor) = 0;
+  virtual void dumpIdentifier(ostream& os) = 0;
+  virtual void dumpFeatures(ostream& os) = 0;
+  virtual ~ssmemory() {}
+
+ protected:
+
+  int numWrite_{1};
+  int memUnitBits_{8};
+  int numRead_{1};
+  int maxLength1D_{2147483646};
+  int maxLength3D_{2147483646};
+  int capacity_{1024};
+  bool linearLength1DStream_{true};
+  int numGenDataType_{1};
+  bool linearPadding_{true};
+  int maxAbsStretch3D2D_{1073741822};
+  int numPendingRequest_{16};
+  int numLength1DUnitBitsExp_{4};
+  int maxAbsStride3D_{1073741822};
+  int maxAbsStride1D_{1073741824};
+  bool indirectStride2DStream_{true};
+  int numIdxUnitBitsExp_{4};
+  int maxAbsDeltaStride2D_{1073741822};
+  bool linearStride2DStream_{true};
+  int maxLength2D_{2147483646};
+  int numMemUnitBitsExp_{4};
+  int maxAbsStretch3D1D_{1073741822};
+  bool indirectIndexStream_{true};
+  int numStride2DUnitBitsExp_{4};
+  int writeWidth_{32};
+  int maxAbsStride2D_{1073741822};
+  int readWidth_{32};
+  bool streamStated_{true};
+  int numSpmBank_{4};
+  bool indirectLength1DStream_{true};
+  int maxAbsDeltaStretch2D_{1073741822};
+
+  std::vector<std::string> atomicOperations_{};
+
+public:
+  DEF_ATTR(numWrite);
+  DEF_ATTR(memUnitBits);
+  DEF_ATTR(numRead);
+  DEF_ATTR(maxLength1D);
+  DEF_ATTR(maxLength3D);
+  DEF_ATTR(capacity);
+  DEF_ATTR(linearLength1DStream);
+  DEF_ATTR(numGenDataType);
+  DEF_ATTR(linearPadding);
+  DEF_ATTR(maxAbsStretch3D2D);
+  DEF_ATTR(numPendingRequest);
+  DEF_ATTR(numLength1DUnitBitsExp);
+  DEF_ATTR(maxAbsStride3D);
+  DEF_ATTR(maxAbsStride1D);
+  DEF_ATTR(indirectStride2DStream);
+  DEF_ATTR(numIdxUnitBitsExp);
+  DEF_ATTR(maxAbsDeltaStride2D);
+  DEF_ATTR(linearStride2DStream);
+  DEF_ATTR(maxLength2D);
+  DEF_ATTR(numMemUnitBitsExp);
+  DEF_ATTR(maxAbsStretch3D1D);
+  DEF_ATTR(indirectIndexStream);
+  DEF_ATTR(numStride2DUnitBitsExp);
+  DEF_ATTR(writeWidth);
+  DEF_ATTR(maxAbsStride2D);
+  DEF_ATTR(readWidth);
+  DEF_ATTR(streamStated);
+  DEF_ATTR(numSpmBank);
+  DEF_ATTR(indirectLength1DStream);
+  DEF_ATTR(maxAbsDeltaStretch2D);
+  DEF_ATTR(atomicOperations);
 };
 
 class ssswitch : public ssnode {
@@ -623,7 +718,18 @@ class ssvport : public ssnode {
   
   std::string name() const override {
     std::stringstream ss;
-    ss << "OI"[links_[0].size() > 0];
+    if (!ContextFlags::Global().adg_compat) {
+      if (input_)
+        ss << "I";
+      else
+        ss << "O";
+    } else {
+      if (links_[0].size() > 0) {
+        ss << "I";
+      } else {
+        ss << "O";
+      }
+    }
     if (port_ != -1) {
       ss << "P" << port_;
     } else {
@@ -633,10 +739,12 @@ class ssvport : public ssnode {
   }
 
   // Check the direction of vector port, whether or not is input vector port
-  bool isInputPort(){
-    DSA_CHECK((links_[0].size() > 0 && links_[1].size() == 0) || (links_[0].size() == 0 && links_[1].size() > 0)) 
-      << "For vector port, it must have one side links to be empty";
-    return links_[0].size() > 0;
+  bool isInputPort() {
+    if (!ContextFlags::Global().adg_compat) {
+      return input_;
+    } else {
+      return links_[0].size() > 0;
+    }
   }
   // Check whether it is output vector port
   bool isOutputPort(){return !isInputPort();}
@@ -759,6 +867,9 @@ class ssvport : public ssnode {
   // Discardable Output Vector Port (Output Vector Port only)
   bool discardOVP_{false};
 
+  // Whether this vector port is an input port
+  bool input_{false};
+
  public:
   DEF_ATTR(port)
   DEF_ATTR(vp_impl)       // IVP & OVP
@@ -767,15 +878,15 @@ class ssvport : public ssnode {
   DEF_ATTR(broadcastIVP)  // IVP
   DEF_ATTR(taskOVP)       // OVP
   DEF_ATTR(discardOVP)    // OVP
+  DEF_ATTR(input)         // IVP & OVP
 };
 
-
-class ssscratchpad : public ssnode {
+class ssscratchpad : public ssmemory {
  public:
-  ssscratchpad() : ssnode() {}
+  ssscratchpad() {}
 
   ssscratchpad(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+      : ssmemory(datawidth, granularity, util, dynamic_timing, fifo) {}
 
   void Accept(adg::Visitor* visitor) override;
 
@@ -787,7 +898,7 @@ class ssscratchpad : public ssnode {
 
   virtual std::string name() const override {
     std::stringstream ss;
-    ss << "SP";
+    ss << "SPM";
     if (x_ != -1 && y_ != -1) {
       ss << "_" << x_ << "_" << y_;
     } else {
@@ -795,9 +906,11 @@ class ssscratchpad : public ssnode {
     }
     return ss.str();
   }
+
   void dumpIdentifier(ostream& os) override {
-    os << "[" + to_string(id_) + ",\"ScratchPad\"" + "]";
+    os << "[" + std::to_string(id_) + ",\" scratchpad \"" + "]";
   }
+
   void dumpFeatures(ostream& os) override {
     os << "{\n";
     // ID
@@ -816,6 +929,10 @@ class ssscratchpad : public ssnode {
     // number of output
     int num_output = out_links().size();
     os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
     // input nodes
     os << "\"input_nodes\" : [";
     int idx_link = 0;
@@ -838,132 +955,33 @@ class ssscratchpad : public ssnode {
       }
     }
     os << "]";
-
     os << "}\n";
-  }
-
-  void collect_features() {
-    features[0] = max_util_ > 1 ? 0.0 : 1.0;
-    features[1] = max_util_ > 1 ? 1.0 : 0.0;
-
-    DSA_CHECK(features[0] || features[1]);
-    features[2] = flow_control_ ? 0.0 : 1.0;
-    features[3] = flow_control_ ? 1.0 : 0.0;
-    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
-    features[4] = lanes();
-    features[5] = max_delay();
-    features[6] = links_[1].size();
-    features[7] = links_[0].size();
-    features[8] = max_util_;
   }
 
   virtual ~ssscratchpad() {}
 
-  void print_features() {
-    std::cout << "------ Features : >>>>>> ";
-    std::cout << "Not Shared ? " << features[0] << ", "
-              << "Shared ? " << features[1] << ", "
-              << "Not Flow Control ? " << features[2] << ", "
-              << "Flow Control ? " << features[3] << ", "
-              << "decomposer = " << features[4] << ", "
-              << "max fifo depth = " << features[5] << ", "
-              << "# input links = " << features[6] << ", "
-              << "# output links = " << features[7] << ", "
-              << "max util = " << features[8] << ", ";
-    std::cout << " ------ Feature Ends <<<<<<\n";
+  bool is_hanger() override { 
+    return false;
   }
 
-  void dump_features() {
-    for (int i = 0; i < 9; ++i) {
-      std::cout << features[i] << " ";
-    }
-    std::cout << "\n";
-  }
+}; 
 
- protected:
-  double features[9];
-
-  int numWrite_{1};
-  int memUnitBits_{8};
-  int numRead_{1};
-  int maxLength1D_{2147483646};
-  int maxLength3D_{2147483646};
-  int capacity_{1024};
-  bool linearLength1DStream_{true};
-  int numGenDataType_{1};
-  bool linearPadding_{true};
-  int maxAbsStretch3D2D_{1073741822};
-  int numPendingRequest_{16};
-  int numLength1DUnitBitsExp_{4};
-  int maxAbsStride3D_{1073741822};
-  int maxAbsStride1D_{1073741824};
-  bool indirectStride2DStream_{true};
-  int numIdxUnitBitsExp_{4};
-  int maxAbsDeltaStride2D_{1073741822};
-  bool linearStride2DStream_{true};
-  int maxLength2D_{2147483646};
-  int numMemUnitBitsExp_{4};
-  int maxAbsStretch3D1D_{1073741822};
-  bool indirectIndexStream_{true};
-  int numStride2DUnitBitsExp_{4};
-  int writeWidth_{32};
-  int maxAbsStride2D_{1073741822};
-  int readWidth_{32};
-  bool streamStated_{true};
-  int numSpmBank_{4};
-  bool indirectLength1DStream_{true};
-  int maxAbsDeltaStrectch2D_{1073741822};
-
-public:
-  DEF_ATTR(numWrite);
-  DEF_ATTR(memUnitBits);
-  DEF_ATTR(numRead);
-  DEF_ATTR(maxLength1D);
-  DEF_ATTR(maxLength3D);
-  DEF_ATTR(capacity);
-  DEF_ATTR(linearLength1DStream);
-  DEF_ATTR(numGenDataType);
-  DEF_ATTR(linearPadding);
-  DEF_ATTR(maxAbsStretch3D2D);
-  DEF_ATTR(numPendingRequest);
-  DEF_ATTR(numLength1DUnitBitsExp);
-  DEF_ATTR(maxAbsStride3D);
-  DEF_ATTR(maxAbsStride1D);
-  DEF_ATTR(indirectStride2DStream);
-  DEF_ATTR(numIdxUnitBitsExp);
-  DEF_ATTR(maxAbsDeltaStride2D);
-  DEF_ATTR(linearStride2DStream);
-  DEF_ATTR(maxLength2D);
-  DEF_ATTR(numMemUnitBitsExp);
-  DEF_ATTR(maxAbsStretch3D1D);
-  DEF_ATTR(indirectIndexStream);
-  DEF_ATTR(numStride2DUnitBitsExp);
-  DEF_ATTR(writeWidth);
-  DEF_ATTR(maxAbsStride2D);
-  DEF_ATTR(readWidth);
-  DEF_ATTR(streamStated);
-  DEF_ATTR(numSpmBank);
-  DEF_ATTR(indirectLength1DStream);
-  DEF_ATTR(maxAbsDeltaStrectch2D);
-
-};
-
-class ssdma : public ssnode {
+class ssdma : public ssmemory {
  public:
-  ssdma() : ssnode() {}
-
-  ssdma(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
-
-  void Accept(adg::Visitor* visitor) override;
-
   ssnode* copy() override {
-    auto *res = new ssdma();
+    auto res = new ssdma();
     *res = *this;
     return res;
   }
 
-  virtual std::string name() const override {
+  ssdma() {}
+
+  ssdma(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssmemory(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+
+  std::string name() const override {
     std::stringstream ss;
     ss << "DMA";
     if (x_ != -1 && y_ != -1) {
@@ -973,16 +991,18 @@ class ssdma : public ssnode {
     }
     return ss.str();
   }
+
   void dumpIdentifier(ostream& os) override {
-    os << "[" + to_string(id_) + ",\"ScratchPad\"" + "]";
+    os << "[" + std::to_string(id_) + ",\" dma \"" + "]";
   }
+
   void dumpFeatures(ostream& os) override {
     os << "{\n";
     // ID
     os << "\"id\" : " << id() << ",\n";
     // NodeType
     os << "\"nodeType\" : "
-       << "\"scratchpad\""
+       << "\"dma\""
        << ",\n";
     // data width
     os << "\"data_width\" : " << datawidth() << ",\n";
@@ -994,6 +1014,10 @@ class ssdma : public ssnode {
     // number of output
     int num_output = out_links().size();
     os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
     // input nodes
     os << "\"input_nodes\" : [";
     int idx_link = 0;
@@ -1016,117 +1040,268 @@ class ssdma : public ssnode {
       }
     }
     os << "]";
-
     os << "}\n";
-  }
-
-  void collect_features() {
-    features[0] = max_util_ > 1 ? 0.0 : 1.0;
-    features[1] = max_util_ > 1 ? 1.0 : 0.0;
-
-    DSA_CHECK(features[0] || features[1]);
-    features[2] = flow_control_ ? 0.0 : 1.0;
-    features[3] = flow_control_ ? 1.0 : 0.0;
-    DSA_CHECK(features[2] || features[3]) << "Either Data(Static) or DataValidReady(Dynamic)";
-    features[4] = lanes();
-    features[5] = max_delay();
-    features[6] = links_[1].size();
-    features[7] = links_[0].size();
-    features[8] = max_util_;
   }
 
   virtual ~ssdma() {}
 
-  void print_features() {
-    std::cout << "------ Features : >>>>>> ";
-    std::cout << "Not Shared ? " << features[0] << ", "
-              << "Shared ? " << features[1] << ", "
-              << "Not Flow Control ? " << features[2] << ", "
-              << "Flow Control ? " << features[3] << ", "
-              << "decomposer = " << features[4] << ", "
-              << "max fifo depth = " << features[5] << ", "
-              << "# input links = " << features[6] << ", "
-              << "# output links = " << features[7] << ", "
-              << "max util = " << features[8] << ", ";
-    std::cout << " ------ Feature Ends <<<<<<\n";
+  bool is_hanger() override { 
+    return false;
   }
 
-  void dump_features() {
-    for (int i = 0; i < 9; ++i) {
-      std::cout << features[i] << " ";
+};
+
+class ssrecurrence : public ssmemory {
+ public:
+  ssnode* copy() override {
+    auto res = new ssrecurrence();
+    *res = *this;
+    return res;
+  }
+
+  ssrecurrence() {}
+
+  ssrecurrence(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssmemory(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+
+  std::string name() const override {
+    std::stringstream ss;
+    ss << "REC";
+    if (x_ != -1 && y_ != -1) {
+      ss << "_" << x_ << "_" << y_;
+    } else {
+      ss << localId_;
     }
-    std::cout << "\n";
+    return ss.str();
   }
 
- protected:
-  double features[9];
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + std::to_string(id_) + ",\" recurrence \"" + "]";
+  }
 
-  int numWrite_{1};
-  int memUnitBits_{8};
-  int numRead_{1};
-  int maxLength1D_{2147483646};
-  int maxLength3D_{2147483646};
-  int capacity_{2147483646};
-  bool linearLength1DStream_{true};
-  int numGenDataType_{0};
-  bool linearPadding_{true};
-  int maxAbsStrectch3D2D_{2147483646};
-  int numPendingRequest_{16};
-  int numLength1DUnitBitsExp_{4};
-  int maxAbsStride3D_{1073741822};
-  int maxAbsStride1D_{1073741824};
-  bool indirectStride2DStream_{true};
-  //std::string atomicOperations_[] = {"Add", "Sub", "Min", "Max"};
-  int numIdxUnitBitsExp_{4};
-  int maxAbsDeltaStride2D_{1073741822};
-  bool linearStride2DStream_{true};
-  int maxLength2D_{2147483646};
-  int maxAbsStretch2D_{1073741822};
-  int numMemUnitBitsExp_{4};
-  int maxAbsStretch3D1D_{1073741822};
-  bool indirectIndexStream_{true};
-  int numStride2DUnitBitsExp_{4};
-  int writeWidth_{16};
-  int maxAbsStride2D_{1073741822};
-  int readWidth_{16};
-  bool streamStated_{true};
-  int numSpmBank_{0};
-  bool indirectLength1DStream_{true};
-  int maxAbsDeltaStretch2D_{1073741822};
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"recurrence\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+    os << "}\n";
+  }
 
-public:
-  DEF_ATTR(numWrite);
-  DEF_ATTR(memUnitBits);
-  DEF_ATTR(numRead);
-  DEF_ATTR(maxLength1D);
-  DEF_ATTR(maxLength3D);
-  DEF_ATTR(capacity);
-  DEF_ATTR(linearLength1DStream);
-  DEF_ATTR(numGenDataType);
-  DEF_ATTR(linearPadding);
-  DEF_ATTR(maxAbsStrectch3D2D);
-  DEF_ATTR(numPendingRequest);
-  DEF_ATTR(numLength1DUnitBitsExp);
-  DEF_ATTR(maxAbsStride3D);
-  DEF_ATTR(maxAbsStride1D);
-  DEF_ATTR(indirectStride2DStream);
-  DEF_ATTR(numIdxUnitBitsExp);
-  DEF_ATTR(maxAbsDeltaStride2D);
-  DEF_ATTR(linearStride2DStream);
-  DEF_ATTR(maxLength2D);
-  DEF_ATTR(maxAbsStretch2D);
-  DEF_ATTR(numMemUnitBitsExp);
-  DEF_ATTR(maxAbsStretch3D1D);
-  DEF_ATTR(indirectIndexStream);
-  DEF_ATTR(numStride2DUnitBitsExp);
-  DEF_ATTR(writeWidth);
-  DEF_ATTR(maxAbsStride2D);
-  DEF_ATTR(readWidth);
-  DEF_ATTR(streamStated);
-  DEF_ATTR(numSpmBank);
-  DEF_ATTR(indirectLength1DStream);
-  DEF_ATTR(maxAbsDeltaStretch2D);
+  virtual ~ssrecurrence() {}
 
+  bool is_hanger() override { 
+    return false;
+  }
+};
+
+class ssgenerate : public ssmemory {
+ public:
+  ssnode* copy() override {
+    auto res = new ssgenerate();
+    *res = *this;
+    return res;
+  }
+
+  ssgenerate() {}
+
+  ssgenerate(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssmemory(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+
+  std::string name() const override {
+    std::stringstream ss;
+    ss << "GEN";
+    if (x_ != -1 && y_ != -1) {
+      ss << "_" << x_ << "_" << y_;
+    } else {
+      ss << localId_;
+    }
+    return ss.str();
+  }
+
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + std::to_string(id_) + ",\" generate \"" + "]";
+  }
+
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"generate\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+    os << "}\n";
+  }
+
+  virtual ~ssgenerate() {}
+
+  bool is_hanger() override { 
+    return false;
+  }
+};
+
+
+class ssregister : public ssmemory {
+ public:
+  ssnode* copy() override {
+    auto res = new ssregister();
+    *res = *this;
+    return res;
+  }
+
+  ssregister() {}
+
+  ssregister(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssmemory(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+
+  std::string name() const override {
+    std::stringstream ss;
+    ss << "REG";
+    if (x_ != -1 && y_ != -1) {
+      ss << "_" << x_ << "_" << y_;
+    } else {
+      ss << localId_;
+    }
+    return ss.str();
+  }
+
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + std::to_string(id_) + ",\" register \"" + "]";
+  }
+
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"register\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+    os << "}\n";
+  }
+
+  virtual ~ssregister() {}
+
+  bool is_hanger() override { 
+    return false;
+  }
 };
 
 }  // namespace dsa

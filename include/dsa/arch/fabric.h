@@ -140,11 +140,28 @@ class SpatialFabric {
 
   std::vector<ssvport*> vport_list() { return node_filter<ssvport*>(); }
 
+  std::vector<ssmemory*> mem_list() { return node_filter<ssmemory*>(); }
+
+  std::vector<ssgenerate*> gen_list() { return node_filter<ssgenerate*>(); }
+
+  std::vector<ssscratchpad*> scratch_list() { return node_filter<ssscratchpad*>(); }
+
+  std::vector<ssrecurrence*> recur_list() { return node_filter<ssrecurrence*>(); }
+
+  std::vector<ssdma*> dma_list() { return node_filter<ssdma*>(); }
+
   std::vector<ssvport*> vlist_impl(bool is_input) {
     std::vector<ssvport*> res;
     auto vports = vport_list();
     for (auto elem : vports) {
-      if (elem->links_[is_input].empty()) res.push_back(elem);
+      if (is_input) {
+        if (elem->isInputPort()) 
+          res.push_back(elem);
+      } else {
+        if (elem->isOutputPort()) 
+          res.push_back(elem);
+      }
+      
     }
     return res;
   }
@@ -276,8 +293,18 @@ class SpatialFabric {
     fix_id(_link_list);
   }
 
-  // External add link -- used by arch. search
-  sslink* add_link(ssnode* src, ssnode* dst) {
+  /**
+   * @brief Adds a link to the spatial fabric. Adds the link from the source
+   * node to the sink node.
+   * 
+   * @param src node that represents the source
+   * @param dst node that represents the sink
+   * @param source_position position to add the link to source node, 
+   * by default -1
+   * @param sink_position position to add the link to sink node, by default -1
+   * @return sslink* the created link between the source and destination nodes
+   */
+  sslink* add_link(ssnode* src, ssnode* dst, int source_position=-1, int sink_position=-1) {
     // if (auto out = dynamic_cast<ssvport*>(src)) {
     //   CHECK(!out->out_links().empty());
     // }
@@ -297,7 +324,7 @@ class SpatialFabric {
     if (dynamic_cast<ssvport*>(dst))
       if (dst->in_links().size() == 8) return nullptr;
 
-    sslink* link = src->add_link(dst);
+    sslink* link = src->add_link(dst, source_position, sink_position);
     link->id(_link_list.size());
     _link_list.push_back(link);
 

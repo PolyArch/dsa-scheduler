@@ -575,6 +575,22 @@ void Schedule::printConfigCheat(ostream& os, std::string cfg_name) {
 
 void Schedule::printConfigVerif(ostream& os) {}
 
+void Schedule::printEdge() {
+
+  std::vector<dsa::dfg::Edge> edges = ssdfg()->edges;
+
+
+  for (int i = 0; i < edge_prop().size(); ++i) {
+    auto edge = edge_prop()[i];
+    std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << std::endl;
+    for (auto link : edge.links) {
+      std::cout << "\tLink " << link.second->name() << std::endl;
+    }
+
+
+  }
+}
+
 void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
   auto& np = _nodeProp[node->id()];
 
@@ -611,18 +627,33 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
     std::set<std::tuple<dsa::dfg::Value*, int, int>> seen_values;
 
     auto& lp = _linkProp[link->id()];
+
+    // First Get all the Empty Slots
     for (int slot = 0; slot < (int) lp.slots.size(); ++slot) {
       if (lp.slots[slot].edges.size() == 0) empty_slots.push_back(slot);
+    }
 
+    for (int slot = 0; slot < (int) lp.slots.size(); ++slot) {
       for (auto it : lp.slots[slot].edges) {
         dsa::dfg::Edge* e = &ssdfg()->edges[it.eid];
         auto print_tuple = make_tuple(e->val(), e->l, e->r);
         if (!seen_values.count(print_tuple)) {
           seen_values.insert(print_tuple);
 
-          ofs << link->source()->name() << "->" << link->sink()->name() << " [color=\"#"
-              << std::hex << colorOf(e->val()) << std::dec << "\" "
-              << (link->max_util() > 1 ? " style=dotted " : "") << " label=\"";
+          // First Print the Name of Link Source Node and Sink Node
+          ofs << link->source()->name() << "->" << link->sink()->name();
+          
+          // Print the Color of the link
+          ofs << " [color=\"#" << std::hex << colorOf(e->val()) 
+              << std::dec << "\" ";
+          
+          // If the link is overutilized, make it dotted
+          if (link->max_util() > 1) {
+            ofs << "style=dotted";
+          }
+          
+          // Print the label of the link
+          ofs << " label=\"";
           if (slot != 0) {
             ofs << "s:" << slot << "-" << slot + e->bitwidth() / 8 - 1;
           }
@@ -630,12 +661,17 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
             ofs << "OVR:" << agg_ovr << " ";
           }
           ofs << "D:" << edge_delay(e) << "/" << max_edge_delay(e) << " ";
+          if (empty_slots.size() > 0 && empty_slots.size() != 8) {
+            ofs << "S:";
+            printCondensedVector(empty_slots, ofs);
+          }
 
           ofs << "\"];\n";
         }
       }
     }
-    if (empty_slots.size()) {
+    
+    if (seen_values.size() == 0) {
       ofs << link->source()->name() << "->" << link->sink()->name()
           << " [color=gray style=dotted, label=\"";
       if (empty_slots.size() != 8) {
@@ -709,6 +745,14 @@ void Schedule::printGraphviz(const char* name) {
   dsa::SpatialFabric* sub = _ssModel->subModel();
 
   ofs << "digraph sched {\n";
+
+  for (auto* elem : sub->dma_list()) printNodeGraphviz(ofs, elem);
+
+  for (auto* elem : sub->recur_list()) printNodeGraphviz(ofs, elem);
+
+  for (auto* elem : sub->gen_list()) printNodeGraphviz(ofs, elem);
+
+  for (auto* elem : sub->scratch_list()) printNodeGraphviz(ofs, elem);
 
   for (auto* elem : sub->input_list()) printNodeGraphviz(ofs, elem);
 

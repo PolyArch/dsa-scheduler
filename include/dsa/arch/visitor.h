@@ -10,6 +10,11 @@ struct Visitor {
   virtual void Visit(ssfu* node);
   virtual void Visit(ssswitch* node);
   virtual void Visit(ssvport* node);
+  virtual void Visit(ssdma* node);
+  virtual void Visit(ssscratchpad* node);
+  virtual void Visit(ssrecurrence* node);
+  virtual void Visit(ssgenerate* node);
+  virtual void Visit(ssregister* node);
 };
 
 /*! \brief A vistor for ADG nodes, which traverses all the nodes by DFS. */
@@ -19,6 +24,11 @@ struct GraphVisitor : Visitor {
   virtual void Visit(ssfu* node);
   virtual void Visit(ssswitch* node);
   virtual void Visit(ssvport* node);
+  virtual void Visit(ssdma* node);
+  virtual void Visit(ssscratchpad* node);
+  virtual void Visit(ssrecurrence* node);
+  virtual void Visit(ssgenerate* node);
+  virtual void Visit(ssregister* node);
 
  private:
   void Visit(ssnode* node);

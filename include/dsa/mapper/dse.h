@@ -264,14 +264,16 @@ class CodesignInstance {
     auto* sub = _ssModel.subModel();
 
     for (ssfu* fu : sub->fu_list()) {
-      if (fu->in_links().size() <= 1 || fu->out_links().size() < 1) {
+      if (fu->in_links().size() == 0 || fu->out_links().size() == 0) {
         nodes_to_delete.insert(fu);
         deleted_something = true;
       }
+      /* This case doesn't work as it could be used as a passthru. Maybe convert to a switch instead?
       if (fu->fu_type_.capability.empty()) {
         nodes_to_delete.insert(fu);
         deleted_something = true;
       }
+      */
     }
     for (ssswitch* sw : sub->switch_list()) {
       if (sw->out_links().size() == 0 || sw->in_links().size() == 0) {
@@ -282,13 +284,13 @@ class CodesignInstance {
 
     // TODO: ovport == ivport if input_size & ouput_size = 0
     for (ssvport* ivport : sub->input_list()) {
-      if (ivport->out_links().size() < 1 && ivport->out_links().size() < 1) {
+      if (ivport->out_links().size() == 0) {
         nodes_to_delete.insert(ivport);
         deleted_something = true;
       }
     }
     for (ssvport* ovport : sub->output_list()) {
-      if (ovport->in_links().size() < 1) {
+      if (ovport->in_links().size() == 0) {
         nodes_to_delete.insert(ovport);
         deleted_something = true;
       }
@@ -310,7 +312,6 @@ class CodesignInstance {
     
     // If there is no utilization, then we shouldn't be pruning
     if (std::get<2>(util) == 0) {
-      DSA_LOG("No utilization, not pruning");
       return;
     }
 
@@ -327,7 +328,7 @@ class CodesignInstance {
     }
 
     for (auto link : links_to_delete) {
-      delete_link(link);
+      delete_link(link); 
     }
 
     // Add all nodes that are unused to a vector then delete them
@@ -676,6 +677,23 @@ class CodesignInstance {
       unassign_node(vport);
       s << "change Output vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
     }
+
+    if (false) {
+      int index = rand() % sub->switch_list().size();
+      auto sw = sub->switch_list()[index];
+      if (sw->max_delay() > 0) {
+        if (!check_cycle(sw))
+          return false;
+        // TODO: Add a check for timing constraints
+        
+        sw->max_delay(0);
+        unassign_node(sw);
+        s << "change Switch " << sw->name() << " max delay from " << sw->max_delay() << " to " << 0;
+      } else {
+        sw->max_delay(15);
+        s << "change Switch " << sw->name() << " max delay from " << sw->max_delay() << " to " << 15;
+      }
+    }
     dse_changes_log.push_back(s.str());
     return true;
   }
@@ -992,15 +1010,15 @@ class CodesignInstance {
    * @return true if there will be no cycle created by removing the node
    * @return false if there will be a cycle created by removing the node
    */
-  bool check_remove_flipflop(ssnode* n) {
+  bool check_cycle(ssnode* n) {
     std::vector<bool> visited(_ssModel.subModel()->node_list().size(), false);
 
     // Check upstream for cycles
-    if (!check_remove_helper(n, visited, true))
+    if (!check_cycle_helper(n, visited, true))
       return false;
     
     // Check downstream for cycles
-    if (!check_remove_helper(n, visited, false))
+    if (!check_cycle_helper(n, visited, false))
       return false;
     
     // No cycles found, so removing flipflow is fine
@@ -1009,7 +1027,7 @@ class CodesignInstance {
 
  private:
   /**
-  * @brief Helper for check_remove_flipflop. Will recursively check all nodes
+  * @brief Helper for check_cycle. Will recursively check all nodes
   * to see if there is a cycle
   * 
   * @param n the node to check
@@ -1018,7 +1036,7 @@ class CodesignInstance {
   * @return true if there is no cycle from removing this node
   * @return false if there is a cycle from removing this node
   */
-  bool check_remove_helper(ssnode* n, std::vector<bool>& visited, bool down) {
+  bool check_cycle_helper(ssnode* n, std::vector<bool>& visited, bool down) {
     auto links = n->in_links();
     if (down) {
       links = n->out_links();
@@ -1040,7 +1058,7 @@ class CodesignInstance {
       visited[node->id()] = true;
 
       // recursively check all the nodes connected to this node
-      if (!check_remove_helper(node, visited, down))
+      if (!check_cycle_helper(node, visited, down))
         return false;
     }
     // No cycle found
@@ -1058,12 +1076,14 @@ class CodesignInstance {
     auto* sub = _ssModel.subModel();
     auto& links = sched.links_of(&edge);
     for (auto it = links.begin(); it != links.end(); ++it) {
+      sslink* link  = it->second;
       //Check if link is the node to collapse
-      if (it->second->sink()->id() == n->id() && std::next(it) != links.end()) {
-        auto src = it->second->source();
-        auto dst = std::next(it)->second->sink();
+      if (link->sink()->id() == n->id() && std::next(it) != links.end()) {
+        auto src = link->source();
+        sslink* next_link  = std::next(it)->second;
+        auto dst = next_link->sink();
 
-        sub->add_link(src, dst);
+        sub->add_link(src, dst, src->link_index(link, false), dst->link_index(next_link, true));
         check_stated(src);
         check_stated(dst);
         return;

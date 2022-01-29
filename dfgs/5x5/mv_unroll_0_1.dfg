@@ -1,0 +1,64 @@
+#pragma group unroll 1
+# [MemPort]: DFG0 Entry0
+# Inst:   %29 = load i64, i64* %28, align 8, !tbaa !4
+#pragma cmd=1.000000e+00
+#pragma repeat=0.000000e+00
+Input64: sub0_v0_0_
+# Cluster 4
+# [MemPort]: DFG0 Entry0
+# Inst:   %27 = load i64, i64* %26, align 8, !tbaa !4
+# [MemPort]: DFG0 Entry1
+# Inst:   %34 = load i64, i64* %33, align 8, !tbaa !4
+# [MemPort]: DFG0 Entry2
+# Inst:   %39 = load i64, i64* %38, align 8, !tbaa !4
+# [MemPort]: DFG0 Entry3
+# Inst:   %44 = load i64, i64* %43, align 8, !tbaa !4
+# Vector Port Width: 4 * 1
+Input64: ICluster_0_4_[4] stated
+sub0_v4_0_ = ICluster_0_4_0
+sub0_v4_1_ = ICluster_0_4_1
+sub0_v4_2_ = ICluster_0_4_2
+sub0_v4_3_ = ICluster_0_4_3
+# [ComputeBody]: DFG0 Entry1
+# Inst:   %30 = mul nsw i64 %29, %27
+sub0_v1_0_ = Mul_I64(sub0_v0_0_, sub0_v4_0_)
+# [ComputeBody]: DFG0 Entry2
+# Inst:   %45 = mul nsw i64 %44, %29
+sub0_v2_0_ = Mul_I64(sub0_v4_3_, sub0_v0_0_)
+# [ComputeBody]: DFG0 Entry3
+# Inst:   %40 = mul nsw i64 %39, %29
+sub0_v3_0_ = Mul_I64(sub0_v4_2_, sub0_v0_0_)
+# [ComputeBody]: DFG0 Entry5
+# Inst:   %35 = mul nsw i64 %34, %29
+sub0_v5_0_ = Mul_I64(sub0_v4_1_, sub0_v0_0_)
+# [Accumulator]: DFG0 Entry6
+# Inst:   %31 = add nsw i64 %30, %23
+#pragma $Reg0 sub0_v6_0_
+sub0_v6_0_ = Add_I64(sub0_v1_0_, $Reg0, ctrl=$ICluster_0_4_State & 8{0: d, 8: r})
+# [Accumulator]: DFG0 Entry7
+# Inst:   %46 = add nsw i64 %45, %20
+#pragma $Reg0 sub0_v7_0_
+sub0_v7_0_ = Add_I64(sub0_v2_0_, $Reg0, ctrl=$ICluster_0_4_State & 8{0: d, 8: r})
+# [Accumulator]: DFG0 Entry8
+# Inst:   %41 = add nsw i64 %40, %21
+#pragma $Reg0 sub0_v8_0_
+sub0_v8_0_ = Add_I64(sub0_v3_0_, $Reg0, ctrl=$ICluster_0_4_State & 8{0: d, 8: r})
+# [Accumulator]: DFG0 Entry9
+# Inst:   %36 = add nsw i64 %35, %22
+#pragma $Reg0 sub0_v9_0_
+sub0_v9_0_ = Add_I64(sub0_v5_0_, $Reg0, ctrl=$ICluster_0_4_State & 8{0: d, 8: r})
+# Cluster 10
+# [PortMem]: DFG0 Entry0
+# Inst:   store i64 %31, i64* %9, align 8, !tbaa !4
+# [PortMem]: DFG0 Entry1
+# Inst:   store i64 %36, i64* %11, align 8, !tbaa !4
+# [PortMem]: DFG0 Entry2
+# Inst:   store i64 %41, i64* %13, align 8, !tbaa !4
+# [PortMem]: DFG0 Entry3
+# Inst:   store i64 %46, i64* %15, align 8, !tbaa !4
+OCluster_0_10_0 = sub0_v6_0_
+OCluster_0_10_1 = sub0_v9_0_
+OCluster_0_10_2 = sub0_v8_0_
+OCluster_0_10_3 = sub0_v7_0_
+# Vector Port Width: 4 * 1
+Output64:OCluster_0_10_[4]

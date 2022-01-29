@@ -307,6 +307,42 @@ SpatialFabric::SpatialFabric(const SpatialFabric& c) : _sizex(c._sizex), _sizey(
 void SpatialFabric::PrintGraphviz(ostream& os) {
   os << "Digraph G { \n";
 
+  // DMA
+  for (auto* dma : dma_list()) {
+    os << dma->name() << " [shape=\"circle\"]" << ";\n";
+    for (auto& elem : dma->out_links()) {
+      const ssnode* dest_node = elem->sink();
+      os << dma->name() << " -> " << dest_node->name() << ";\n";
+    }
+  }
+
+  // Recurrance
+  for (auto* rec : recur_list()) {
+    os << rec->name() << " [shape=\"circle\"]" << ";\n";
+    for (auto& elem : rec->out_links()) {
+      const ssnode* dest_node = elem->sink();
+      os << rec->name() << " -> " << dest_node->name() << ";\n";
+    }
+  }
+
+  // Generate
+  for (auto* gen : gen_list()) {
+    os << gen->name() << " [shape=\"circle\"]" << ";\n";
+    for (auto& elem : gen->out_links()) {
+      const ssnode* dest_node = elem->sink();
+      os << gen->name() << " -> " << dest_node->name() << ";\n";
+    }
+  }
+
+  // Scratchpad
+  for (auto* spm : scratch_list()) {
+    os << spm->name() << " [shape=\"circle\"]" << ";\n";
+    for (auto& elem : spm->out_links()) {
+      const ssnode* dest_node = elem->sink();
+      os << spm->name() << " -> " << dest_node->name() << ";\n";
+    }
+  }
+  
   // VPorts
   for (auto* vport : vport_list()) {
     os << vport->name() << " [shape=\"circle\"]" << ";\n";
@@ -370,11 +406,24 @@ void SpatialFabric::build_substrate(int sizex, int sizey) {
   }
 }
 
-sslink* ssnode::add_link(ssnode* node) {
+/**
+ * @brief Creates a link and adds it to each edge
+ * 
+ * @param node 
+ * @param source_position 
+ * @param sink_position 
+ * @return sslink* 
+ */
+sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position) {
   sslink* link = new sslink(this, node);
   DSA_CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
   auto& olinks = links_[0];
-  olinks.push_back(link);
+  if (source_position == -1) {
+    olinks.push_back(link);
+  } else {
+    DSA_CHECK(source_position < olinks.size()) << "Invalid sink position " << source_position;
+    olinks.insert(olinks.begin() + source_position, link);
+  }
 
   link->subnet.resize(link->bitwidth() / link->source()->granularity());
   link->subnet[0] = ~0ull >> (64 - link->bitwidth());
@@ -384,7 +433,12 @@ sslink* ssnode::add_link(ssnode* node) {
 
   DSA_LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
 
-  node->links_[1].push_back(link);
+  if (sink_position == -1) {
+    node->links_[1].push_back(link);
+  } else {
+    DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid source position " << sink_position;
+    node->links_[1].insert(node->links_[1].begin() + sink_position, link);
+  }
   return link;
 }
 

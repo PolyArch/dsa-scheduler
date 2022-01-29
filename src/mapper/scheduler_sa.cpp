@@ -282,7 +282,6 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
 }
 
 bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
-
   initialize(ssDFG, sched);  // initialize if null, otherwise its fine
   auto pdgname = basename(ssDFG->filename);
   auto modelname = basename(_ssModel->filename);
@@ -697,10 +696,13 @@ int SchedulerSimulatedAnnealing::route(
   std::pair<int, sslink*> removed_output_vport{-1, nullptr};
 
   for (ssnode* n : sched->ssModel()->subModel()->node_list()) {
-    DSA_CHECK(n->id() >= 0 && n->id() < n_nodes);
-    node_dist[n->id()] = std::vector<int>(n->lanes(), -1);
-    came_from[n->id()] = std::vector<std::pair<int, sslink*>>(n->lanes(), {-1, nullptr});
-    done[n->id()] = std::vector<int>(n->lanes(), false);
+    int node_id = n->id();
+    DSA_CHECK(node_id >= 0 && node_id < n_nodes);
+    node_dist[node_id] = std::vector<int>(n->lanes(), -1);
+    int n_lanes = n->lanes();
+    DSA_CHECK(n_lanes > 0) << "N lanes has to be positive, but it is " << n_lanes;
+    came_from[node_id] = std::vector<std::pair<int, sslink*>>(n_lanes, {-1, nullptr});
+    done[node_id] = std::vector<int>(n->lanes(), false);
   }
 
   if (!path_lengthen) ++routing_times;
@@ -775,9 +777,12 @@ int SchedulerSimulatedAnnealing::route(
     }
   }
 
-  done[source.second->id()][source.first] = new_rand_prio;
-  node_dist[source.second->id()][source.first] = 0;
-  came_from[source.second->id()][source.first] = std::make_pair(0, nullptr);
+  int source_node_id = source.second->id();
+  DSA_CHECK(source_node_id < n_nodes) << "Source node is should be less than total node number";
+  done[source_node_id][source.first] = new_rand_prio;
+  node_dist[source_node_id][source.first] = 0;
+  DSA_CHECK(source.first < came_from[source_node_id].size()) << "N Lanes is problematic";
+  came_from[source_node_id][source.first] = std::make_pair(0, nullptr);
   openset.emplace(0, new_rand_prio, source.first, source.second);
 
 
@@ -809,6 +814,11 @@ int SchedulerSimulatedAnnealing::route(
         }
         sslink* next_link = link;
         ssnode* next = next_link->sink();
+
+        // make sure we arent mapping to memory
+        if (auto memory = dynamic_cast<ssmemory*> (next)) {
+          continue;
+        }
         
         // Check to see if next is a functional unit
         if (auto fu = dynamic_cast<ssfu*>(next)) {
@@ -843,6 +853,15 @@ int SchedulerSimulatedAnnealing::route(
 
         int new_dist = cur_dist + route_cost;
 
+        if (next_slot >= node_dist[next->id()].size()) {
+          DSA_INFO << "Out of range slot: " << next_slot << " lanes" << next->lanes() << " dist " << node_dist[next->id()].size() << " " << next->name(); 
+          continue;
+        }
+        DSA_CHECK(next_slot < next->lanes()) << "Next slot is out of range" 
+                                              << came_from[next->id()].size()
+                                              << " " << next_slot 
+                                              << " " << next->lanes();
+
         int next_dist = node_dist[next->id()][next_slot];
 
         bool over_ride = (path_lengthen && make_pair(next_slot, next) == dest);
@@ -861,7 +880,12 @@ int SchedulerSimulatedAnnealing::route(
 
           openset.emplace(new_dist, new_rand_prio, next_slot % next->lanes(), next);
 
+          
+
           node_dist[next->id()][next_slot] = new_dist;
+          DSA_CHECK(next->id() < n_nodes);
+          DSA_CHECK(next_slot < came_from[next->id()].size());
+          DSA_CHECK(next_slot < next->lanes());
           came_from[next->id()][next_slot] = std::make_pair(slot, next_link);
         }
       }
@@ -893,6 +917,7 @@ int SchedulerSimulatedAnnealing::route(
     count++;
 
     // Get the link, slot pair for next node
+    
     link = came_from[node_slot.second->id()][node_slot.first];
 
     // save the slot

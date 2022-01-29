@@ -64,7 +64,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
       }
     }
     void Visit(ssvport* vp) override {
-      ports[vp->in_links().empty()].push_back(vp->bitwidth_capability());
+      ports[vp->isInputPort()].push_back(vp->bitwidth_capability());
     }
   };
 
@@ -191,6 +191,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
     sched->printGraphviz(sched_viz.c_str());
+    //sched->printEdge();
 
     std::string verif_header = verif_dir + dfg_base + ".configbits";
     std::ofstream vsh(verif_header);
@@ -202,8 +203,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   string pdg_rawname = dfg->filename.substr(0, lastindex);
 
   if (!succeed_sched || sched == nullptr) {
-    cout << "Cannot be scheduled, try a smaller DFG!\n\n";
-    return 1;
+    DSA_CHECK(false) << "Cannot be scheduled, try a smaller DFG!";
   }else{
     if(verbose) DSA_INFO << "Spatial scheduling finished!";
   }

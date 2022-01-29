@@ -5,6 +5,7 @@
 #include "dsa/debug.h"
 #include "dsa/core/singleton.h"
 
+#define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
 namespace dsa {
 
 ContextFlags::ContextFlags() {
@@ -67,5 +68,19 @@ void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
   this->max_iters = parsed["max-iters"].as<int>();
   this->tolerate_unuse = parsed["tolerate-unuse"].as<bool>();
 
+  try {
+    this->pe_total_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_total_lut.pt");
+    this->pe_logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_logic_lut.pt");
+    this->pe_ram_lut = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ram_lut.pt");
+    this->pe_flip_flop = torch::jit::load(TORCH_MODEL_PREFIX "processing_element/pe_model_ff.pt");
+
+    this->sw_total_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_total_lut.pt");
+    this->sw_logic_lut = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_logic_lut.pt");
+    this->sw_ram_lut= torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ram_lut.pt");
+    this->sw_flip_flop = torch::jit::load(TORCH_MODEL_PREFIX "switch/switch_model_ff.pt");
+  } catch (const c10::Error& e) {
+    DSA_CHECK(false)
+      << "Error Loading FPGA Model: " << TORCH_MODEL_PREFIX;
+  }
 }
 } // Namespace DSA

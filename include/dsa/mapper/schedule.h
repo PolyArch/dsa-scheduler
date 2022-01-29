@@ -173,6 +173,8 @@ class Schedule {
   // @{
   void printGraphviz(const char* name);
 
+  void printEdge();
+
   void printNodeGraphviz(std::ofstream& ofs, ssnode* fu);
 
   void printMvnGraphviz(std::ofstream& ofs, ssnode* node);
