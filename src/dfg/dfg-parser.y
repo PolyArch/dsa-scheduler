@@ -116,7 +116,7 @@ statement: INPUT ':' io_def  eol {
    */
   if (stated) {
     auto symbol_id = "$" + name + "State";
-    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
+    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 63));
   }
   for (int i = 0, cnt = 0; i < n; ++i) {
     std::stringstream ss;
