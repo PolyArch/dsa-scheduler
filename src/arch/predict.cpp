@@ -8,6 +8,41 @@
 
 #define TORCH_MODEL_PREFIX REPO_PREFIX "/estimation-models/"
 
+namespace dsa {
+
+struct WrappedModule {
+  torch::jit::script::Module m;
+
+  WrappedModule(const std::string &path) {
+    try {
+      m = torch::jit::load(path);
+    }
+    catch (const c10::Error& e) {
+     DSA_CHECK(false)
+       << "Error Loading FPGA Model: " << path;
+   }
+  }
+
+};
+
+#define DEFINE_WRAPPED_MODEL(fn, mn)          \
+  WrappedModule *fn() {                       \
+    static auto *res = new WrappedModule(mn); \
+    return res;                               \
+  }
+
+DEFINE_WRAPPED_MODEL(pe_total_lut, TORCH_MODEL_PREFIX "processing_element/pe_model_total_lut.pt")
+DEFINE_WRAPPED_MODEL(pe_logic_lut, TORCH_MODEL_PREFIX "processing_element/pe_model_logic_lut.pt")
+DEFINE_WRAPPED_MODEL(pe_ram_lut, TORCH_MODEL_PREFIX "processing_element/pe_model_ram_lut.pt")
+DEFINE_WRAPPED_MODEL(pe_flip_flop, TORCH_MODEL_PREFIX "processing_element/pe_model_ff.pt")
+
+DEFINE_WRAPPED_MODEL(sw_total_lut, TORCH_MODEL_PREFIX "switch/switch_model_total_lut.pt")
+DEFINE_WRAPPED_MODEL(sw_logic_lut, TORCH_MODEL_PREFIX "switch/switch_model_logic_lut.pt")
+DEFINE_WRAPPED_MODEL(sw_ram_lut, TORCH_MODEL_PREFIX "switch/switch_model_ram_lut.pt")
+DEFINE_WRAPPED_MODEL(sw_flip_flop, TORCH_MODEL_PREFIX "switch/switch_model_ff.pt")
+
+}
+
 /*
 Input: [decomposer, delay_fifo_depth, num_input_ports, isShared,
         num_output_ports, output_select_mode, protocol, regFileSize]
@@ -20,18 +55,18 @@ Protocol:
 Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
 */
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
-  torch::jit::script::Module total_lut = dsa::ContextFlags::Global().pe_total_lut;
-  torch::jit::script::Module logic_lut = dsa::ContextFlags::Global().pe_logic_lut;
-  torch::jit::script::Module lut_ram = dsa::ContextFlags::Global().pe_ram_lut;
-  torch::jit::script::Module ff = dsa::ContextFlags::Global().pe_flip_flop;
+  auto *total_lut = dsa::pe_total_lut();
+  auto *logic_lut = dsa::pe_logic_lut();
+  auto *lut_ram = dsa::pe_ram_lut();
+  auto *ff = dsa::pe_flip_flop();
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
 
-  at::Tensor total_lut_output = total_lut.forward(inputs).toTensor();
-  at::Tensor logic_lut_output = logic_lut.forward(inputs).toTensor();
-  at::Tensor lut_ram_output = lut_ram.forward(inputs).toTensor();
-  at::Tensor ff_output = ff.forward(inputs).toTensor();
+  at::Tensor total_lut_output = total_lut->m.forward(inputs).toTensor();
+  at::Tensor logic_lut_output = logic_lut->m.forward(inputs).toTensor();
+  at::Tensor lut_ram_output = lut_ram->m.forward(inputs).toTensor();
+  at::Tensor ff_output = ff->m.forward(inputs).toTensor();
 
   return {total_lut_output[0].item<float>(), 
           logic_lut_output[0].item<float>(), 
@@ -44,18 +79,18 @@ std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
 /* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
 /* Output {TotalLUTs LogicLUTs LUTRAMs SRLs FFs RAMB36 RAMB18 URAM DSPBlocks} */
 std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameters){
-  torch::jit::script::Module total_lut = dsa::ContextFlags::Global().sw_total_lut;
-  torch::jit::script::Module logic_lut = dsa::ContextFlags::Global().sw_logic_lut;
-  torch::jit::script::Module lut_ram = dsa::ContextFlags::Global().sw_ram_lut;
-  torch::jit::script::Module ff = dsa::ContextFlags::Global().sw_flip_flop;
+  auto *total_lut = dsa::sw_total_lut();
+  auto *logic_lut = dsa::sw_logic_lut();
+  auto *lut_ram = dsa::sw_ram_lut();
+  auto *ff = dsa::sw_flip_flop();
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
 
-  at::Tensor total_lut_output = total_lut.forward(inputs).toTensor();
-  at::Tensor logic_lut_output = logic_lut.forward(inputs).toTensor();
-  at::Tensor lut_ram_output = lut_ram.forward(inputs).toTensor();
-  at::Tensor ff_output = ff.forward(inputs).toTensor();
+  at::Tensor total_lut_output = total_lut->m.forward(inputs).toTensor();
+  at::Tensor logic_lut_output = logic_lut->m.forward(inputs).toTensor();
+  at::Tensor lut_ram_output = lut_ram->m.forward(inputs).toTensor();
+  at::Tensor ff_output = ff->m.forward(inputs).toTensor();
 
   return {total_lut_output[0].item<float>(), 
           logic_lut_output[0].item<float>(), 
