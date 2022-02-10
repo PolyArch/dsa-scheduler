@@ -583,11 +583,10 @@ void Schedule::printEdge() {
   for (int i = 0; i < edge_prop().size(); ++i) {
     auto edge = edge_prop()[i];
     std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << std::endl;
-    for (auto link : edge.links) {
-      std::cout << "\tLink " << link.second->name() << std::endl;
+    for (int i = 0; i < edge.links.size(); ++i) {
+      auto link = edge.links[i].second;
+      std::cout << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << std::endl;
     }
-
-
   }
 }
 
@@ -644,8 +643,8 @@ void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
           ofs << link->source()->name() << "->" << link->sink()->name();
           
           // Print the Color of the link
-          ofs << " [color=\"#" << std::hex << colorOf(e->val()) 
-              << std::dec << "\" ";
+          ofs << " [color=\"#" << std::hex << std::setfill('0') 
+              << std::setw(6) << colorOf(e->val()) << std::dec << "\" ";
           
           // If the link is overutilized, make it dotted
           if (link->max_util() > 1) {
@@ -838,49 +837,63 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   agg_ovr = 0;
   max_util = 0;
 
+  // Go through each vertex
   for (auto v : _vertexProp) {
-    if (v.node() != nullptr) {
-      const auto& np = _nodeProp[v.node()->id()];
+    if (v.node() == nullptr)
+      continue;
+    DSA_CHECK(v.node() != nullptr) << "Vertex node is null";
+    // First get the nodeProp associated with this vertex
+    const auto& np = _nodeProp[v.node()->id()];
 
-      // Calculate aggregate overage
-      for (int i = 0, m = np.slots.size(); i < m; ++i) {
-        auto& slot = np.slots[i];
-        int cnt = 0;
+    // Calculate aggregate overage
+    for (int i = 0, m = np.slots.size(); i < m; ++i) {
+      // Get the slot for this node
+      auto& slot = np.slots[i];
 
-        vector<dsa::dfg::Node*> io;
-        vector<dsa::dfg::Node*> other;
-        vector<dsa::dfg::Operation*> ops;
-        for (auto elem : slot.vertices) {
-          auto* v = elem.first;
-          if (v->is_temporal()) {
-            if (v->type() == dsa::dfg::Node::V_INPUT) io.push_back(v);
-            if (v->type() == dsa::dfg::Node::V_OUTPUT) io.push_back(v);
-          } else if (auto op = dynamic_cast<dsa::dfg::Operation*>(v)) {
-            ops.push_back(op);
-          } else {
-            cnt++;
-            other.push_back(elem.first);
-          }
+      // Count of vertices mapped to this slot
+      int cnt = 0;
+
+      // Vectors to store all the dfg nodes mapped to this slot
+      vector<dsa::dfg::Node*> io;
+      vector<dsa::dfg::Node*> other;
+      vector<dsa::dfg::Operation*> ops;
+      
+      // loop through all the slots for this vertex
+      for (auto elem : slot.vertices) {
+        // Get the DFG node
+        auto* v = elem.first;
+        
+        // Get what type of DFG Node is mapped to this slot
+        if (v->is_temporal()) {
+          if (v->type() == dsa::dfg::Node::V_INPUT) io.push_back(v);
+          if (v->type() == dsa::dfg::Node::V_OUTPUT) io.push_back(v);
+        } else if (auto op = dynamic_cast<dsa::dfg::Operation*>(v)) {
+          ops.push_back(op);
+        } else {
+          cnt++;
+          other.push_back(v);
         }
-        int unique_io = vector_utils::count_unique(io);
-
-        int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
-        int cur_ovr = cur_util - v.slot.ref->max_util();
-        if (cur_ovr > 0) {
-          DSA_LOG(OVERPROV) << v.slot.ref->name() << ": "
-            << cnt << " + " << slot.passthrus.size() << " + "
-            << unique_io << " + " << (ops.size() != 0) << " > " << v.slot.ref->max_util();
-          for (auto elem: io) {
-            DSA_LOG(OVERPROV) << elem->name();
-          }
-          for (auto elem: other) {
-            DSA_LOG(OVERPROV) << elem->name();
-          }
-        }
-        agg_ovr += std::max(cur_ovr, 0);
-        ovr = max(ovr, cur_ovr);
-        max_util = std::max(cur_util, max_util);
       }
+
+      int unique_io = vector_utils::count_unique(io);
+
+      int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
+      int cur_ovr = cur_util - v.node()->max_util();
+
+      if (cur_ovr > 0) {
+        DSA_LOG(OVERPROV) << v.node()->name() << ": "
+          << cnt << " + " << slot.passthrus.size() << " + "
+          << unique_io << " + " << (ops.size() != 0) << " > " << v.node()->max_util();
+        for (auto elem: io) {
+          DSA_LOG(OVERPROV) << elem->name();
+        }
+        for (auto elem: other) {
+          DSA_LOG(OVERPROV) << elem->name();
+        }
+      }
+      agg_ovr += std::max(cur_ovr, 0);
+      ovr = max(ovr, cur_ovr);
+      max_util = std::max(cur_util, max_util);
     }
   }
 

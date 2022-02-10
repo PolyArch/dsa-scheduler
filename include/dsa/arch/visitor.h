@@ -1,3 +1,5 @@
+#pragma once
+
 #include "dsa/arch/sub_model.h"
 
 namespace dsa {
@@ -9,6 +11,8 @@ struct Visitor {
   virtual void Visit(ssnode* node);
   virtual void Visit(ssfu* node);
   virtual void Visit(ssswitch* node);
+  virtual void Visit(ssivport* node);
+  virtual void Visit(ssovport* node);
   virtual void Visit(ssvport* node);
   virtual void Visit(ssdma* node);
   virtual void Visit(ssscratchpad* node);
@@ -23,6 +27,8 @@ struct GraphVisitor : Visitor {
   GraphVisitor(SpatialFabric* fabric);
   virtual void Visit(ssfu* node);
   virtual void Visit(ssswitch* node);
+  virtual void Visit(ssivport* node);
+  virtual void Visit(ssovport* node);
   virtual void Visit(ssvport* node);
   virtual void Visit(ssdma* node);
   virtual void Visit(ssscratchpad* node);

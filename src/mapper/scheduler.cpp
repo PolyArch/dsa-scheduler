@@ -150,7 +150,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   if (check_feasible(dfg, model)) {
     auto sigint_handler = [](int) { exit(1); };
-    if(verbose) {
+    if (verbose) {
       DSA_INFO << "DFG=" << dfg_base << ", ADG=" << model_base;
       DSA_INFO << "Feasibility checked, scheduling ... ";
     }
@@ -190,8 +190,12 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     dsa::mapper::pass::print_graphviz(viz_dir + dfg_base + ".dot", dfg);
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
+    ostringstream os;
+    os << "viz/" << model_base << "-hw.json";
+    model->subModel()->DumpHwInJson(os.str().c_str());
     sched->printGraphviz(sched_viz.c_str());
-    //sched->printEdge();
+    DSA_INFO << "Printing Edges:";
+    sched->printEdge();
 
     std::string verif_header = verif_dir + dfg_base + ".configbits";
     std::ofstream vsh(verif_header);

@@ -208,7 +208,7 @@ MACRO(MEM_ATOMIC_OP, AtomicOperations)                          // Parameter: st
                                                                 //  scratchpad memory. All fixed point operation: Add, Sub,
                                                                 //  Mul, Div, Mod, Min, Max, BNot, BOr, BAnd, BXor, LNot, 
                                                                 //  LAnd, LOr, LXor, Comp
-MACRO(MEM_NUM_STRIDE2DUnitBitsExp, NumStride2DUnitBitsExp)                          // Parameter: uint, Number of data type for stride2D stream
+MACRO(MEM_NUM_STRIDE2D_UNIT_BITS_EXP, NumStride2DUnitBitsExp)                          // Parameter: uint, Number of data type for stride2D stream
 MACRO(MEM_NUM_PENDING_REQUEST, NumPendingRequest)               // Parameter: uint, Number of ROB Entry, DMA and Indirect SPM and GEN only
 MACRO(MEM_NUM_L1DUNITBITSEXP, NumLength1DUnitBitsExp)           // Parameter: uint, Number of data type for Linear1D stream
 MACRO(MEM_NUM_IDXUNITBITSEXP, NumIdxUnitBitsExp)                // Parameter: uint, Number of data type for index stream

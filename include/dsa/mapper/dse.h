@@ -304,8 +304,11 @@ class CodesignInstance {
   }
 
   void prune_all_unused() {
+
+    auto* sub = _ssModel.subModel();
+
     // First Prune all current Hangers
-    while (delete_hangers()) {  }
+   // while (delete_hangers()) {  }
 
     // Now get the utilization
     auto util = utilization();
@@ -314,8 +317,6 @@ class CodesignInstance {
     if (std::get<2>(util) == 0) {
       return;
     }
-
-    auto* sub = _ssModel.subModel();
 
     std::vector<ssnode*> nodes_to_delete;
     std::vector<sslink*> links_to_delete;
@@ -341,7 +342,7 @@ class CodesignInstance {
       delete_node(node);
     }
     
-    while (delete_hangers()) {  }
+    //while (delete_hangers()) {  }
   }
 
   void make_random_modification(double temperature) {
@@ -988,9 +989,9 @@ class CodesignInstance {
   }
 
   void dump_breakdown(bool verbose) {
-    auto estimated = dsa::adg::estimation::EstimatePowerAera(ss_model());
-    estimated.Dump(std::cout);
     if (verbose) {
+      auto estimated = dsa::adg::estimation::EstimatePowerAera(ss_model());
+      estimated.Dump(std::cout);
       for (int i = 0, n = res.size(); i < n; ++i) {
         if (!res[i]) {
           std::cout << "[skip]" << std::endl;
@@ -1023,6 +1024,12 @@ class CodesignInstance {
     
     // No cycles found, so removing flipflow is fine
     return true;
+  }
+
+  void prune_memory_nodes() {
+    auto* sub = _ssModel.subModel();
+    for (auto& node : sub->mem_list())
+      delete_node(node);
   }
 
  private:
@@ -1064,65 +1071,7 @@ class CodesignInstance {
     // No cycle found
     return true;
   }
-
-  /**
-   * @brief Collapses the links through a node, of a given edge
-   * 
-   * @param n node to collapse
-   * @param edge edge to collapse from
-   * @param sched currently used schedule
-   */
-  void collapse_edge_links(ssnode* n, dsa::dfg::Edge edge, Schedule& sched) {
-    auto* sub = _ssModel.subModel();
-    auto& links = sched.links_of(&edge);
-    for (auto it = links.begin(); it != links.end(); ++it) {
-      sslink* link  = it->second;
-      //Check if link is the node to collapse
-      if (link->sink()->id() == n->id() && std::next(it) != links.end()) {
-        auto src = link->source();
-        sslink* next_link  = std::next(it)->second;
-        auto dst = next_link->sink();
-
-        sub->add_link(src, dst, src->link_index(link, false), dst->link_index(next_link, true));
-        check_stated(src);
-        check_stated(dst);
-        return;
-      }
-      
-    }
-  }
-
-  /**
-   * @brief Adds a fifo depth to all nodes after a given node in the given edge
-   * 
-   * TODO: Only Check the last node in an endge
-   * 
-   * @param fifos set of fu's that have already have their fifo depth added
-   * @param n node to collapse
-   * @param edge edge to check for functional units
-   * @param sched current schedule to use
-   */
-  void add_fifo_edge(std::unordered_set<ssfu*>& fifos, ssnode* n, dsa::dfg::Edge edge, Schedule& sched) {
-    bool found_node = false;
-    for (auto link : sched.links_of(&edge)) {
-      if (found_node) {
-        if (auto fu = dynamic_cast<ssfu*>(link.second->sink())) {
-          // Check if node is already in the set or if it has too large a delay fifo
-          if (fu->delay_fifo_depth() < 32 && fifos.find(fu) == fifos.end()) {
-            fu->max_delay(fu->delay_fifo_depth() + 1);
-            fifos.insert(fu);
-            // We don't need to reassign these to the schedule
-
-            return;
-          }
-        }
-      } else if (link.second->sink()->id() == n->id()) {
-        found_node = true;
-      }
-    }
-  }
-
-  /**
+   /**
    * @brief Collapses a vport
    * TODO Fix this
    * @param vport vport to collapse
@@ -1255,6 +1204,87 @@ class CodesignInstance {
     });
     return links;
   }
+
+  /**
+   * @brief Collapses the links through a node, of a given edge
+   * 
+   * @param n node to collapse
+   * @param edge edge to collapse from
+   * @param sched currently used schedule
+   */
+  void collapse_edge_links(ssnode* n, Schedule::EdgeProp edgeProp, Schedule& sched, std::vector<sslink*>& collapsed_links) {
+    auto* sub = _ssModel.subModel();
+    auto& links = edgeProp.links;
+    // loop through links
+    for (int i = 0; i < links.size(); i++) {
+      sslink* link  = links[i].second;
+      //Check if link is the node to collapse
+      if (link->sink()->id() == n->id() && i + 1 < links.size()) {
+        auto src = link->source();
+        int sourceIndex = src->link_index(link, false);
+        sslink* next_link  = links[i + 1].second;
+        auto dst = next_link->sink();
+        int sinkIndex = dst->link_index(next_link, true);
+        sslink* collapsed_link = sub->add_link(src, dst, sourceIndex, sinkIndex);
+        
+        check_stated(src);
+        check_stated(dst);
+
+        if (collapsed_link != nullptr)
+          collapsed_links.push_back(collapsed_link);
+        return;
+      }
+    }
+  }
+
+  /**
+   * @brief Adds a fifo depth to all nodes after a given node in the given edge
+   * 
+   * TODO: Only Check the last node in an endge
+   * 
+   * @param fifos set of fu's that have already have their fifo depth added
+   * @param n node to collapse
+   * @param edge edge to check for functional units
+   * @param sched current schedule to use
+   */
+  void add_fifo_edge(std::unordered_set<ssfu*>& fifos, ssnode* n, Schedule::EdgeProp edge, Schedule& sched) {
+
+    bool found_node = false;
+    for(auto link : edge.links) {
+      if (found_node) {
+        if (auto fu = dynamic_cast<ssfu*>(link.second->sink())) {
+          // Check if node is already in the set or if it has too large a delay fifo
+          if (fu->delay_fifo_depth() < 32 && fifos.find(fu) == fifos.end()) {
+            fu->max_delay(fu->delay_fifo_depth() + 1);
+            fifos.insert(fu);
+            // We don't need to reassign these to the schedule
+
+            return;
+          }
+        }
+      } else if (link.second->sink()->id() == n->id()) {
+        found_node = true;
+      }
+    }
+    /*
+    for (auto link : sched.links_of(&edge)) {
+      if (found_node) {
+        if (auto fu = dynamic_cast<ssfu*>(link.second->sink())) {
+          // Check if node is already in the set or if it has too large a delay fifo
+          if (fu->delay_fifo_depth() < 32 && fifos.find(fu) == fifos.end()) {
+            fu->max_delay(fu->delay_fifo_depth() + 1);
+            fifos.insert(fu);
+            // We don't need to reassign these to the schedule
+
+            return;
+          }
+        }
+      } else if (link.second->sink()->id() == n->id()) {
+        found_node = true;
+      }
+    }
+    */
+  }
   
   /**
    * @brief Deletes a node
@@ -1274,47 +1304,25 @@ class CodesignInstance {
     auto* sub = _ssModel.subModel();
     
     std::unordered_set<ssfu*> fifos;
+    std::vector<sslink*> collapsed_links;
     int links_collapsed = 0;
     
     for_each_sched([&](Schedule& sched) {
-      auto link_prop = sched.link_prop(); 
-      for (auto& link : n->out_links()) {
-        auto link_slice = link_prop[link->id()];
-        for (auto &slot : link_slice.slots) {
-          auto edges = slot.edges;
-          for (auto edge_slice : edges) {
-            auto& edge = sched.ssdfg()->edges[edge_slice.eid];
-            if (add_fifo && sched.edge_delay(&edge) <= 0) {
-              add_fifo_edge(fifos, n, edge, sched);
-            }
-            if (collapse_links) {
-              collapse_edge_links(n, edge, sched);
-              links_collapsed++;
-            }
-          }
+      auto edges = sched.ssdfg()->edges;
+      for (int i = 0; i < sched.edge_prop().size(); ++i) {
+        auto edgeProp = sched.edge_prop()[i];
+        if (add_fifo && sched.edge_delay(&edges[i]) < 1) {
+          add_fifo_edge(fifos, n, edgeProp, sched);
+        }
+        if (collapse_links) {
+          collapse_edge_links(n, edgeProp, sched, collapsed_links);
+          links_collapsed++;
         }
       }
     });
 
     if (collapse_links && dynamic_cast<ssvport*>(n)) {
       //collapse_vport(dynamic_cast<ssvport*>(n));
-    }
-
-    if (links_collapsed > 0) {
-      std::ostringstream s;
-      s << dse_changes_log.back() << " collapsed " << links_collapsed << " links";
-      dse_changes_log.back() = s.str();
-    }
-
-    if (fifos.size() > 0) {
-      std::ostringstream s;
-      s << dse_changes_log.back() << " fifo depth added for ";
-      for(auto it = fifos.begin(); it != fifos.end(); ++it) {
-        s << "FU_" << (*it)->id();
-        if (std::next(it) != fifos.end())
-          s << ",";
-      }
-      dse_changes_log.back() = s.str();
     }
 
     for_each_sched([&](Schedule& sched) { sched.allocate_space(); });
@@ -1328,17 +1336,41 @@ class CodesignInstance {
     while (n->out_links().size() > 0) {
       delete_link(n->out_links()[0]);
     }
-    
-    for_each_sched([&](Schedule& sched) {
-      for (int slot = 0; slot < sched.num_slots(n); ++slot) {
-        for (auto& p : sched.dfg_nodes_of(slot, n)) {
-          sched.unassign_dfgnode(p.first);
-        }
-      }
-    });
+
+    unassign_node(n);
 
     sub->delete_node(n->id());
     for_each_sched([&](Schedule& sched) { sched.remove_node(n->id()); });
+
+    if (links_collapsed > 0) {
+      std::ostringstream s;
+      s << dse_changes_log.back() << " collapsed " << "(" << links_collapsed << ") ";
+      
+      for (int i = 0; i < collapsed_links.size(); ++i) {
+        int inIndex = collapsed_links[i]->source()->link_index(collapsed_links[i], false);
+        int inSize = collapsed_links[i]->source()->out_links().size();
+        int outIndex = collapsed_links[i]->sink()->link_index(collapsed_links[i], true);
+        int outSize = collapsed_links[i]->sink()->in_links().size();
+        s << collapsed_links[i]->name() << " " << inIndex << "(" << inSize << ")" << "->" << outIndex << "(" << outSize << ") ";
+        if (i < collapsed_links.size() - 1) {
+          s << ", ";
+        }
+      }
+      
+      dse_changes_log.back() = s.str();
+    }
+
+
+    if (fifos.size() > 0) {
+      std::ostringstream s;
+      s << dse_changes_log.back() << " fifo depth added for ";
+      for(auto it = fifos.begin(); it != fifos.end(); ++it) {
+        s << "FU_" << (*it)->id();
+        if (std::next(it) != fifos.end())
+          s << ",";
+      }
+      dse_changes_log.back() = s.str();
+    }
 
     delete n;
     verify();

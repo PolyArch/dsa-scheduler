@@ -21,21 +21,33 @@ struct CandidateSpotVisitor : dfg::Visitor {
       ssfu* cand_fu = fus[i];
 
       if (!cand_fu->fu_type_.Capable(inst->inst())) {
-        //DSA_LOG(CAND) << "Not capable!";
-        continue;
-      }
-      if (cand_fu->out_links().size() < inst->values.size()) {
-        //DSA_LOG(CAND) << "Not enough outs: " << cand_fu->name() << " "
-        //         << cand_fu->out_links().size() << " < " << inst->values.size();
+        ostringstream os;
+        os <<  "Not capable!" << inst->name() << " " << cand_fu->name() << " [";
+
+        int idx_inst = 0;
+        int num_inst = cand_fu->fu_type_.capability.size();
+        for (auto& elem : cand_fu->fu_type_.capability) {
+          os << "\"" << dsa::name_of_inst(elem.op) << "\"";
+          if (idx_inst < num_inst - 1) {
+            os << ", ";
+            idx_inst++;
+          }
+        }
+        os << "]";
+        //DSA_LOG(CAND) << os.str();
+
         continue;
       }
 
       if (!inst->is_temporal()) {
-        if (sched->isPassthrough(0, cand_fu))  // FIXME -- this can't be right
+        if (sched->isPassthrough(0, cand_fu))  {// FIXME -- this can't be right
+          DSA_LOG(CAND) << "Used as Passthrough";
           continue;
+        }
         // Normal Dedidated Instructions
 
         if (cand_fu->is_shared() && !spots.empty()) {
+          DSA_LOG(CAND) << "Shared FU: " << cand_fu->name() << " " << inst->name();
           continue;
         }
 
@@ -45,11 +57,15 @@ struct CandidateSpotVisitor : dfg::Visitor {
           if (k % inst->bitwidth() != 0) {
             continue;
           }
+
           if (routing_along) {
-            if (k / inst->bitwidth() != inst->lane() % cand_fu->lanes()) {
+            if (inst->lane() < 0) {
+              routing_along = false;
+            } else if (k / inst->bitwidth() != inst->lane() % cand_fu->lanes()) {
               continue;
             }
           }
+
           int cnt = 1;
           for (int sub_slot = 0; sub_slot < inst->bitwidth(); sub_slot += cand_fu->granularity()) {
             cnt += sched->dfg_nodes_of((sub_slot + k) / cand_fu->granularity(), cand_fu).size();
@@ -174,14 +190,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
     if (spots.empty()) {
       spots = bad;
       if (input->stated)
-        DSA_WARNING << input->bandwidth() << "-wide stated input port insufficient!";
+        DSA_LOG(WARNING) << input->bandwidth() << "-wide stated input port insufficient!";
       else
-        DSA_WARNING << input->bandwidth() << "-wide input port insufficient!";
-    }
-    DSA_LOG(CAND) << "Input Port " << input->id() << " (" << input->name() << ") " << input->bandwidth() << " with " << spots.size() << " candidates";
-    for (auto candidate : spots) {
-      ssvport* vport = dynamic_cast<ssvport*>(candidate.slot.ref);
-      DSA_LOG(CAND) << "    " << vport->name() << " with bandwith " << vport->bitwidth_capability() << " and stated "<< vport->vp_stated();
+        DSA_LOG(WARNING) << input->bandwidth() << "-wide input port insufficient!";
     }
 
     cnt[input->id()] = spots.size();
@@ -223,9 +234,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
     if (spots.empty()) {
       spots = bad;
       if (output->penetrated_state >= 0)
-        DSA_WARNING << output->bandwidth() << "-wide stated input port insufficient!";
+        DSA_LOG(WARNING) << output->bandwidth() << "-wide stated input port insufficient!";
       else
-        DSA_WARNING << output->bandwidth() << "-wide input port insufficient!";
+        DSA_LOG(WARNING) << output->bandwidth() << "-wide input port insufficient!";
     }
 
     cnt[output->id()] = spots.size();

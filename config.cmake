@@ -1,4 +1,4 @@
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_INSTALL_PREFIX $ENV{SS_TOOLS})
 set(INST_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst")
-set(CMAKE_BUILD_TYPE "release")
+set(CMAKE_BUILD_TYPE "Release")

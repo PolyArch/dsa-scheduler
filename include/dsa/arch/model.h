@@ -6,7 +6,7 @@
 #include <set>
 #include <string>
 #include <vector>
-
+#include "dsa/arch/utils.h"
 #include "dsa/arch/fabric.h"
 #include "dsa/arch/fu_model.h"
 #include "dsa/arch/sub_model.h"

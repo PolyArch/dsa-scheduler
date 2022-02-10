@@ -11,7 +11,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
 #include "dsa/core/singleton.h"
 #include "dsa/debug.h"
 #include "fu_model.h"
@@ -38,6 +37,7 @@ using std::to_string;
 const int MAX_SUBNETS = 8;
 
 class ssnode;
+class sssync;
 class ssvport;
 
 template <typename T>
@@ -203,6 +203,10 @@ class ssnode {
    */
   std::vector<sslink*>& out_links() { return links_[0]; }
 
+  void shuffle_links(bool in_links) {
+    std::random_shuffle(links_[in_links].begin(), links_[in_links].end());
+  }
+
   /*!
    * \brief Index of a link
    */
@@ -300,6 +304,77 @@ class ssnode {
   const std::vector<sslink*> &links(int x) { return links_[x]; }
 };
 
+////////////////////////////////////////////////////////////////
+//                                                            //
+//                     substructures                          //
+//                                                            //
+////////////////////////////////////////////////////////////////
+
+class sscompute : public ssnode {
+ public:
+  sscompute(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  sscompute() {}
+
+  virtual std::string name() const = 0;
+  virtual void Accept(adg::Visitor* visitor) = 0;
+  virtual void dumpIdentifier(ostream& os) = 0;
+  virtual void dumpFeatures(ostream& os) = 0;
+  virtual ~sscompute() {}
+};
+
+class sssync : public ssnode {
+ public:
+  sssync(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  sssync() {}
+
+  virtual std::string name() const = 0;
+  virtual void Accept(adg::Visitor* visitor) = 0;
+  virtual void dumpIdentifier(ostream& os) = 0;
+  virtual void dumpFeatures(ostream& os) = 0;
+  virtual bool isInput() = 0;
+  virtual bool isOutput() = 0;
+  virtual int bitwidth_capability() = 0;
+  virtual bool isHanger() = 0;
+  virtual ~sssync() {}
+
+  std::vector<int>& port_vec() { return _port_vec; }
+  void set_port_vec(std::vector<int> p) { _port_vec = p; }
+  void set_port2node(std::string portname, ssnode* node) { port2node[portname] = node; }
+  ssnode* convert_port2node(std::string portname) { return port2node[portname]; }
+  size_t size() { return _port_vec.size(); }
+
+ protected:
+  int port_ = -1;
+  std::vector<int> _port_vec;
+  std::string io_type;
+  int channel_buffer;
+  std::map<std::string, ssnode*> port2node;
+
+  // Vector Port Implementation (Both input and output vector port)
+  // Example: A 8-wide vector port is used as a 4-wide vector port
+  // 0 : Full XBar Implementation: Any-to-any connection
+  //     Memory A[3:0] -> Compute [ A[1], [X], A[3], [X], [X], [X], A[2], A[0] ]
+  // 1 : Limited XBar Implementation: To any port, but ordered
+  //     Memory A[3:0] -> Compute [ A[3], [X], A[2], [X], [X], [X], A[1], A[0] ]
+  // 2 : Non-XBar Implementation: Only go to lowest ports
+  //     Memory A[3:0] -> Compute [ [X], [X], [X], [X], A[3], A[2], A[1], A[0] ]
+  int vp_impl_{2};
+
+  // Stream Stated Vector Port (Both input and output vector port)
+  // Whether this vector port support state predication (for control),
+  //  and padding (input vector port only) for no-balanced unrolling, which depends on state
+  bool vp_stated_{true};
+
+ public:
+  DEF_ATTR(port);         // Both
+  DEF_ATTR(vp_impl);       // IVP & OVP
+  DEF_ATTR(vp_stated);     // IVP & OVP
+};
+
 class ssmemory : public ssnode {
  public:
   ssmemory(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
@@ -334,6 +409,7 @@ class ssmemory : public ssnode {
   int maxAbsDeltaStride2D_{1073741822};
   bool linearStride2DStream_{true};
   int maxLength2D_{2147483646};
+  int maxAbsStretch2D_{1073741822};
   int numMemUnitBitsExp_{4};
   int maxAbsStretch3D1D_{1073741822};
   bool indirectIndexStream_{true};
@@ -368,6 +444,7 @@ public:
   DEF_ATTR(maxAbsDeltaStride2D);
   DEF_ATTR(linearStride2DStream);
   DEF_ATTR(maxLength2D);
+  DEF_ATTR(maxAbsStretch2D);
   DEF_ATTR(numMemUnitBitsExp);
   DEF_ATTR(maxAbsStretch3D1D);
   DEF_ATTR(indirectIndexStream);
@@ -382,12 +459,18 @@ public:
   DEF_ATTR(atomicOperations);
 };
 
-class ssswitch : public ssnode {
+////////////////////////////////////////////////////////////////
+//                                                            //
+//                       hardware                             //
+//                                                            //
+////////////////////////////////////////////////////////////////
+
+class ssswitch : public sscompute {
  public:
-  ssswitch() : ssnode() {}
+  ssswitch() : sscompute() {}
 
   ssswitch(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+      : sscompute(datawidth, granularity, util, dynamic_timing, fifo) {}
 
   void Accept(adg::Visitor* visitor) override;
 
@@ -500,14 +583,14 @@ class ssswitch : public ssnode {
   double features[9];
 };
 
-class ssfu : public ssnode {
+class ssfu : public sscompute {
  public:
-  ssfu() : ssnode() {}
+  ssfu() : sscompute() {}
 
   ssfu(int datawidth, int granularity, int util, bool dynamic_timing, int fifo,
-       const Capability& fu_type) : ssnode(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
+       const Capability& fu_type) : sscompute(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
 
-  ssnode* copy() override {
+  sscompute* copy() override {
     auto res = new ssfu();
     *res = *this;
     return res;
@@ -696,6 +779,238 @@ class ssfu : public ssnode {
 
 };
 
+
+class ssivport : public sssync {
+ public:
+
+  ssnode* copy() override {
+    auto res = new ssivport();
+    *res = *this;
+    return res;
+  }
+
+  ssivport() {}
+
+  ssivport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : sssync(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+  
+  std::string name() const override {
+    std::stringstream ss;
+    ss << "I";
+    if (port_ != -1) {
+      ss << "P" << port_;
+    } else {
+      ss << id_;
+    }
+    return ss.str();
+  }
+
+  // Check the direction of vector port, whether or not is input vector port
+  bool isInput() override { return true; }
+
+  // Check whether it is output vector port
+  bool isOutput() override { return false; }
+
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + std::to_string(id_) + ",\"input vector port\"" + "]";
+  }
+
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // # Port
+    os << "\"port\" : " << port_ << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"vector port\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity() << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+    os << "}\n";
+  }
+
+  int bitwidth_capability() {
+    int result = 0;
+    for (int i = 0; i < out_links().size(); ++i) {
+      // If this vectorport is stated, then the first link should be reserved
+      // for the stated edge and not count toward capability
+      if (i == 0 && vp_stated())
+        continue;
+      result += out_links()[i]->bitwidth();
+    }
+    return result;
+  }
+
+  virtual ~ssivport(){};
+
+  bool isHanger() override { return out_links().empty();}
+
+ protected:
+
+  // Repeative Input Vector Port (Input Vector Port only)
+  // Whether this input vector port is able to issue the vector in periodic way
+  bool repeatIVP_{false};
+
+  // Broadcast Input Vector Port (Input Vector Port only)
+  // Whether this input vector port is able to copy the stream response for the other port
+  bool broadcastIVP_{false};
+
+ public:
+  DEF_ATTR(repeatIVP);     // IVP
+  DEF_ATTR(broadcastIVP);  // IVP
+};
+
+class ssovport : public sssync {
+ public:
+  ssnode* copy() override {
+    auto res = new ssovport();
+    *res = *this;
+    return res;
+  }
+
+  ssovport() {}
+
+  ssovport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
+      : sssync(datawidth, granularity, util, dynamic_timing, fifo) {}
+
+  void Accept(adg::Visitor* vistor) override;
+  
+  std::string name() const override {
+    std::stringstream ss;
+    ss << "O";
+    
+    if (port_ != -1) {
+      ss << "P" << port_;
+    } else {
+      ss << id_;
+    }
+    return ss.str();
+  }
+
+  // Check the direction of vector port, whether or not is input vector port
+  bool isInput() override { return false; }
+
+  // Check whether it is output vector port
+  bool isOutput() override {return true;}
+
+  void dumpIdentifier(ostream& os) override {
+    os << "[" + std::to_string(id_) + ",\"vector port\"" + "]";
+  }
+  void dumpFeatures(ostream& os) override {
+    os << "{\n";
+    // ID
+    os << "\"id\" : " << id() << ",\n";
+    // # Port
+    os << "\"port\" : " << port() << ",\n";
+    // NodeType
+    os << "\"nodeType\" : "
+       << "\"vector port\""
+       << ",\n";
+    // data width
+    os << "\"data_width\" : " << datawidth() << ",\n";
+    // granularity
+    os << "\"granularity\" : " << granularity_ << ",\n";
+    // number of input
+    int num_input = in_links().size();
+    os << "\"num_input\" : " << num_input << ",\n";
+    // number of output
+    int num_output = out_links().size();
+    os << "\"num_output\" : " << num_output << ",\n";
+    // flow control
+    os << "\"flow_control\" : " << (flow_control() ? "true" : "false") << ",\n";
+    // max util
+    os << "\"max_util\" : " << max_util() << ",\n";
+    // input nodes
+    os << "\"input_nodes\" : [";
+    int idx_link = 0;
+    for (auto in_link : in_links()) {
+      in_link->source()->dumpIdentifier(os);
+      if (idx_link < num_input - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "],\n";
+    // output nodes
+    os << "\"output_nodes\" : [";
+    idx_link = 0;
+    for (auto out_link : out_links()) {
+      out_link->sink()->dumpIdentifier(os);
+      if (idx_link < num_output - 1) {
+        idx_link++;
+        os << ", ";
+      }
+    }
+    os << "]";
+    os << "}\n";
+  }
+
+  int bitwidth_capability() {
+    int result = 0;
+    for (int i = 0; i < in_links().size(); ++i) {
+      // If this vectorport is stated, then the first link should be reserved
+      // for the stated edge and not count toward capability
+      if (i == 0 && vp_stated())
+        continue;
+      result += in_links()[i]->bitwidth();
+    }
+    return result;
+  }
+
+  virtual ~ssovport(){};
+
+  bool isHanger() override { return in_links().empty(); }
+
+ protected:
+  // Taskflow Output Vector Port (Output Vector Port only)
+  bool taskOVP_{false};
+
+  // Discardable Output Vector Port (Output Vector Port only)
+  bool discardOVP_{false};
+
+ public:
+  DEF_ATTR(taskOVP);       // OVP
+  DEF_ATTR(discardOVP);    // OVP
+};
+
+
 // This should be improved later
 class ssvport : public ssnode {
  public:
@@ -846,7 +1161,7 @@ class ssvport : public ssnode {
   //     Memory A[3:0] -> Compute [ A[3], [X], A[2], [X], [X], [X], A[1], A[0] ]
   // 2 : Non-XBar Implementation: Only go to lowest ports
   //     Memory A[3:0] -> Compute [ [X], [X], [X], [X], A[3], A[2], A[1], A[0] ]
-  int vp_impl_{2};
+  int vp_impl_{0};
 
   // Stream Stated Vector Port (Both input and output vector port)
   // Whether this vector port support state predication (for control),
@@ -1129,7 +1444,6 @@ class ssrecurrence : public ssmemory {
   }
 
   virtual ~ssrecurrence() {}
-
   bool is_hanger() override { 
     return false;
   }
@@ -1239,9 +1553,6 @@ class ssregister : public ssmemory {
     std::stringstream ss;
     ss << "REG";
     if (x_ != -1 && y_ != -1) {
-      ss << "_" << x_ << "_" << y_;
-    } else {
-      ss << localId_;
     }
     return ss.str();
   }

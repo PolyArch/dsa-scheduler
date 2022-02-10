@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../utils/model_parsing.h"
+#include "../mapper/pass/print_json.h"
 #include "dsa/arch/sub_model.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/debug.h"
@@ -372,6 +373,210 @@ void SpatialFabric::PrintGraphviz(ostream& os) {
   }
 
   os << "}\n";
+}
+
+void SpatialFabric::DumpHwInJson(const char* name) {
+  // Sanity Check for the output stream file
+  ofstream os(name);
+  DSA_CHECK(os.good()) << "ADG (json) File has bas output stream";
+  DSA_INFO << "Emit ADG (Json) File: " << name;
+
+  // Check the version of ADG (new version: include the Memory Node Info; legacy version: just CGRA)
+  bool newVersionADG = !ContextFlags::Global().adg_compat;
+
+  // Switch between the different version of ADG
+  if (newVersionADG) {
+    os << "{" << std::endl;
+    os << "\"" << adg::ADGKEY_NAMES[adg::DSANODES] << "\" : { " << std::endl;
+    dsa::adg::JsonWriter writer(os);
+    
+    // First Dump Processing Elements
+    for (auto* node : fu_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Switches
+    for (auto* node : switch_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Reccurrance
+    for (auto* node : recur_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Register
+    for (auto* node : reg_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Generate
+    for (auto* node : gen_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Scratchpad
+    for (auto* node : scratch_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump DMA
+    for (auto* node : dma_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Input VectorPorts
+    for (auto* node : input_list()) {
+      node->Accept(&writer);
+      os << "," << std::endl;
+    }
+
+    // Then Dump Output VectorPorts
+    for (int i = 0; i < output_list().size(); i++) {
+      output_list()[i]->Accept(&writer);
+      if (i != output_list().size() - 1) {
+        os << ",";
+      }
+      os << std::endl;
+    }
+
+    os << "}," << std::endl;
+    os << "\"" << adg::ADGKEY_NAMES[adg::DSAEDGES] << "\" : [ ";
+    // Print Edges
+    for (int i = 0; i < link_list().size(); i++) {
+      auto link = link_list()[i];
+      os << "{" << std::endl;
+      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODETYPE] << "\" : \"";
+      if (auto fu = dynamic_cast<ssfu*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+      else if (auto sw = dynamic_cast<ssswitch*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+      else if (auto ivp = dynamic_cast<ssivport*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+      else if (auto ovp = dynamic_cast<ssovport*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      else if (auto vp = dynamic_cast<ssvport*>(link->source())) {
+        if (vp->isInputPort())
+          os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+        else
+          os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      } else if (auto dma = dynamic_cast<ssdma*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+      else if (auto spm = dynamic_cast<ssscratchpad*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+      else if (auto ovp = dynamic_cast<ssgenerate*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+      else if (auto ovp = dynamic_cast<ssregister*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+      os << "\"," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODEID] << "\" : " << link->source()->localId() << "," << std::endl;
+      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCEINDEX] << "\" : " << link->source()->link_index(link, false) << "," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODETYPE] << "\" : \"";
+      if (auto fu = dynamic_cast<ssfu*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+      else if (auto sw = dynamic_cast<ssswitch*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+      else if (auto ivp = dynamic_cast<ssivport*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+      else if (auto ovp = dynamic_cast<ssovport*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      else if (auto vp = dynamic_cast<ssvport*>(link->sink())) {
+        if (vp->isInputPort())
+          os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+        else
+          os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      } else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+      else if (auto spm = dynamic_cast<ssscratchpad*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+      else if (auto ovp = dynamic_cast<ssgenerate*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+      else if (auto ovp = dynamic_cast<ssregister*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+      os << "\"," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODEID] << "\" : " << link->sink()->localId() << "," << std::endl;
+      os << "\"" << adg::ADGKEY_NAMES[adg::SINKINDEX] << "\" : " << link->sink()->link_index(link, true) << std::endl;
+      os << "}";
+      if (i < link_list().size() - 1)
+        os << ",";
+      os << " ";
+    }
+
+    os << "]" << std::endl;
+    os << "}" << std::endl;
+  } else {
+    os << "{\n";  // Start of the JSON file
+    // Instruction Set
+    int start_enc = 3;
+    std::set<OpCode> ss_inst_set;
+    os << "\"Instruction Set\" : {\n";
+    for (ssnode* node : node_list()) {
+      ssfu* fu_node = dynamic_cast<ssfu*>(node);
+      if (fu_node != nullptr) {
+        for (auto& elem : fu_node->fu_type_.capability) {
+          ss_inst_set.insert(elem.op);
+        }
+      }
+    }
+    int num_total_inst = ss_inst_set.size();
+    int idx_inst = 0;
+    for (OpCode inst : ss_inst_set) {
+      os << "\"" << dsa::name_of_inst(inst) << "\" : " << start_enc + (idx_inst++);
+      if (idx_inst < num_total_inst) {
+        os << ",";
+      }
+      os << "\n";
+    }
+    os << "},\n";
+
+    // Links
+    os << "\"links\" : [\n";  // The Start of Links
+    int idx_link = 0;
+    int size_links = link_list().size();
+    for (auto link : link_list()) {
+      os << "{\n";
+      os << "\"source\":";
+      link->source()->dumpIdentifier(os);
+      os << ",\n";
+      os << "\"sink\":";
+      link->sink()->dumpIdentifier(os);
+      os << "}";
+      if (idx_link < size_links - 1) {
+        idx_link++;
+        os << ",\n";  // Seperate the links
+      }
+    }
+    os << "],\n";  // The End of Links
+
+    // Nodes
+    os << "\"nodes\" : [\n";  // The Start of Nodes
+    int idx_node = 0;
+    int size_nodes = node_list().size();
+    for (auto node : node_list()) {
+      node->dumpFeatures(os);
+      if (idx_node < size_nodes - 1) {
+        idx_node++;
+        os << ",\n";
+      }
+    }
+    os << "]\n";  // The End of Nodes
+
+    os << "}\n";  // End of the JSON file
+  }
 }
 
 void SpatialFabric::Apply(adg::Visitor* visitor) {

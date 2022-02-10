@@ -486,7 +486,7 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       if (!sched->is_scheduled(node)) {
         node->Accept(&cpv);
         auto& candidates = cpv.candidates[node->id()];
-        DSA_LOG(CAND) << i << " node ("<< node->name() << ") has " 
+        DSA_LOG(CAND) << i << " node (" << node->name() << ") has " 
                       << candidates.size() << " candidates";
         if (candidates.empty()) {
           DSA_LOG(CAND) << ssDFG->filename << ": " << "Cannot map " << node->name();
@@ -516,9 +516,18 @@ int SchedulerSimulatedAnnealing::map_to_completion(SSDfg* ssDFG, Schedule* sched
       return 1;
     }
   }
-  // indirect_map_to_index.clear();
-
-  return sched->is_complete<dsa::dfg::Node*>() ? 1 : -1;
+  if (sched->is_complete<dsa::dfg::Node*>()) {
+    return 1;
+  } else {
+    DSA_LOG(COMPLETE) << "Not Completely Mapped!";
+    DSA_LOG(COMPLETE) << "Input Ports Complete: " << 
+                         sched->is_complete<dsa::dfg::InputPort>()
+                      << " Output Ports Complete: " << 
+                         sched->is_complete<dsa::dfg::OutputPort>()
+                      << " Instructions: " <<
+                         sched->is_complete<dsa::dfg::Instruction>();
+    return -1;  
+  }
 }
 
 void SchedulerSimulatedAnnealing::unmap_some(SSDfg* ssDFG, Schedule* sched) {
@@ -682,9 +691,14 @@ int SchedulerSimulatedAnnealing::route(
     std::vector<std::pair<int, sslink*>>::iterator* ins_it, 
     int max_path_lengthen) {
 
+  bool path_lengthen = ins_it != nullptr;
+
   std::pair<int, ssnode*> source = {vps.lane(), vps.node()};
   std::pair<int, ssnode*> dest = {vpd.lane(), vpd.node()};
-  bool path_lengthen = ins_it != nullptr;
+  DSA_LOG(ROUTE) << "Routing edge " << edge->name() 
+               << " from " << source.second->name() 
+               << " to " << dest.second->name()
+               << " path lengthen: " << path_lengthen;
 
   int n_nodes = sched->ssModel()->subModel()->node_list().size();
   std::vector<std::vector<int>> node_dist(n_nodes);
@@ -744,7 +758,7 @@ int SchedulerSimulatedAnnealing::route(
       ssnode* next = vport->out_links()[slot]->sink();
 
       // Bookkeeping to add in at the end
-      removed_output_vport = {slot, vport->out_links()[slot]};
+      removed_input_vport = {slot, vport->out_links()[slot]};
       
       // Replace source with the next node
       //source.first = slot;
@@ -777,6 +791,23 @@ int SchedulerSimulatedAnnealing::route(
     }
   }
 
+  // Special Case where stated makes path shorter and become the same node
+  if (source.second == dest.second && !path_lengthen) {
+    auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
+    // First check if the output port was removed
+    if (removed_output_vport.second != nullptr) {
+      insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end());
+    }
+
+    // Second check if the input port was removed
+    if (removed_input_vport.second != nullptr) {
+      insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin() + idx);
+    }
+
+    return 1;
+  }
+
+
   int source_node_id = source.second->id();
   DSA_CHECK(source_node_id < n_nodes) << "Source node is should be less than total node number";
   done[source_node_id][source.first] = new_rand_prio;
@@ -784,8 +815,6 @@ int SchedulerSimulatedAnnealing::route(
   DSA_CHECK(source.first < came_from[source_node_id].size()) << "N Lanes is problematic";
   came_from[source_node_id][source.first] = std::make_pair(0, nullptr);
   openset.emplace(0, new_rand_prio, source.first, source.second);
-
-
 
   while (!openset.empty()) {
     auto &front_elem = *openset.begin();
@@ -898,6 +927,7 @@ int SchedulerSimulatedAnnealing::route(
   }
 
   auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
+  DSA_LOG(ROUTE) << " IDX = " << idx;
   
   auto node_slot = dest;
 
@@ -905,9 +935,10 @@ int SchedulerSimulatedAnnealing::route(
   dsa::dfg::Edge* alt_edge = nullptr;
   pair<int, sslink*> link;
   
-  // This means that we had an input vector port at beginnning of edge
+  // This means that we had an output vector port at beginnning of edge
   if (removed_output_vport.second != nullptr) {
-    insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).begin() + idx);
+    insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end());
+    count++;
   }
   
 
@@ -940,6 +971,7 @@ int SchedulerSimulatedAnnealing::route(
   // Need to make sure we add back the other links in-order.
   // With path lengthening (which has cycles) the previous
   // code can't gaurantee that.
+
   if (alt_edge) {
     auto& alt_links = sched->links_of(alt_edge);
     for (auto alt_link : alt_links) {
@@ -951,9 +983,9 @@ int SchedulerSimulatedAnnealing::route(
     }
   }
   
-  // This means that we had an input vector port at beginnning of edge
-  if (removed_input_vport.second != nullptr) {
-    insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin() + idx);
+  if (removed_input_vport.second != nullptr && !alt_edge) {
+    insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin());
+    count++;
   }
   
   return count;

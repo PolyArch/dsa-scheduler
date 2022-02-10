@@ -1,5 +1,4 @@
 #include <string>
-
 #include "dsa/arch/fabric.h"
 
 namespace dsa {

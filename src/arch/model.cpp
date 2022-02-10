@@ -11,7 +11,6 @@
 #include "../utils/model_parsing.h"
 #include "../utils/string_utils.h"
 #include "dsa/arch/ssinst.h"
-#include "dsa/arch/utils.h"
 #include "dsa/debug.h"
 #include "json/json.h"
 

@@ -148,7 +148,7 @@ void initialize_workloads(CodesignInstance*& ci, const std::string &pdg_filename
 }
 
 void dump_schedules(CodesignInstance*& ci, std::string base_path) {
-  for (int i = 0; i < ci->workload_array.size(); ++i) {
+  for (int i = 0; i < ci->workload_array.size(); i++) {
     std::string path = base_path + std::to_string(i);
     auto sched = ci->res[i];
     if (sched == nullptr) continue;
@@ -195,6 +195,7 @@ void filter_useless_function_units(CodesignInstance*& ci) {
       }
     }
   }
+  used_insts.insert(dsa::OpCode::SS_Copy);
 
   //  TODO: remove hack to make is so zero size capabilities are removed
   for (int i = 0; i < (int)ssmodel.fu_types.size(); ++i) {
@@ -247,6 +248,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   initialize_workloads(cur_ci, pdg_filename);
   setup_indirect(cur_ci, scheduler);
   filter_useless_function_units(cur_ci);
+  cur_ci->prune_memory_nodes();
   cur_ci->verify();
 
   // Schedule First Node
@@ -320,10 +322,13 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
     
     auto util = cand_ci->utilization();
 
-    DSA_INFO << std::setprecision(2)
-              << "Utilization ratio overall: " << std::get<0>(util)
-              << ", nodes: " << std::get<1>(util) 
-              << ", links: " << std::get<2>(util) << std::setprecision(7);
+    std::stringstream utilizationStream;
+    utilizationStream << std::setprecision(2) << "Utilization ratio overall: " 
+              << std::get<0>(util) << ", nodes: " 
+              << std::get<1>(util) << ", links: " 
+              << std::get<2>(util) << std::setprecision(7);
+
+    DSA_INFO << utilizationStream.str();
 
     objectives << dump_log(time_elps, i, last_improve, temperature, cand_ci, best_ci) << std::endl;
 
@@ -358,7 +363,9 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
       // dump the new hw json
       dump_hw(best_ci, i);
 
-      dump_schedules(best_ci, "viz/iters/iter_");
+      std::ostringstream oss;
+      oss << "viz/iters/iter_" << i << "/sched_";
+      dump_schedules(best_ci, oss.str());
 
       // Modify the temperature
       ++improv_iter;
@@ -379,7 +386,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
             exp(-(best_obj - new_obj) / temperature);
         if (p < target) {
           // Accept the modification
-          std::cout << p << " < " << target << ", accept a worse point!" << std::endl;
+          DSA_INFO << p << " < " << target << ", accept a worse point!";
           if (cur_ci != best_ci) {
             delete cur_ci;
           }
@@ -404,10 +411,15 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   double best_obj = best_ci->weight_obj();
   DSA_INFO << "FINAL DSE OBJ: " << best_obj;
   auto util = cur_ci->utilization();
-  DSA_INFO << std::setprecision(2) << "Utilization ratio overall: " 
+
+  std::stringstream utilizationStream;
+  utilizationStream << std::setprecision(2) << "Utilization ratio overall: " 
             << std::get<0>(util) << ", nodes: " 
             << std::get<1>(util) << ", links: " 
             << std::get<2>(util) << std::setprecision(7);
+
+  
+  DSA_INFO << utilizationStream.str();
 
   CodesignInstance* prunned_ci = new CodesignInstance(*best_ci, false);
   prunned_ci->verify();
@@ -419,7 +431,6 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   double pruned_obj = prunned_ci->weight_obj();
   auto final_util = best_ci->utilization();
   auto pruned_util = prunned_ci->utilization();
-  DSA_INFO << "PRUNED DSE OBJ: " << pruned_obj;
 
   DSA_INFO << std::setprecision(2) << "Prunned utilization ratio overall: " 
            << std::get<0>(pruned_util) << ", nodes: " 

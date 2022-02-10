@@ -71,11 +71,14 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
   int maxAbsDeltaStride2D= nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_DELTA_STRIDE2D]].asInt();
   node->maxAbsDeltaStride2D(maxAbsDeltaStride2D);
 
-  bool linearStride2DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asBool();
+  bool linearStride2DStream = nodeParam[ADGKEY_NAMES[MEM_LINEAR_S2D]].asBool();
   node->linearStride2DStream(linearStride2DStream);
 
   int maxLength2D = nodeParam[ADGKEY_NAMES[MEM_MAX_L2D]].asInt();
   node->maxLength2D(maxLength2D);
+
+  int maxAbsStretch2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH2D]].asInt();
+  node->maxAbsStretch2D(maxAbsStretch2D);
 
   int numMemUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_UNITBITS]].asInt();
   node->numMemUnitBitsExp(numMemUnitBitsExp);
@@ -86,14 +89,15 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
   int indirectIndexStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_INDEX]].asInt();
   node->indirectIndexStream(indirectIndexStream);
 
-  int numStride2DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_STRIDE2DUnitBitsExp]].asInt();
+  int numStride2DUnitBitsExp = nodeParam[ADGKEY_NAMES[MEM_NUM_STRIDE2D_UNIT_BITS_EXP]].asInt();
   node->numStride2DUnitBitsExp(numStride2DUnitBitsExp);
 
   int writeWidth = nodeParam[ADGKEY_NAMES[MEM_WRITE_WIDTH]].asInt();
   node->writeWidth(writeWidth);
 
-  int maxAbsStretch2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRETCH2D]].asInt();
-  node->maxAbsStride2D(maxAbsStretch2D);
+
+  int maxAbsStride2D = nodeParam[ADGKEY_NAMES[MEM_MAX_ABS_STRIDE2D]].asInt();
+  node->maxAbsStride2D(maxAbsStride2D);
 
   int readWidth = nodeParam[ADGKEY_NAMES[MEM_READ_WIDTH]].asInt();
   node->readWidth(readWidth);
@@ -120,8 +124,6 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
   }
 
   node->atomicOperations(atomicOp);
-
-
   return node;
 }
 
@@ -496,7 +498,7 @@ SpatialFabric* Import(std::string filename) {
               << "Global ID = " << globalNodeId << ", node->id() = " << node->id()
               << ", localNodeId = " << localNodeId << ", vp->localId() = " << dma->localId();
           globalNodeId++;
-          dma_tab[localNodeId] = node;   
+          dma_tab[localNodeId] = node;
         } else if (nodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
           //////////////////////////////////////
           ///////// Scratchpad Memory  /////////
@@ -525,7 +527,6 @@ SpatialFabric* Import(std::string filename) {
               << ", localNodeId = " << localNodeId << ", sp->localId() = " << sp->localId();
           globalNodeId++;
           sp_tab[localNodeId] = node;
-
         } else if (nodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
           //////////////////////////////////////
           ///////// Recurrence Engine  /////////
@@ -604,6 +605,7 @@ SpatialFabric* Import(std::string filename) {
 
           re = static_cast<ssregister*>(SetMemoryParameters(nodeParam, re));
           re->localId(localNodeId);
+          re->localId(localNodeId);
 
           node = re;
           sf->add_node(node);
@@ -613,7 +615,6 @@ SpatialFabric* Import(std::string filename) {
               << ", localNodeId = " << localNodeId << ", re->localId() = " << re->localId();
           globalNodeId++;
           reg_tab[localNodeId] = node;
-
         }
       }  // End of loop over all nodes
       DSA_CHECK(fu_tab.size() > 0);
@@ -803,10 +804,7 @@ SpatialFabric* Import(std::string filename) {
                         /*fifo depth=*/2);
         vp->input(is_input);
         vp->port(port_num);
-        if (num_inputs + num_outputs == 1)
-          vp->vp_stated(false);
-        else
-          vp->vp_stated(true);
+        vp->vp_stated(true);
         node = vp;
       } else {
         DSA_CHECK(false) << id << "has unknown type" << nodeType << "\n";
@@ -838,6 +836,16 @@ SpatialFabric* Import(std::string filename) {
         DSA_CHECK(from_module && to_module);
         // connect
         from_module->add_link(to_module);
+      }
+    }
+
+    for (auto node : sym_tab) {
+      if (auto vport  = dynamic_cast<ssvport*>(node)) {
+        if (vport->out_links().size() + vport->in_links().size() < 2) {
+          vport->vp_stated(false);
+        }
+        vport->shuffle_links(true);
+        vport->shuffle_links(false);
       }
     }
   }
