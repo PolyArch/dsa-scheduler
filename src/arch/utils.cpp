@@ -189,7 +189,7 @@ SpatialFabric* Import(std::string filename) {
         int localNodeId = stoi(localNodeIdStr);
         // Create different ssnode based on the node Type
         ssnode* node;
-        if(verbose) DSA_INFO << "\tCreate:\t" << nodeType << "." << localNodeId;
+        DSA_LOG(ADG) << "\tCreate:\t" << nodeType << "." << localNodeId;
         // Create DSA node based on the node type
         if (nodeType == ADGKEY_NAMES[PE_TYPE]) {
           //////////////////////////////
@@ -285,7 +285,7 @@ SpatialFabric* Import(std::string filename) {
           for (int instIdx = 0; instIdx < insts.size(); instIdx++) {
             // Get the opcode for this instruction
             std::string opName = insts[instIdx].asString();
-            if(verbose) DSA_INFO << "\t\tAdd Operation [ " << opName << " ] to " << fuName;
+            DSA_LOG(ADG) << "\t\tAdd Operation [ " << opName << " ] to " << fuName;
             fu_type.Add(dsa::inst_from_string(opName.c_str()), 1 /*instruction count*/);
           }
 
@@ -720,8 +720,7 @@ SpatialFabric* Import(std::string filename) {
         // <-> SW -> OVP I don't know why sourceModule && sinkModule not work, should it
         // be nullptr if it is memory node?
         if (sourceDefined && sinkDefined) {
-          if(verbose)
-            DSA_INFO << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId << "["
+          DSA_LOG(ADG) << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId << "["
                    << sourceIndex << "]"
                    << " --> " << sinkNodeType << "." << sinkNodeId << "[" << sinkIndex
                    << "]";

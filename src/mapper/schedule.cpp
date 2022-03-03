@@ -80,6 +80,9 @@ void Schedule::LoadMappingInJson(const std::string& mapping_filename) {
       auto adgslot = obj["adgslot"].asInt();
       this->assign_node(dfg->type_filter<dsa::dfg::Node*>()[dfgnode],
                         {adgslot, fabric->node_list()[adgnode]});
+      DSA_LOG(LOAD)
+        << dfg->type_filter<dsa::dfg::Node*>()[dfgnode]->name()
+        << " assigned to " << fabric->node_list()[adgnode]->name();
     } else if (op == "assign_link") {
       auto dfgedge = obj["dfgedge"].asInt();
       auto adglink = obj["adglink"].asInt();
