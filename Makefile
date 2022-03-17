@@ -10,7 +10,7 @@ json:
 	mkdir -p 3rd-party/jsoncpp/build && cd 3rd-party/jsoncpp/build && \
 	cmake .. -DCMAKE_INSTALL_PREFIX=$(SS_TOOLS)  && make install -j
 
-dsa: json
+dsa: json 3rd-party/libtorch
 	mkdir -p build && cd build && \
 	cmake -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 	      -DTorch_DIR="$(shell git rev-parse --show-toplevel)/3rd-party/libtorch/share/cmake/Torch" .. && \
