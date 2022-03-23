@@ -2,9 +2,12 @@
 #include "dsa/arch/fu_model.h"
 #include "dsa/debug.h"
 #include "dsa/mapper/schedule.h"
+#include <sstream>
 
 namespace dsa {
 namespace mapper {
+
+using std::ostringstream;
 
 struct CandidateSpotVisitor : dfg::Visitor {
 
@@ -71,7 +74,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
             cnt += sched->dfg_nodes_of((sub_slot + k) / cand_fu->granularity(), cand_fu).size();
           }
 
-          if (rand() % (cnt * cnt) == 0) {
+          if (cnt == 1) {
             spots.emplace_back(routing_along, Slot<ssnode*>(k / cand_fu->granularity(), fus[i]));
           } else {
             secondary_spots.emplace_back(routing_along, Slot<ssnode*>(k / cand_fu->granularity(), fus[i]));
@@ -189,10 +192,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
     if (spots.empty()) {
       spots = bad;
-      if (input->stated)
+      if (input->stated) {
         DSA_LOG(WARNING) << input->bandwidth() << "-wide stated input port insufficient!";
-      else
+      } else {
         DSA_LOG(WARNING) << input->bandwidth() << "-wide input port insufficient!";
+      }
     }
 
     cnt[input->id()] = spots.size();
@@ -233,10 +237,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
     if (spots.empty()) {
       spots = bad;
-      if (output->penetrated_state >= 0)
+      if (output->penetrated_state >= 0) {
         DSA_LOG(WARNING) << output->bandwidth() << "-wide stated input port insufficient!";
-      else
+      } else {
         DSA_LOG(WARNING) << output->bandwidth() << "-wide input port insufficient!";
+      }
     }
 
     cnt[output->id()] = spots.size();

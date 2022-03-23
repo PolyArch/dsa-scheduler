@@ -343,7 +343,8 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           int input_port_idx = dsa::vector_utils::indexing(currLink, sinkFuNode->in_links());
           // Get Encode for Operands Routing
           DSA_CHECK(input_port_idx >= 0) << "not found input port";
-          DSA_CHECK(operandIdx >= 0) << "This edge's destination is fu but not used?";
+          DSA_CHECK(operandIdx >= 0)
+            << edge->name() << " of " << vertex->name() << " is " << operandIdx;
           {
             os << "//\tconfig " << sinkFuNode->name() << endl;
             if(operandIdx < 2){
