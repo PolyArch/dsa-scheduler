@@ -636,7 +636,7 @@ sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position) {
     link->subnet[1] = ~0ull >> (64 - link->bitwidth());
   }
 
-  DSA_LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
+  DSA_LOG(SUBNET) << link->subnet[0];
 
   if (sink_position == -1) {
     node->links_[1].push_back(link);
