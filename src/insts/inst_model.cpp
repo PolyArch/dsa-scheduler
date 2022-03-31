@@ -444,7 +444,9 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "string\\\"%s\\\"\\n\",str); "
          "return SS_ERR;}\n";
          */
-  ofs << "  else {return SS_ERR;}\n";
+  ofs << "  else {\n"
+      << " DSA_WARNING << str << \" not found!\";\n"
+      << " return SS_ERR;}\n";
   ofs << "}\n\n";
 
   // Properties of Instructions

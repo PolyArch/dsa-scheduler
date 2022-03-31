@@ -8,11 +8,13 @@ Shl_I16                 16           2              1              1           1
 Mul_I16                 16           2              1              1           1            
 Add_I32                 32           2              1              1           1            
 RShf_U64                64           2              1              1           1
-Cat64                   64           2              1              1           1
+Concat_I64              64           2              1              1           1
+Concat_I32              64           2              1              1           1
 Select_I64              64           3              1              1           1
 Add_I32x2               64           2              1              1           1            
 HLAdd_I32x2             64           2              1              1           1            
 Mul_I64                 64           2              1              1           1            
+Mul_I16x4               64           2              1              1           1            
 Add_I64                 64           2              1              1           1            
 HLAdd_I64               64           2              1              1           1            
 Sub_I64                 64           2              1              1           1            
@@ -30,6 +32,7 @@ Add_I8x8                64           2              1              2           1
 Add_I16x4               64           2              1              2           1
 LShf_U64                64           2              1              1           1
 Div_I64                 64           2              1              1           1            
+Div_I16x4               64           2              1              1           1            
 
 
 # Legacy Instructions
@@ -39,7 +42,8 @@ Add8                    8            2              1              1           1
 # 16-Bit Instructions                                                                       
 Add16                   16           2              1              1           1            
 Sub16                   16           2              1              1           1            
-Concat16                16           1              1              1           1            
+Concat_I32              16           1              1              1           1            
+Concat_I64              16           1              1              1           1            
 Acc16                   16           2              1              1           1            
 Mul16                   16           2              1              1           1            
 Div16                   16           2              1              1           1            
