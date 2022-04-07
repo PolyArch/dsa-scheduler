@@ -173,7 +173,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
   DSA_INFO << cfg_name << ": bitstream is being generated";
   os << "#pragma once" << std::endl;
   // Header file for data type
-  os << "// Header File for Data Type" << std::endl << "#include <cstdint>" 
+  os << "// Header File for Data Type" << std::endl << "#include <stdint.h>"
       << std::endl << std::endl;
   os << "// Input Vector Ports" << std::endl ;
   for (auto& pv : _ssDFG->type_filter<dsa::dfg::InputPort>()) {

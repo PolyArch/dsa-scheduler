@@ -100,6 +100,7 @@ struct Operand {
   // TODO(@were): Move these to simulation.
   // @{
   // bool valid();
+  bool empty();
 
   std::vector<std::queue<sim::SpatialPacket>> fifos;
 

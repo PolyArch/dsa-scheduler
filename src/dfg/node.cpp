@@ -96,6 +96,15 @@ bool Operand::ready() {
   return true;
 }
 
+bool Operand::empty() {
+  for (auto &fifo : fifos) {
+    if (!fifo.empty()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 uint64_t Operand::poll() {
   DSA_CHECK(ready());
   uint64_t res = 0;
