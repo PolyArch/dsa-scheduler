@@ -164,6 +164,7 @@ void Instruction::forward() {
 
   CtrlBits::Behavior bh(_ops.size());
   uint64_t output = 0;
+  bool has_predoff = false;
 
   std::ostringstream reason;
   std::ostringstream compute_dump;
@@ -186,6 +187,7 @@ void Instruction::forward() {
       _input_vals[i] = _ops[i].poll();
       if (!_ops[i].predicate()) {
         bh.discard = true;
+        has_predoff = true;
         reason << "[operand " << i << " invalid]";
       } else if (_ops[i].type != dsa::dfg::OperandType::data) {
         DSA_LOG(PRED) << "bits: " << predicate.toString() << ", pred: " << _input_vals[i];
@@ -198,6 +200,13 @@ void Instruction::forward() {
     compute_dump << _input_vals[i];
   }
   compute_dump << ") = ";
+
+  if (has_predoff && getenv("BACKCGRA")) {
+    bh.exec = false;
+    for (int i = 0; i < 2; ++i) {
+      bh.backpressure[i] = _ops[i].predicate();
+    }
+  }
 
 
   if (bh.exec) {  // IF VALID
