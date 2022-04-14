@@ -146,7 +146,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   string model_rawname = model_filename.substr(0, lastindex);
   string model_base =
       model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
-
+  int ovr = 0, agg_ovr = 0, max_util = 0;
 
   if (check_feasible(dfg, model)) {
     auto sigint_handler = [](int) { exit(1); };
@@ -167,7 +167,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     int lat = 0, latmis = 0;
 
     if (dsa::ContextFlags::Global().verbose) {
-      int ovr = 0, agg_ovr = 0, max_util = 0;
+      ovr = 0; agg_ovr = 0; max_util = 0;
       sched->get_overprov(ovr, agg_ovr, max_util);
       int violation = sched->violation();
 
