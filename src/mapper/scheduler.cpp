@@ -208,7 +208,9 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   if (!succeed_sched || sched == nullptr) {
     DSA_CHECK(false) << "Cannot be scheduled, try a smaller DFG!";
-  }else{
+  } else if (ovr > 0) {
+    DSA_CHECK(false) << "Overprovision detected, try a smaller DFG!";
+  } else {
     if(verbose) DSA_INFO << "Spatial scheduling finished!";
   }
 
