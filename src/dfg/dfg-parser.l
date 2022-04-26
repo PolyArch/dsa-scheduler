@@ -52,6 +52,7 @@ M   [-]
                                         }
 "---"[^\n]*                             { return NEW_DFG; }
 
+"Array"*                                { return (ARRAY); }
 "Input"("8"|"16"|"32"|"64")*            { iow(&yylval, yytext); return(INPUT); }
 "InputVec"                              { yylval.i = 64; return(INPUT); }
 "Output"("8"|"16"|"32"|"64")*           { iow(&yylval, yytext); return(OUTPUT); }

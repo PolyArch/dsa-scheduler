@@ -45,7 +45,7 @@ class Scheduler {
 
   virtual bool schedule(SSDfg* ssDFG, Schedule*& schedule) = 0;
 
-  virtual bool incrementalSchedule(CodesignInstance& incr_table) {
+  virtual bool incrementalSchedule(CodesignInstance& incr_table, int max_vector=-1) {
     DSA_CHECK(0) << "not supported";
     return false;
   }

@@ -120,6 +120,9 @@ Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
 }
 
 int Instruction::bitwidth() {
+  if (opcode == dsa::SS_Concat_I32) {
+    return 64;
+  }
   if (opcode != dsa::SS_NONE) {
     return dsa::bitwidth[opcode];
   }

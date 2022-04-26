@@ -202,7 +202,6 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     printConfigCheat(os, cfg_name);
   } else {
     // For each edge, find out the passthrough node
-    int edge_idx = 0;
     SSDfg* ssDFG = ssdfg();
     auto &edge_list = ssDFG->edges;
     auto &vertex_list = ssDFG->nodes;
@@ -214,10 +213,16 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
     //////////// Loop over all edges ////////////
     /////////////////////////////////////////////
 
-    for (auto& ep : _edgeProp) {
+    for (int edge_idx = 0; edge_idx < (int) edge_list.size(); ++edge_idx) {
 
       // Traverse all edges to gather all node reconfiguration
       dsa::dfg::Edge* edge = &edge_list[edge_idx];
+      auto &ep = _edgeProp[edge_idx];
+      // Skip memory edges
+      if (edge->memory()) {
+        DSA_INFO << edge->name() << "skip!";
+        continue;
+      }
       os << "// -------- EDGE:" << edge_idx << ", extra_lat = " << ep.extra_lat
          << " -------- " << endl;
 
@@ -233,12 +238,12 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
         // Get the source of current link, source of one link can be SW, FU and IVP
         ssswitch* sourceSwNode =  dynamic_cast<ssswitch*> (currLink->source());
         ssfu*     sourceFuNode =  dynamic_cast<ssfu*>     (currLink->source());
-        ssvport*  sourceIVPNode = dynamic_cast<ssvport*>  (currLink->source());
+        ssivport*  sourceIVPNode = dynamic_cast<ssivport*>  (currLink->source());
 
         // Get the sink of current link, sink of one link can be SW, FU and OVP
         ssswitch* sinkSwNode =    dynamic_cast<ssswitch*>(currLink->sink());
         ssfu*     sinkFuNode =    dynamic_cast<ssfu*>(currLink->sink());
-        ssvport*  sinkOVPNode =   dynamic_cast<ssvport*>(currLink->sink());
+        ssovport*  sinkOVPNode =   dynamic_cast<ssovport*>(currLink->sink());
         
         ///////////////////////////////////////////////
         //// Source Input Vector Port --> CurrLink ////
@@ -382,7 +387,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Encode the Opcode for PE
           auto* inst = dynamic_cast<dsa::dfg::Instruction*>(vertex);
           DSA_CHECK(inst) << "why a non-instruction node will be mapped to fu";
-          int local_opcode = sinkFuNode->fu_type_.get_encoding(inst->inst());
+          int local_opcode = sinkFuNode->fu_type().get_encoding(inst->inst());
           os << "//\t\tset current opcode to " << local_opcode << " means "
              << name_of_inst(inst->inst()) << endl;
           info[fu_id].opcode = local_opcode;
@@ -486,11 +491,11 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           // Get the physical port index
           int pid = dsa::vector_utils::indexing(currLink,sinkOVPNode->in_links());
           // Get the output of DFG: an edge whose last link points to OVP means such edge must points to OutputPort (DFG)
-          dsa::dfg::OutputPort* outNdoe = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
+          dsa::dfg::OutputPort* outNode = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
           // Get the source index of this edge
           // The source index should be combined with state: 
           // if the edge is not stated defined by sink node, source Index should + 1 if sink OVP is stated
-          int sourceIdx = outNdoe->sourceEdgeIdx(edge) + (!edge->sinkStated() ? sinkOVPNode->vp_stated() : 0);
+          int sourceIdx = outNode->sourceEdgeIdx(edge) + (!edge->sinkStated() ? sinkOVPNode->vp_stated() : 0);
           // Make sure that each edge has a non-negative sourceIdx
           DSA_CHECK(sourceIdx >= 0) << "The order in stream for edge connected to OVP cannot be negative";
           DSA_CHECK(pid >= 0) << "The index of physical port cannot be negative";
@@ -509,7 +514,6 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
                << "//\t\troute vport[" << pid << "] to value[" << sourceIdx << "]" << endl;
         }
       }// Loop end for all links on this edge
-      edge_idx++;
     }
 
     /////////////////////////////////////////////
@@ -583,13 +587,17 @@ void Schedule::printEdge() {
 
   std::vector<dsa::dfg::Edge> edges = ssdfg()->edges;
 
-
   for (int i = 0; i < edge_prop().size(); ++i) {
     auto edge = edge_prop()[i];
-    std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << std::endl;
+    if (auto outputPort = dynamic_cast<dsa::dfg::OutputPort*>(edges[i].use())) {
+      int sourceIdx = outputPort->sourceEdgeIdx(&edges[i]);
+      std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << "," << sourceIdx << ")" << std::endl;
+    } else {
+      std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << ")" << std::endl;
+    }
     for (int i = 0; i < edge.links.size(); ++i) {
       auto link = edge.links[i].second;
-      std::cout << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << std::endl;
+      std::cout << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << " (" << link->source()->link_index(link, false) << "," << link->sink()->link_index(link, true) << ")" << std::endl;
     }
   }
 }
@@ -606,7 +614,9 @@ void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
     }
 
     if (vertices.size() == 0) {
-      ofs << "<tr><td border=\"1\"> " << node->name() << " </td></tr>";
+      if (dynamic_cast<SpatialNode*>(node)) {
+        ofs << "<tr><td border=\"1\"> " << node->name() << " </td></tr>";
+      }
     } else {
       for (auto v : vertices) {
         if (!v->values.empty()) {
@@ -718,7 +728,7 @@ void Schedule::printCondensedVector(std::vector<int>& vec, std::ostream& os) {
 void Schedule::printNodeGraphviz(std::ofstream& ofs, ssnode* node) {
   int sy = _ssModel->subModel()->sizey();
 
-  if (dynamic_cast<ssvport*>(node)) {
+  if (dynamic_cast<SyncNode*>(node)) {
     auto& np = _nodeProp[node->id()];
     if (np.slots[0].vertices.size() == 0) return;
   }
@@ -776,8 +786,11 @@ void Schedule::stat_printOutputLatency() {
   cout << "** Output Vector Latencies **\n";
   for (int i = 0; i < n; i++) {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
+    if (vec_out == nullptr) continue;
     auto loc = locationOf(vec_out);
-    ssvport* vport = dynamic_cast<ssvport*>(loc.node());
+    if (loc.node() == nullptr) continue;
+    SyncNode* vport = dynamic_cast<SyncNode*>(loc.node());
+    if (vport == nullptr) continue;
     DSA_CHECK(vport) << loc.node()->name();
     cout << vec_out->name() << " to " << vport->name() << " sz" << vport->size() << ": ";
     for (auto inc_edge : operands[vec_out->id()]) {
@@ -788,6 +801,15 @@ void Schedule::stat_printOutputLatency() {
     cout << endl;
   }
 }
+
+int Schedule::unrollDegree() {
+  int64_t unrollDegree = -1;
+  for (int i = 0; (long unsigned int) i < ssdfg()->meta.size(); ++i) {
+    unrollDegree = std::max(unrollDegree, ssdfg()->meta[i].unroll);
+  }
+  return (int) unrollDegree;
+}
+
 #include "./pass/iterative_latency.h"
 
 bool Schedule::fixLatency(int& max_lat, int& max_lat_mis, std::pair<int, int>& delay_violation) {
@@ -826,7 +848,7 @@ void Schedule::validate() {
         DSA_CHECK(prev_link->sink() == link->source());
       }
       if (i + 1 < (int)links.size()) {
-        DSA_CHECK(dynamic_cast<ssvport*>(link->sink()) == 0);
+        DSA_CHECK(dynamic_cast<SyncNode*>(link->sink()) == 0);
       }
       ++i;
       prev_link = link;
@@ -845,7 +867,10 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   for (auto v : _vertexProp) {
     if (v.node() == nullptr)
       continue;
+    if (dynamic_cast<DataNode*>(v.node()))
+      continue;
     DSA_CHECK(v.node() != nullptr) << "Vertex node is null";
+    DSA_CHECK(v.node()->id() < _nodeProp.size()) << "Vertex node id is out of range: " << v.node()->id() << " " << _nodeProp.size();
     // First get the nodeProp associated with this vertex
     const auto& np = _nodeProp[v.node()->id()];
 
@@ -860,11 +885,11 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
       // Vectors to store all the dfg nodes mapped to this slot
       vector<dsa::dfg::Node*> io;
       vector<dsa::dfg::Node*> other;
+      vector<dsa::dfg::Instruction*> insts;
       vector<dsa::dfg::Operation*> ops;
       
       // loop through all the slots for this vertex
       for (auto elem : slot.vertices) {
-        // Get the DFG node
         auto* v = elem.first;
         
         // Get what type of DFG Node is mapped to this slot
@@ -873,20 +898,30 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
           if (v->type() == dsa::dfg::Node::V_OUTPUT) io.push_back(v);
         } else if (auto op = dynamic_cast<dsa::dfg::Operation*>(v)) {
           ops.push_back(op);
-        } else {
+        } else if (auto inst = dynamic_cast<dsa::dfg::Instruction*>(v)) {
+          cnt++;
+          insts.push_back(inst);
+        } else{
           cnt++;
           other.push_back(v);
+        }
+      }
+      
+      int instruction_ovr = 0;
+      if (insts.size() > 0) {
+        for (auto inst : insts) {
+          instruction_ovr += get_instruction_overprov(inst);
         }
       }
 
       int unique_io = vector_utils::count_unique(io);
 
-      int cur_util = cnt + slot.passthrus.size() + unique_io + (ops.size() != 0);
+      int cur_util = cnt + instruction_ovr + slot.passthrus.size() + unique_io + (ops.size() != 0);
       int cur_ovr = cur_util - v.node()->max_util();
 
       if (cur_ovr > 0) {
         DSA_LOG(OVERPROV) << v.node()->name() << ": "
-          << cnt << " + " << slot.passthrus.size() << " + "
+          << cnt << " + " << instruction_ovr << " + " << slot.passthrus.size() << " + "
           << unique_io << " + " << (ops.size() != 0) << " > " << v.node()->max_util();
         for (auto elem: io) {
           DSA_LOG(OVERPROV) << elem->name();
@@ -908,7 +943,39 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
   }
 }
 
+/**
+ * @brief Checks an Instruction to see if it is being broadcasted within a node.
+ * 
+ * @param inst Instruction to check
+ * @return int the number of broadcasts that this node is using
+ */
+int Schedule::get_instruction_overprov(dfg::Instruction* inst) {
+  int max_num_results = num_values(inst->inst());
+  int current_results = 0;
+  std::set<sslink*> links_used = {};
+  
+  for (auto edge : ssdfg()->edges) {
+    // Check to see if the source of the edge matches this instruction
+    if (edge.def()->id() == inst->id()) {
+      auto links = _edgeProp[edge.id].links;
+      if (links.size() == 0) continue; 
+      sslink* first_link = links.begin()->second;
+      if (links_used.find(first_link) == links_used.end()) {
+        links_used.insert(first_link);
+        current_results++;
+      }
+    }
+  }
+  return std::max(current_results - max_num_results, 0);
+}
+
 void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util) {
+  // As Memory serves as a bus, no need to check for overprov
+  if (dynamic_cast<DataNode*>(link->source()))
+    return;
+  if (dynamic_cast<DataNode*>(link->sink()))
+    return;
+  
   int n = link->source()->datawidth() / link->source()->granularity();
   for (int slot = 0; slot < n; ++slot) {
     auto& lp = _linkProp[link->id()];
@@ -1063,27 +1130,174 @@ void Schedule::normalize() {
   candidate_cnt = cpv.cnt;
 }
 
-double Schedule::estimated_performance() {
+double Schedule::estimated_performance(std::string& spm_performance, std::string&l2_performance, std::string& dram_performance, int num_cores, int num_banks, bool debug) {
   auto dfg = this->ssdfg();
-  std::vector<std::vector<double>> bw(dfg->meta.size(), std::vector<double>(2, 0));
-  std::vector<double> coef(dfg->meta.size(), (double)1.0);
 
-  for (auto& elem : dfg->type_filter<dsa::dfg::InputPort>()) {
-    if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Read & 1) &&
-        elem.meta.source != dsa::dfg::MetaPort::Data::Unknown) {
-      bw[elem.group_id()][elem.meta.source == dsa::dfg::MetaPort::Data::SPad] +=
-          (double) elem.vectorLanes() * elem.bitwidth() / 8;
-    } else if ((elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndRead & 1) ||
-               (elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::IndWrite) & 1) {
-      if (this->ssModel()->indirect() < 1) {
-        coef[elem.group_id()] = 0.1;
-      }
-    } else if (elem.meta.op >> (int)dsa::dfg::MetaPort::Operation::Atomic & 1) {
-      if (this->ssModel()->indirect() < 2) {
-        coef[elem.group_id()] = 0.1;
+  // Calculate the Frequency of each code region
+  std::vector<double> nmlz_freq;
+  for (int i = 0; i < dfg->meta.size(); ++i) {
+    nmlz_freq.push_back(dfg->meta[i].frequency);
+  }
+  double nmlz = std::accumulate(nmlz_freq.begin(), nmlz_freq.end(), 0);
+  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
+    nmlz_freq[i] /= nmlz;
+  }
+
+  // ArgSort nmlz frequency
+  std::vector<double> nmlz_freq_args(dfg->meta.size(), 0);
+  std::size_t n(0);
+  std::generate(std::begin(nmlz_freq_args), std::end(nmlz_freq_args), [&]{ return n++; });
+  std::sort(  std::begin(nmlz_freq_args), 
+              std::end(nmlz_freq_args),
+              [&](int i1, int i2) { return nmlz_freq[i1] > nmlz_freq[i2]; } );
+  
+  DSA_LOG(PERFORMANCE) << "Normalized Frequency " << nmlz_freq;
+  DSA_LOG(PERFORMANCE) << "Normalized Frequency args " << nmlz_freq_args;
+
+  // Get the performance of scratchpad in each code region
+  double spm_performance_factor = 1.0;
+  for (auto spad : ssModel()->subModel()->scratch_list()) {
+    // the production rate for this scratchpad node
+    int productionRate = spad->readWidth() * spad->memUnitBits();
+
+    double inputConsumption = 0;
+    double outputConsumption = 0;
+
+    // Populate input and output consumption rates
+    auto vertices = node_prop()[spad->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        auto input_consumtion = arr->Consumption(true);
+        auto output_consumption = arr->Consumption(false);
+        for (int i = 0; i < dfg->meta.size(); ++i) {
+          inputConsumption += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          outputConsumption += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+        }
       }
     }
-    coef[elem.group_id()] *= elem.meta.cmd;
+    DSA_LOG(PERFORMANCE) << "SPM Production rate: " << productionRate;
+    DSA_LOG(PERFORMANCE) << "SPM Input consumption rate: " << inputConsumption;
+    DSA_LOG(PERFORMANCE) << "SPM Output consumption rate: " << outputConsumption;
+
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / inputConsumption));
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / outputConsumption));
+  }
+
+  // Get the performance of dma in each code region
+  std::vector<double> dma_performace(dfg->meta.size(), 1);
+  double dma_performance_factor = 1.0;
+  for (auto dma : ssModel()->subModel()->dma_list()) {
+    // Generated online
+    double core_reduction_rate = (-.4 * std::pow(1.03, num_cores - 1) + 1.4);
+
+    double productionRate = dma->readWidth() * dma->memUnitBits() * std::min(num_banks, num_cores) * core_reduction_rate;
+
+    // l2 bandwidth = width of vectorport / repeat ratio
+    // overall reuse rate = (total traffic) / (memory footprint) * (port repeat)
+    // mem bandwidth = width of vector port / overall resuse rate
+
+    double consumptionRate = 0.0;
+    
+    // Populate consumption rate
+    auto vertices = node_prop()[dma->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::DMA* arr = dynamic_cast<dfg::DMA*>(vertex.first)) {
+        auto input_consumtion = arr->Consumption(true, true);
+        auto output_consumption = arr->Consumption(false, true);
+        if (arr->recurrant()) {
+          for (int i = 0; i < dfg->meta.size(); ++i) {
+            input_consumtion[i] *= (1 - arr->reuse());
+            output_consumption[i] *= (1 - arr->reuse());
+          }
+        }
+        for (int i = 0; i < dfg->meta.size(); ++i) {
+          consumptionRate += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          consumptionRate += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+        }
+      }
+    }
+    
+    consumptionRate *= num_cores;
+    DSA_LOG(PERFORMANCE) << "L2 production rate: " << productionRate;
+    DSA_LOG(PERFORMANCE) << "L2 consumption rate: " << consumptionRate;
+    DSA_LOG(PERFORMANCE) << "L2 performance factor: " << productionRate / consumptionRate;
+
+    dma_performance_factor = std::min(dma_performance_factor, (productionRate / consumptionRate));
+  }
+
+  std::vector<double> dram_performance_local(dfg->meta.size(), 1);
+  double dram_performance_factor = 1.0;
+  for (auto dma : ssModel()->subModel()->dma_list()) {
+
+    double core_reduction_rate = (-.4 * std::pow(1.01, num_cores) + 1.4);
+    // 160 Bytes per cycle is DRAM bandwidth
+    double productionRate = 160 * dma->memUnitBits() * core_reduction_rate;
+
+    double consumptionRate = 0.0;
+    
+    // Populate consumption rate
+    auto vertices = node_prop()[dma->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        auto input_consumtion = arr->Consumption(true, true, true);
+        auto output_consumption = arr->Consumption(false, true, true);
+        for (int i = 0; i < dfg->meta.size(); ++i) {
+          consumptionRate += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          consumptionRate += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+        }
+      }
+    }
+
+    consumptionRate *= num_cores;
+
+    DSA_LOG(PERFORMANCE) << "DRAM production rate: " << productionRate;
+    DSA_LOG(PERFORMANCE) << "DRAM consumption rate: " << consumptionRate;
+
+    dram_performance_factor = std::min(dram_performance_factor, (productionRate / consumptionRate));
+  }
+
+
+  std::vector<double> rec_performance(dfg->meta.size(), 1);
+  for (auto rec : ssModel()->subModel()->recur_list()) {
+    std::vector<double> rec_lat(dfg->meta.size(), 0.0);
+    std::vector<double> rec_hide(dfg->meta.size(), 0.0);
+    auto vertices = node_prop()[rec->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        for (dfg::Edge edge : ssdfg()->edges) {
+          if (edge.use()->id() == arr->id()) {
+            if (auto output = dynamic_cast<dfg::OutputPort*>(edge.def())) {
+              double lat = this->latOf(output);
+              double hide = (double) output->meta.conc / dfg->meta[output->group_id()].unroll;
+              if (lat > hide) {
+                rec_lat[output->group_id()] = lat;
+                rec_hide[output->group_id()] = hide;
+              }
+            }
+          } else if (edge.def()->id() == arr->id()) {
+            if (auto output = dynamic_cast<dfg::OutputPort*>(edge.use())) {
+              double lat = this->latOf(output);
+              double hide = (double) output->meta.conc / dfg->meta[output->group_id()].unroll;
+              if (lat > hide) {
+                rec_lat[output->group_id()] = lat;
+                rec_hide[output->group_id()] = hide;
+              }
+            }
+          }
+        }
+      } else {
+        DSA_CHECK(false) << "Recurrence should only contain array nodes";
+      }
+    }
+    for (int i = 0; i < dfg->meta.size(); ++i) {
+      if (rec_hide[i] == 0) {
+        rec_performance[i] = 1;
+      } else {
+        rec_performance[i] = (rec_lat[i] / rec_hide[i]) * nmlz_freq[i];
+      }
+    }
   }
 
   std::vector<int> inst_cnt(dfg->meta.size(), 0);
@@ -1091,52 +1305,43 @@ double Schedule::estimated_performance() {
     ++inst_cnt[elem.group_id()];
   }
 
-  double memory_bw = 64 * this->ssModel()->io_ports;
-  std::vector<double> bw_coef(dfg->meta.size(), 1.0);
-  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
-    for (int j = 0; j < 2; ++j) {
-      // std::cout << "memory bandwidth: " << memory_bw << " ? " << bw[i][j] << std::endl;
-      if (bw[i][j] > memory_bw) {
-        bw_coef[i] = std::min(bw_coef[i], memory_bw / bw[i][j]);
-      }
-    }
+  std::vector<int> lanes_cnt(dfg->meta.size(), 0);
+  for (auto& elem : dfg->type_filter<dsa::dfg::InputPort>()) {
+    lanes_cnt[elem.group_id()] += elem.vectorLanes();
   }
-
-  std::vector<double> nmlz_freq;
-  for (int i = 0; i < dfg->meta.size(); ++i) {
-    nmlz_freq.push_back(dfg->meta[i].frequency);
-  }
-  double nmlz = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
-  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
-    nmlz_freq[i] /= nmlz;
-  }
-
-  std::vector<double> rec_lat(dfg->meta.size(), 0.0);
-  std::vector<double> rec_hide(dfg->meta.size(), 0.0);
   for (auto& elem : dfg->type_filter<dsa::dfg::OutputPort>()) {
-    if (elem.meta.dest == dsa::dfg::MetaPort::Data::LocalPort) {
-      double lat = this->latOf(&elem);
-      double hide = (double) elem.meta.conc / dfg->meta[elem.group_id()].unroll;
-      if (lat > hide) {
-        rec_lat[elem.group_id()] = lat;
-        rec_hide[elem.group_id()] = hide;
-      }
-    }
+    lanes_cnt[elem.group_id()] += elem.vectorLanes();
   }
-
-  double overall = 0.0;
-
+  
+  double overall_l2 = 0.0;
+  double overall_dram = 0.0;
   int fifo = violation_penalty.second;
-  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
-    double v =
-        std::min(bw_coef[i], rec_hide[i] / rec_lat[i]) * inst_cnt[i] * nmlz_freq[i];
-    DSA_LOG(ESTIMATION) << "[Group " << i << "] Freq: " << dfg->meta[i].frequency
-                    << ", #Insts:" << inst_cnt[i] << ", Memory: " << bw[i][0]
-                    << ", SPad: " << bw[i][1] << ", Rec: " << rec_hide[i] << "/"
-                    << rec_lat[i] << ", Overall: " << v
-                    << ", Performance Coef: " << coef[i];
-    overall += v * coef[i] * ((double)fifo / (_groupMismatch[i] + fifo));
+  double best_freq = 0;
+  std::ostringstream spm;
+  std::ostringstream l2;
+  std::ostringstream dram;
+  spm << spm_performance_factor;
+  l2 << dma_performance_factor;
+  dram << dram_performance_factor;
+
+
+  for (int i = 0; i < dfg->meta.size(); ++i) {
+
+    double mismatch = ((double)fifo / (_groupMismatch[i] + fifo));
+    double min_performace = std::min(spm_performance_factor, dma_performance_factor);
+    min_performace = std::min(min_performace, rec_performance[i]);
+    min_performace = std::min(min_performace, ((double)fifo / (_groupMismatch[i] + fifo)));
+    double min_performace_dram = std::min(min_performace, dram_performance_factor);
+
+    overall_dram += min_performace_dram * (inst_cnt[i] + lanes_cnt[i]) * nmlz_freq[i];
+    
+    overall_l2 += min_performace * (inst_cnt[i] + lanes_cnt[i]) * nmlz_freq[i];
   }
 
-  return overall;
+  spm_performance = spm.str();
+  l2_performance = l2.str();
+  dram_performance = dram.str();
+
+  // harmonic mean of both numbers
+  return std::sqrt(overall_dram * overall_l2) * num_cores;
 }

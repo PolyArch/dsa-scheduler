@@ -19,7 +19,8 @@ using string_utils::String;
  * @param nodeParam 
  * @param node 
  */
-ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
+template<typename T>
+T* SetMemoryParameters(Json::Value nodeParam, T* node) {
   int numWrite = nodeParam[ADGKEY_NAMES[NUM_MEM_WRITE]].asInt();
   node->numWrite(numWrite);
 
@@ -35,7 +36,7 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
   int maxLength3D = nodeParam[ADGKEY_NAMES[MEM_MAX_L3D]].asInt();
   node->maxLength3D(maxLength3D);
 
-  int capacity = nodeParam[ADGKEY_NAMES[MEM_CAP]].asInt();
+  int64_t capacity = nodeParam[ADGKEY_NAMES[MEM_CAP]].asInt64();
   node->capacity(capacity);
 
   bool linearLength1DStream = nodeParam[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
@@ -43,7 +44,7 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
 
   int numGenDataType = nodeParam[ADGKEY_NAMES[NUM_MEM_DATATYPE]].asInt();
   node->numGenDataType(numGenDataType);
-  //DEF_ATTR(linearPadding);
+
   bool linearPadding = nodeParam[ADGKEY_NAMES[MEM_PADDING]].asBool();
   node->linearPadding(linearPadding);
 
@@ -124,6 +125,9 @@ ssmemory* SetMemoryParameters(Json::Value nodeParam, ssmemory* node) {
   }
 
   node->atomicOperations(atomicOp);
+
+  node->datawidth(64);
+  node->granularity(64);
   return node;
 }
 
@@ -387,11 +391,10 @@ SpatialFabric* Import(std::string filename) {
           // Get the suggest depth for the vector port
           int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
-          auto vp = new ssvport(compBits, compUnitBits,
+          auto vp = new ssivport(compBits, compUnitBits,
                                 /* max_util */ 1,
                                 /* dynamic timing */ true,
                                 /* fifo depth=*/suggestDepth);
-          vp->input(true);
           // Set the vector port implementation
           int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
           vp->vp_impl(vpImpl);
@@ -438,11 +441,10 @@ SpatialFabric* Import(std::string filename) {
           // Get the suggest depth for the vector port
           int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
-          auto vp = new ssvport(compBits, compUnitBits,
+          auto vp = new ssovport(compBits, compUnitBits,
                                 /* max_util */ 1,
                                 /* dynamic timing */ true,
                                 /* fifo depth=*/suggestDepth);
-          vp->input(false);
           // Set the vector port implementation
           int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
           vp->vp_impl(vpImpl);
@@ -472,24 +474,20 @@ SpatialFabric* Import(std::string filename) {
           /////////////////////////////////////////
           
           // Get node parameter
-          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[DMA_TYPE]];
-          
-          /*
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[MEM_NODE]];
           // Get the node type and node Id from node parameter
           std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
           // Node Type in Node Definition is different from the one in Node Name
           DSA_CHECK(nodeTypeParam == nodeType)
               << "NodeType from Name = " << nodeType
               << ", node type in parameter = " << nodeTypeParam;
-          */
           int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
           // Node ID from node parameter should be same as the one from Node Name
           DSA_CHECK(nodeIdParam == localNodeId);
 
           ssdma* dma = new ssdma();
+          dma = SetMemoryParameters<ssdma>(nodeParam, dma);
           dma->localId(localNodeId);
-
-          dma = static_cast<ssdma*>(SetMemoryParameters(nodeParam, dma));
 
           node = dma;
           sf->add_node(node);
@@ -498,25 +496,25 @@ SpatialFabric* Import(std::string filename) {
               << "Global ID = " << globalNodeId << ", node->id() = " << node->id()
               << ", localNodeId = " << localNodeId << ", vp->localId() = " << dma->localId();
           globalNodeId++;
-          dma_tab[localNodeId] = node;
+          dma_tab[localNodeId] = node; 
         } else if (nodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
           //////////////////////////////////////
           ///////// Scratchpad Memory  /////////
           //////////////////////////////////////
           
           // Get node parameter
-          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[SPM_TYPE]];
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[MEM_NODE]];
           // Get the node type and node Id from node parameter
           std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
           // Node Type in Node Definition is different from the one in Node Name
-          //DSA_CHECK(nodeTypeParam == nodeType);
+          DSA_CHECK(nodeTypeParam == nodeType)
+              << "NodeType from Name = " << nodeType
+              << ", node type in parameter = " << nodeTypeParam;
           int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
           // Node ID from node parameter should be same as the one from Node Name
-          DSA_CHECK(nodeIdParam == localNodeId);
           
           auto sp = new ssscratchpad();
-
-          sp = static_cast<ssscratchpad*>(SetMemoryParameters(nodeParam, sp));
+          sp = SetMemoryParameters<ssscratchpad>(nodeParam, sp);
           sp->localId(localNodeId);
 
           node = sp;
@@ -533,20 +531,20 @@ SpatialFabric* Import(std::string filename) {
           //////////////////////////////////////
 
           // Get node parameter
-          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[REC_TYPE]];
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[MEM_NODE]];
           // Get the node type and node Id from node parameter
           std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
           // Node Type in Node Definition is different from the one in Node Name
-          //DSA_CHECK(nodeTypeParam == nodeType);
+          DSA_CHECK(nodeTypeParam == nodeType)
+              << "NodeType from Name = " << nodeType
+              << ", node type in parameter = " << nodeTypeParam;
           int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
           // Node ID from node parameter should be same as the one from Node Name
           DSA_CHECK(nodeIdParam == localNodeId);
           
           auto re = new ssrecurrence();
           re->localId(localNodeId);
-
-          re = static_cast<ssrecurrence*>(SetMemoryParameters(nodeParam, re));
-
+          re = SetMemoryParameters<ssrecurrence>(nodeParam, re);
           node = re;
           sf->add_node(node);
           DSA_CHECK(globalNodeId == node->id());
@@ -561,18 +559,19 @@ SpatialFabric* Import(std::string filename) {
           ///////// Generation Engine  /////////
           //////////////////////////////////////
           // Get node parameter
-          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[REC_TYPE]];
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[MEM_NODE]];
           // Get the node type and node Id from node parameter
           std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
           // Node Type in Node Definition is different from the one in Node Name
-          //DSA_CHECK(nodeTypeParam == nodeType);
+          DSA_CHECK(nodeTypeParam == nodeType)
+              << "NodeType from Name = " << nodeType
+              << ", node type in parameter = " << nodeTypeParam;
           int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
           // Node ID from node parameter should be same as the one from Node Name
           DSA_CHECK(nodeIdParam == localNodeId);
           
           auto ge = new ssgenerate();
-
-          ge = static_cast<ssgenerate*>(SetMemoryParameters(nodeParam, ge));
+          ge = SetMemoryParameters<ssgenerate>(nodeParam, ge);
           ge->localId(localNodeId);
 
           node = ge;
@@ -592,19 +591,19 @@ SpatialFabric* Import(std::string filename) {
           //////////////////////////////////////
           
           // Get node parameter
-          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[REC_TYPE]];
+          Json::Value nodeParam = (*dsaNode)[ADGKEY_NAMES[MEM_NODE]];
           // Get the node type and node Id from node parameter
           std::string nodeTypeParam = nodeParam[ADGKEY_NAMES[NODETYPE]].asString();
           // Node Type in Node Definition is different from the one in Node Name
-          //DSA_CHECK(nodeTypeParam == nodeType);
+          DSA_CHECK(nodeTypeParam == nodeType)
+              << "NodeType from Name = " << nodeType
+              << ", node type in parameter = " << nodeTypeParam;
           int nodeIdParam = nodeParam[ADGKEY_NAMES[NODEID]].asInt();
           // Node ID from node parameter should be same as the one from Node Name
           DSA_CHECK(nodeIdParam == localNodeId);
           
           auto re = new ssregister();
-
           re = static_cast<ssregister*>(SetMemoryParameters(nodeParam, re));
-          re->localId(localNodeId);
           re->localId(localNodeId);
 
           node = re;
@@ -634,6 +633,96 @@ SpatialFabric* Import(std::string filename) {
       auto& jsonLinks = cgra->operator[](ADGKEY_NAMES[DSAEDGES]);
       auto sf = res;
       DSA_CHECK(jsonLinks.isArray());
+
+      // First loop through and set links
+      for (int i = 0; i < jsonLinks.size(); ++i) {
+        auto& dsaLink = jsonLinks[i];
+        DSA_CHECK(dsaLink.isObject());
+        // Get the Source and Sink Node Type
+        std::string sourceNodeType = dsaLink[ADGKEY_NAMES[SOURCENODETYPE]].asString();
+        std::string sinkNodeType = dsaLink[ADGKEY_NAMES[SINKNODETYPE]].asString();
+        // Get the Souce and Sink Node Local ID
+        int sourceNodeId = dsaLink[ADGKEY_NAMES[SOURCENODEID]].asInt();
+        int sinkNodeId = dsaLink[ADGKEY_NAMES[SINKNODEID]].asInt();
+        // Get the source and sink edge index
+        int sourceIndex = dsaLink[ADGKEY_NAMES[SOURCEINDEX]].asInt();
+        int sinkIndex = dsaLink[ADGKEY_NAMES[SINKINDEX]].asInt();
+
+        // Get the source Module from the table
+        ssnode* sourceModule;
+        bool sourceDefined = false;
+        if (sourceNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
+          sourceModule = fu_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
+          sourceModule = sw_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
+          sourceModule = ivp_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
+          sourceModule = ovp_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
+          sourceModule = dma_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
+          sourceModule = sp_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
+          sourceModule = rec_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
+          sourceModule = gen_tab[sourceNodeId];
+          sourceDefined = true;
+        } else if (sourceNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
+          sourceModule = reg_tab[sourceNodeId];
+          sourceDefined = true;
+        } else {
+          DSA_CHECK(false) << "Unknown source node type: " << sourceNodeType;
+        }
+
+        // Get the sink Module from the table
+        ssnode* sinkModule;
+        bool sinkDefined = false;
+        if (sinkNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
+          sinkModule = fu_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
+          sinkModule = sw_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
+          sinkModule = ovp_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
+          sinkModule = ivp_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
+          sinkModule = dma_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
+          sinkModule = sp_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
+          sinkModule = rec_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
+          sinkModule = gen_tab[sinkNodeId];
+          sinkDefined = true;
+        } else if (sinkNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
+          sinkModule = reg_tab[sinkNodeId];
+          sinkDefined = true;
+        } else {
+          DSA_CHECK(false) << "Unknown sink node type: " << sinkNodeType;
+        }
+        if (sourceDefined && sinkDefined) {
+          DSA_CHECK(sourceModule != nullptr) << "Source Module is null: " << sourceNodeType << " " << sourceNodeId;
+          DSA_CHECK(sinkModule != nullptr) << "Sink Module is null: " << sinkNodeType << " " << sinkNodeId;
+          sourceModule->add_empty_link(sinkModule);
+        }
+      }
+
+      // Now Loop Through and add the links
       for (int i = 0; i < jsonLinks.size(); ++i) {
         auto& dsaLink = jsonLinks[i];
         DSA_CHECK(dsaLink.isObject());
@@ -716,15 +805,13 @@ SpatialFabric* Import(std::string filename) {
         }
 
         // Connect between node
-        // TODO: since memory node is not included, so we only connect between IVP -> PE
-        // <-> SW -> OVP I don't know why sourceModule && sinkModule not work, should it
-        // be nullptr if it is memory node?
         if (sourceDefined && sinkDefined) {
           DSA_LOG(ADG) << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId << "["
                    << sourceIndex << "]"
                    << " --> " << sinkNodeType << "." << sinkNodeId << "[" << sinkIndex
                    << "]";
-          sourceModule->add_link(sinkModule);
+          // Use Set Link to ensure proper indexing
+          sourceModule->set_link(sinkModule, sourceIndex, sinkIndex);
         }
       }  // End of loop over all links
     }    // End of parsing all json links
@@ -796,15 +883,25 @@ SpatialFabric* Import(std::string filename) {
         } else {
           continue;
         }
-        auto vp =
-            new ssvport(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
-                        cgranode["max_util"].asInt(),
-                        /*dynamic timing=*/true,
-                        /*fifo depth=*/2);
-        vp->input(is_input);
-        vp->port(port_num);
-        vp->vp_stated(true);
-        node = vp;
+        if (is_input) {
+          auto vp =
+              new ssivport(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
+                          cgranode["max_util"].asInt(),
+                          /*dynamic timing=*/true,
+                          /*fifo depth=*/2);
+          vp->port(port_num);
+          vp->vp_stated(true);
+          node = vp;
+        } else {
+          auto vp =
+              new ssovport(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
+                          cgranode["max_util"].asInt(),
+                          /*dynamic timing=*/true,
+                          /*fifo depth=*/2);
+          vp->port(port_num);
+          vp->vp_stated(true);
+          node = vp;
+        }
       } else {
         DSA_CHECK(false) << id << "has unknown type" << nodeType << "\n";
       }
@@ -839,7 +936,7 @@ SpatialFabric* Import(std::string filename) {
     }
 
     for (auto node : sym_tab) {
-      if (auto vport  = dynamic_cast<ssvport*>(node)) {
+      if (auto vport  = dynamic_cast<SyncNode*>(node)) {
         if (vport->out_links().size() + vport->in_links().size() < 2) {
           vport->vp_stated(false);
         }

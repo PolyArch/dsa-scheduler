@@ -1,12 +1,14 @@
 #pragma once
 
 #include <string>
+#include <torch/script.h>
 
 #include "dsa/arch/estimation.h"
 #include "dsa/arch/model.h"
 #include "schedule.h"
 #include "scheduler.h"
 
+#include "dsa/core/singleton.h"
 // This class contains all info which you might want to remember about
 class WorkloadSchedules {
  public:
@@ -40,6 +42,23 @@ class SchedStats {
 // 1. Explore full design space with randomness
 // 2.
 
+inline int next_power_of_two(int n) {
+    if (n <= 1) return 1;
+    // decrement `n` (to handle the case when `n` itself
+    // is a power of 2)
+    n = n - 1;
+ 
+    // initialize result by 2
+    int k = 2;
+ 
+    // double `k` and divide `n` in half till it becomes 0
+    while (n >>= 1) {
+        k = k << 1;    // double `k`
+    }
+ 
+    return k;
+}
+
 template <typename T>
 inline int non_uniform_random(const std::vector<T>& nodes, const std::vector<bool>& vec) {
   for (int res = rand() % nodes.size();; res = rand() % nodes.size()) {
@@ -59,9 +78,14 @@ class CodesignInstance {
   SSModel* ss_model() { return &_ssModel; }
   ~CodesignInstance() {}
   std::vector<WorkloadSchedules> workload_array;
-  std::vector<int> weight;
+  std::vector<double> weight;
 
   std::vector<Schedule*> res;
+  std::pair<double, double> objective{-1, -1};
+  int num_cores = 1;
+  int num_banks = 8;
+  int system_bus = 8;
+  int max_vector = -1;
 
   /*
     Vector of unused nodes and links.
@@ -73,12 +97,18 @@ class CodesignInstance {
   std::vector<bool> unused_links;
 
   bool sanity_check{false};
+  std::string dse_fail_reason = "";
   std::string dse_change = "none";
   std::vector<std::string> dse_changes_log;
   double performance = 0;
+  double prior_score = 0;
   double links_score = 0;
+  double nodes_score = 0;
   std::vector<double> workload_performances;
   std::vector<std::vector<std::pair<std::string, double>>> dfg_performances;
+  std::vector<std::vector<std::pair<std::string, std::string>>> dfg_spm_performances;
+  std::vector<std::vector<std::pair<std::string, std::string>>> dfg_l2_performances;
+  std::vector<std::vector<std::pair<std::string, std::string>>> dfg_dram_performances;
   std::vector<double> workload_weights;
   double normalized_resources = 0;
 
@@ -112,10 +142,11 @@ class CodesignInstance {
     // Check Node
     for (auto& node : _ssModel.subModel()->node_list()) {
       if (auto fu = dynamic_cast<ssfu*>(node)) {
-        DSA_CHECK(!fu->fu_type_.capability.empty());
-      } else if (auto vport  = dynamic_cast<ssvport*>(node)) {
-        if (vport->vp_stated())
+        DSA_CHECK(!fu->fu_type().capability.empty());
+      } else if (auto vport  = dynamic_cast<SyncNode*>(node)) {
+        if (vport->vp_stated()) {
           DSA_CHECK(vport->out_links().size() + vport->in_links().size() > 1);
+        }
       }
       //DSA_CHECK(node->parent == _ssModel.subModel());
       DSA_CHECK(node == _ssModel.subModel()->node_list()[node->id()]);
@@ -133,7 +164,7 @@ class CodesignInstance {
     }
 
     for (unsigned i = 0; i < _ssModel.subModel()->link_list().size(); ++i) {
-      DSA_CHECK(_ssModel.subModel()->link_list()[i]->id() == (int)i);
+      DSA_CHECK(_ssModel.subModel()->link_list()[i]->id() == (int) i);
     }
   }
 
@@ -191,9 +222,63 @@ class CodesignInstance {
     return s.str();
   }
 
+  std::string get_spm_performances(bool cout=false) {
+    std::ostringstream s;
+    for(auto it = dfg_spm_performances.begin(); it != dfg_spm_performances.end(); ++it) {
+      for(auto next = it->begin(); next != it->end(); ++next) {
+        s << next->first << ": " << next->second;
+        if (cout)
+          s << std::endl;
+        else if (std::next(it) != dfg_spm_performances.end() || std::next(next) != it->end())
+          s << ",";
+      }
+    }
+    return s.str();
+  }
+
+  std::string get_l2_performances(bool cout=false) {
+    std::ostringstream s;
+    for(auto it = dfg_l2_performances.begin(); it != dfg_l2_performances.end(); ++it) {
+      for(auto next = it->begin(); next != it->end(); ++next) {
+        s << next->first << ": " << next->second;
+        if (cout)
+          s << std::endl;
+        else if (std::next(it) != dfg_l2_performances.end() || std::next(next) != it->end())
+          s << ",";
+      }
+    }
+    return s.str();
+  }
+
+  std::string get_dram_performances(bool cout=false) {
+    std::ostringstream s;
+    for(auto it = dfg_dram_performances.begin(); it != dfg_dram_performances.end(); ++it) {
+      for(auto next = it->begin(); next != it->end(); ++next) {
+        s << next->first << ": " << next->second;
+        if (cout)
+          s << std::endl;
+        else if (std::next(it) != dfg_dram_performances.end() || std::next(next) != it->end())
+          s << ",";
+      }
+    }
+    return s.str();
+  }
+
   // Verify, plus also check:
   // 1. there are no hangers (elements with no purpose, usually after delete)
   void verify_strong() { verify(); }
+
+  void add_edges_to_data_node(DataNode* n) {
+    auto sub = _ssModel.subModel();
+    if (sub->vport_list().empty()) return;
+
+    for (auto ovp : sub->output_list()) {
+      add_link(n, ovp);
+    } 
+    for (auto ivp : sub->input_list()) {
+      add_link(n, ivp);
+    }
+  }
 
   void add_random_edges_to_node(ssnode* n, int min_in, int max_in, int min_out,
                                 int max_out) {
@@ -206,14 +291,13 @@ class CodesignInstance {
          ++i, ++j) {
       int src_node_index = rand() % sub->nodes<ssnode*>().size();
       ssnode* src = sub->node_list()[src_node_index];
-      if ((dynamic_cast<ssvport*>(src) && src->out_links().empty()) || src == n) {
+      if ((dynamic_cast<SyncNode*>(src) && src->out_links().empty()) || src == n) {
         i--;
         continue;
       }
 
       if (src == n) continue;
-      sub->add_link(src, n);
-      check_stated(src);
+      add_link(src, n);
       
 
     }
@@ -222,16 +306,13 @@ class CodesignInstance {
          ++i, ++j) {
       int dst_node_index = rand() % sub->node_list().size();
       ssnode* dst = sub->node_list()[dst_node_index];
-      if ((dynamic_cast<ssvport*>(dst) && dst->in_links().empty()) || dst == n) {
+      if ((dynamic_cast<SyncNode*>(dst) && dst->in_links().empty()) || dst == n) {
         i--;
         continue;
       }
 
       if (n == dst) continue;
-
-      sub->add_link(n, dst);
-      check_stated(dst);
-      
+      add_link(n, dst);
     }
   }
 
@@ -255,7 +336,7 @@ class CodesignInstance {
    * @return true if something is deleted
    * @return false otherwise
    */
-  bool delete_hangers() {
+  bool delete_hangers(bool unassign=true) {
     bool deleted_something = false;
 
     //TODO: Convert from set once memory is added
@@ -269,7 +350,7 @@ class CodesignInstance {
         deleted_something = true;
       }
       /* This case doesn't work as it could be used as a passthru. Maybe convert to a switch instead?
-      if (fu->fu_type_.capability.empty()) {
+      if (fu->fu_type().capability.empty()) {
         nodes_to_delete.insert(fu);
         deleted_something = true;
       }
@@ -283,13 +364,13 @@ class CodesignInstance {
     }
 
     // TODO: ovport == ivport if input_size & ouput_size = 0
-    for (ssvport* ivport : sub->input_list()) {
+    for (ssivport* ivport : sub->input_list()) {
       if (ivport->out_links().size() == 0) {
         nodes_to_delete.insert(ivport);
         deleted_something = true;
       }
     }
-    for (ssvport* ovport : sub->output_list()) {
+    for (ssovport* ovport : sub->output_list()) {
       if (ovport->in_links().size() == 0) {
         nodes_to_delete.insert(ovport);
         deleted_something = true;
@@ -303,8 +384,48 @@ class CodesignInstance {
     return deleted_something;
   }
 
-  void prune_all_unused() {
+  bool dfg_exceeds_size(SSDfg* dfg, int size) {
+    for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
+      if (dfg->meta[i].unroll > size) {
+        return true;
+      }
+    }
+    return false;
+  }
 
+  /**
+   * @brief Use Prior to prunning. Will collapse all stated edges that are
+   * unused
+   * 
+   * @return true if a stated edge is collapsed 
+   * @return false if no stated edge is collapsed
+   */
+  bool all_stated_collapse() {
+    while (delete_hangers()) {  }
+    auto* sub = _ssModel.subModel();
+    auto util = utilization();
+    if (std::get<2>(util) == 0) {
+      return false;
+    }
+
+    std::vector<ssnode*> nodes_to_delete;
+    std::vector<sslink*> links_to_delete;
+
+    for (int i = 0; i < sub->node_list().size(); ++i) {
+      ssnode* n = sub->node_list()[i];
+      if (auto sync = dynamic_cast<SyncNode*>(n)) {
+        if (sync->vp_stated()) {
+          if (!stated_mapped(sync)) {
+            stated_collapse(sync, false);
+          }
+        }
+      }
+    }
+    while (delete_hangers()) {  }
+    return false;
+  }
+
+  void prune_all_unused() {
     auto* sub = _ssModel.subModel();
 
     // First Prune all current Hangers
@@ -320,7 +441,7 @@ class CodesignInstance {
 
     std::vector<ssnode*> nodes_to_delete;
     std::vector<sslink*> links_to_delete;
-    
+
     // Add all links that are unused to a vector then delete them
     // Note: Links must be deleted before nodes
     for (int i = 0; i < unused_links.size(); i++) {
@@ -329,7 +450,7 @@ class CodesignInstance {
     }
 
     for (auto link : links_to_delete) {
-      delete_link(link); 
+      delete_link(link, false); 
     }
 
     // Add all nodes that are unused to a vector then delete them
@@ -339,10 +460,11 @@ class CodesignInstance {
     }
 
     for (auto node : nodes_to_delete) {
-      delete_node(node);
+      delete_node(node, false, false, false, false);
     }
     
-    //while (delete_hangers()) {  }
+    while (delete_hangers()) {  }
+    return;
   }
 
   void make_random_modification(double temperature) {
@@ -399,53 +521,59 @@ class CodesignInstance {
   bool add_something(int item_class) {
     std::ostringstream s;
     auto* sub = _ssModel.subModel();
-    if (item_class < 65) { // 65% to add a random link
+    if (item_class < 50) { // 50% to add a random link
       if (sub->node_list().empty()) return false;
       int src_node_index = rand() % sub->node_list().size();
       int dst_node_index = rand() % sub->node_list().size();
       ssnode* src = sub->node_list()[src_node_index];
       ssnode* dst = sub->node_list()[dst_node_index];
-      if (dynamic_cast<ssvport*>(src) && src->out_links().empty()) {
+      if (dynamic_cast<SyncNode*>(src) && src->out_links().empty()) {
         return false;
       }
-      if (dynamic_cast<ssvport*>(dst) && dst->in_links().empty()) {
+      if (dynamic_cast<SyncNode*>(dst) && dst->in_links().empty()) {
         return false;
       }
       if (src == dst) return false;
 
-      
-      sub->add_link(src, dst);
-      check_stated(src);
-      check_stated(dst);
+      add_link(src, dst);
 
       s << "add link from " << src->name() << " to " << dst->name();
-    } else if (item_class < 80) { // 15% to add a random switch
+    } else if (item_class < 65) { // 10% to add a random switch
       ssswitch* sw = sub->add_switch();
       add_random_edges_to_node(sw, 1, 5, 1, 5);
       s << "add switch " <<  sw->name() << " ins/outs: " << sw->in_links().size() << "/" << sw->out_links().size();
-    } else if (item_class < 90) { // 10% to add a random FU
+    } else if (item_class < 75) { // 10% to add a random FU
       // Randomly pick an FU type from the set
       auto& fu_defs = _ssModel.fu_types;
       if (fu_defs.empty()) return false;
       ssfu* fu = sub->add_fu();
       int fu_def_index = rand() % fu_defs.size();
       Capability* def = fu_defs[fu_def_index];
-      fu->fu_type_ = *def;
+      fu->fu_type(*def);
       s << "add function unit " << fu->name();
-    } else if (item_class < 95) { //  5% to add a random input vector port
-      ssvport* vport = sub->add_vport(true);
+    } else if (item_class < 85) { //  10% to add a random input vector port
+      ssivport* vport = sub->add_input_vport();
       add_random_edges_to_node(vport, 0, 1, 5, 12);
+      check_stated(vport, false);
       s << "adding input vport " << vport->name();
-    } else { // 5% to add a random output vector port
-      ssvport* vport = sub->add_vport(false);
+    } else if (item_class < 95) { // 10% to add a random output vector port
+      ssovport* vport = sub->add_output_vport();
       add_random_edges_to_node(vport, 5, 12, 0, 1);
+      check_stated(vport, false);
       s << "adding output vport " << vport->name();
-    }
+    } else { // 5% to add a scratchpad
+      ssscratchpad* spm = sub->add_scratchpad();
+      add_edges_to_data_node(spm);
+      s << "adding scratchpad " << spm->name();
+    } 
+
     dse_changes_log.push_back(s.str());
     for_each_sched([&](Schedule& sched) { sched.allocate_space(); });
+    while (delete_hangers()) {  }
     verify_strong();
     return true;
   }
+
 
   /**
    * @brief Removes something from the ADG
@@ -462,42 +590,50 @@ class CodesignInstance {
   bool remove_something(int item_class) {
     std::ostringstream s;
     auto* sub = _ssModel.subModel();
-    if (item_class < 60) { // 60% to remove a random link
+    if (item_class < 50) { // 50% to remove a random link
       if (sub->link_list().empty()) return false;
       int index = non_uniform_random(sub->link_list(), unused_links);
       sslink* l = sub->link_list()[index];
       s << "remove link " << l->name();
       dse_changes_log.push_back(s.str());
       delete_link(l);
-    } else if (item_class < 75) { // 15% to remove a random switch
+    } else if (item_class < 65) { // 15% to remove a random switch
       if (sub->switch_list().empty()) return false;
       int index = non_uniform_random(sub->switch_list(), unused_nodes);
       ssswitch* sw = sub->switch_list()[index];
       s << "remove switch " << sw->name();
       dse_changes_log.push_back(s.str());
       delete_node(sw, true, false, true);
-    } else if (item_class < 90) { // 15% to remove a random FU
+    } else if (item_class < 80) { // 10% to remove a random FU
       if (sub->fu_list().empty()) return false;
       int index = non_uniform_random(sub->fu_list(), unused_nodes);
       ssfu* fu = sub->fu_list()[index];
       s << "remove function unit " << fu->name();
       dse_changes_log.push_back(s.str());
       delete_node(fu, true, false, false);
-    } else if (item_class < 95) { // 5% to remove a random input vector port
+    } else if (item_class < 85) { // 5% to remove a random input vector port
       if (sub->input_list().size() <= 1) return false;
       int index = non_uniform_random(sub->input_list(), unused_nodes);
-      ssvport* vport = sub->input_list()[index];
+      ssivport* vport = sub->input_list()[index];
       s << "remove input vport "<< vport->name();
       dse_changes_log.push_back(s.str());
       delete_node(vport, false, false, false);
-    } else { // 5% to remove a random output vector port
+    } else if (item_class < 90) { // 5% to remove a random output vector port
       if (sub->output_list().size() <= 1) return false;
       int index = non_uniform_random(sub->output_list(), unused_nodes);
-      ssvport* vport = sub->output_list()[index];
+      ssovport* vport = sub->output_list()[index];
       s << "remove output vport "<< vport->name();
       dse_changes_log.push_back(s.str());
       delete_node(vport, false, false, false);
-    }
+    } else { // 10% to remove a data node
+      if (sub->data_list().empty()) return false;
+      int index = non_uniform_random(sub->data_list(), unused_nodes);
+      DataNode* mem = sub->data_list()[index];
+      s << "remove memory " << mem->name();
+      dse_changes_log.push_back(s.str());
+      delete_node(mem, false, false, false);
+    } 
+
     verify_strong();
     while (delete_hangers()) {  }
     return true;
@@ -524,7 +660,7 @@ class CodesignInstance {
       if (sub->node_list().empty()) return false;
       int node_index = rand() % sub->node_list().size();
       ssnode* node = sub->node_list()[node_index];
-      if (dynamic_cast<ssvport*>(node)) return false;
+      if (dynamic_cast<SyncNode*>(node)) return false;
       s << "change Node " << node->name() << " flow control from " << node->flow_control() << " to " << !node->flow_control();
 
       node->flow_control(!node->flow_control());
@@ -540,7 +676,7 @@ class CodesignInstance {
           }
         });
       }
-    } else if (item_class < 20) { // 5% to change the name of a node
+    } else if (item_class < 20) { // 5% to change the util of a node
       return false;
 
       if (sub->fu_list().empty()) return false;
@@ -566,7 +702,7 @@ class CodesignInstance {
         unassign_node(fu);
       }
 
-    } else if (item_class < 50) { // 30% to change fu fifo depth
+    } else if (item_class < 30) { // 10% to change fu fifo depth
       if (sub->fu_list().empty()) return false;
       int diff = -(rand() % 3 + 1);
       if (rand() & 1) diff *= -1;
@@ -594,38 +730,51 @@ class CodesignInstance {
           }
         }
       });
-    } else if (item_class < 70) { // 20% to change a node's fu_type
+    } else if (item_class < 40) { // 10% to change a node's fu_type
       if (sub->fu_list().empty()) return false;
       int index = rand() % sub->fu_list().size();
       auto fu = sub->fu_list()[index];
 
       if (rand() & 1) {
         s << "add FU " << fu->name() << " operation";
-        dse_changes_log.push_back(s.str());
 
-        fu->fu_type_ = *ss_model()->fu_types[rand() % ss_model()->fu_types.size()];
-      } else if (fu->fu_type_.capability.size() > 1) {
-        int j = rand() % fu->fu_type_.capability.size();
-        s << "remove FU " << fu->name() << " operation " << dsa::name_of_inst(fu->fu_type_.capability.at(j).op);
-        dse_changes_log.push_back(s.str());
-        fu->fu_type_.Erase(j);
+        fu->fu_type(*ss_model()->fu_types[rand() % ss_model()->fu_types.size()]);
+      } else if (fu->fu_type().capability.size() > 1) {
+        int j = rand() % fu->fu_type().capability.size();
+        s << "remove FU " << fu->name() << " operation " << dsa::name_of_inst(fu->fu_type().capability.at(j).op);
+        auto fu_type = fu->fu_type();
+        fu_type.Erase(j);
+        fu->fu_type(fu_type);
+        /*
+        s << " new operations: \"";
+        for (auto& op : fu->fu_type().capability) {
+          s << dsa::name_of_inst(op.op) << " ";
+        }
+        s << "\"";
+        */
+
       }
 
       for_each_sched([&](Schedule& sched) {
         for (int slot = 0; slot < sched.num_slots(fu); ++slot) {
           for (auto& p : sched.dfg_nodes_of(slot, fu)) {
             if (auto inst = dynamic_cast<dsa::dfg::Instruction*>(p.first)) {
-              if (!fu->fu_type_.Capable(inst->inst())) {
+              if (!fu->fu_type().Capable(inst->inst())) {
                 sched.unassign_dfgnode(p.first);
               }
             }
           }
         }
       });
-    } else if (item_class < 90) { // 20% to change node granularity
+    } else if (item_class < 60) { // 20% to change node granularity
       return false;
       int index = rand() % sub->node_list().size();
       auto fu = sub->node_list()[index];
+      
+      // Doesn't make sense to change a memory or sync nodes granularity
+      if (dynamic_cast<DataNode*>(fu)) return false;
+      if (dynamic_cast<SyncNode*>(fu)) return false;
+
       int new_one = (1 << (rand() % 4)) * 8;
       while (new_one == fu->granularity() || new_one > fu->datawidth()) {
         new_one = (1 << (rand() % 4)) * 8;
@@ -659,23 +808,90 @@ class CodesignInstance {
 
       s << "change FU " << fu->name() << " granularity from " << fu->granularity() << " to " << new_one;
       fu->granularity(new_one);
-    } else if (item_class < 95) { // 5% to change a input Vports stated
+
+    } else if (item_class < 65) { // 5% to change a input Vports stated
+      if  (sub->input_list().empty()) return false;
       int index = rand() % sub->input_list().size();
       auto vport = sub->input_list()[index];
 
       if (vport->out_links().size() < 2) return false;
-      
-      vport->vp_stated(!vport->vp_stated());
-      unassign_node(vport);
+
+      if (vport->vp_stated()) {
+        stated_collapse(vport);
+        if (stated_mapped(vport))
+          unassign_node(vport);
+      } else {
+        vport->vp_stated(true);
+        unassign_node(vport);
+      }
+
       s << "change Input vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
+    }  else if (item_class < 75) { // 10% to change scratchpad capacity
+      if  (sub->scratch_list().empty()) return false;
+      int index = rand() % sub->scratch_list().size();
+      auto spm = sub->scratch_list()[index];
+      int size = (int) log2(spm->capacity());
+      if (rand() & 1) {
+        size += 1;
+      } else {
+        size -= 1;
+      }
+      size = std::max(size, 8);
+      size = std::min(size, 21);
+
+      spm->capacity(std::pow(2, size));
+      unassign_node(spm);
+      s << "change SPM Capacity " << spm->name() << " to " << spm->capacity();
+    } else if (item_class < 85) { // 10% to change system bus size
+      return false;
+      if  (sub->dma_list().empty()) return false;
+      int index = rand() % sub->dma_list().size();
+      auto dma = sub->dma_list()[index];
+      DSA_CHECK(dma->readWidth() == dma->writeWidth());
+      int bus_width = (int) log2(dma->readWidth());
+      if (rand() & 1) {
+        bus_width += 1;
+      } else {
+        bus_width -= 1;
+      }
+      bus_width = std::max(bus_width, 3);
+      bus_width = std::min(bus_width, 6);
+
+      dma->readWidth(std::pow(2, bus_width));
+      dma->writeWidth(std::pow(2, bus_width));
+    } else if (item_class < 95) { // 10% to change scratchpad bus size
+      if  (sub->scratch_list().empty()) return false;
+      int index = rand() % sub->scratch_list().size();
+      auto spm = sub->scratch_list()[index];
+      DSA_CHECK(spm->readWidth() == spm->writeWidth());
+      int bus_width = (int) log2(spm->readWidth());
+      if (rand() & 1) {
+        bus_width += 1;
+      } else {
+        bus_width -= 1;
+      }
+      bus_width = std::max(bus_width, 3);
+      bus_width = std::min(bus_width, 5);
+
+      spm->readWidth(std::pow(2, bus_width));
+      spm->writeWidth(std::pow(2, bus_width));
+      s << "change SPM width " << spm->name() << " to " << spm->readWidth();
     } else { // 5% to change a output Vports stated
+      if  (sub->output_list().empty()) return false;
       int index = rand() % sub->output_list().size();
       auto vport = sub->output_list()[index];
 
       if (vport->in_links().size() < 2) return false;
-      
-      vport->vp_stated(!vport->vp_stated());
-      unassign_node(vport);
+
+      if (vport->vp_stated()) {
+        stated_collapse(vport);
+        if (stated_mapped(vport))
+          unassign_node(vport);
+      } else {
+        vport->vp_stated(true);
+        unassign_node(vport);
+      }
+
       s << "change Output vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
     }
 
@@ -696,6 +912,7 @@ class CodesignInstance {
       }
     }
     dse_changes_log.push_back(s.str());
+    while (delete_hangers()) {  }
     return true;
   }
 
@@ -708,6 +925,8 @@ class CodesignInstance {
   void for_each_sched(const std::function<void(Schedule&)>& f) {
     for (auto& ws : workload_array) {
       for (Schedule& sched : ws.sched_array) {
+        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
+          continue;
         f(sched);
       }
     }
@@ -720,7 +939,12 @@ class CodesignInstance {
    * @param from_scratch whether to restart from scratch
    */
   CodesignInstance(const CodesignInstance& c, bool from_scratch) : _ssModel(c._ssModel){
+    objective = std::make_pair<double, double>(-1, -1);
     weight = c.weight;
+    num_cores = c.num_cores;
+    num_banks = c.num_banks;
+    system_bus = c.system_bus;
+    max_vector = c.max_vector;
     
     if (from_scratch) {
       for (auto& work : c.workload_array) {
@@ -740,8 +964,6 @@ class CodesignInstance {
 
     unused_nodes = c.unused_nodes;
     unused_links = c.unused_links;
-
-    dse_obj();
   }
 
   /**
@@ -752,7 +974,10 @@ class CodesignInstance {
   void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
       int slots = link->source()->datawidth() / link->source()->granularity();
+      //int slots = sched.link_prop()[link->id()].slots.size();
+      
       DSA_LOG(UNASSIGN) << "Unassign link " << link->id() << " with " << slots << " slots";
+      sched.verify();
       for (int slot = 0; slot < slots; ++slot) {
         for (auto& p : sched.dfg_edges_of(slot, link)) {
           // TODO: consider just deleteting the edge, and having the scheduler
@@ -774,8 +999,9 @@ class CodesignInstance {
     for_each_sched([&](Schedule& sched) {
       for (int slot = 0; slot < sched.num_slots(node); ++slot) {
         for (auto& p : sched.dfg_nodes_of(slot, node)) {
-          if (p.first)
+          if (p.first) {
             sched.unassign_dfgnode(p.first); 
+          }
         }
       }
     });
@@ -787,21 +1013,34 @@ class CodesignInstance {
    * @param node the node to check
    * @param deleting whether a link will be deleted from the schedule
    */
-  void check_stated(ssnode* node, bool deleting=false) {
-    if (auto vport = dynamic_cast<ssvport*>(node)) {
-      bool prev_stated = vport->vp_stated();
-      if (vport->in_links().size() + vport->out_links().size() > (1 + deleting)) {
-        vport->vp_stated(true);
-      } else {
+  void check_stated(ssnode* node, bool checkUnassign=true) {
+    if (auto vport = dynamic_cast<SyncNode*>(node)) {
+      int prev_capability = vport->bitwidth_capability();
+      if (vport->isInputPort() && vport->out_links().size() < 2) {
         vport->vp_stated(false);
       }
-
-      if (deleting)
+      if (vport->isOutputPort() && vport->in_links().size() < 2) {
+        vport->vp_stated(false);
+      }
+      if (checkUnassign) {
         unassign_node(vport);
-        
-      else if (prev_stated != vport->vp_stated())
-        unassign_node(vport);
+      }
     }
+  }
+
+  /**
+   * @brief Adds a link to the ADG
+   * 
+   */
+  sslink* add_link(ssnode* source, ssnode* sink, int souceSlot=-1, int sinkSlot=-1, bool unassign=false) {
+    verify();
+    auto* sub = _ssModel.subModel();
+    
+    check_stated(source, unassign);
+    check_stated(sink, unassign);
+    
+    auto* link = sub->add_link(source, sink, souceSlot, sinkSlot);
+    return link;
   }
 
   /**
@@ -809,26 +1048,126 @@ class CodesignInstance {
    * 
    * @param link link to delete
    */
-  void delete_link(sslink* link) {
+  void delete_link(sslink* link, bool unassign=true) {
     verify();
     
     auto* sub = _ssModel.subModel();
-    check_stated(link->source(), true);
-    check_stated(link->sink(), true);
 
-    // remove it from every schedule
+    if (auto ivport = dynamic_cast<ssivport*>(link->source())) {
+      
+      if (unassign) 
+        unassign_node(ivport);
+
+
+      // Check if stated property must be changed due to deletion of link
+      if (ivport->out_links().size() <= 2) {
+        ivport->vp_stated(false);
+      }
+    }
+
+    if (auto ovport = dynamic_cast<ssovport*>(link->sink())) {
+
+      if (unassign) 
+        unassign_node(ovport);
+
+      // Check if stated property must be changed due to deletion of link
+      if (ovport->in_links().size() <= 2) {
+        ovport->vp_stated(false);
+      }
+    }
+
+    // remove it from every schedule, even if unassign=true
     unassign_link(link);
+
     sub->delete_link(link->id());
+
     for_each_sched([&](Schedule& sched) { 
       sched.remove_link(link->id());
     });
 
     delete link;
+
     verify();
   }
 
-  double dse_sched_obj(Schedule* sched) {
+  int check_overprovisioning() {
+    int overprovisioned = 0;
+    for (int i = 0; i < workload_array.size(); ++i) {
+      auto& ws = workload_array[i];
+      bool non_overprovedSchedule = false;
+      for (Schedule& sched : ws.sched_array) {
+        SchedStats s;
+        sched.get_overprov(s.ovr, s.agg_ovr, s.max_util);
+        if (s.ovr == 0) {
+          non_overprovedSchedule = true;
+          break;
+        }
+      }
+      if (!non_overprovedSchedule) {
+        overprovisioned++;
+      }
+    }
+    return overprovisioned;
+  }
+
+  int check_schedules() {
+    int num_not_working = 0;
+    for (int i = 0; i < workload_array.size(); ++i) {
+      bool working_schedule = false;
+      auto& ws = workload_array[i];
+      for (Schedule& sched : ws.sched_array) {
+        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
+          continue;
+        if (sched.is_complete<dfg::Node*>()) {
+          working_schedule = true;
+          break;
+        }
+      }
+      if (!working_schedule) {
+        num_not_working++;
+      }
+    }
+    return num_not_working;
+  }
+
+  double configuration_performance(int num_cores_local, int num_banks_local, int system_bus_width_local) {
+    auto dma = _ssModel.subModel()->dma_list();
+    int old_system_bus_size = 0;
+    if (dma.size() > 0) {
+      old_system_bus_size = dma[0]->readWidth();
+      dma[0]->readWidth(system_bus_width_local);
+      dma[0]->writeWidth(system_bus_width_local);
+    }
+
+
+    double total = 1.0;
+    for (int i = 0; i < workload_array.size(); ++i) {
+      auto& ws = workload_array[i];
+      double score = (double)1e-3;     
+      for (Schedule& sched : ws.sched_array) {
+        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
+          continue;
+        std::string spm_performance = "";
+        std::string l2_performance = "";
+        std::string dram_read_performance = "";
+        score = std::max(score, dse_sched_obj(&sched, num_cores_local, num_banks_local, spm_performance, l2_performance, dram_read_performance));
+      }
+      total *= score * weight[i];
+    }
+
+    // Restore old system bus size
+    if (dma.size() > 0) {
+      dma[0]->readWidth(old_system_bus_size);
+      dma[0]->writeWidth(old_system_bus_size);
+    }
+    
+    // Return harmonic mean of all schedules performances
+    return pow(total, (1.0 / workload_array.size()));
+  }
+
+  double dse_sched_obj(Schedule* sched, int cores, int banks, std::string& spm_performance, std::string& l2_performance, std::string& dram_performance) {
     if (!sched) return 0.1;
+
     // YES, I KNOW THIS IS A COPY OF SCHED< JUST A TEST FOR NOW
     SchedStats s;
     int num_left = sched->num_left();
@@ -840,7 +1179,22 @@ class CodesignInstance {
     sched->fixLatency(s.lat, s.latmis, delay_violation);
 
     int violation = sched->violation();
-    double performance = sched->estimated_performance();
+    double threads = cores;
+    double performance = sched->estimated_performance(spm_performance, l2_performance, dram_performance, threads, banks);
+    
+    // Check to see that the performance actually exists
+    if (performance > 1) {
+      // Give the possibility to run at lower number of threads
+      while (threads > 0) {
+        threads -= 1;
+        double thread_performance = sched->estimated_performance(spm_performance, l2_performance, dram_performance, threads, banks);
+        if (thread_performance > performance) {
+          performance = thread_performance;
+        } else {
+          break;
+        }
+      }
+    }
     
     if (succeed_sched) {
       double eval = performance;
@@ -855,13 +1209,151 @@ class CodesignInstance {
     return -num_left;
   }
 
-  float dse_obj() {
+  double constrained_system_explore(dsa::adg::estimation::Result prev_estimation, int num_cores, int num_banks, int system_bus_width) {
+    auto dma = _ssModel.subModel()->dma_list();
+    int links = 0;
+    if (dma.size() > 0) {
+      links = dma[0]->in_links().size() + dma[0]->out_links().size();
+    }
+
+    auto resource_estimation = prev_estimation;
+    resource_estimation.scale_cores(num_cores);
+    resource_estimation.add_system_bus_overhead(num_cores, num_banks, system_bus_width);
+    auto scaled = resource_estimation.sum();
+    scaled->normalize();
+    double constrained_resource = scaled->constrained_resource(0);
+
+    delete scaled;
+    return constrained_resource;
+  }
+
+  void system_bus_explore(int& num_cores, int& num_banks, int& system_bus_width) {
+    double performance = -1;
+
+    // Now we should calculate system-level parameters
+    std::vector<int> possible_system_bus = {8, 16, 32, 64};
+
+    for (int system_bus_width_local : possible_system_bus) {
+      // Setup resource estimation
+      auto resource_estimation = dsa::adg::estimation::EstimatePowerAera(&_ssModel);
+      resource_estimation.add_core_overhead();
+
+      // Search for best number of cores and banks together
+      int num_cores_local = this->num_cores;
+      int num_banks_local = next_power_of_two(num_cores_local);
+      double constrained_resource_local = constrained_system_explore(resource_estimation, num_cores_local, num_banks_local, system_bus_width_local);
+      // We need to iterate up the number of cores
+      if (constrained_resource_local < 1.0) {
+        double local_performance = configuration_performance(num_cores_local, num_banks_local, system_bus_width_local);
+
+        if (local_performance > performance) {
+          performance = local_performance;
+          num_cores = num_cores_local;
+          num_banks = num_banks_local;
+          system_bus_width = system_bus_width_local;
+        } else if (local_performance == performance) {
+          if (num_cores_local > num_cores) {
+            performance = local_performance;
+            num_cores = num_cores_local;
+            num_banks = num_banks_local;
+            system_bus_width = system_bus_width_local;
+          }
+        }
+
+        while (constrained_resource_local < 1.0) {
+          num_cores_local += 1;
+          num_banks_local = next_power_of_two(num_cores_local);
+          constrained_resource_local = constrained_system_explore(resource_estimation, num_cores_local, num_banks_local, system_bus_width_local);
+          if (constrained_resource_local < 1.0) {
+            local_performance = configuration_performance(num_cores_local, num_banks_local, system_bus_width_local);
+            if (local_performance > performance) {
+              performance = local_performance;
+              num_cores = num_cores_local;
+              num_banks = num_banks_local;
+              system_bus_width = system_bus_width_local;
+            } else if (local_performance == performance) {
+              if (num_cores_local > num_cores) {
+                performance = local_performance;
+                num_cores = num_cores_local;
+                num_banks = num_banks_local;
+                system_bus_width = system_bus_width_local;
+              }
+            }
+          }
+        }
+      } else {
+        // We need to go down with number of cores;
+        while (constrained_resource_local >= 1.0 && num_cores_local > 0) {
+          num_cores_local -= 1;
+          num_banks_local = next_power_of_two(num_cores_local);
+          constrained_resource_local = constrained_system_explore(resource_estimation, num_cores_local, num_banks_local, system_bus_width_local);
+          if (constrained_resource_local < 1.0) {
+            double local_performance = configuration_performance(num_cores_local, num_banks_local, system_bus_width_local);
+            if (local_performance > performance) {
+              performance = local_performance;
+              num_cores = num_cores_local;
+              num_banks = num_banks_local;
+              system_bus_width = system_bus_width_local;
+            } else if (local_performance == performance) {
+              if (num_cores_local > num_cores) {
+                performance = local_performance;
+                num_cores = num_cores_local;
+                num_banks = num_banks_local;
+                system_bus_width = system_bus_width_local;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  std::pair<double, double> dse_obj(bool cache_obj=true) {
+    if (objective.first > 0) {
+      return objective;
+    }
     double total_score = 1.0;
     res.resize(workload_array.size());
 
-    bool meaningful = false;
-    double failure = 0;
+    // First Check to make sure that everything schedules
+    int num_not_scheduled = check_schedules();
+    if (num_not_scheduled != 0) {
+      dse_fail_reason = std::to_string(num_not_scheduled) + " schedules not working";
+      return std::make_pair<double, double>(1.0, 0.0);
+    }
+
+    // Now Check to make sure that everything is not overprovisioned
+    int num_overproved = check_overprovisioning();
+    if  (num_overproved != 0) {
+      dse_fail_reason = std::to_string(num_overproved) + " schedules overprovisioned";
+      // The objective should be slightly bigger than failing schedules
+      return std::make_pair<double, double>(1.25, 0.0);
+    }
+
+    int best_system_bus_size = -1;
+    int best_num_cores = -1;
+    int best_num_banks = -1;
+
+    system_bus_explore(best_num_cores, best_num_banks, best_system_bus_size);
+
+    if (num_cores == -1) {
+      dse_fail_reason = "budget";
+      return std::make_pair<double, double>(1.5, 0.0); 
+    }
+
+    num_cores = best_num_cores;
+    num_banks = best_num_banks;
+    system_bus = best_system_bus_size;
+    for (auto dma : ss_model()->subModel()->dma_list()) {
+      dma->writeWidth(system_bus);
+      dma->readWidth(system_bus);
+    }
+
+
     std::vector<std::vector<std::pair<std::string, double>>> _dfg_performances;
+    std::vector<std::vector<std::pair<std::string, std::string>>> _dfg_spm_performances;
+    std::vector<std::vector<std::pair<std::string, std::string>>> _dfg_l2_performances;
+    std::vector<std::vector<std::pair<std::string, std::string>>> _dfg_dram_performances;
     std::vector<double> _workload_performances;
     std::vector<double> _workload_weights;
 
@@ -869,56 +1361,75 @@ class CodesignInstance {
       auto& ws = workload_array[i];
       double score = (double)1e-3;
       res[i] = nullptr;
-      std::vector<std::pair<std::string, double>> performances;      
+      std::vector<std::pair<std::string, double>> performances;
+      std::vector<std::pair<std::string, std::string>> spm_performance;
+      std::vector<std::pair<std::string, std::string>> dram_performance;
+      std::vector<std::pair<std::string, std::string>> l2_performance;        
       for (Schedule& sched : ws.sched_array) {
-        double new_score = dse_sched_obj(&sched);
+        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
+          continue;
+        
+        std::string spm_performance_local = "";
+        std::string l2_performance_local = "";
+        std::string dram_performance_local = "";
+        
+        double new_score = dse_sched_obj(&sched, num_cores, num_banks, spm_performance_local, l2_performance_local, dram_performance_local);
 
         if (new_score >= score) {
           score = new_score;
           res[i] = &sched;
-          meaningful = true;
-        }
-        if (new_score < 0.0) {
-         
-          failure = std::min(failure, new_score);
         }
         performances.push_back(std::make_pair(sched.ssdfg()->filename, new_score));
+
+        spm_performance.push_back(std::make_pair(sched.ssdfg()->filename, spm_performance_local));
+        l2_performance.push_back(std::make_pair(sched.ssdfg()->filename, l2_performance_local));
+        dram_performance.push_back(std::make_pair(sched.ssdfg()->filename, dram_performance_local));
       }
       _dfg_performances.push_back(performances);
+      _dfg_spm_performances.push_back(spm_performance);
+      _dfg_l2_performances.push_back(l2_performance);
+      _dfg_dram_performances.push_back(dram_performance);
       _workload_performances.push_back(score);
       _workload_weights.push_back(weight[i]);
-      total_score *= score * weight[i];
+      total_score *= std::pow(score, weight[i]);
     }
 
     dfg_performances = _dfg_performances;
+    dfg_spm_performances = _dfg_spm_performances;
+    dfg_l2_performances = _dfg_l2_performances;
+    dfg_dram_performances = _dfg_dram_performances;
     workload_weights = _workload_weights;
     workload_performances = _workload_performances;
 
-    if (!meaningful) {
-      return exp(failure);
-    }
-
-    total_score = pow(total_score, (1.0 / workload_array.size()));
-
-    auto estimated = dsa::adg::estimation::EstimatePowerAera(&_ssModel).sum();
-    estimated->normalize();
-
+    double total_weights = std::accumulate(workload_weights.begin(), workload_weights.end(), 0.0);
+    total_score = pow(total_score, (1.0 / total_weights));
     performance = total_score;
-    normalized_resources = estimated->constrained_resource(0);
 
-    double final_score = 0.0;
-    double multiplier = 1.0;
-    
-    // Only Search Logic Lut, Ram Lut, FF (all other resources are fixed)
-    for (int i = 0; i < 3; ++i) {
-      final_score += (total_score / estimated->constrained_resource(i)) * multiplier;
-      multiplier *= 0.1;
-    }
+
+    auto resource_estimation = dsa::adg::estimation::EstimatePowerAera(&_ssModel);
+    resource_estimation.add_core_overhead();
+    //resource_estimation.scale_cores(num_cores);
+    //resource_estimation.add_system_bus_overhead(num_cores, num_banks, system_bus);
+    auto scaled = resource_estimation.sum();
+    scaled->normalize();
+
+    normalized_resources = scaled->constrained_resource(0);
+
+    // Set final score
+    std::pair<double, double> final_score = std::make_pair(performance, normalized_resources);
+
+    dse_fail_reason = "succeed";
+    delete scaled;
+
+    if (cache_obj)
+      objective = final_score;
 
     return final_score;
   }
 
-  float weight_obj() { return dse_obj(); }
+  std::pair<double, double> weight_obj() {
+    return dse_obj();
+  }
 
 
   /**
@@ -929,7 +1440,7 @@ class CodesignInstance {
    */
   std::tuple<float, float, float> utilization() {
     // If DSE_OBJ is horrible return nothing
-    if (abs(dse_obj()) < (1.0 + 1e-3)) {
+    if (abs(dse_obj(false).first) < 2) {
       return {0, 0, 0};
     }
     
@@ -988,6 +1499,55 @@ class CodesignInstance {
     return {overall_usage, nodes_usage, links_usage};
   }
 
+  /**
+   * @brief Checks if a stated Edge is mapped to a vector port
+   * 
+   * @param sync the vector port to check
+   * @return true if a stated edge is mapped to this vector port
+   * @return false if a stated edge is not mapped to this vector port
+   */
+  bool stated_mapped(SyncNode* sync) {
+    for (size_t i = 0; i < res.size(); ++i) {
+      auto sched = res[i];
+      if (sched != nullptr) {
+        // Loop through all the edges
+        std::vector<dsa::dfg::Edge> edges = sched->ssdfg()->edges;
+        for (int j = 0; j < sched->edge_prop().size(); j++) {
+          auto& ep = sched->edge_prop()[j];
+          if (ep.links.size() == 0)
+              continue;
+          auto& edge = edges[j];
+          if (sync->isInputPort() && edge.sourceStated()) {
+            // Only need to check first link
+            ssnode* edge_source = ep.links[0].second->source();
+            if (edge_source->id() == sync->id())
+              return true;
+            
+          } else if (sync->isOutputPort() && edge.sinkStated()) {
+            // Only need to check last link as they are ordered
+            ssnode* edge_sink = ep.links[ep.links.size() - 1].second->sink();
+            if (edge_sink->id() == sync->id())
+              return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  int countSchedules() {
+    int count = 0;
+    for (auto workload : workload_array) {
+      for (auto sched : workload.sched_array) {
+        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector) {
+          continue;
+        }
+        count++;
+      }
+    }
+    return count;
+  }
+
   void dump_breakdown(bool verbose) {
     if (verbose) {
       auto estimated = dsa::adg::estimation::EstimatePowerAera(ss_model());
@@ -997,7 +1557,10 @@ class CodesignInstance {
           std::cout << "[skip]" << std::endl;
           continue;
         }
-        auto performance = dse_sched_obj(res[i]);
+        std::string spm_performance = "";
+        std::string dram_performance = "";
+        std::string l2_performance = "";
+        auto performance = dse_sched_obj(res[i], num_cores, num_banks, spm_performance, l2_performance, dram_performance);
         std::cout << res[i]->ssdfg()->filename << ": " << performance << std::endl;
       }
     }
@@ -1024,12 +1587,6 @@ class CodesignInstance {
     
     // No cycles found, so removing flipflow is fine
     return true;
-  }
-
-  void prune_memory_nodes() {
-    auto* sub = _ssModel.subModel();
-    for (auto& node : sub->mem_list())
-      delete_node(node);
   }
 
  private:
@@ -1071,19 +1628,22 @@ class CodesignInstance {
     // No cycle found
     return true;
   }
-   /**
+  
+
+  
+  /**
    * @brief Collapses a vport
    * TODO Fix this
    * @param vport vport to collapse
    */
-  void collapse_vport(ssvport* vport) {
+  void collapse_vport(SyncNode* vport) {
     // Get Links used in schedules
     std::unordered_set<sslink*> links = useful_vport_links(vport);
     // If no links are used in any schedule, we can just remove vport
     if (links.size() == 0) return;
 
     auto* sub = _ssModel.subModel();
-    ssvport* other_vport;
+    SyncNode* other_vport;
     
     if (vport->out_links().size() == 0) {
       // Find another random VPort to collapse this one into
@@ -1095,7 +1655,7 @@ class CodesignInstance {
       if (log2(other_vport->in_links().size()) == log2(links.size() + other_vport->in_links().size())) {
         // Simply add links to this vport
         for (auto& link : links) {
-          sub->add_link(link->source(), other_vport);
+          add_link(link->source(), other_vport);
         }
       } else {
         // Add Switches so VPort retains current power of two width
@@ -1181,7 +1741,7 @@ class CodesignInstance {
     dse_changes_log.back() = s.str();
   }
 
-  std::unordered_set<sslink*> useful_vport_links(ssvport* n) {
+  std::unordered_set<sslink*> useful_vport_links(SyncNode* n) {
     std::unordered_set<sslink*> links;
     for_each_sched([&](Schedule& sched) {
       auto link_prop = sched.link_prop(); 
@@ -1206,6 +1766,63 @@ class CodesignInstance {
   }
 
   /**
+   * @brief Create a adjacency matrix object of the current ADG
+   * Nodes with an ingoing or outgoing connection will have a one
+   * Otherwise, a zero
+   * 
+   * @return torch::Tensor the adjacency matrix
+   */
+  torch::Tensor create_adjacency_matrix() {
+    auto* sub = _ssModel.subModel();
+
+    int num_nodes = sub->node_list().size();
+    torch::Tensor adjacency_matrix = torch::zeros({num_nodes, num_nodes});
+
+    // Loop through all the nodes
+    for (auto& node : sub->node_list()) {
+      // Set all the in_links to 1
+      for (auto& link : node->in_links()) {
+        adjacency_matrix.index_put_({node->id(), link->source()->id()}, 1);
+        adjacency_matrix.index_put_({link->source()->id(), node->id()}, 1);
+      }
+      // Set all the out_links to 1
+      for (auto& link : node->out_links()) {
+        adjacency_matrix.index_put_({node->id(), link->sink()->id()}, 1);
+        adjacency_matrix.index_put_({link->sink()->id(), node->id()}, 1);
+      }
+    }
+
+    return adjacency_matrix;
+  }
+
+  /**
+   * @brief Creates a feature vector for each node in the ADG
+   * 
+   * 
+   * 
+   * 
+   * @param node the node to create a feature vector for
+   * @return torch::Tensor 
+   */
+
+  /*
+  torch::Tensor node_features(ssnode* node) {
+    torch::Tensor features = torch::zeros({1, 10});
+    
+    if (auto sw = dynamic_cast<ssswitch*>(node)) {
+    } else if (auto fu = dynamic_cast<ssfu*>(node)) {
+    } else if (auto ivport = dynamic_cast<ssivport*>(node)) {
+    } else if (auto ovport = dynamic_cast<ssovport*>(node)) {
+    } else if (auto dma = dynamic_cast<ssdma*>(node)) {
+    } else if (auto rec = dynamic_cast<ssrecurrence*>(node)) {
+    } else if (auto gen = dynamic_cast<ssgenerate*>(node)) {
+    } else if (auto spm = dynamic_cast<ssscratchpad*>(node)) {
+    } else {
+      DSA_CHECK(false) << "Unknown node type";
+    }
+  } */
+
+  /**
    * @brief Collapses the links through a node, of a given edge
    * 
    * @param n node to collapse
@@ -1225,14 +1842,53 @@ class CodesignInstance {
         sslink* next_link  = links[i + 1].second;
         auto dst = next_link->sink();
         int sinkIndex = dst->link_index(next_link, true);
-        sslink* collapsed_link = sub->add_link(src, dst, sourceIndex, sinkIndex);
+        sslink* collapsed_link = add_link(src, dst, sourceIndex, sinkIndex);
         
-        check_stated(src);
-        check_stated(dst);
 
         if (collapsed_link != nullptr)
           collapsed_links.push_back(collapsed_link);
         return;
+      }
+    }
+  }
+
+  /**
+   * @brief Schedule-preserving Transformation for Stated Vector Ports
+   * As a stated link must be used as the first link, if we are removing
+   * the stated property then we must also remove the first link to preserve
+   * the schedule.
+   * 
+   * @param n the vector port to collapse the stated property
+   * @param preserve_schedule whether to preserve the schedulability
+   * This property is important for prunning which requires schedulability
+   * remains
+   */
+  void stated_collapse(ssnode* n, bool preserve_schedule=true, bool unassign=true) {
+    auto* sub = _ssModel.subModel();
+    if (auto sync = dynamic_cast<SyncNode*>(n)) {
+      if (sync->vp_stated()) {
+        // Change VP_Stated to false
+        sync->vp_stated(false);
+        
+        // If it doesn't use a crossbar then the first link must be deleted
+        // Otherwise we should delete a random link
+        if (sync->isInputPort()) {
+          if (sync->vp_impl() == 2) 
+            delete_link(sync->out_links()[0], unassign);
+          else if (!preserve_schedule) {
+            int linkToDelete = rand() % sync->out_links().size();
+            delete_link(sync->out_links()[linkToDelete], unassign);
+          }
+        } else {
+          if (sync->vp_impl() == 2)
+            delete_link(sync->in_links()[0], unassign);
+          else if (!preserve_schedule) {
+            int linkToDelete = rand() % sync->in_links().size();
+            delete_link(sync->in_links()[linkToDelete], unassign);
+          }
+        }
+        if (unassign && stated_mapped(sync)) 
+          unassign_node(sync);
       }
     }
   }
@@ -1275,7 +1931,6 @@ class CodesignInstance {
             fu->max_delay(fu->delay_fifo_depth() + 1);
             fifos.insert(fu);
             // We don't need to reassign these to the schedule
-
             return;
           }
         }
@@ -1299,7 +1954,7 @@ class CodesignInstance {
    * @param forward_vport whether to forward the links of vport
    * @param add_fifo whether to add fifo depths to all nodes after
    */
-  void delete_node(ssnode* n, bool collapse_links=false, bool forward_vport=false, bool add_fifo=false) {
+  void delete_node(ssnode* n, bool collapse_links=false, bool forward_vport=false, bool add_fifo=false, bool unassign=true) {
 
     auto* sub = _ssModel.subModel();
     
@@ -1321,8 +1976,8 @@ class CodesignInstance {
       }
     });
 
-    if (collapse_links && dynamic_cast<ssvport*>(n)) {
-      //collapse_vport(dynamic_cast<ssvport*>(n));
+    if (collapse_links && dynamic_cast<SyncNode*>(n)) {
+      //collapse_vport(dynamic_cast<SyncNode*>(n));
     }
 
     for_each_sched([&](Schedule& sched) { sched.allocate_space(); });
@@ -1330,17 +1985,19 @@ class CodesignInstance {
     verify();
 
     while (n->in_links().size() > 0) {
-      delete_link(n->in_links()[0]);
+      delete_link(n->in_links()[0], unassign);
     }
 
     while (n->out_links().size() > 0) {
-      delete_link(n->out_links()[0]);
+      delete_link(n->out_links()[0], unassign);
     }
 
     unassign_node(n);
+    for_each_sched([&](Schedule& sched) { sched.ensure_node_delete(n->id()); });
 
     sub->delete_node(n->id());
     for_each_sched([&](Schedule& sched) { sched.remove_node(n->id()); });
+    for_each_sched([&](Schedule& sched) { sched.verify(); });
 
     if (links_collapsed > 0) {
       std::ostringstream s;
@@ -1365,7 +2022,7 @@ class CodesignInstance {
       std::ostringstream s;
       s << dse_changes_log.back() << " fifo depth added for ";
       for(auto it = fifos.begin(); it != fifos.end(); ++it) {
-        s << "FU_" << (*it)->id();
+        s << "FU_" << (*it)->id() << " (" << (*it)->delay_fifo_depth() << ")";
         if (std::next(it) != fifos.end())
           s << ",";
       }
@@ -1379,5 +2036,9 @@ class CodesignInstance {
 
 namespace dsa {
 
-void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename);
+void VectorDesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_size=8);
+
+void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_vector_size=-1);
+
+void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_size);
 } // namespace dsa

@@ -24,7 +24,14 @@ using namespace std;
 bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
   struct DFGCounter : dsa::dfg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_required;
+    std::vector<int> inst_bitwidths;
     std::vector<int> ports[2];
+    std::vector<int> spms;
+    std::vector<int> dmas;
+    std::vector<int> recs;
+    std::vector<int> regs;
+    std::vector<int> gens;
+
     void Visit(dfg::Instruction* node) {
       inst_required[{node->inst(), (int)node->is_temporal()}]++;
       for (int i = 0; i < node->ops().size(); ++i) {
@@ -42,6 +49,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
             << operand_width << " != " << node->bitwidth();
         }
       }
+      inst_bitwidths.push_back(node->bitwidth());
     }
     void Visit(dfg::InputPort* vec) {
       ports[1].push_back(vec->bandwidth());
@@ -49,23 +57,70 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
     void Visit(dfg::OutputPort* vec) {
       ports[0].push_back(vec->bandwidth());
     }
+    void Visit(dfg::Scratchpad* spm) {
+      spms.push_back(spm->size());
+    }
+    void Visit(dfg::DMA* dma) {
+      dmas.push_back(dma->size());
+    }
+    void Visit(dfg::Recurrance* rec) {
+      recs.push_back(rec->size());
+    }
+    void Visit(dfg::Register* reg) {
+      regs.push_back(reg->size());
+    }
+    void Visit(dfg::Generate* gen) {
+      gens.push_back(gen->size());
+    }
   };
 
   struct SpatialCounter : dsa::adg::Visitor {
     std::map<std::pair<OpCode, int>, int> inst_exist;
+    std::vector<int> fu_granularities;
     std::vector<int> ports[2];
+    std::vector<int64_t> spms;
+    std::vector<int64_t> dmas;
+    std::vector<int> recs;
+    std::vector<int> regs;
+    std::vector<int> gens;
     void Visit(ssfu* fu) override {
-      for (auto elem : fu->fu_type_.capability) {
+      for (auto elem : fu->fu_type().capability) {
         if (fu->max_util() == 1) {
           inst_exist[{elem.op, 0}] += 64 / dsa::bitwidth[elem.op];
         } else {
           inst_exist[{elem.op, 1}] += fu->max_util();
         }
       }
+      fu_granularities.push_back(fu->granularity());
     }
-    void Visit(ssvport* vp) override {
-      ports[vp->isInputPort()].push_back(vp->bitwidth_capability());
+    void Visit(ssivport* vp) override {
+      ports[1].push_back(vp->bitwidth_capability());
     }
+
+    void Visit(ssovport* vp) override {
+      ports[0].push_back(vp->bitwidth_capability());
+    }
+
+    void Visit(ssscratchpad* spm) override {
+      spms.push_back(spm->capacity());
+    }
+    
+    void Visit(ssdma* dma) override {
+      dmas.push_back(dma->capacity());
+    }
+    
+    void Visit(ssregister* reg) override {
+      regs.push_back(reg->capacity());
+    }
+
+    void Visit(ssgenerate* gen) override {
+      gens.push_back(gen->capacity());
+    }
+
+    void Visit(ssrecurrence* rec) override {
+      recs.push_back(rec->capacity());
+    }
+
   };
 
   DFGCounter dc;
@@ -83,20 +138,168 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
     }
   }
 
-  for (int i = 0; i < 2; ++i) {
-    if (dc.ports[i].size() > sc.ports[i].size()) {
-      DSA_LOG(COUNT) << "In total, " << dc.ports[i].size()
-                 << " port(s) are required, but only have " << sc.ports[i].size();
+  if (!dc.inst_bitwidths.empty()) {
+    sort(dc.inst_bitwidths.begin(), dc.inst_bitwidths.end());
+    sort(sc.fu_granularities.begin(), sc.fu_granularities.end(), std::greater<int>());
+    if (dc.inst_bitwidths[0] < sc.fu_granularities[0]) {
+      DSA_LOG(COUNT) << "The smallest instruction bitwidth is " << dc.inst_bitwidths[0]
+                     << " bits, but the smallest FU granularity is "
+                     << sc.fu_granularities[0] << " bits";
       return false;
     }
-    sort(dc.ports[i].begin(), dc.ports[i].end(), std::greater<int>());
-    sort(sc.ports[i].begin(), sc.ports[i].end(), std::greater<int>());
-    for (int j = 0, n = dc.ports[i].size(); j < n; ++j) {
-      if (dc.ports[i][j] > sc.ports[i][j]) {
-        DSA_LOG(COUNT) << "A " << dc.ports[i][j] << "-wide port is required, but only have "
-                   << sc.ports[i][j];
+  }
+
+  sort(dc.ports[0].begin(), dc.ports[0].end(), std::greater<int>());
+  sort(sc.ports[0].begin(), sc.ports[0].end(), std::greater<int>());
+
+  if (dc.ports[0].size() > sc.ports[0].size()) {
+    DSA_LOG(COUNT) << "In total, " << dc.ports[0].size()
+                << " output port(s) are required, but only have " << sc.ports[0].size();
+    return false;
+  }
+
+  sort(dc.ports[0].begin(), dc.ports[0].end(), std::greater<int>());
+  sort(sc.ports[0].begin(), sc.ports[0].end(), std::greater<int>());
+  for (int j = 0, n = dc.ports[0].size(); j < n; ++j) {
+    if (dc.ports[0][j] > sc.ports[0][j]) {
+      DSA_LOG(COUNT) << "A " << dc.ports[0][j] << "-wide output port is required, but only have "
+                  << sc.ports[0][j];
+      return false;
+    }
+  }
+
+  if (dc.ports[1].size() > sc.ports[1].size()) {
+    DSA_LOG(COUNT) << "In total, " << dc.ports[1].size()
+                << " input port(s) are required, but only have " << sc.ports[1].size();
+    return false;
+  }
+
+  sort(dc.ports[1].begin(), dc.ports[1].end(), std::greater<int>());
+  sort(sc.fu_granularities.begin(), sc.fu_granularities.end(), std::greater<int>());
+  for (int j = 0, n = dc.ports[1].size(); j < n; ++j) {
+    if (dc.ports[1][j] > sc.ports[1][j]) {
+      DSA_LOG(COUNT) << "A " << dc.ports[1][j] << "-wide input port is required, but only have "
+                  << sc.ports[1][j];
+      return false;
+    }
+  }
+  
+
+  sort(dc.spms.begin(), dc.spms.end(), std::greater<int>());
+  sort(sc.spms.begin(), sc.spms.end(), std::greater<int64_t>());
+
+  int total_sw_spm = accumulate(dc.spms.begin(), dc.spms.end(), 0);
+  int total_hw_spm = accumulate(sc.spms.begin(), sc.spms.end(), 0);
+  
+  if (total_sw_spm > total_hw_spm) {
+    DSA_LOG(COUNT) << "In total, " << total_sw_spm
+                << " kbs in scratchpad are required, but only have " << total_hw_spm;
+    return false;
+  }
+  
+  if (dc.spms.size() > 0) {
+    if (sc.spms.size() > 0) {
+      if (dc.spms[0] > sc.spms[0]) {
+        DSA_LOG(COUNT) << "A " << dc.spms[0] << "-wide SPM is required for scratchpad with " << sc.spms[0] << " capacity";
         return false;
       }
+    } else {
+      DSA_LOG(COUNT) << "A " << dc.spms[0] << "-wide SPM is required for scratchpad";
+      return false;
+    }
+  }
+  
+
+  int64_t total_sw_dma = accumulate(dc.dmas.begin(), dc.dmas.end(), 0);
+  int64_t total_hw_dma = accumulate(sc.dmas.begin(), sc.dmas.end(), (int64_t) 0);
+  
+  if (total_sw_dma > total_hw_dma) {
+    DSA_LOG(COUNT) << "In total, " << total_sw_dma
+                << " kbs in DMA are required, but only have " << total_hw_dma;
+    return false;
+  }
+
+  if (dc.dmas.size() > 0) {
+    if (sc.dmas.size() > 0) {
+      if (dc.dmas[0] > sc.dmas[0]) {
+        DSA_LOG(COUNT) << "A " << dc.dmas[0] << "-wide DMA is required, but only have " << sc.dmas[0];
+        return false;
+      }
+    } else {
+      DSA_LOG(COUNT) << "A " << dc.dmas[0] << "-wide DMA is required for dma";
+      return false;
+    }
+  }
+
+  sort(dc.recs.begin(), dc.recs.end(), std::greater<int>());
+  sort(sc.recs.begin(), sc.recs.end(), std::greater<int>());
+
+  int total_sw_rec = accumulate(dc.recs.begin(), dc.recs.end(), 0);
+  int total_hw_rec = accumulate(sc.recs.begin(), sc.recs.end(), 0);
+
+  if (total_sw_rec > total_hw_rec) {
+    DSA_LOG(COUNT) << "In total, " << total_sw_rec
+                << " kbs in Recurrance are required, but only have " << total_hw_rec;
+    return false;
+  }
+
+  if (dc.recs.size() > 0) {
+    if (sc.recs.size() > 0) {
+      if (dc.recs[0] > sc.recs[0]) {
+        DSA_LOG(COUNT) << "A " << dc.recs[0] << "-wide Recurrance Node is required, but only have " << sc.recs[0];
+        return false;
+      }
+    } else {
+      DSA_LOG(COUNT) << "A " << dc.recs[0] << "-wide Recurrance Node is required for recurrance";
+      return false;
+    }
+  }
+
+  sort(dc.regs.begin(), dc.regs.end(), std::greater<int>());
+  sort(sc.regs.begin(), sc.regs.end(), std::greater<int>());
+
+  int total_sw_reg = accumulate(dc.regs.begin(), dc.regs.end(), 0);
+  int total_hw_reg = accumulate(sc.regs.begin(), sc.regs.end(), 0);
+  
+  if (total_sw_reg > total_hw_reg) {
+    DSA_LOG(COUNT) << "In total, " << total_sw_reg
+                << " kbs in Registers are required, but only have " << total_hw_reg;
+    return false;
+  }
+
+  if (dc.regs.size() > 0) {
+    if (sc.regs.size() > 0) {   
+      if (dc.regs[0] > sc.regs[0]) {
+        DSA_LOG(COUNT) << "A " << dc.regs[0] << "-wide Register Node is required, but only have " << sc.regs[0];
+        return false;
+      }
+    } else {
+      DSA_LOG(COUNT) << "A " << dc.regs[0] << "-wide Register Node is required for register";
+      return false;
+    }
+  }
+
+  sort(dc.gens.begin(), dc.gens.end(), std::greater<int>());
+  sort(sc.gens.begin(), sc.gens.end(), std::greater<int>());
+
+  int total_sw_gen = accumulate(dc.gens.begin(), dc.gens.end(), 0);
+  int total_hw_gen = accumulate(sc.gens.begin(), sc.gens.end(), 0);
+
+  if (total_sw_gen > total_hw_gen) {
+    DSA_LOG(COUNT) << "In total, " << total_sw_gen
+                << " kbs in Generate are required, but only have " << total_hw_gen;
+    return false;
+  }
+
+  if (dc.gens.size() > 0) {
+    if (sc.gens.size() > 0) {   
+      if (dc.gens[0] > sc.gens[0]) {
+        DSA_LOG(COUNT) << "A " << dc.gens[0] << "-wide Generate Node is required, but only have " << sc.gens[0];
+        return false;
+      }
+    } else {
+      DSA_LOG(COUNT) << "A " << dc.gens[0] << "-wide Register Node is required for generate";
+      return false;
     }
   }
 
@@ -134,7 +337,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     pdg_dir += "/";
   }
   string viz_dir = pdg_dir + "viz/";
-  string iter_dir = pdg_dir + "viz/iter/";
+  string iter_dir = pdg_dir + "viz/iters/";
   string verif_dir = pdg_dir + "verif/";
 
   ENFORCED_SYSTEM(("mkdir -p " + viz_dir).c_str());
@@ -146,6 +349,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   string model_rawname = model_filename.substr(0, lastindex);
   string model_base =
       model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
+    
   int ovr = 0, agg_ovr = 0, max_util = 0;
 
   if (check_feasible(dfg, model)) {
@@ -163,11 +367,11 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     sigaction(SIGINT, &sigIntHandler, NULL);
 
     succeed_sched = schedule_timed(dfg, sched);
+    sched->get_overprov(ovr, agg_ovr, max_util);
 
     int lat = 0, latmis = 0;
 
     if (dsa::ContextFlags::Global().verbose) {
-      ovr = 0; agg_ovr = 0; max_util = 0;
       sched->get_overprov(ovr, agg_ovr, max_util);
       int violation = sched->violation();
 
@@ -187,7 +391,8 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
       dsa::mapper::pass::print_graphviz("viz/final.dot", dfg, sched);
     }
 
-    dsa::mapper::pass::print_graphviz(viz_dir + dfg_base + ".dot", dfg);
+    dsa::mapper::pass::print_graphviz(viz_dir + "/" + dfg_base + ".dot", dfg);
+    DSA_INFO << "Printed " << viz_dir << "/" << dfg_base << ".dot";
 
     std::string sched_viz = viz_dir + dfg_base + "." + model_base + ".gv";
     ostringstream os;
@@ -220,7 +425,13 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   DSA_CHECK(osh.good());
   sched->printConfigHeader(osh, dfg_base);
   if (dsa::ContextFlags::Global().verbose) {
-    std::cout << "Performance: " << sched->estimated_performance() << std::endl;
+    std::string spm_performance = "";
+    std::string l2_performance = "";
+    std::string dram_performance = "";
+    DSA_INFO << "Performance: " << sched->estimated_performance(spm_performance, l2_performance, dram_performance);
+    DSA_INFO << "  SPM Bandwidth: " << spm_performance;
+    DSA_INFO << "  L2 Bandwidth: " << l2_performance;
+    DSA_INFO << "  DRAM Bandwidth: " << dram_performance;
   }
 
   if (dsa::ContextFlags::Global().bitstream) {

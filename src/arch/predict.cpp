@@ -41,39 +41,49 @@ DEFINE_WRAPPED_MODEL(sw_logic_lut, TORCH_MODEL_PREFIX "switch/switch_model_logic
 DEFINE_WRAPPED_MODEL(sw_ram_lut, TORCH_MODEL_PREFIX "switch/switch_model_ram_lut.pt")
 DEFINE_WRAPPED_MODEL(sw_flip_flop, TORCH_MODEL_PREFIX "switch/switch_model_ff.pt")
 
+DEFINE_WRAPPED_MODEL(switch_model, TORCH_MODEL_PREFIX "switch/switch_model.pt");
+DEFINE_WRAPPED_MODEL(pe_model, TORCH_MODEL_PREFIX "processing_element/processing_element_model.pt");
+
 }
 
 /*
-Input: [decomposer, delay_fifo_depth, num_input_ports, isShared,
-        num_output_ports, output_select_mode, protocol, regFileSize]
-OutputSelectMode:
-    0 = Individual
-    1 = Universal
-Protocol:
-    0 = Data
-    1 = DataValidReady
+
+Input: [Inputs, Outputs, OutputBuffer Depth, Static, Fifo Depth, Registers, Meta]
 Output: [TotalLUTs, LogicLUTs, LUTRAMs, FFs]
 */
 std::vector<float> pe_area_predict_fpga(std::vector<float> parameters) {
-  auto *total_lut = dsa::pe_total_lut();
-  auto *logic_lut = dsa::pe_logic_lut();
-  auto *lut_ram = dsa::pe_ram_lut();
-  auto *ff = dsa::pe_flip_flop();
+  auto pe_model = dsa::pe_model();
 
   std::vector<torch::jit::IValue> inputs;
   inputs.push_back(torch::tensor(parameters));
 
-  at::Tensor total_lut_output = total_lut->m.forward(inputs).toTensor();
-  at::Tensor logic_lut_output = logic_lut->m.forward(inputs).toTensor();
-  at::Tensor lut_ram_output = lut_ram->m.forward(inputs).toTensor();
-  at::Tensor ff_output = ff->m.forward(inputs).toTensor();
-
-  return {total_lut_output[0].item<float>(), 
-          logic_lut_output[0].item<float>(), 
-          lut_ram_output[0].item<float>(), 
+  at::Tensor pe_model_output = pe_model->m.forward(inputs).toTensor();
+  std::vector<float> output = {
+          pe_model_output[0].item<float>(), 
+          pe_model_output[1].item<float>(), 
+          pe_model_output[2].item<float>(), 
           0, 
-          ff_output[0].item<float>(), 
-          0, 0, 0, 0};;
+          pe_model_output[3].item<float>(), 
+          0, 0, 0, 0
+  };
+  return output;
+}
+
+std::vector<float>  switch_area_predict_fpga(const  std::vector<float> parameters) {
+  auto *switch_model = dsa::switch_model();
+  std::vector<torch::jit::IValue> inputs;
+  inputs.push_back(torch::tensor(parameters));
+
+  at::Tensor switch_model_output = switch_model->m.forward(inputs).toTensor();
+  std::vector<float> output = {
+          switch_model_output[0].item<float>(), 
+          switch_model_output[1].item<float>(), 
+          switch_model_output[2].item<float>(), 
+          0, 
+          switch_model_output[3].item<float>(), 
+          0, 0, 0, 0
+  };
+  return output;
 }
 
 /* Input Parameters {back_pressure_fifo_depth decomposer num_input_ports isShared num_output_ports protocol} */
@@ -92,12 +102,195 @@ std::vector<float>  router_area_predict_fpga(const  std::vector<float> parameter
   at::Tensor lut_ram_output = lut_ram->m.forward(inputs).toTensor();
   at::Tensor ff_output = ff->m.forward(inputs).toTensor();
 
-  return {total_lut_output[0].item<float>(), 
+  std::vector<float> output = {
+          total_lut_output[0].item<float>(), 
           logic_lut_output[0].item<float>(), 
           lut_ram_output[0].item<float>(), 
           0, 
           ff_output[0].item<float>(), 
-          0, 0, 0, 0};
+          0, 0, 0, 0
+  };
+
+  // Temporary Hack for Switch Models until updated ML Models are available
+  if (output[1] < 100) {
+    output[0] = output[0] - output[1] + 100.0;
+    output[1] = 100.0;
+  }
+  if (output[2] < 100) {
+    output[0] = output[0] - output[2] + 100.0;
+    output[2] = 100.0;
+  }
+
+  return output;
+}
+
+std::vector<float> input_vport_area_predict_fpga(const float parameter) {
+  int next_power_of_two =  pow(2, ceil(log(parameter)/log(2)));
+  switch(next_power_of_two) {
+      case 1:
+        return {(int) (3014 / 4), (int) (2886 / 4), (int) (128 / 4), 0, (int) (584 / 4), 0, 0, 0, 0};
+      case 2:
+        return {(int) (3221 / 4), (int) (3013 / 4), (int) (208 / 4), 0, (int) (461 / 4), 0, 0, 0, 0};
+      case 4:
+        return {(int) (5027 / 4), (int) (4739 / 4), (int) (288 / 4), 0, (int) (473 / 4), 0, 0, 0, 0};
+      case 8:
+        return {(int) (7028 / 4), (int) (6900 / 4), (int) (128 / 4), 0, (int) ( 1017 / 4), 0, 0, 0, 0};
+      default: {
+        DSA_CHECK(false) << "Input Vector Port Too big. Size: " << parameter;
+        return {0, 0, 0, 0, 0, 0, 0, 0, 0};
+      }
+    }
+}
+
+
+std::vector<int> stream_table = {15730, 15730, 0, 0, 4504, 0, 0, 0, 0};
+std::vector<int> AGU = {2602, 2602, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> ROB = {29801, 29801, 0, 0, 1344, 4, 0, 0, 0};
+std::vector<int> RequestXBar = {972, 500, 472, 0, 52, 0, 0, 0, 0};
+std::vector<int> ResponseXBar = {936, 528, 408, 0, 52, 0, 0, 0, 0};
+std::vector<int> RobScheduler = {246, 246, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> Banks = {548, 548, 0, 0, 152, 256, 0, 0, 0};
+
+// Parameters = [#VP, SPM Width, SPM Capacity, Indirect]
+std::vector<double> spm_area_predict_fpga(const std::vector<double> parameters) {
+  std::vector<double> baseline = {11, 32, 1048576, 1};
+
+  std::vector<double> output = {
+    stream_table[0] / baseline[0] * parameters[0]
+    + AGU[0] / baseline[1] * parameters[1]
+    + ROB[0] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[0] + ResponseXBar[0]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[0] * parameters[3]
+    + Banks[0] / baseline[2] * parameters[2],
+    stream_table[1] / baseline[0] * parameters[0]
+    + AGU[1] / baseline[1] * parameters[1]
+    + ROB[1] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[1] + ResponseXBar[1]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[1] * parameters[3]
+    + Banks[1] / baseline[2] * parameters[2],
+    stream_table[2] / baseline[0] * parameters[0]
+    + AGU[2] / baseline[1] * parameters[1]
+    + ROB[2] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[2] + ResponseXBar[2]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[2] * parameters[3]
+    + Banks[2] / baseline[2] * parameters[2],
+    stream_table[3] / baseline[0] * parameters[0]
+    + AGU[3] / baseline[1] * parameters[1]
+    + ROB[3] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[3] + ResponseXBar[3]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[3] * parameters[3]
+    + Banks[3] / baseline[2] * parameters[2],
+    stream_table[4] / baseline[0] * parameters[0]
+    + AGU[4] / baseline[1] * parameters[1]
+    + ROB[4] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[4] + ResponseXBar[4]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[4] * parameters[3]
+    + Banks[4] / baseline[2] * parameters[2],
+    stream_table[5] / baseline[0] * parameters[0]
+    + AGU[5] / baseline[1] * parameters[1]
+    + ROB[5] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[5] + ResponseXBar[5]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[5] * parameters[3]
+    + Banks[5] / baseline[2] * parameters[2],
+    stream_table[6] / baseline[0] * parameters[0]
+    + AGU[6] / baseline[1] * parameters[1]
+    + ROB[6] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[6] + ResponseXBar[6]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[6] * parameters[3]
+    + Banks[6] / baseline[2] * parameters[2],
+    stream_table[7] / baseline[0] * parameters[0]
+    + AGU[7] / baseline[1] * parameters[1]
+    + ROB[7] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[7] + ResponseXBar[7]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[7] * parameters[3]
+    + Banks[7] / baseline[2] * parameters[2],
+    stream_table[8] / baseline[0] * parameters[0]
+    + AGU[8] / baseline[1] * parameters[1]
+    + ROB[8] / baseline[1] * parameters[1] * parameters[3]
+    + (RequestXBar[8] + ResponseXBar[8]) / baseline[1] * parameters[1] * parameters[3]
+    + RobScheduler[8] * parameters[3]
+    + Banks[8] / baseline[2] * parameters[2]
+  };
+  return output;
+}
+
+
+std::vector<int> xBar = {182, 182, 0, 0, 11, 0, 0, 0, 0};
+std::vector<int> TLB = {98, 98, 0, 0, 185, 0, 0, 0, 0};
+std::vector<int> DMARobScheduler = {246, 246, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> DMAStreamTable = {246, 246, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> DMARob = {2314, 2314, 0, 0, 848, 4, 0, 0, 0};
+std::vector<int> DMAAgu = {2593, 2593, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> DMAReader = {376, 376, 0, 0, 1020, 0, 0, 0, 0};
+std::vector<int> DMAWriter = {65, 37, 28, 0, 149, 0, 0, 0, 0};
+
+std::vector<double> dma_area_predict_fpga(const std::vector<double> parameters) {
+  std::vector<double> baseline = {11, 32};
+  std::vector<double> output = {
+    (xBar[0] + TLB[0] + DMARobScheduler[0])
+    + DMAStreamTable[0] / baseline[0] * parameters[0]
+    + (DMARob[0] + DMAAgu[0] + DMAReader[0] + DMAWriter[0]) / baseline[1] * parameters[1],
+    (xBar[1] + TLB[1] + DMARobScheduler[1])
+    + DMAStreamTable[1] / baseline[0] * parameters[0]
+    + (DMARob[1] + DMAAgu[1] + DMAReader[1] + DMAWriter[1]) / baseline[1] * parameters[1],
+    (xBar[2] + TLB[2] + DMARobScheduler[2])
+    + DMAStreamTable[2] / baseline[0] * parameters[0]
+    + (DMARob[2] + DMAAgu[2] + DMAReader[2] + DMAWriter[2]) / baseline[1] * parameters[1],
+    (xBar[3] + TLB[3] + DMARobScheduler[3])
+    + DMAStreamTable[3] / baseline[0] * parameters[0]
+    + (DMARob[3] + DMAAgu[3] + DMAReader[3] + DMAWriter[3]) / baseline[1] * parameters[1],
+    (xBar[4] + TLB[4] + DMARobScheduler[4])
+    + DMAStreamTable[4] / baseline[0] * parameters[0]
+    + (DMARob[4] + DMAAgu[4] + DMAReader[4] + DMAWriter[4]) / baseline[1] * parameters[1],
+    (xBar[5] + TLB[5] + DMARobScheduler[5])
+    + DMAStreamTable[5] / baseline[0] * parameters[0]
+    + (DMARob[5] + DMAAgu[5] + DMAReader[5] + DMAWriter[5]) / baseline[1] * parameters[1],
+    (xBar[6] + TLB[6] + DMARobScheduler[6])
+    + DMAStreamTable[6] / baseline[0] * parameters[0]
+    + (DMARob[6] + DMAAgu[6] + DMAReader[6] + DMAWriter[6]) / baseline[1] * parameters[1],
+    (xBar[7] + TLB[7] + DMARobScheduler[7])
+    + DMAStreamTable[7] / baseline[0] * parameters[0]
+    + (DMARob[7] + DMAAgu[7] + DMAReader[7] + DMAWriter[7]) / baseline[1] * parameters[1],
+    (xBar[8] + TLB[8] + DMARobScheduler[8])
+    + DMAStreamTable[8] / baseline[0] * parameters[0]
+    + (DMARob[8] + DMAAgu[8] + DMAReader[8] + DMAWriter[8]) / baseline[1] * parameters[1]
+  };
+  return output;
+}
+
+std::vector<float> output_vport_area_predict_fpga(const float parameter) {
+  int next_power_of_two =  pow(2, ceil(log(parameter)/log(2)));
+  switch(next_power_of_two) {
+      case 1:
+        return {(int) (3014 / 4), (int) (2886 / 4), (int) (128 / 4), 0, (int) (584 / 4), 0, 0, 0, 0};
+      case 2:
+        return {(int) (3221 / 4), (int) (3013 / 4), (int) (208 / 4), 0, (int) (461 / 4), 0, 0, 0, 0};
+      case 4:
+        return {(int) (5027 / 4), (int) (4739 / 4), (int) (288 / 4), 0, (int) (473 / 4), 0, 0, 0, 0};
+      case 8:
+        return {(int) (7028 / 4), (int) (6900 / 4), (int) (128 / 4), 0, (int) ( 1017 / 4), 0, 0, 0, 0};
+      default: {
+        DSA_CHECK(false) << "Output Vector Port Too big. Size: " << parameter;
+        return {0, 0, 0, 0, 0, 0, 0, 0, 0};
+      }
+    }
+}
+
+std::vector<double> system_bus = {10024, 10024, 0, 0, 833, 0, 0, 0, 0};
+std::vector<double> system_bus_area_predict_fpga(const std::vector<double> parameters) {
+  std::vector<double> baseline = {4, 4, 32};
+  std::vector<double> output = {
+    system_bus[0] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[1] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[2] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[3] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[4] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[5] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[6] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[7] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2]),
+    system_bus[8] / (baseline[0] * baseline[1] * baseline[2]) * (parameters[0] * parameters[1] * parameters[2])
+  };
+  return output;
 }
 
 /* Input Parameters {num_input num_output} */

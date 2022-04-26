@@ -153,7 +153,10 @@ Node* Edge::def() const {
 bool Edge::sourceStated() {
   // Get the source node and cast it to input port
   dsa::dfg::InputPort* ip = dynamic_cast<dsa::dfg::InputPort*>(def());
-  return ip != nullptr && ip->stated && vid == 0;
+  if (dsa::dfg::InputPort* ip = dynamic_cast<dsa::dfg::InputPort*>(def())) {
+    return ip->stated && vid == 0;
+  }
+  return false;
 }
 
 /**
@@ -164,17 +167,29 @@ bool Edge::sourceStated() {
  */
 bool Edge::sinkStated() {
   // Get the sink node and cast it into output port
-  dsa::dfg::OutputPort* op = dynamic_cast<dsa::dfg::OutputPort*>(use());
-  // Get the source side index of this edge to output port
-  int sourceEdgeIdx = op->sourceEdgeIdx(this);
-  // Edge is stated defined by sink node
-  // Sink node is output port, output port is penetratable, edge index to sink node is 0
-  return op != nullptr && (op->penetrated_state >=0) && sourceEdgeIdx == 0;
+  if (dsa::dfg::OutputPort* op = dynamic_cast<dsa::dfg::OutputPort*>(use())) {
+    // Get the source side index of this edge to output port
+    int sourceEdgeIdx = op->sourceEdgeIdx(this);
+    // Edge is stated defined by sink node
+    // Sink node is output port, output port is penetratable, edge index to sink node is 0
+    return (op->penetrated_state >=0) && sourceEdgeIdx == 0;
+  }
+  return false;
+}
+
+bool Edge::memory() {
+  if (dynamic_cast<dsa::dfg::Array*>(use())) {
+    return true;
+  }
+  if (dynamic_cast<dsa::dfg::Array*>(def())) {
+    return true;
+  }
+  return false;
 }
 
 Value* Edge::val() const {
   auto node = def();
-  DSA_CHECK(vid < node->values.size()) << vid << " " << node->values.size();
+  DSA_CHECK(vid < node->values.size()) << node->name() << " has " << vid << " " << node->values.size();
   return &node->values[vid];
 }
 

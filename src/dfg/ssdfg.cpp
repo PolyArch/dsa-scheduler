@@ -40,15 +40,44 @@ void SSDfg::check_for_errors() {
       }
       return ok;
     }
+
+    // Method Used During Debugging Only
+    void PrintValues(dsa::dfg::Node* node) {
+      DSA_INFO << "Values of " << node->name() << ":";
+      for (int i = 0; i < node->values.size(); i++) {
+        DSA_INFO << " Value" << i << ": ";
+        for (int use : node->values[i].uses) {
+          DSA_INFO << "  " << use;
+        }
+      }
+    }
     void Visit(dsa::dfg::InputPort* vi) {
       DSA_CHECK(HasUse(vi)) << "No user on input " << vi->name();
+      // DSA_CHECK(HasOperands(vi)) << "No Operands on input " << vi->name();
     }
     void Visit(dsa::dfg::OutputPort* vo) {
+      // DSA_CHECK(HasUse(vo)) << "No user on output " << vo->name();
       DSA_CHECK(HasOperands(vo)) << "No operand on output " << vo->name();
     }
     void Visit(dsa::dfg::Instruction* inst) {
       DSA_CHECK(HasUse(inst)) << "No user on instruction " << inst->name();
       DSA_CHECK(HasOperands(inst)) << "No operand on instruction " << inst->name();
+    }
+    void Visit(dsa::dfg::DMA* dma) {
+      DSA_CHECK(HasOperands(dma) || HasUse(dma)) << "No involvement on DMA " << dma->name();
+    }
+    void Visit(dsa::dfg::Scratchpad* spm) {
+      DSA_CHECK(HasOperands(spm) || HasUse(spm)) << "No involvement on Scratchpad " << spm->name();
+    }
+    void Visit(dsa::dfg::Register* reg) {
+      DSA_CHECK(HasOperands(reg) || HasUse(reg)) << "No involvement on Register " << reg->name();
+    }
+    void Visit(dsa::dfg::Recurrance* rec) {
+      DSA_CHECK(HasUse(rec)) << "No user on Recurrance " << rec->name();
+      DSA_CHECK(HasOperands(rec)) << "No operand on Recurrance " << rec->name();
+    }
+    void Visit(dsa::dfg::Generate* gen) {
+      DSA_CHECK(HasOperands(gen) || HasUse(gen)) << "No involvement on Register " << gen->name();
     }
   };
   ErrorChecker ec;
@@ -56,7 +85,7 @@ void SSDfg::check_for_errors() {
 }
 
 void SSDfg::normalize() {
-  nodes.resize(instructions.size() + vins.size() + vouts.size() + operations.size());
+  nodes.resize(instructions.size() + vins.size() + vouts.size() + dmas.size() + spms.size() + gens.size() + recs.size() + regs.size() + operations.size());
 #define NORMALIZE_IMPL(a)       \
   do {                          \
     for (auto& elem : a) {      \
@@ -67,6 +96,11 @@ void SSDfg::normalize() {
   NORMALIZE_IMPL(operations);
   NORMALIZE_IMPL(vins);
   NORMALIZE_IMPL(vouts);
+  NORMALIZE_IMPL(dmas);
+  NORMALIZE_IMPL(spms);
+  NORMALIZE_IMPL(gens);
+  NORMALIZE_IMPL(recs);
+  NORMALIZE_IMPL(regs);
 #undef NORMALIZE_IMPL
 }
 
@@ -255,6 +289,11 @@ SSDfg::SSDfg(const SSDfg& dfg)
       operations(dfg.operations),
       vins(dfg.vins),
       vouts(dfg.vouts),
+      spms(dfg.spms),
+      dmas(dfg.dmas),
+      regs(dfg.regs),
+      recs(dfg.recs),
+      gens(dfg.gens),
       edges(dfg.edges),
       meta(dfg.meta) {
   normalize();

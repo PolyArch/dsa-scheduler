@@ -67,7 +67,7 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   virtual bool schedule(SSDfg*, Schedule*&) override;
 
-  virtual bool incrementalSchedule(CodesignInstance& incr_table) override;
+  virtual bool incrementalSchedule(CodesignInstance& incr_table, int max_vector=-1) override;
 
   int schedule_internal(SSDfg* ssDFG, Schedule*& sched);
 

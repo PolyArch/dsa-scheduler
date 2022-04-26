@@ -18,6 +18,9 @@ CollectRedundancy(SSDfg* dfg) {
         : operands(dfg->nodes.size()), users(dfg->nodes.size()), dfg(dfg) {}
 
     void Visit(Node* node) {
+      DSA_LOG(COLLECT) << "Collecting redundancy for " << node->name();
+      DSA_LOG(COLLECT) << "Operands: " << node->ops().size();
+      DSA_LOG(COLLECT) << "Values: " << node->values.size();
       for (auto& op : node->ops()) {
         for (auto eid : op.edges) {
           auto* edge = &dfg->edges[eid];
@@ -38,7 +41,8 @@ CollectRedundancy(SSDfg* dfg) {
         }
       }
     }
-  } rc(dfg);
+  } 
+  rc(dfg);
 
   dfg->Apply(&rc);
 

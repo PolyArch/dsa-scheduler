@@ -1,0 +1,16 @@
+Switch Model, trained on 2592 samples
+Trained using Pytorch, RayTune, and SciOptimize
+
+Parameters
+   Learning Rate: 0.03346904675208105
+   Batch Size: 8
+   Epochs: 150
+Best trial final validation loss: 16263.923089674961
+Best trial l1 loss: tensor([71.2682, 71.2682, 71.2682, 71.2682])
+
+Average Loss with L1 [72.664894 72.664894 72.664894 72.664894]
+Average Loss with MSE loss: [17491.732 17491.732 17491.732 17491.732]
+Average Loss with RMS Loss: [95.298256 95.298256 95.298256 95.298256]
+
+Average Model: [2272.5576  2126.1504   149.62659  332.21332]
+Real: [2337.7395  2188.8506   148.88889  344.0099 ]

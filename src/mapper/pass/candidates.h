@@ -23,13 +23,13 @@ struct CandidateSpotVisitor : dfg::Visitor {
     for (size_t i = 0; i < fus.size(); ++i) {
       ssfu* cand_fu = fus[i];
 
-      if (!cand_fu->fu_type_.Capable(inst->inst())) {
+      if (!cand_fu->fu_type().Capable(inst->inst())) {
         ostringstream os;
         os <<  "Not capable!" << inst->name() << " " << cand_fu->name() << " [";
 
         int idx_inst = 0;
-        int num_inst = cand_fu->fu_type_.capability.size();
-        for (auto& elem : cand_fu->fu_type_.capability) {
+        int num_inst = cand_fu->fu_type().capability.size();
+        for (auto& elem : cand_fu->fu_type().capability) {
           os << "\"" << dsa::name_of_inst(elem.op) << "\"";
           if (idx_inst < num_inst - 1) {
             os << ", ";
@@ -51,6 +51,11 @@ struct CandidateSpotVisitor : dfg::Visitor {
 
         if (cand_fu->is_shared() && !spots.empty()) {
           DSA_LOG(CAND) << "Shared FU: " << cand_fu->name() << " " << inst->name();
+          continue;
+        }
+
+        if (inst->bitwidth() < cand_fu->granularity()) {
+          DSA_LOG(CAND) << "Granularity greater than instruction bitwidth " << cand_fu->name() << " " << inst->name();
           continue;
         }
 
@@ -111,8 +116,9 @@ struct CandidateSpotVisitor : dfg::Visitor {
     auto fabric = sched->ssModel()->subModel();
     for (int i = 0, n = fabric->fu_list().size(); i < n; ++i) {
       auto* fu = fabric->fu_list()[i];
-      auto& capability = fu->fu_type_.capability;
-      std::vector<int> cnt(fu->fu_type_.capability.size(), 0);
+      auto fu_type = fu->fu_type();
+      auto& capability = fu_type.capability;
+      std::vector<int> cnt(fu->fu_type().capability.size(), 0);
       for (int j = 0, m = capability.size(); j < m; ++j) {
         cnt[j] = capability[j].count;
       }
@@ -153,6 +159,8 @@ struct CandidateSpotVisitor : dfg::Visitor {
           break;
         }
       }
+      
+      fu->fu_type(fu_type);
       if (ok) {
         candidates[op->id()].emplace_back(0, Slot<ssnode*>(0, static_cast<ssnode*>(fu)));
         ++this->cnt[op->id()];
@@ -245,6 +253,120 @@ struct CandidateSpotVisitor : dfg::Visitor {
     }
 
     cnt[output->id()] = spots.size();
+  }
+
+  void Visit(dfg::DMA* dma) override {
+    auto fabric = sched->ssModel()->subModel();
+    auto dma_nodes = fabric->dma_list();
+    // Lets write size in units of bits
+    std::vector<MapSpot>& spots = candidates[dma->id()];
+    std::vector<MapSpot> bad;
+    spots.clear();
+    for (size_t i = 0; i < dma_nodes.size(); ++i) {
+      auto cand = dma_nodes[i];
+      if (cand->capacity() >= dma->size()) {
+        spots.emplace_back(0, Slot<ssnode*>(0, cand));
+      }
+    }
+
+    if (spots.empty()) {
+      spots = bad;
+      DSA_LOG(WARNING) << dma->size() << "KB DMA insufficient!";
+    }
+
+    cnt[dma->id()] = spots.size();
+  }
+
+  void Visit(dfg::Scratchpad* spm) override {
+    auto fabric = sched->ssModel()->subModel();
+    auto spm_nodes = fabric->scratch_list();
+    // Lets write size in units of bits
+    std::vector<MapSpot>& spots = candidates[spm->id()];
+    std::vector<MapSpot> bad;
+    spots.clear();
+    for (size_t i = 0; i < spm_nodes.size(); ++i) {
+      auto cand = spm_nodes[i];
+      if (cand->capacity() >= spm->size()) {
+        DSA_LOG(CAND) << "Adding candidate " << cand->name() << " to spm " << spm->name();
+        spots.emplace_back(0, Slot<ssnode*>(0, cand));
+      }
+    }
+
+    if (spots.empty()) {
+      spots = bad;
+      DSA_LOG(WARNING) << spm->size() << "KB ScratchPad insufficient!";
+    }
+
+    cnt[spm->id()] = spots.size();
+  }
+
+  void Visit(dfg::Register* reg) override {
+    auto fabric = sched->ssModel()->subModel();
+    auto reg_nodes = fabric->reg_list();
+    // Lets write size in units of bits
+    std::vector<MapSpot>& spots = candidates[reg->id()];
+    std::vector<MapSpot> bad;
+    spots.clear();
+    for (size_t i = 0; i < reg_nodes.size(); ++i) {
+      auto cand = reg_nodes[i];
+      if (cand->capacity() >= reg->size()) {
+        DSA_LOG(CAND) << "Adding candidate " << cand->name() << " to reg " << reg->name();
+        spots.emplace_back(0, Slot<ssnode*>(0, cand));
+      }
+    }
+
+    if (spots.empty()) {
+      spots = bad;
+      DSA_LOG(WARNING) << reg->size() << "KB Register Node insufficient!";
+    }
+
+    cnt[reg->id()] = spots.size();
+  }
+
+  void Visit(dfg::Recurrance* rec) override {
+    auto fabric = sched->ssModel()->subModel();
+    auto rec_nodes = fabric->recur_list();
+    // Lets write size in units of bits
+    std::vector<MapSpot>& spots = candidates[rec->id()];
+    std::vector<MapSpot> bad;
+    spots.clear();
+    for (size_t i = 0; i < rec_nodes.size(); ++i) {
+      auto cand = rec_nodes[i];
+      if (cand->capacity() >= rec->size()) {
+        DSA_LOG(CAND) << "Adding candidate " << cand->name() << " to rec " << rec->name();
+        spots.emplace_back(0, Slot<ssnode*>(0, cand));
+      }
+    }
+
+    if (spots.empty()) {
+      spots = bad;
+      DSA_LOG(WARNING) << rec->size() << "KB Recurrance Node insufficient!";
+    }
+
+    cnt[rec->id()] = spots.size();
+  }
+
+  void Visit(dfg::Generate* gen) override {
+    auto fabric = sched->ssModel()->subModel();
+    auto gen_nodes = fabric->gen_list();
+    // Lets write size in units of bits
+    std::vector<MapSpot>& spots = candidates[gen->id()];
+    std::vector<MapSpot> bad;
+    spots.clear();
+    for (size_t i = 0; i < gen_nodes.size(); ++i) {
+      auto cand = gen_nodes[i];
+      if (cand->capacity() >= gen->size()) {
+        DSA_LOG(CAND) << "Adding candidate " << cand->name() << " to gen " << gen->name();
+        spots.emplace_back(0, Slot<ssnode*>(0, cand));
+      }
+    }
+
+    if (spots.empty()) {
+      spots = bad;
+      DSA_LOG(WARNING) << gen->size() << "KB Generate Node insufficient!";
+    }
+
+    cnt[gen->id()] = spots.size();
   }
 
   CandidateSpotVisitor(Schedule* sched_, int max_candidates_)

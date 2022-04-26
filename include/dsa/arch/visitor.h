@@ -13,7 +13,6 @@ struct Visitor {
   virtual void Visit(ssswitch* node);
   virtual void Visit(ssivport* node);
   virtual void Visit(ssovport* node);
-  virtual void Visit(ssvport* node);
   virtual void Visit(ssdma* node);
   virtual void Visit(ssscratchpad* node);
   virtual void Visit(ssrecurrence* node);
@@ -29,7 +28,6 @@ struct GraphVisitor : Visitor {
   virtual void Visit(ssswitch* node);
   virtual void Visit(ssivport* node);
   virtual void Visit(ssovport* node);
-  virtual void Visit(ssvport* node);
   virtual void Visit(ssdma* node);
   virtual void Visit(ssscratchpad* node);
   virtual void Visit(ssrecurrence* node);

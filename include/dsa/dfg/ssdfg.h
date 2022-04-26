@@ -21,6 +21,7 @@
 #include "dsa/dfg/metadata.h"
 #include "dsa/dfg/node.h"
 #include "dsa/dfg/port.h"
+#include "dsa/dfg/array.h"
 #include "dsa/dfg/symbols.h"
 #include "dsa/simulation/data.h"
 #include "dsa-ext/spec.h"
@@ -174,6 +175,16 @@ class SSDfg {
   std::vector<dsa::dfg::InputPort> vins;
   /*! \brief The instances of the vector outputs. */
   std::vector<dsa::dfg::OutputPort> vouts;
+  /*! \brief The instances of the DMAs. */
+  std::vector<dsa::dfg::DMA> dmas;
+  /*! \brief The instances of the Scratchpads. */
+  std::vector<dsa::dfg::Scratchpad> spms;
+  /*! \brief The instances of the Recturrance. */
+  std::vector<dsa::dfg::Recurrance> recs;
+  /*! \brief The instances of the Generates. */
+  std::vector<dsa::dfg::Generate> gens;
+  /*! \brief The instances of the Registers. */
+  std::vector<dsa::dfg::Register> regs;
   /*! \brief The summary vector of all the nodes above. */
   std::vector<dsa::dfg::Node*> nodes;
   /*! \brief The instances of all the edges. */
@@ -238,6 +249,26 @@ inline std::vector<dsa::dfg::InputPort>& SSDfg::type_filter() {
 template <>
 inline std::vector<dsa::dfg::OutputPort>& SSDfg::type_filter() {
   return vouts;
+}
+template <>
+inline std::vector<dsa::dfg::DMA>& SSDfg::type_filter() {
+  return dmas;
+}
+template <>
+inline std::vector<dsa::dfg::Scratchpad>& SSDfg::type_filter() {
+  return spms;
+}
+template <>
+inline std::vector<dsa::dfg::Recurrance>& SSDfg::type_filter() {
+  return recs;
+}
+template <>
+inline std::vector<dsa::dfg::Generate>& SSDfg::type_filter() {
+  return gens;
+}
+template <>
+inline std::vector<dsa::dfg::Register>& SSDfg::type_filter() {
+  return regs;
 }
 
 template <typename T, typename... Args>

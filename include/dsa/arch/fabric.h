@@ -67,9 +67,9 @@ class SpatialFabric {
 
   const std::vector<ssnode*>& node_list() { return _node_list; }
 
-  std::vector<ssvport*> vport_list() { return node_filter<ssvport*>(); }
+  std::vector<SyncNode*> vport_list() { return node_filter<SyncNode*>(); }
 
-  std::vector<ssmemory*> mem_list() { return node_filter<ssmemory*>(); }
+  std::vector<DataNode*> data_list() { return node_filter<DataNode*>(); }
 
   std::vector<ssgenerate*> gen_list() { return node_filter<ssgenerate*>(); }
 
@@ -81,23 +81,8 @@ class SpatialFabric {
 
   std::vector<ssdma*> dma_list() { return node_filter<ssdma*>(); }
 
-  std::vector<ssvport*> vlist_impl(bool is_input) {
-    std::vector<ssvport*> res;
-    auto vports = vport_list();
-    for (auto elem : vports) {
-      if (is_input) {
-        if (elem->isInputPort()) 
-          res.push_back(elem);
-      } else {
-        if (elem->isOutputPort()) 
-          res.push_back(elem);
-      }
-      
-    }
-    return res;
-  }
-  std::vector<ssvport*> input_list() { return vlist_impl(true); }
-  std::vector<ssvport*> output_list() { return vlist_impl(false); }
+  std::vector<ssivport*> input_list() { return node_filter<ssivport*>(); }
+  std::vector<ssovport*> output_list() { return node_filter<ssovport*>(); }
 
   void add_input(int i, ssnode* n) { _io_map[true][i] = n; }
   void add_output(int i, ssnode* n) { _io_map[false][i] = n; }
@@ -115,6 +100,12 @@ class SpatialFabric {
     return fu;
   }
 
+  ssscratchpad* add_scratchpad() {
+    auto* sp = new ssscratchpad();
+    add_node(sp);
+    return sp;
+  }
+
   ssswitch* add_switch() {
     auto* sw = new ssswitch();
     add_node(sw);  // id and stuff
@@ -128,19 +119,33 @@ class SpatialFabric {
     return sw;
   }
 
-  ssvport* add_vport(bool is_input) {
-    auto vport = new ssvport();
-    add_node(vport);
-    return vport;
+  ssivport* add_input_vport() {
+    auto* vp = new ssivport();
+    add_node(vp);  // id and stuff
+    return vp;
   }
 
-  ssvport* add_vport(bool is_input, int port_num) {
-    ssvport* vport = add_vport(is_input);
+  ssovport* add_output_vport() {
+    auto* vp = new ssovport();
+    add_node(vp);  // id and stuff
+    return vp;
+  }
+
+  SyncNode* add_vport(bool is_input) {
+    if (is_input) {
+      return add_input_vport();
+    } else {
+      return add_output_vport();
+    }
+  }
+
+  SyncNode* add_vport(bool is_input, int port_num) {
+    SyncNode* vport = add_vport(is_input);
+    vport->port(port_num);
     DSA_CHECK(!_ssio_interf.vports_map[is_input].count(port_num))
         << "Error: Multiple " << (is_input ? "input" : "output")
         << " ports with port number " << port_num << "created\n\n";
     _ssio_interf.vports_map[is_input][port_num] = vport;
-    vport->port(port_num);
     return vport;
   }
 
@@ -214,9 +219,18 @@ class SpatialFabric {
   void delete_node(int node_index) {
     delete_by_id(_node_list, node_index);
     fix_id(_node_list);
+
+    // Fix Compute and Sync Ids
     fix_local_id(fu_list());
     fix_local_id(switch_list());
-    fix_local_id(vport_list());
+    fix_local_id(input_list());
+    fix_local_id(output_list());
+
+    // Fix Id for memory nodes
+    fix_local_id(scratch_list());
+    fix_local_id(recur_list());
+    fix_local_id(dma_list());
+    fix_local_id(gen_list());
   }
 
   void delete_link(int link_index) {
@@ -236,24 +250,39 @@ class SpatialFabric {
    * @return sslink* the created link between the source and destination nodes
    */
   sslink* add_link(ssnode* src, ssnode* dst, int source_position=-1, int sink_position=-1) {
-    // if (auto out = dynamic_cast<ssvport*>(src)) {
-    //   CHECK(!out->out_links().empty());
-    // }
-    // if (auto in = dynamic_cast<ssvport*>(dst)) {
-    //   CHECK(!in->in_links().empty());
-    // }
     // Check if a self-link
-    if (src->id() == dst->id()) return nullptr;
+    if (src->id() == dst->id()) 
+      return nullptr;
+    
+    // Disable connections breaking dfg
+    if (dynamic_cast<SyncNode*>(src) && dynamic_cast<SyncNode*>(dst))
+      return nullptr;
+    if (dynamic_cast<DataNode*>(src) && dynamic_cast<DataNode*>(dst))
+      return nullptr;
+    if (dynamic_cast<DataNode*>(src) && dynamic_cast<SpatialNode*>(dst))
+      return nullptr;
+    if (dynamic_cast<SpatialNode*>(src) && dynamic_cast<DataNode*>(dst))
+      return nullptr;
+    if (dynamic_cast<SpatialNode*>(src) && dynamic_cast<ssivport*>(dst))
+      return nullptr;
+    if (dynamic_cast<ssovport*>(src) && dynamic_cast<SpatialNode*>(dst))
+      return nullptr;
+
+    if (dynamic_cast<DataNode*>(src) && dynamic_cast<ssovport*>(dst))
+      return nullptr;
+    if (dynamic_cast<ssivport*>(src) && dynamic_cast<DataNode*>(dst))
+      return nullptr;
+
+    /*
+    if (dynamic_cast<ssivport*>(src))
+      if (src->out_links().size() == 8) return nullptr;
+    if (dynamic_cast<ssovport*>(dst))
+      if (dst->in_links().size() == 8) return nullptr;
+    */
 
     // Check if a link already exists
     for (auto link : src->out_links())
       if (link->sink()->id() == dst->id()) return nullptr;
-
-    if (dynamic_cast<ssvport*>(src))
-      if (src->out_links().size() == 8) return nullptr;
-
-    if (dynamic_cast<ssvport*>(dst))
-      if (dst->in_links().size() == 8) return nullptr;
 
     sslink* link = src->add_link(dst, source_position, sink_position);
     link->id(_link_list.size());
@@ -274,8 +303,22 @@ class SpatialFabric {
         fu->localId(fu_list().size());
       } else if (auto sw = dynamic_cast<ssswitch*>(n)) {
         sw->localId(switch_list().size());
-      } else if (auto vport = dynamic_cast<ssvport*>(n)) {
-        vport->localId(vport_list().size());
+      } else if (auto vport = dynamic_cast<ssivport*>(n)) {
+        vport->localId(input_list().size());
+      } else if (auto vport = dynamic_cast<ssovport*>(n)) {
+        vport->localId(output_list().size());
+      } else if (auto scratchpad = dynamic_cast<ssscratchpad*>(n)) {
+        scratchpad->localId(scratch_list().size());
+      } else if (auto recur = dynamic_cast<ssrecurrence*>(n)) {
+        recur->localId(recur_list().size());
+      } else if (auto dma = dynamic_cast<ssdma*>(n)) {
+        dma->localId(dma_list().size());
+      } else if (auto gen = dynamic_cast<ssgenerate*>(n)) {
+        gen->localId(gen_list().size());
+      } else if (auto reg = dynamic_cast<ssregister*>(n)) {
+        reg->localId(reg_list().size());
+      } else {
+        DSA_CHECK(false) << "Unknown node type: " << n->name();
       }
     }
 
@@ -318,10 +361,6 @@ inline std::vector<ssfu*> SpatialFabric::nodes() {
 template <>
 inline std::vector<ssnode*> SpatialFabric::nodes() {
   return _node_list;
-}
-template <>
-inline std::vector<ssvport*> SpatialFabric::nodes() {
-  return vport_list();
 }
 
 }  // namespace dsa

@@ -71,10 +71,79 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj(Schedule*& sched, SchedStat
             (s.max_util - 1) * 3000 + sched->total_passthrough;
   obj = obj * 100 + sched->num_links_mapped();
 
+  std::vector<double> nmlz_freq;
+  for (int i = 0; i < sched->ssdfg()->meta.size(); ++i) {
+    nmlz_freq.push_back(sched->ssdfg()->meta[i].frequency);
+  }
+  double nmlz = std::accumulate(nmlz_freq.begin(), nmlz_freq.end(), 0);
+  for (int i = 0; (long unsigned int) i < sched->ssdfg()->meta.size(); ++i) {
+    nmlz_freq[i] /= nmlz;
+  }
+
+  // ArgSort nmlz frequency
+  std::vector<double> nmlz_freq_args(sched->ssdfg()->meta.size(), 0);
+  std::size_t n(0);
+  std::generate(std::begin(nmlz_freq_args), std::end(nmlz_freq_args), [&]{ return n++; });
+  std::sort(  std::begin(nmlz_freq_args), 
+              std::end(nmlz_freq_args),
+              [&](int i1, int i2) { return nmlz_freq[i1] > nmlz_freq[i2]; } );
+
+  double spm_performance_factor = 1.0;
+  for (auto spad : sched->ssModel()->subModel()->scratch_list()) {
+    // the production rate for this scratchpad node
+    int productionRate = spad->readWidth() * spad->memUnitBits();
+
+    double inputConsumption = 0;
+    double outputConsumption = 0;
+
+    // Populate input and output consumption rates
+    auto vertices = sched->node_prop()[spad->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        auto input_consumtion = arr->Consumption(true);
+        auto output_consumption = arr->Consumption(false);
+        for (int i = 0; i < sched->ssdfg()->meta.size(); ++i) {
+          inputConsumption += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          outputConsumption += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+        }
+      }
+    }
+  
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / inputConsumption));
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / outputConsumption));
+  }
+  obj += 100 * (1 / spm_performance_factor);
+
+  
+  
+  for (auto data : sched->ssModel()->subModel()->data_list()) {
+    int64_t capacity = data->capacity();
+    int64_t capacityUsed = (int64_t) 0;
+    
+    // Get Software Vertices Mapped To Node
+    auto vertices = sched->node_prop()[data->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        // Get the size of the array
+        capacityUsed += arr->size();
+      } else {
+        DSA_CHECK(false) << "Memory node " << data->name() << " has non-array vertex: " << vertex.first->name();
+      }
+    }
+
+    // We cant have overprovisioned memory
+    if (capacityUsed > capacity) {
+      succeed_sched = false;
+      num_left++;
+    }
+  }
+
   return make_pair(succeed_sched - num_left, -obj);
 }
 
-bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, dsa::dfg::Edge* edge,
+bool SchedulerSimulatedAnnealing::length_creep(Schedule* sched, dsa::dfg::Edge* edge, 
                                                int& num, CandidateRoute& undo_routing) {
   bool changed = false;
 
@@ -221,7 +290,7 @@ std::pair<int, int> SchedulerSimulatedAnnealing::obj_creep(Schedule*& sched,
 /* This function will perform one iteration of an incremental scheduling of all
  * workloads which are stored in the scheduling tabl
  */
-bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
+bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst, int max_vector) {
   // need to make sure the scheduler has the right submodel
   _ssModel = inst.ss_model();
 
@@ -240,6 +309,8 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
 
     for (WorkloadSchedules& ws : inst.workload_array) {
       for (Schedule& sr : ws.sched_array) {
+        if (max_vector != -1 && sr.unrollDegree() > (int) max_vector)
+          continue;
         workers.push([this, &sr](int id) {
           Schedule* sched = &sr;
           DSA_CHECK(sched->ssModel() == _ssModel);
@@ -265,6 +336,10 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst) {
   } else {
     for (WorkloadSchedules& ws : inst.workload_array) {
       for (Schedule& sr : ws.sched_array) {
+        if (max_vector != -1 && sr.unrollDegree() > (int) max_vector) {
+          continue;
+        }
+        
         Schedule* sched = &sr;
         DSA_CHECK(sched->ssModel() == _ssModel);
 
@@ -325,7 +400,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
     bool print_stat = (iter & (256 - 1)) == 0;
 
     // if we don't improve for some time, lets reset
-    if (iter - last_improvement_iter > 1024) {
+    if (iter - last_improvement_iter > 1024 || fail_to_route > 32) {
       *cur_sched = *sched;
     }
 
@@ -340,9 +415,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       return false;
     }
     if (status == -1) {
-      if (++fail_to_route > 32) {
-        return false;
-      }
+      ++fail_to_route;
       DSA_LOG(ROUTING) << "Problem with Topology -- Mapping Impossible";
       continue;
     }
@@ -358,7 +431,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
 
     if (verbose && ((score > best_score) || print_stat)) {
       stringstream ss;
-      ss << "viz/iter/" << iter << ".gv";
+      ss << "viz/iters/" << iter << "-sched.gv";
       cur_sched->printGraphviz(ss.str().c_str());
 
       for (auto& elem : ssDFG->type_filter<dsa::dfg::InputPort>()) {
@@ -579,7 +652,8 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
   bool is_temporal_out = is_temporal && is_out;
 
   int internet_dis = abs(from_slot - next_slot);
-  int num_of_slots = link->bitwidth() / link->source()->granularity();
+  int num_of_slots = sched->lanes_involved(link->source(), link->bitwidth());
+  // link->bitwidth() / link->source()->granularity();
   internet_dis = min(internet_dis, num_of_slots - internet_dis);
 
   // For now, links only route on their own network
@@ -654,8 +728,14 @@ void insert_edge(std::pair<int, sslink*> link,
   DSA_LOG(ROUTE_BT) << link.first << ", " << link.second->name();
   sched->assign_edgelink(edge, link.first, link.second, it);
 
+
   if (dynamic_cast<ssfu*>(link.second->sink())) {
-    if ((dest != x) && !sched->dfgNodeOf(link.first, link.second)) {
+      DSA_LOG(PASSTHROUGH) << "CHECKING " << x.second->name() << " with link " << link.second->sink()->name() << " on edge " << edge->id;
+    // Dylan: So deleting the second part seems to assign pass-throughs correctly
+    // but I don't know if this is the right way to do it.
+
+    if ((dest != x) /*&& !sched->dfgNodeOf(link.first, link.second) */) {
+      DSA_LOG(PASSTHROUGH) << "Inserting Passthrough " << x.second->name();
       sched->assign_edge_pt(edge, x);
     }
   }
@@ -675,6 +755,10 @@ void insert_edge(std::pair<int, sslink*> link,
                  Schedule* sched, 
                  dsa::dfg::Edge* edge,
                  std::vector<std::pair<int, sslink*>>::iterator it) {
+  DSA_CHECK(link.second != nullptr);
+  DSA_CHECK(link.second->source() != nullptr);
+  DSA_CHECK(link.second->sink() != nullptr);
+  
   sched->assign_edgelink(edge, link.first, link.second, it);
 }
 
@@ -705,9 +789,9 @@ int SchedulerSimulatedAnnealing::route(
 
   std::pair<int, ssnode*> source = {vps.lane(), vps.node()};
   std::pair<int, ssnode*> dest = {vpd.lane(), vpd.node()};
-  DSA_LOG(ROUTE) << "Routing edge " << edge->name() 
-               << " from [" << source.first << ", " << source.second->name()  << "]"
-               << " to [" << dest.first << ", " << dest.second->name() << "]"
+  DSA_LOG(ROUTE) << "Routing edge " << edge->name()
+               << " (ID:" << edge->id << ") from " << source.second->name() 
+               << " to " << dest.second->name()
                << " path lengthen: " << path_lengthen;
 
   int n_nodes = sched->ssModel()->subModel()->node_list().size();
@@ -747,8 +831,7 @@ int SchedulerSimulatedAnnealing::route(
   int new_rand_prio = 0;
 
   // Check to see if source is an Input Vector Port
-  if (auto vport = dynamic_cast<ssvport*>(source.second)) {
-    DSA_CHECK(!vport->vp_stated() || vport->in_links().size() + vport->out_links().size() != 1) << vport->vp_stated() << " " << vport->in_links().size() << " " << vport->out_links().size();
+  if (auto vport = dynamic_cast<ssivport*>(source.second)) {
     if (vport->vp_impl() == 2) {
       auto* inNode = dynamic_cast<dsa::dfg::InputPort*> (edge->def());
 
@@ -760,19 +843,16 @@ int SchedulerSimulatedAnnealing::route(
       // then we must reserve the first slot of the input port
       if (vport->vp_stated() && !inNode->stated)
         slot++;
-
-      // Sanity check that the slot is valid
-      DSA_CHECK(slot >= 0 && slot < vport->out_links().size())
-        << "Invalid slot " << slot << " with size of " << vport->out_links().size()
-        << ". Input vector port stated: " << vport->vp_stated() << ", inNode " << inNode->name()
-        << " stated: " << inNode->stated << " capability " << vport->name() << ": "
-        << vport->bitwidth_capability() << " input: " << inNode->bandwidth();
+      
+      // Sanity Check
+      DSA_CHECK(slot < vport->out_links().size())
+        << "Slot " << slot << " out of bounds for vport " << vport->name()
+        << " with size: " << vport->out_links().size() << " and stated: " << vport->vp_stated();
 
       // Get node associated with slot
       ssnode* next = vport->out_links()[slot]->sink();
 
       // Bookkeeping to add in at the end
-      // FIXME(@were, @dkupsh): Support decomposability later!
       removed_input_vport = {0, vport->out_links()[slot]};
       
       // Replace source with the next node
@@ -782,9 +862,7 @@ int SchedulerSimulatedAnnealing::route(
   }
 
   // Check if destination is an output Vector Port
-  if (auto vport = dynamic_cast<ssvport*>(dest.second)) {
-    DSA_CHECK(!vport->vp_stated() || vport->in_links().size() + vport->out_links().size() != 1)
-      << vport->vp_stated() << " " << vport->in_links().size() << " " << vport->out_links().size();
+  if (auto vport = dynamic_cast<ssovport*>(dest.second)) {
     if (vport->vp_impl() == 2) {
       // Get output dfg node
       dsa::dfg::OutputPort* outNode = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
@@ -795,15 +873,11 @@ int SchedulerSimulatedAnnealing::route(
       if (vport->vp_stated() && outNode->penetrated_state == -1)
         sourceIdx++;
 
-      // Sanity check that the slot is valid
-      DSA_CHECK(sourceIdx >= 0 && sourceIdx < vport->in_links().size())
-        << "Invalid slot " << sourceIdx << " with size of " << vport->in_links().size()
-        << ". Input vector port stated: " << vport->vp_stated() << ", outNode " << outNode->name()
-        << " stated: " << outNode->penetrated_state << " capability " << vport->name() << ": "
-        << vport->bitwidth_capability() << " input: " << outNode->bandwidth();
+      // Sanity Check
+      DSA_CHECK(sourceIdx < vport->in_links().size()) << "Slot " << sourceIdx << " out of bounds for vport " << vport->name() << " with size: " << vport->in_links().size() << " and stated: " << vport->vp_stated();
 
       // Bookkeeping for later
-      removed_output_vport = {sourceIdx, vport->in_links()[sourceIdx]};
+      removed_output_vport = {0, vport->in_links()[sourceIdx]};
 
       // Replace destination with the node that should be routed
       // dest.first = sourceIdx;
@@ -811,22 +885,32 @@ int SchedulerSimulatedAnnealing::route(
     }
   }
 
+  DSA_LOG(ROUTE) << "Source: " << source.second->name() << " " << source.first;
+  DSA_LOG(ROUTE) << "Dest: " << dest.second->name() << " " << dest.first;
+
   // Special Case where stated makes path shorter and become the same node
   if (source.second == dest.second && !path_lengthen) {
+    int count = 0;
     auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
+
     // First check if the output port was removed
     if (removed_output_vport.second != nullptr) {
-      insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end());
+      dest = {removed_output_vport.first, removed_output_vport.second->sink()};
+      auto node_slot = std::make_pair(removed_output_vport.first, removed_output_vport.second->sink());
+
+      insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end(), dest, node_slot);
+      count++;
     }
 
     // Second check if the input port was removed
     if (removed_input_vport.second != nullptr) {
-      insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin() + idx);
+      auto node_slot = std::make_pair(removed_input_vport.first, removed_input_vport.second->sink());
+      insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin() + idx, dest, node_slot);
+      count++;
     }
 
-    return 1;
+    return std::max(count, 1);
   }
-
 
   int source_node_id = source.second->id();
   DSA_CHECK(source_node_id < n_nodes) << "Source node is should be less than total node number";
@@ -864,26 +948,21 @@ int SchedulerSimulatedAnnealing::route(
         sslink* next_link = link;
         ssnode* next = next_link->sink();
 
-        // make sure we arent mapping to memory
-        if (auto memory = dynamic_cast<ssmemory*> (next)) {
-          continue;
-        }
-        
-        // Check to see if next is a functional unit
-        if (auto fu = dynamic_cast<ssfu*>(next)) {
-          if (next != dest.second) {
-            // If it is a functional unit and already assigned as a passthrough, skip
-            if (sched->isPassthrough(next_slot, fu))
-              continue;
-            
-            // If it is a functional unit and already assigned as a computation to another edge, skip
-            if (!fu->is_shared() && sched->dfgNodeOf(next_slot, fu) != nullptr)
-              continue;
+        DSA_CHECK(next_slot < next->lanes())
+          << "Next slot is out of range: " << came_from[next->id()].size()
+          << " " << next_slot << " " << next->lanes();
 
-
+        // Check to see if we are mapping to memory or the spatial architecture
+        // We shouldn't have edges going through both
+        if (edge->memory()) {
+          if (dynamic_cast<SpatialNode*>(next)) {
+            continue;
+          }
+        } else {
+          if (dynamic_cast<DataNode*>(next)) {
+            continue;
           }
         }
-        
 
         std::pair<int, sslink*> next_pair(next_slot, next_link);
 
@@ -897,26 +976,20 @@ int SchedulerSimulatedAnnealing::route(
         } else {
           // For path lengthening, only route on free spaces
           route_cost = sched->routing_cost(next_pair, edge);
-          if (dynamic_cast<ssfu*>(next_pair.second->sink())) {
-            if (next_pair.first != dest.first || next_pair.second->sink() != dest.second) {
-              route_cost = -1;
-            }
-          }
           if (route_cost != 1 || sched->dfgNodeOf(next_slot, next)) route_cost = -1;
+          if (dynamic_cast<ssfu*>(link->sink()) && link->sink() != dest.second) {
+            route_cost = -1;
+          }
         }
 
         if (route_cost == -1) continue;
 
         int new_dist = cur_dist + route_cost;
-
+        
         if (next_slot >= node_dist[next->id()].size()) {
-          DSA_INFO << "Out of range slot: " << next_slot << " lanes"
-            << next->lanes() << " dist " << node_dist[next->id()].size() << " " << next->name(); 
+          DSA_INFO << "Out of range slot: " << next_slot << " lanes " << next->lanes() << " dist " << node_dist[next->id()].size() << " " << next->name(); 
           continue;
         }
-        DSA_CHECK(next_slot < next->lanes())
-          << "Next slot is out of range" << came_from[next->id()].size()
-          << " " << next_slot << " " << next->lanes();
 
         int next_dist = node_dist[next->id()][next_slot];
 
@@ -954,7 +1027,6 @@ int SchedulerSimulatedAnnealing::route(
   }
 
   auto idx = ins_it ? *ins_it - sched->links_of(edge).begin() : 0;
-  DSA_LOG(ROUTE) << " IDX = " << idx;
   
   auto node_slot = dest;
 
@@ -964,8 +1036,13 @@ int SchedulerSimulatedAnnealing::route(
   
   // This means that we had an output vector port at beginnning of edge
   if (removed_output_vport.second != nullptr) {
-    insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end());
+    auto old_dest = dest;
+    dest = {removed_output_vport.first, removed_output_vport.second->sink()};
+    node_slot = dest;
+    insert_edge(removed_output_vport, sched, edge, sched->links_of(edge).end(), dest, node_slot);
     count++;
+    
+    node_slot = old_dest;
   }
   
 
@@ -975,7 +1052,6 @@ int SchedulerSimulatedAnnealing::route(
     count++;
 
     // Get the link, slot pair for next node
-    
     link = came_from[node_slot.second->id()][node_slot.first];
 
     // save the slot
@@ -988,7 +1064,7 @@ int SchedulerSimulatedAnnealing::route(
     if ((alt_edge = sched->alt_edge_for_link(link, edge))) {
       break;
     }
-
+    
     // Insert link into the edge
     insert_edge(link, sched, edge, sched->links_of(edge).begin() + idx, dest, node_slot);
 
@@ -1000,22 +1076,24 @@ int SchedulerSimulatedAnnealing::route(
   // code can't gaurantee that.
 
   if (alt_edge) {
+    DSA_LOG(ROUTE) << "Inserting alternate edge " << alt_edge->name();
     auto& alt_links = sched->links_of(alt_edge);
     for (auto alt_link : alt_links) {
-      node_slot = std::make_pair(alt_link.first, alt_link.second->source());
+      node_slot = std::make_pair(alt_link.first, alt_link.second->sink());
       insert_edge(alt_link, sched, edge, sched->links_of(edge).begin() + idx, dest, node_slot);
       idx++;
 
       if (alt_link == link) break;  // we added the final link
     }
   }
-
-
+  
   if (removed_input_vport.second != nullptr && !alt_edge) {
-    insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin());
+    node_slot = std::make_pair(removed_input_vport.first, removed_input_vport.second->sink());
+    
+    insert_edge(removed_input_vport, sched, edge, sched->links_of(edge).begin(),dest, node_slot);
     count++;
   }
-
+  
   return count;
 }
 
@@ -1024,16 +1102,16 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
                                                mapper::Slot<ssnode*> here) {
 
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
-  /*if(node->indirect()) {
-    // if input is indirect, then create a mapping for the output node with the same name (search)
-    // if output is indirect, skip!!
-    printf("Found an indirect node, just assigned it to the same id\n");
-    // mapping to the hardware
-    sched->assign_node(node, here);
-    return true;
-  } else {
-    printf("Found a normal node, just assigned it to the same id\n");
-  }*/
+  // if(node->indirect()) {
+  //   // if input is indirect, then create a mapping for the output node with the same name (search)
+  //   // if output is indirect, skip!!
+  //   printf("Found an indirect node, just assigned it to the same id\n");
+  //   // mapping to the hardware
+  //   sched->assign_node(node, here);
+  //   return true;
+  // } else {
+  //   printf("Found a normal node, just assigned it to the same id\n");
+  // }
   std::vector<dsa::dfg::Edge*> to_revert;
 
 #define process(edge_, node_, src, dest)                              \
@@ -1061,13 +1139,64 @@ bool SchedulerSimulatedAnnealing::scheduleHere(Schedule* sched, dsa::dfg::Node* 
       }                                                               \
     }                                                                 \
   } while (false)
-
+  
+  //DSA_INFO << "Schedule Here: " << node->name() << " at " << here.lane_no << " " << here.ref->name();
   sched->assign_node(node, {here.lane_no, here.ref});
   auto here_ = sched->locationOf(node);
-  process(sched->operands[node->id()], def, loc, here_);
+  do {
+    auto edge_ = sched->operands[node->id()];
+    auto& edges = edge_;
+    int n = edge_.size();
+    for (int i = 0; i < n; ++i) {
+      auto edge = edges[i];
+      DSA_CHECK(sched->link_count(edge) == 0)
+        << "Edge [" << edge->id << "]: "  << edge->name() << " is already routed!\n";
+      auto n = edge->def();
+
+      if (sched->is_scheduled(n)) {
+        auto loc = sched->locationOf(n);
+        if (!route(sched, edge, loc, here_, nullptr, 0)) {
+          DSA_LOG(ROUTE) << "Cannot route [" << edge->id << ", " << edge->name() << "] "
+                         << loc.node()->id() << " -> " << here_.node()->id() << ", dist: "
+                         << sched->distances[loc.node()->id()][here_.node()->id()];
+          for (auto revert : to_revert) sched->unassign_edge(revert);
+          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);
+          sched->unassign_dfgnode(node);
+          return false;
+        }
+      }
+    }
+  } while (false);
+
+  //process(sched->operands[node->id()], def, loc, here_);
   to_revert = sched->operands[node->id()];
   // TODO: @vidushi: we do not need to route if the same name port (ie. source) was routed earlier
-  process(sched->users[node->id()], use, here_, loc);
+  //process(sched->users[node->id()], use, here_, loc);
+  //DSA_INFO << "Schedule Here Second!";
+  do {
+    auto edge_ = sched->users[node->id()];
+    auto& edges = edge_;
+    int n = edge_.size();
+    for (int i = 0; i < n; ++i) {
+      auto edge = edges[i];
+      DSA_CHECK(sched->link_count(edge) == 0) << "Edge [" << edge->id << "]: " << edge->name() << " is already routed!\n";
+      auto n = edge->use();
+
+      if (sched->is_scheduled(n)) {
+        auto loc = sched->locationOf(n);
+        if (!route(sched, edge, here_, loc, nullptr, 0)) {
+          DSA_LOG(ROUTE) << "Cannot route [" << edge->id << ", " << edge->name() << "] "
+                         << here_.node()->id() << " -> " << loc.node()->id() << ", dist: "
+                         << sched->distances[here_.node()->id()][loc.node()->id()];
+          for (auto revert : to_revert) sched->unassign_edge(revert);
+          for (int j = 0; j < i; ++j) sched->unassign_edge(edges[j]);
+          sched->unassign_dfgnode(node);
+          return false;
+        }
+      }
+    }
+  } while (false);
+
 #undef process
 
 
@@ -1133,6 +1262,7 @@ int SchedulerSimulatedAnnealing::try_candidates(
       SchedStats s;
       CandidateRoute undo_path;
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
+      DSA_LOG(MAP) << "Score: " << candScore.first << ", " << candScore.second;
 
       if (!find_best) {
         return i;
@@ -1186,6 +1316,7 @@ void CandidateRoute::apply(Schedule* sched) {
       sched->assign_edge_pt(edge_prop.first, elem);
     }
     for (auto elem : edge_prop.second.links) {
+      DSA_LOG(UNASSIGN) << "Assigning " << elem.second->name() << " to edge [" << edge_prop.first->id << "]: " << edge_prop.first->name();
       sched->assign_edgelink(edge_prop.first, elem.first, elem.second);
     }
   }

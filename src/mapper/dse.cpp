@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iomanip>
+#include <ctpl_stl.h>
 
 #include "dsa/core/singleton.h"
 #include "dsa/dfg/node.h"
@@ -13,55 +14,167 @@ CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
 
 namespace dsa {
 
-const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective,Best Objective,Current Performance,Best Performance,Current Normalized Resources,Best Normalized Resources,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Change Details,Current Resources,Current FU Resource,Current Switch Resource,Current VPort Resource,Current Mem Resource,Best Resources,Best FU Resource,Best Switch Resource,Best VPort Resource,Best Mem Resource,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances";
+const std::string log_header = "Time,Iteration,Meaningful Iterations,Temperature,Current Objective Performance,Best Objective Performance,Current Objective Area,Best Objective Area,Current Number of Cores,Best Number of Cores,Current Number of Banks,Best Number of Banks,Current System Bus Size,Best System Bus Size,Current Single-Core Normalized Resources,Best Single-Core Normalized Resources,Current Normalized Resources,Best Normalized Resources,Current Nodes,Best Nodes,Current Links,Best Links,Current Util Overall,Current Link Util,Current Node Util,Best Util Overall,Best Link Util,Best Node Util,DSE Fail Reason,DSE Change Details,Current Workload Weights,Best Workload Weights,Current Workload Performance,Best Workload Performance,Current DFG Performances,Best DFG Performances,Current SPM DFG Performances,Best SPM DFG Performances,Current L2 DFG Performances,Best L2 DFG Performances,Current DRAM DFG Performances,Best DRAM DFG Performances,Current Single-Core Resources,Best Single-Core Resources,Current Resources,Best Resources,Current Functional Unit Resources,Current Switch Resources,Current IVPort Resources,Current OVPort Resources,Current Scratchpad Resources,Current DMA Resources,Current Recurrance Resources,Current Generate Resources,Current Register Resources,Current Core Resources,Current System Bus Resources,Best Functional Unit Resources,Best Switch Resources,Best IVPort Resources,Best OVPort Resources,Best Scratchpad Resources,Best DMA Resources,Best Recurrance Resources,Best Generate Resources,Best Register Resources,Best Core Resources,Best System Bus Resources";
 
 // Print Resources for given type
 std::string resources(int type, dsa::adg::estimation::Result& estimated) {
+  
   std::ostringstream s;
   switch(type) {
-    case 0: // Sum
-      s << estimated.sum()->dump();
-      break;
-    case 1: // FU
-      s << estimated.resource_bd(0)->dump();
-      break;
-    case 2: // Switch
-      s << estimated.resource_bd(1)->dump();
-      break;
-    case 3: // VPort
-      s << estimated.resource_bd(2)->dump();
-      break;
-    case 4: // Memory
-      s << estimated.resource_bd(3)->dump();
-      break;
-    case 5: { // Normalized Sum
-      auto normalized_estimated = estimated.sum();
-      normalized_estimated->normalize();
-      s << normalized_estimated->dump();
+    case 0: { // Sum 
+      auto sum = estimated.sum()->clone();
+      s << sum->dump();
+      delete sum;
       break;
     }
-    case 6: { // Normalized FU 
-      auto normalized_estimated_fu = estimated.resource_bd(0);
-      normalized_estimated_fu->normalize();
-      s << normalized_estimated_fu->dump();
+    case 1: { // FU
+      auto fu = estimated.resource_bd(0)->clone();
+      s << fu->dump();
+      delete fu;
       break;
     }
-    case 7: { // Normalized Switch
-      auto normalized_estimated_switch = estimated.resource_bd(1);
-      normalized_estimated_switch->normalize();
-      s << normalized_estimated_switch->dump();
+    case 2: { // Switch
+      auto sw = estimated.resource_bd(1)->clone();
+      s << sw->dump();
+      delete sw;
       break;
     }
-    case 8: { // Normalized VPort
-      auto normalized_estimated_vport = estimated.resource_bd(2);
-      normalized_estimated_vport->normalize();
-      s << normalized_estimated_vport->dump();
+    case 3: { // IVPort
+      auto ivport = estimated.resource_bd(2)->clone();
+      s << ivport->dump();
+      delete ivport;
       break;
     }
-    case 9: { // Normalized Memory
-      auto normalized_estimated_mem = estimated.resource_bd(3);
-      normalized_estimated_mem->normalize();
-      s << normalized_estimated_mem->dump();
+    case 4: { // OVPort
+      auto ovport = estimated.resource_bd(3)->clone();
+      s << ovport->dump();
+      delete ovport;
+      break;
+    }
+    case 5: { // Scratchpad
+      auto scratch = estimated.resource_bd(4)->clone();
+      s << scratch->dump();
+      delete scratch;
+      break;
+    }
+    case 6: { // DMA
+      auto dma = estimated.resource_bd(5)->clone();
+      s << dma->dump();
+      delete dma;
+      break;
+    }
+    case 7: { // Recurrance
+      auto recurrance = estimated.resource_bd(6)->clone();
+      s << recurrance->dump();
+      delete recurrance;
+      break;
+    }
+    case 8: { // Generate
+      auto generate = estimated.resource_bd(7)->clone();
+      s << generate->dump();
+      delete generate;
+      break;
+    }
+    case 9: { // Register
+      auto registers = estimated.resource_bd(8)->clone();
+      s << registers->dump();
+      delete registers;
+      break;
+    }
+    case 10: { // Core
+      auto core = estimated.resource_bd(9)->clone();
+      s << core->dump();
+      delete core;
+      break;
+    }
+    case 11: { // System Bus
+      auto system_bus = estimated.resource_bd(10)->clone();
+      s << system_bus->dump();
+      delete system_bus;
+      break;
+    }
+    case 12: { // Normalize Sum 
+      auto sum = estimated.sum()->clone();
+      sum->normalize();
+      s << sum->dump();
+      delete sum;
+      break;
+    }
+    case 13: { // FU
+      auto fu = estimated.resource_bd(0)->clone();
+      fu->normalize();
+      s << fu->dump();
+      delete fu;
+      break;
+    }
+    case 14: { // Switch
+      auto sw = estimated.resource_bd(1)->clone();
+      sw->normalize();
+      s << sw->dump();
+      delete sw;
+      break;
+    }
+    case 15: { // IVPort
+      auto ivport = estimated.resource_bd(2)->clone();
+      ivport->normalize();
+      s << ivport->dump();
+      delete ivport;
+      break;
+    }
+    case 16: { // OVPort
+      auto ovport = estimated.resource_bd(3)->clone();
+      ovport->normalize();
+      s << ovport->dump();
+      delete ovport;
+      break;
+    }
+    case 17: { // Scratchpad
+      auto scratch = estimated.resource_bd(4)->clone();
+      scratch->normalize();
+      s << scratch->dump();
+      delete scratch;
+      break;
+    }
+    case 18: { // DMA
+      auto dma = estimated.resource_bd(5)->clone();
+      dma->normalize();
+      s << dma->dump();
+      delete dma;
+      break;
+    }
+    case 19: { // Recurrance
+      auto recurrance = estimated.resource_bd(6)->clone();
+      recurrance->normalize();
+      s << recurrance->dump();
+      delete recurrance;
+      break;
+    }
+    case 20: { // Generate
+      auto generate = estimated.resource_bd(7)->clone();
+      generate->normalize();
+      s << generate->dump();
+      delete generate;
+      break;
+    }
+    case 21: { // Register
+      auto registers = estimated.resource_bd(8)->clone();
+      registers->normalize();
+      s << registers->dump();
+      delete registers;
+      break;
+    }
+    case 22: { // Core
+      auto core = estimated.resource_bd(9)->clone();
+      core->normalize();
+      s << core->dump();
+      delete core;
+      break;
+    }
+    case 23: { // System Bus
+      auto system_bus = estimated.resource_bd(10)->clone();
+      system_bus->normalize();
+      s << system_bus->dump();
+      delete system_bus;
       break;
     }
   }
@@ -87,47 +200,102 @@ std::string dump_log(const double& time, const int& iteration, const int& last_i
 
   auto best_estimated = dsa::adg::estimation::EstimatePowerAera(best_ci->ss_model());
   auto curr_estimated = dsa::adg::estimation::EstimatePowerAera(curr_ci->ss_model());
+  best_estimated.add_core_overhead();
+  curr_estimated.add_core_overhead();
+
+
+  std::string curr_single_core_resources = resources(0, curr_estimated);
+  std::string best_single_core_resources = resources(0, best_estimated);
+
+  std::string curr_single_core_normalized_resources = resources(12, curr_estimated);
+  std::string best_single_core_normalized_resources = resources(12, best_estimated);
+
+  best_estimated.scale_cores(best_ci->num_cores);
+  curr_estimated.scale_cores(curr_ci->num_cores);
+  
+  best_estimated.add_system_bus_overhead(best_ci->num_cores, best_ci->num_banks, best_ci->system_bus);
+  curr_estimated.add_system_bus_overhead(curr_ci->num_cores, curr_ci->num_banks, curr_ci->system_bus);
   
   std::ostringstream s;
   s << time << ","
     << iteration << ","
     << last_improve << "," 
     << temp << ","
-    << curr_ci->weight_obj() << ","
-    << best_ci->weight_obj() << ","
-    << curr_ci->performance << ","
-    << best_ci->performance << ",\""
-    << resources(5, curr_estimated) << "\",\""
-    << resources(5, best_estimated) << "\","
+    << curr_ci->weight_obj().first << ","
+    << best_ci->weight_obj().first << ","
+    << curr_ci->weight_obj().second << ","
+    << best_ci->weight_obj().second << ","
+    << curr_ci->num_cores << ","
+    << best_ci->num_cores << ","
+    << curr_ci->num_banks << ","
+    << best_ci->num_banks << ","
+    << curr_ci->system_bus << ","
+    << best_ci->system_bus << ",\""
+    << curr_single_core_normalized_resources << "\",\""
+    << best_single_core_normalized_resources << "\",\""
+    << resources(12, curr_estimated) << "\",\""
+    << resources(12, best_estimated) << "\","
+    << curr_ci->ss_model()->subModel()->node_list().size() << ","
+    << best_ci->ss_model()->subModel()->node_list().size() << ","
+    << curr_ci->ss_model()->subModel()->link_list().size() << ","
+    << best_ci->ss_model()->subModel()->link_list().size() << ","
     << std::get<0>(curr_util) << ","
     << std::get<1>(curr_util) << ","
     << std::get<2>(curr_util) << ","
     << std::get<0>(best_util) << ","
     << std::get<1>(best_util) << ","
-    << std::get<2>(best_util) << ",\""
-    << curr_ci->get_changes_log() << "\",\"" 
-    << resources(0, curr_estimated) << "\",\"" 
-    << resources(1, curr_estimated) << "\",\"" 
-    << resources(2, curr_estimated) << "\",\"" 
-    << resources(3, curr_estimated) << "\",\""
-    << resources(4, curr_estimated) << "\",\"" 
-    << resources(0, best_estimated) << "\",\"" 
-    << resources(1, best_estimated) << "\",\"" 
-    << resources(2, best_estimated) << "\",\"" 
-    << resources(3, best_estimated) << "\",\""
-    << resources(4, best_estimated) << "\",\"" 
+    << std::get<2>(best_util) << ","
+    << curr_ci->dse_fail_reason << ",\""
+    << curr_ci->get_changes_log() << "\",\""
     << curr_ci->get_workload_weights() << "\",\""
     << best_ci->get_workload_weights() << "\",\""
     << curr_ci->get_workload_performances() << "\",\""
     << best_ci->get_workload_performances() << "\",\""
     << curr_ci->get_dfg_performances() << "\",\""
-    << best_ci->get_dfg_performances() << "\"";
+    << best_ci->get_dfg_performances() << "\",\""
+    << curr_ci->get_spm_performances() << "\",\""
+    << best_ci->get_spm_performances() << "\",\""
+    << curr_ci->get_l2_performances() << "\",\""
+    << best_ci->get_l2_performances() << "\",\""
+    << curr_ci->get_dram_performances() << "\",\""
+    << best_ci->get_dram_performances() << "\",\""
+    << curr_single_core_resources << "\",\"" 
+    << best_single_core_resources << "\",\""
+    << resources(0, curr_estimated) << "\",\""
+    << resources(0, best_estimated) << "\",\""
+    << resources(1, curr_estimated) << "\",\"" 
+    << resources(2, curr_estimated) << "\",\"" 
+    << resources(3, curr_estimated) << "\",\""
+    << resources(4, curr_estimated) << "\",\""
+    << resources(5, curr_estimated) << "\",\""
+    << resources(6, curr_estimated) << "\",\""
+    << resources(7, curr_estimated) << "\",\""
+    << resources(8, curr_estimated) << "\",\""
+    << resources(9, curr_estimated) << "\",\""
+    << resources(10, curr_estimated) << "\",\""
+    << resources(11, curr_estimated) << "\",\""
+    << resources(1, best_estimated) << "\",\""
+    << resources(2, best_estimated) << "\",\""
+    << resources(3, best_estimated) << "\",\""
+    << resources(4, best_estimated) << "\",\""
+    << resources(5, best_estimated) << "\",\""
+    << resources(6, best_estimated) << "\",\""
+    << resources(7, best_estimated) << "\",\""
+    << resources(8, best_estimated) << "\",\""
+    << resources(9, best_estimated) << "\",\""
+    << resources(10, best_estimated) << "\",\""
+    << resources(11, best_estimated) << "\"";
+
   return s.str();
 }
 
-void dump_hw(CodesignInstance*& ci, int i) {
+void dump_hw(CodesignInstance*& ci, int i, int max_vector_size) {
   std::stringstream hw_ss;
-  hw_ss << "viz/iters/dse-sched-" << i << ".json";
+  if (max_vector_size=-1)
+    hw_ss << "viz/iters/dse-sched-" << i << ".json";
+  else
+    hw_ss << "viz/iters/" << max_vector_size << "/dse-sched-" << i << ".json";
+  
   ci->ss_model()->subModel()->DumpHwInJson(hw_ss.str().c_str());
 }
 
@@ -139,13 +307,47 @@ void initialize_workloads(CodesignInstance*& ci, const std::string &pdg_filename
       ci->workload_array.emplace_back();
       ci->weight.push_back(1);
     } else if (curline.find("weight=") == 0) {
-      std::istringstream ssin(curline.substr(8, curline.size()));
-      ssin >> ci->weight.back();
+      ci->weight.back() = std::stod(curline.substr(curline.find("=") + 1));
     } else {
+      DSA_INFO << "Parsing: " << curline;
       ci->workload_array.back().sched_array.emplace_back(ci->ss_model(), new SSDfg(curline));
     }
   }
 }
+
+bool checkIndirect(CodesignInstance*& ci) {
+  for (auto& w : ci->workload_array) {
+    for (auto& sched : w.sched_array) {
+      auto dfg = sched.ssdfg();
+      for (auto port : dfg->vins) {
+        if (port.indirect())
+          return true;
+      }
+      for (auto port : dfg->vouts) {
+        if (port.indirect())
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+void initialize_indirect(CodesignInstance*& ci) {
+  if (checkIndirect(ci)) {
+    for (auto data : ci->ss_model()->subModel()->data_list()) {
+      data->indirectIndexStream(true);
+      data->indirectLength1DStream(true);
+      data->indirectStride2DStream(true);
+    }
+  } else {
+    for (auto data : ci->ss_model()->subModel()->data_list()) {
+      data->indirectIndexStream(false);
+      data->indirectLength1DStream(false);
+      data->indirectStride2DStream(false);
+    }
+  }
+}
+
 
 void dump_schedules(CodesignInstance*& ci, std::string base_path) {
   for (int i = 0; i < ci->workload_array.size(); i++) {
@@ -154,7 +356,7 @@ void dump_schedules(CodesignInstance*& ci, std::string base_path) {
     if (sched == nullptr) continue;
     
     DSA_INFO << "Dumping "<< sched->ssdfg()->filename 
-              << " at " << path << " " << ci->dse_sched_obj(sched);
+              << " at " << path;
     ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
     std::string filename = path + "/" + std::to_string(i);
     sched->printGraphviz((path + "/graph.gv").c_str());
@@ -165,13 +367,13 @@ void dump_schedules(CodesignInstance*& ci, std::string base_path) {
   }
 }
 
-void setup_indirect(CodesignInstance*& ci, SchedulerSimulatedAnnealing*& scheduler) {
+void setup_indirect(CodesignInstance*& ci, SchedulerSimulatedAnnealing*& scheduler, int max_vector_size) {
   double best_indir = -1;
-  double best_obj = -1;
-  scheduler->incrementalSchedule(*ci);
+  std::pair<double, double> best_obj{-1, -1};
+  scheduler->incrementalSchedule(*ci, max_vector_size);
   for (int indirect = 0; indirect <= 2; ++indirect) {
     ci->ss_model()->indirect(indirect);
-    double indir_obj = ci->weight_obj();
+    std::pair<double, double> indir_obj = ci->dse_obj(false);
     if (indir_obj > best_obj) {
       best_indir = indirect;
       best_obj = indir_obj;
@@ -183,6 +385,7 @@ void setup_indirect(CodesignInstance*& ci, SchedulerSimulatedAnnealing*& schedul
 void filter_useless_function_units(CodesignInstance*& ci) {
   auto& ssmodel = *ci->ss_model();
   std::set<dsa::OpCode> used_insts;
+  std::set<dsa::OpCode> adg_insts;
   for (auto& elem : ci->workload_array) {
     for (auto& dfg : elem.sched_array) {
       struct InstCounter : dfg::Visitor {
@@ -195,6 +398,20 @@ void filter_useless_function_units(CodesignInstance*& ci) {
       }
     }
   }
+
+  for (int i = 0; i < (int)ssmodel.subModel()->fu_list().size(); ++i) {
+    auto* fu = ssmodel.subModel()->fu_list()[i];
+    for (int j = 0; j < (int)fu->fu_type().capability.size(); ++j) {
+      adg_insts.insert(fu->fu_type().capability[j].op);
+    }
+  }
+
+  for (auto& inst : used_insts) {
+    if (adg_insts.find(inst) == adg_insts.end()) {
+      DSA_CHECK(false) << "Instruction " << dsa::name_of_inst(inst) << " is not used in ADG";
+    }
+  }
+
   used_insts.insert(dsa::OpCode::SS_Copy);
 
   //  TODO: remove hack to make is so zero size capabilities are removed
@@ -215,23 +432,77 @@ void filter_useless_function_units(CodesignInstance*& ci) {
 
   for (int i = 0; i < (int)ssmodel.subModel()->fu_list().size(); ++i) {
     auto* fu = ssmodel.subModel()->fu_list()[i];
-    for (int j = 0; j < (int)fu->fu_type_.capability.size(); ++j) {
-      if (used_insts.find(fu->fu_type_.capability[j].op) == used_insts.end()) {
-          fu->fu_type_.Erase(j);
+    for (int j = 0; j < (int)fu->fu_type().capability.size(); ++j) {
+      if (used_insts.find(fu->fu_type().capability[j].op) == used_insts.end()) {
+          auto fu_type = fu->fu_type();
+          fu_type.Erase(j);
+          fu->fu_type(fu_type);
           --j;
       }
     }
-    if ((int)fu->fu_type_.capability.size() == 0) {
+    if ((int)fu->fu_type().capability.size() == 0) {
       //DSA_CHECK(false);
-    } else if ((int)fu->fu_type_.capability.size() > used_insts.size()) {
-      DSA_CHECK(false) << "Instruction Capability " << fu->fu_type_.capability.size() << " is larger than used instructions " << used_insts.size();
+    } else if ((int)fu->fu_type().capability.size() > used_insts.size()) {
+      DSA_CHECK(false) << "Instruction Capability " << fu->fu_type().capability.size() << " is larger than used instructions " << used_insts.size();
     }
+  }
+  
+}
+
+bool Compare(std::pair<double, double> a, std::pair<double, double> b) {
+  if (a.first > b.first) return true;
+  if (a.first == b.first) return a.second < b.second;
+  return false;
+}
+
+void VectorDesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_size) {
+  std::vector<int> sizes = {};
+  int max_size_log = std::log2(max_size);
+  for (int i = 0; i <= max_size_log; ++i) {
+    sizes.push_back(1 << i);
+  }
+
+
+  CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
+  initialize_workloads(cur_ci, pdg_filename);
+
+  ctpl::thread_pool workers(sizes.size());
+  for (int size : sizes) {
+    DSA_INFO << "Starting size: " << size;
+    ENFORCED_SYSTEM(("mkdir -p viz/" + std::to_string(size)).c_str());
+    ENFORCED_SYSTEM(("mkdir -p viz/iters/" + std::to_string(size)).c_str());
+    CodesignInstance* vector_ci = new CodesignInstance(*cur_ci, true);
+    vector_ci->max_vector = size;
+    if (vector_ci->countSchedules() == 0) {
+      delete vector_ci;
+      continue;
+    }
+    workers.push([&ssmodel, vector_ci, size](int id) {
+      ExploreDesign(vector_ci, ssmodel, size);
+    });
   }
 }
 
-void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
+void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_vector_size) {
+
+  // Set up Codesign Instance
+  CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
+  initialize_workloads(cur_ci, pdg_filename);
+  cur_ci->max_vector = max_vector_size;
+
+  ExploreDesign(cur_ci, ssmodel, max_vector_size);
+}
+
+
+void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_size) {
+  DSA_INFO << "Vector Size: " << max_vector_size;
   // Create Objective CSV File
-  std::string path = "viz/objectives.csv";
+  std::string path;
+  if (max_vector_size == -1)
+    path = "viz/objectives.csv";
+  else 
+    path = "viz/objectives_" + std::to_string(max_vector_size) + ".csv";
+  
   ofstream objectives(path);
 
   DSA_CHECK(objectives.good()) << path << " not opened!";
@@ -243,35 +514,42 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   clock_t start_time = clock();
   scheduler->set_start_time();
 
-  // Set up Codesign Instance
-  CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
-  initialize_workloads(cur_ci, pdg_filename);
-  setup_indirect(cur_ci, scheduler);
+  setup_indirect(cur_ci, scheduler, max_vector_size);
+  initialize_indirect(cur_ci);
   filter_useless_function_units(cur_ci);
-  cur_ci->prune_memory_nodes();
-  cur_ci->verify();
+
+  if (cur_ci->workload_array.size() == 0) {
+    DSA_INFO << "No workloads found!";
+    return;
+  }
+  for (int i = 0; i < cur_ci->workload_array.size(); i++) {
+    if (cur_ci->workload_array[i].sched_array.size() == 0) {
+      DSA_INFO << "Workload " << i << " has no schedules";
+      return;
+    }
+  }
 
   // Schedule First Node
   clock_t StartSchedule = clock();
-  scheduler->incrementalSchedule(*cur_ci);
+  scheduler->incrementalSchedule(*cur_ci, max_vector_size);
   clock_t ScheduleCollapse = clock() - StartSchedule;
 
   CodesignInstance* best_ci = cur_ci;
 
   // Create DSE Loop Variables
   int improv_iter = 0;
-  double temperature = 24;
+  double temperature = 25;
   int i = 0;
   int last_improve = 0;
-  double last_best_obj = -999;
+  std::pair<double, double> last_best_obj{-999, -999};
 
   // Dump Start log and hw;
   objectives << dump_log(static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC, i, last_improve, temperature, cur_ci, cur_ci) << std::endl;
-  dump_hw(cur_ci, i);
+  dump_hw(cur_ci, i, max_vector_size);
 
   // Start DSE Iterations. Will end if it doesn't improve in 750 meaningful iterations
   while (last_improve < 750) {
-    DSA_INFO << "--- ### Begin DSE Iteration " << i << " (" << std::setprecision(2) <<temperature <<") ### ---";
+    DSA_INFO << "--- ### Begin DSE Iteration " << i << " (" << std::setprecision(2) << temperature << ") ### ---";
 
     // Setup Next Iteration
     clock_t current_time = clock();
@@ -306,16 +584,16 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
     // Schedule the Modification
     clock_t StartSchedule = clock();
-    scheduler->incrementalSchedule(*cand_ci);
+    scheduler->incrementalSchedule(*cand_ci, max_vector_size);
     clock_t ScheduleCollapse = clock() - StartSchedule;
     cand_ci->verify();
 
     // Calcuate Objective
-    double new_obj = cand_ci->weight_obj();
-    double best_obj = best_ci->weight_obj();
-    double init_obj = cur_ci->weight_obj();
+    std::pair<double, double> new_obj = cand_ci->weight_obj();
+    std::pair<double, double> best_obj = best_ci->weight_obj();
+    std::pair<double, double> init_obj = cur_ci->weight_obj();
 
-    DSA_CHECK(best_obj > last_best_obj) << " best obj went down from " << last_best_obj << " to " << best_obj;
+    DSA_CHECK(Compare(best_obj, last_best_obj)) << " best obj went down from " << last_best_obj << " to " << best_obj;
 
     // Print Objectives
     DSA_INFO << "DSE OBJ: " << std::setprecision(4) << new_obj << "(Best:" << best_obj << ") (Iteration:" << init_obj << ")";
@@ -334,7 +612,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
     // Reject a bad modification that causes everything not to schedule
     
-    if (new_obj < (1.0 + 1e-3)) {
+    if (new_obj.first < 2) {
       delete cand_ci;
       ++i;
       continue;
@@ -343,7 +621,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
     cand_ci->dump_breakdown(ci.verbose);
 
-    if (new_obj > best_obj) {
+    if (Compare(new_obj, best_obj)) {
       // Yay! We have improved the solution
       
       last_best_obj = best_obj;
@@ -361,11 +639,17 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
                 << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC;
 
       // dump the new hw json
-      dump_hw(best_ci, i);
+      dump_hw(best_ci, i, max_vector_size);
 
-      std::ostringstream oss;
-      oss << "viz/iters/iter_" << i << "/sched_";
-      dump_schedules(best_ci, oss.str());
+      if (max_vector_size == -1) {
+        std::ostringstream oss;
+        oss << "viz/iters/iter_" << i << "/sched_";
+        dump_schedules(best_ci, oss.str());
+      } else {
+        std::ostringstream oss;
+        oss << "viz/iters/" << max_vector_size << "/iter_" << i << "/sched_";
+        dump_schedules(best_ci, oss.str());
+      }
 
       // Modify the temperature
       ++improv_iter;
@@ -383,7 +667,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
         // Otherwise, we do simulated annealing and randomly accept modification based on objective and temperature
         double p = (double)rand() / RAND_MAX;
         double target =
-            exp(-(best_obj - new_obj) / temperature);
+            exp(-(best_obj.first - new_obj.first) / temperature);
         if (p < target) {
           // Accept the modification
           DSA_INFO << p << " < " << target << ", accept a worse point!";
@@ -408,7 +692,7 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   best_ci->verify();
 
   // Print Final Results
-  double best_obj = best_ci->weight_obj();
+  std::pair<double, double> best_obj = best_ci->weight_obj();
   DSA_INFO << "FINAL DSE OBJ: " << best_obj;
   auto util = cur_ci->utilization();
 
@@ -423,12 +707,16 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
 
   CodesignInstance* prunned_ci = new CodesignInstance(*best_ci, false);
   prunned_ci->verify();
-
+  
+  //scheduler->incrementalSchedule(*prunned_ci);
+  prunned_ci->all_stated_collapse();
   prunned_ci->prune_all_unused();
+
+  //scheduler->incrementalSchedule(*prunned_ci);
 
   DSA_INFO << "Pruned DSE OBJ: " << prunned_ci->weight_obj();
 
-  double pruned_obj = prunned_ci->weight_obj();
+  std::pair<double, double> pruned_obj = prunned_ci->weight_obj();
   auto final_util = best_ci->utilization();
   auto pruned_util = prunned_ci->utilization();
 
@@ -443,12 +731,28 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
            << std::get<1>(final_util) << ", links: " 
            << std::get<2>(final_util) << std::setprecision(7);
 
-  dump_schedules(prunned_ci, "viz/final_prunned_");
-  dump_schedules(best_ci, "viz/final_");
+  if (max_vector_size == -1) {
+    dump_schedules(prunned_ci, "viz/final_prunned_");
+    dump_schedules(best_ci, "viz/final_");
+  } else {
+    dump_schedules(prunned_ci, "viz/" + std::to_string(max_vector_size) + "/final_prunned_");
+    dump_schedules(best_ci, "viz/" + std::to_string(max_vector_size) + "/final_");
+  }
 
-  best_ci->ss_model()->subModel()->DumpHwInJson("viz/final.json");
-  prunned_ci->ss_model()->subModel()->DumpHwInJson("viz/prunned.json");
+  if (max_vector_size == -1) {
+    best_ci->ss_model()->subModel()->DumpHwInJson("viz/final.json");
+    prunned_ci->ss_model()->subModel()->DumpHwInJson("viz/prunned.json");
+  } else {
+    std::string final = "viz/" + std::to_string(max_vector_size) + "/final.json";
+    std::string prunned = "viz/" + std::to_string(max_vector_size) + "/prunned.json";
+    best_ci->ss_model()->subModel()->DumpHwInJson(final.c_str());
+    prunned_ci->ss_model()->subModel()->DumpHwInJson(prunned.c_str());
+  }
   best_ci->dump_breakdown(ci.verbose);
+  if (prunned_ci->dse_obj().first < 2) {
+    DSA_INFO << "Prunned Obj is less than 1";
+  }
+  //DSA_CHECK(prunned_ci->dse_obj() > 1) << "Pruned obj is less than 1";
 
   DSA_INFO << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC;
 
@@ -460,4 +764,5 @@ void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename) {
   delete prunned_ci;
   DSA_INFO << "DSE Finished!";
 }
+
 }

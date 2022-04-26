@@ -41,12 +41,12 @@ struct MetaPort {
   // Operation
   int op;
 
-  // # of instances
+  // # of concurrent instances
   int conc;
 
   // The coef of memory command penalty,
   // and the coef of memory reuse reward.
-  double cmd{1.0}, repeat;
+  double cmd{1.0}, repeat{1.0}, reuse{0.0};
 
   std::string dest_port;
 
@@ -58,7 +58,7 @@ struct MetaPort {
     op = 0;
     conc = 0;
     cmd = 1.0;
-    repeat = 0.0;
+    repeat = 1.0;
     dest_port = "";
   }
 
@@ -89,10 +89,17 @@ struct MetaPort {
       std::istringstream iss(val);
       DSA_CHECK(iss >> conc) << "Cannot read: " << val;
       success = true;
-    } else if (key == "repeat" || key == "cmd") {
+    } else if (key == "repeat" || key == "cmd" || key == "reuse") {
       std::istringstream iss(val);
-      auto& ref = key == "repeat" ? repeat : cmd;
-      iss >> ref;
+      if (key == "repeat") {
+        iss >> repeat;
+      } else {
+        if (key == "cmd") {
+          iss >> cmd;
+        } else if (key == "reuse") {
+          iss >> reuse;
+        }
+      }
       success = true;
     }
     DSA_CHECK(success) << key << " " << val;
@@ -118,6 +125,7 @@ struct MetaPort {
     }
     os << "#pragma cmd=" << cmd << "\n";
     os << "#pragma repeat=" << repeat << "\n";
+    os << "#pragma reuse=" << reuse << "\n";
   }
 };
 

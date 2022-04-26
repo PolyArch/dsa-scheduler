@@ -12,7 +12,6 @@ void Visitor::Visit(ssnode* node) {}
 void Visitor::Visit(ssfu* node) { Visit(static_cast<ssnode*>(node)); }
 void Visitor::Visit(ssivport* node) { Visit(static_cast<ssnode*>(node)); }
 void Visitor::Visit(ssovport* node) { Visit(static_cast<ssnode*>(node)); }
-void Visitor::Visit(ssvport* node) { Visit(static_cast<ssnode*>(node)); }
 void Visitor::Visit(ssswitch* node) { Visit(static_cast<ssnode*>(node)); }
 void Visitor::Visit(ssdma* node) { Visit(static_cast<ssnode*>(node)); }
 void Visitor::Visit(ssscratchpad* node) { Visit(static_cast<ssnode*>(node)); }
@@ -31,7 +30,6 @@ void GraphVisitor::Visit(ssnode* node) {
 void GraphVisitor::Visit(ssfu* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssivport* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssovport* node) { Visit(static_cast<ssnode*>(node)); }
-void GraphVisitor::Visit(ssvport* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssswitch* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssdma* node) { Visit(static_cast<ssnode*>(node)); }
 void GraphVisitor::Visit(ssscratchpad* node) { Visit(static_cast<ssnode*>(node)); }
@@ -47,7 +45,6 @@ void GraphVisitor::Visit(ssregister* node) { Visit(static_cast<ssnode*>(node)); 
 DEFINE_ACCEPT(ssswitch);
 DEFINE_ACCEPT(ssivport);
 DEFINE_ACCEPT(ssovport);
-DEFINE_ACCEPT(ssvport);
 DEFINE_ACCEPT(ssfu);
 DEFINE_ACCEPT(ssdma);
 DEFINE_ACCEPT(ssscratchpad);

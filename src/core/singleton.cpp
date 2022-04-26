@@ -38,31 +38,31 @@ void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
     auto *budget = dynamic_cast<adg::estimation::FPGAResource*>(this->budget);
     auto *core_resources = dynamic_cast<adg::estimation::FPGAResource*>(this->core_resources);
     budget->total_lut = 1182240;
-    core_resources->total_lut = 27634;
+    core_resources->total_lut = 9446;
     
     budget->logic_lut = 1123206;
-    core_resources->logic_lut = 24388;
+    core_resources->logic_lut = 7894;
     
     budget->ram_lut = 59034;
-    core_resources->ram_lut = 2598;
+    core_resources->ram_lut = 1552;
     
     budget->srl = 592813;
-    core_resources->srl = 648;
+    core_resources->srl = 0;
     
     budget->ff = 2364480;
-    core_resources->ff = 27750;
+    core_resources->ff = 3140;
     
-    budget->ramb32 = 2160;
-    core_resources->ramb32 = 25;
+    budget->ramb36 = 2160;
+    core_resources->ramb36 = 0;
     
     budget->ramb18 = 4322;
-    core_resources->ramb18 = 11;
+    core_resources->ramb18 = 0;
     
     budget->uram = 960;
     core_resources->uram = 0;
 
     budget->dsp = 6840;
-    core_resources->dsp = 3;
+    core_resources->dsp = 0;
   }
   this->bitstream = parsed["print-bitstream"].as<bool>();
   this->max_iters = parsed["max-iters"].as<int>();

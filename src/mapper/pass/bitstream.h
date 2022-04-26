@@ -138,37 +138,19 @@ struct BitstreamWriter : Visitor {
     }
   }
 
-  // Print Configuration Bitstream for Vector Port
-  void Visit(ssvport* vport) {
-    // Generate bitstream for input vector port
-    if (vport->isInputPort()) {
-      // Calculate the selection bits for input vector port, +1 for selection of ground
-      int selBits = log2ceil(vport->out_links().size() + 1);
-      // DSA_INFO << vport->name() << " has " << vport->out_links().size() << " outputs";
-      // DSA_INFO << vport->name() << " selection bits = " << selBits;
-      // Loop from the highest physical port to lowest port
-      for (int portIdx = (vport->out_links().size() - 1); portIdx >= 0; portIdx--) {
-        // Left shift to make room for new selection bits
-        cfgInfoBitset <<= selBits;
-        if (ni.vectorRoute.count(portIdx)) {
-          cfgInfoBitset |= ni.vectorRoute[portIdx];
-        }
+
+  void Visit(ssivport* vport) {
+    // Calculate the selection bits for input vector port, +1 for selection of ground
+    int selBits = log2ceil(vport->out_links().size() + 1);
+    // DSA_INFO << vport->name() << " has " << vport->out_links().size() << " outputs";
+    // DSA_INFO << vport->name() << " selection bits = " << selBits;
+    // Loop from the highest physical port to lowest port
+    for (int portIdx = (vport->out_links().size() - 1); portIdx >= 0; portIdx--) {
+      // Left shift to make room for new selection bits
+      cfgInfoBitset <<= selBits;
+      if (ni.vectorRoute.count(portIdx)) {
+        cfgInfoBitset |= ni.vectorRoute[portIdx];
       }
-    } else if (vport->isOutputPort()) {
-      // Calculate the selection bits for output vector port, +1 for selection of ground
-      int selBits = log2ceil(vport->in_links().size() + 1);
-      // DSA_INFO << vport->name() << " has " << vport->in_links().size() << " inputs";
-      // DSA_INFO << vport->name() << " selection bits = " << selBits;
-      // Generate bitstream for output vector port
-      for (int vecIdx = (vport->in_links().size() - 1); vecIdx >= 0; vecIdx--) {
-        // Left shift to make room for new selection bits
-        cfgInfoBitset <<= selBits;
-        if (ni.vectorRoute.count(vecIdx)) {
-          cfgInfoBitset |= ni.vectorRoute[vecIdx];
-        }
-      }
-    } else {
-      DSA_CHECK(false) << "The direction of vector port is problematic";
     }
 
     // Set the lower bit to enable the vector port
@@ -198,6 +180,50 @@ struct BitstreamWriter : Visitor {
       cfgInfoBitset >>= cfgInfoBits;
       cfgIdx++;
     }
+  }
+
+  void Visit(ssovport* vport) {
+    // Calculate the selection bits for output vector port, +1 for selection of ground
+    int selBits = log2ceil(vport->in_links().size() + 1);
+    // DSA_INFO << vport->name() << " has " << vport->in_links().size() << " inputs";
+    // DSA_INFO << vport->name() << " selection bits = " << selBits;
+    // Generate bitstream for output vector port
+    for (int vecIdx = (vport->in_links().size() - 1); vecIdx >= 0; vecIdx--) {
+      // Left shift to make room for new selection bits
+      cfgInfoBitset <<= selBits;
+      if (ni.vectorRoute.count(vecIdx)) {
+        cfgInfoBitset |= ni.vectorRoute[vecIdx];
+      }
+    }
+
+    // Set the lower bit to enable the vector port
+    if (cfgInfoBitset.any()) {
+      cfgInfoBitset <<= 1;
+      cfgInfoBitset.set(0);
+    }
+
+    // Group the configuration into by [[cfgInfoBits]]
+    int cfgIdx = 0;
+    // Loop while there are still bits to be grouped
+    while (cfgInfoBitset.any()) {
+      // Taking the lower bits of configuration info bitset
+      uint64_t currCfgInfo = (cfgInfoBitset & cfgInfoMask).to_ulong();
+      // Write the node type
+      currCfgInfo |= ((uint64_t)(vport->isInputPort() ? IVP_NODE_TYPE : OVP_NODE_TYPE)
+                      << nodeTypeLow);
+      // Write the node local id
+      currCfgInfo |= ((uint64_t)(vport->localId()) << nodeIdLow);
+      // Set the configuration group index
+      currCfgInfo |= ((uint64_t)0 << cfgGroupLow);
+      // Set the configuration index
+      currCfgInfo |= ((uint64_t)cfgIdx << cfgIndexLow);  // Set configuration index
+      // Push it into the configuration bit vector
+      configBitsVec.push_back(currCfgInfo);
+      // Right shift the bitset to clear the grouped configuration info
+      cfgInfoBitset >>= cfgInfoBits;
+      cfgIdx++;
+    }
+
   }
 
   // Print Configuration Bitstream for Function Unit
@@ -250,7 +276,7 @@ struct BitstreamWriter : Visitor {
       cfgInfoBitset <<= outSelBits;
       cfgInfoBitset |= ni.resultOutRoute[0];
       // Write Opcode Selection
-      int opcodeSelBits = log2ceil(fu->fu_type_.capability.size());
+      int opcodeSelBits = log2ceil(fu->fu_type().capability.size());
       cfgInfoBitset <<= opcodeSelBits;
       cfgInfoBitset |= ni.opcode;
       // Write the delay fifo cycle

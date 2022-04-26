@@ -26,3 +26,4 @@ sched/*
 .cache/*
 3rd-party/*.zip
 .metals/*
+tests/

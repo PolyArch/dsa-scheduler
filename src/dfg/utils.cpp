@@ -83,6 +83,30 @@ struct Exporter : Visitor {
     current["lanes"] = vp->vectorLanes();
     Visit(static_cast<Node*>(vp));
   }
+  void Visit(DMA* dma) override {
+    current["type"] = "dma";
+    Visit(static_cast<Array*>(dma));
+  }
+  void Visit(Scratchpad* sp) override {
+    current["type"] = "spm";
+    Visit(static_cast<Array*>(sp));
+  }
+  void Visit(Recurrance* rec) override {
+    current["type"] = "rec";
+    Visit(static_cast<Array*>(rec));
+  }
+  void Visit(Register* reg) override {
+    current["type"] = "reg";
+    Visit(static_cast<Array*>(reg));
+  }
+  void Visit(Generate* gen) override {
+    current["type"] = "gen";
+    Visit(static_cast<Array*>(gen));
+  }
+  void Visit(Array* arr) override {
+    current["size"] = arr->size();
+    Visit(static_cast<Node*>(arr));
+  }
 };
 
 void Export(SSDfg* dfg, const std::string& fname) {
@@ -327,12 +351,15 @@ SSDfg* Import(const std::string& s) {
       if (node.isMember("width")) {
         int length = node["lanes"].asInt();
         int width = node["width"].asInt();
-        if (inputs.empty()) {
+        if (node.isMember("stated")) {
           bool stated = node["stated"].asBool();
           res->emplace_back<InputPort>(length, width, name, res, meta, stated);
-        } else {
+        } else if (node.isMember("penetrate")) {
           int penetrate = node["penetrate"].asInt();
           res->emplace_back<OutputPort>(length, width, name, res, meta, penetrate);
+          res->nodes.back()->values.emplace_back(res, i, 0);
+        } else {
+          DSA_CHECK(false);
         }
       } else if (node.isMember("op")) {
         int opcode = node["op"].asInt();
@@ -361,33 +388,64 @@ SSDfg* Import(const std::string& s) {
           inst.values[i / 2].reg = value_info[i].asInt();
           inst.values[i / 2].symbol = value_info[i + 1].asString(); 
         }
-      }
-      auto &operands = node["inputs"];
-      for (int j = 0, m = operands.size(); j < m; ++j) {
-        auto &obj = operands[j];
-        auto type = obj["type"].asString();
-        if (obj.isMember("imm")) {
-          res->nodes[i]->ops().emplace_back(res, Str2Flag(type), obj["imm"].asInt64());
+      } else if (node.isMember("type")) {
+        std::string type = node["type"].asString();
+        int size = node["size"].asInt();
+        if (type == "dma") {
+          res->emplace_back<DMA>(size, name, res);
+          res->nodes.back()->values.emplace_back(res, i, 0);
+        } else if (type == "spm") {
+          res->emplace_back<Scratchpad>(size, name, res);
+          res->nodes.back()->values.emplace_back(res, i, 0);
+        } else if (type ==  "rec") {
+          res->emplace_back<Recurrance>(size, name, res);
+          res->nodes.back()->values.emplace_back(res, i, 0);
+        } else if (type == "gen") {
+          res->emplace_back<Generate>(size, name, res);
+          res->nodes.back()->values.emplace_back(res, i, 0);
+        } else if (type == "reg") {
+          res->emplace_back<Register>(size, name, res);
+          res->nodes.back()->values.emplace_back(res, i, 0);
         } else {
-          auto &edges = obj["edges"];
-          std::vector<int> es;
-          for (auto &edge : edges) {
-            auto &edge_obj = edge;
-            int src_id = edge_obj["src_id"].asInt();
-            int src_val = edge_obj["src_val"].asInt();
-            int delay = edge_obj["delay"].asInt();
-            int l = edge_obj["l"].asInt();
-            int r = edge_obj["r"].asInt();
-            DSA_CHECK(src_id < i);
-            Edge e_instance(res, src_id, src_val, i, l, r);
-            es.push_back(edge_obj["id"].asInt());
-            if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
-            e_instance.delay = delay;
-            e_instance.id = es.back();
-            res->edges[es.back()] = e_instance;
-          }
-          res->nodes[i]->ops().emplace_back(res, es, Str2Flag(type));
+          DSA_CHECK(false) << "Unknown type: " << type;
         }
+      }
+    }
+  }
+
+  for (int i = 0, n = root->size(); i < n; ++i) {
+    auto &node = (*root)[i];
+    if(node.isMember("task_id")) continue;
+    if (node.isMember("dst_group")) continue;
+    auto &operands = node["inputs"];
+    for (int j = 0, m = operands.size(); j < m; ++j) {
+      auto &obj = operands[j];
+      auto type = obj["type"].asString();
+      if (obj.isMember("imm")) {
+        res->nodes[i]->ops().emplace_back(res, Str2Flag(type), obj["imm"].asInt64());
+      } else {
+        auto &edges = obj["edges"];
+        std::vector<int> es;
+        for (auto &edge : edges) {
+          auto &edge_obj = edge;
+          int src_id = edge_obj["src_id"].asInt();
+          int src_val = edge_obj["src_val"].asInt();
+          int delay = edge_obj["delay"].asInt();
+          int l = edge_obj["l"].asInt();
+          int r = edge_obj["r"].asInt();
+          Edge e_instance(res, src_id, src_val, i, l, r);
+          es.push_back(edge_obj["id"].asInt());
+          if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
+          e_instance.delay = delay;
+          e_instance.id = es.back();
+          res->edges[es.back()] = e_instance;
+          //DSA_INFO << "Adding Edge" << e_instance.id << ": " << src_id << "(" << src_val << ")->" << i;
+
+          if (e_instance.vid >= e_instance.def()->values.size()) {
+            e_instance.def()->values.emplace_back(res, src_id, e_instance.vid);
+          }
+        }
+        res->nodes[i]->ops().emplace_back(res, es, Str2Flag(type));
       }
     }
   }

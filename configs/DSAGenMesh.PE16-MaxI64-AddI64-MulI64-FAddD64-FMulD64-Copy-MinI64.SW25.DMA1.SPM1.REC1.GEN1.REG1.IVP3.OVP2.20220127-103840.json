@@ -2160,7 +2160,7 @@
     },
     "InputVectorPort.2" : {
       "dsagen2.sync.config.SyncKeys$IVPNode$" : {
-        "vpImpl" : 0,
+        "vpImpl" : 2,
         "vpStated" : true,
         "parameterClassName" : "dsagen2.sync.config.IVPNodeParameters",
         "depthByte" : 2,
@@ -2172,7 +2172,7 @@
     },
     "InputVectorPort.1" : {
       "dsagen2.sync.config.SyncKeys$IVPNode$" : {
-        "vpImpl" : 0,
+        "vpImpl" : 2,
         "vpStated" : true,
         "parameterClassName" : "dsagen2.sync.config.IVPNodeParameters",
         "depthByte" : 2,
@@ -2184,7 +2184,7 @@
     },
     "InputVectorPort.0" : {
       "dsagen2.sync.config.SyncKeys$IVPNode$" : {
-        "vpImpl" : 0,
+        "vpImpl" : 2,
         "vpStated" : true,
         "parameterClassName" : "dsagen2.sync.config.IVPNodeParameters",
         "depthByte" : 2,
@@ -2196,7 +2196,7 @@
     },
     "OutputVectorPort.1" : {
       "dsagen2.sync.config.SyncKeys$OVPNode$" : {
-        "vpImpl" : 0,
+        "vpImpl" : 2,
         "discardOVP" : true,
         "vpStated" : true,
         "parameterClassName" : "dsagen2.sync.config.OVPNodeParameters",
@@ -2208,7 +2208,7 @@
     },
     "OutputVectorPort.0" : {
       "dsagen2.sync.config.SyncKeys$OVPNode$" : {
-        "vpImpl" : 0,
+        "vpImpl" : 2,
         "discardOVP" : true,
         "vpStated" : true,
         "parameterClassName" : "dsagen2.sync.config.OVPNodeParameters",

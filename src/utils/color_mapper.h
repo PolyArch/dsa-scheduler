@@ -9,10 +9,13 @@
 namespace cm {
 
 inline int ColorOf(dsa::dfg::Value* val, bool reset = false) {
+  //return 173 | (216 << 8) | (230 << 16);
   auto* node = val->node();
-  if (static_cast<int>(node->ops().size()) == 1 && node->ops()[0].edges.size() == 1) {
-    auto res = val->parent->edges[node->ops()[0].edges[0]].val();
-    return ColorOf(res);
+  if (!dynamic_cast<dsa::dfg::InputPort*>(node)) {
+    if (static_cast<int>(node->ops().size()) == 1 && node->ops()[0].edges.size() == 1 ) {
+      auto res = val->parent->edges[node->ops()[0].edges[0]].val();
+      return ColorOf(res);
+    }
   }
   static std::map<dsa::dfg::Node*, std::tuple<int, int, int>> colorMap;
   if (colorMap.count(node) == 0 || reset) {

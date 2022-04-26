@@ -8,86 +8,91 @@
 
 namespace dsa {
 
+#define DEF_ATTR(attr)                         \
+  decltype(attr##_) attr() { return attr##_; } \
+  void attr(const decltype(attr##_) & new_value) { attr##_ = new_value; }
+
 // Instruction Class
 // Stores attributes like it's name, latency, etc...
-class ConfigInst {
- public:
-  std::string name() { return _name; }
-  void setName(std::string& name) { _name = name; }
-
-  int bitwidth() { return _bitwidth; }
-  void setBitwidth(int b) { _bitwidth = b; }
-
-  int numOps() { return _num_ops; }
-  void setNumOperands(int n_ops) { _num_ops = n_ops; }
-
-  int numValues() { return _num_values; }
-  void setNumValues(int n_values) { _num_values = n_values; }
-
-  int latency() { return _latency; }
-  void setLatency(int lat) { _latency = lat; }
-
-  int throughput() { return _throughput; }
-  void setThroughput(int thr) { _throughput = thr; }
-
-  double area() { return _area; }
-  void setArea(double area) { _area = area; }
-
-  double power() { return _power; }
-  void setPower(double power) { _power = power; }
-
-  double LogicLut() { return _logic_lut; }
-  void setLogicLut(double logic_lut) { _logic_lut = logic_lut; }
-
-  double FlipFlop() { return _flip_flop; }
-  void setFlipFlop(double flip_flop) { _flip_flop = flip_flop; }
-
+class ConfigInst { 
  private:
-  std::string _name;
-  int _latency;
-  int _throughput;  // technically 1/throughput in cycles
-  int _num_values;
-  int _num_ops;
-  int _bitwidth;
-  double _area = -1.0;
-  double _power = -1.0;
-  double _logic_lut = -1.0;
-  double _flip_flop = -1.0;
+  std::string name_;
+  std::string dtype_;
+  int opcode_;
+  int latency_;
+  int throughput_;  // technically 1/throughput in cycles
+  int num_values_;
+  int num_ops_;
+  int bitwidth_;
+  double area_ = -1.0;
+  double power_ = -1.0;
+  double total_lut_ = 5.0;
+  double logic_lut_ = 5.0;
+  double ram_lut_ = -1.0;
+  double srl_ = -1.0;
+  double flip_flop_ = 5.0;
+  double ram_b36_ = -1.0;
+  double ram_b18_ = -1.0;
+  double u_ram_ = -1.0;
+  double dsp_ = -1.0;
+ public:
+  DEF_ATTR(name);
+  DEF_ATTR(dtype);
+  DEF_ATTR(opcode);
+  DEF_ATTR(latency);
+  DEF_ATTR(throughput);
+  DEF_ATTR(num_values);
+  DEF_ATTR(num_ops);
+  DEF_ATTR(bitwidth);
+  DEF_ATTR(area);
+  DEF_ATTR(power);
+  DEF_ATTR(total_lut);
+  DEF_ATTR(logic_lut);
+  DEF_ATTR(ram_lut);
+  DEF_ATTR(srl);
+  DEF_ATTR(flip_flop);
+  DEF_ATTR(ram_b36);
+  DEF_ATTR(ram_b18);
+  DEF_ATTR(u_ram);
+  DEF_ATTR(dsp);
 };
 
 class FuType {
- public:
-  std::string name() { return _name; }
-  void setName(std::string name) { _name = name; }
-
-  double area() { return _area; }
-  void setArea(double area) { _area = area; }
-
-  double power() { return _power; }
-  void setPower(double power) { _power = power; }
-
-  double LogicLut() { return _logic_lut; }
-  void setLogicLut(double logic_lut) { _logic_lut = logic_lut; }
-
-  double FlipFlop() { return _flip_flop; }
-  void setFlipFlop(double flip_flop) { _flip_flop = flip_flop; }
-
  private:
-  std::string _name;
-  double _area = -1.0;
-  double _power = -1.0;
-  double _logic_lut = -1.0;
-  double _flip_flop = -1.0;
+  std::string name_;
+  double area_ = -1.0;
+  double power_ = -1.0;
+  double total_lut_ = 5.0;
+  double logic_lut_ = 5.0;
+  double ram_lut_ = -1.0;
+  double flip_flop_ = 5.0;
+  double dsp_ = -1.0;
+ public:
+  
+  DEF_ATTR(name);
+  DEF_ATTR(area);
+  DEF_ATTR(power);
+  DEF_ATTR(total_lut);
+  DEF_ATTR(logic_lut);
+  DEF_ATTR(ram_lut);
+  DEF_ATTR(flip_flop);
+  DEF_ATTR(dsp);
 };
 
 class InstModel {
  public:
   InstModel(char* filename);  // read the file and populate the instructions
+
+  void readModel(char* filename);
   void PowerAreaModel(char* filename);
 
+  void newPrintCFiles(char* header_file, char* cpp_file);
   void printCFiles(char* header, char* cpp);
 
+  ConfigInst* getInst(int opcode);
+
  private:
+  std::vector<ConfigInst*> instList_;
   std::vector<ConfigInst*> _instList;
   std::vector<FuType*> _fuTypeList;
   std::string filename_;

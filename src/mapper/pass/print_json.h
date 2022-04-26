@@ -66,13 +66,14 @@ struct JsonWriter : dsa::adg::Visitor {
     os << "\"" << ADGKEY_NAMES[VP_STATE] << "\" : " << BoolToString(vport->vp_stated()) << "," << std::endl;
     os << "\"parameterClassName\" : \"dsagen2.sync.config.IVPNodeParameters\"," << std::endl;
     os << "\"" << ADGKEY_NAMES[DEPTH_BYTE] << "\" : " << vport->delay_fifo_depth() << "," << std::endl;
-    os << "\"" << ADGKEY_NAMES[NODETYPE] << "\" : " << ADGKEY_NAMES[IVP_TYPE] << "," << std::endl;
+    os << "\"" << ADGKEY_NAMES[NODETYPE] << "\" : \"" << ADGKEY_NAMES[IVP_TYPE] << "\"," << std::endl;
     os << "\"" << ADGKEY_NAMES[NODEID] << "\" : " << vport->localId() << "," << std::endl;
     os << "\"" << ADGKEY_NAMES[IVP_BROADCAST] << "\" : " << vport->broadcastIVP() << std::endl;
 
     os << "}" << std::endl;
     os << "}";
   }
+
   void Visit(ssovport* vport) override {
     os << "\"" << ADGKEY_NAMES[OVP_TYPE] << "." << vport->localId() << "\" : {" << std::endl;
     os << "\"" << ADGKEY_NAMES[OVP_NODE] << "\" : {" << std::endl;
@@ -89,41 +90,6 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "}" << std::endl;
     os << "}";
-  }
-
-  void Visit(ssvport* vport) override {
-    if (vport->isInputPort()) {
-      os << "\"" << ADGKEY_NAMES[IVP_TYPE] << "." << vport->localId() << "\" : {" << std::endl;
-      os << "\"" << ADGKEY_NAMES[IVP_NODE] << "\" : {" << std::endl;
-
-      // VectorPort Parameters
-      os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << vport->vp_impl() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[VP_STATE] << "\" : " << BoolToString(vport->vp_stated()) << "," << std::endl;
-      os << "\"parameterClassName\" : \"dsagen2.sync.config.IVPNodeParameters\"," << std::endl;
-      os << "\"" << ADGKEY_NAMES[DEPTH_BYTE] << "\" : " << vport->delay_fifo_depth() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[NODETYPE] << "\" : \"" << ADGKEY_NAMES[IVP_TYPE] << "\"," << std::endl;
-      os << "\"" << ADGKEY_NAMES[NODEID] << "\" : " << vport->localId() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[IVP_BROADCAST] << "\" : " << vport->broadcastIVP() << std::endl;
-
-      os << "}" << std::endl;
-      os << "}";
-    } else {
-      os << "\"" << ADGKEY_NAMES[OVP_TYPE] << "." << vport->localId() << "\" : {" << std::endl;
-      os << "\"" << ADGKEY_NAMES[OVP_NODE] << "\" : {" << std::endl;
-
-      // VectorPort Parameters
-      os << "\"" << ADGKEY_NAMES[OVP_DISCARD] << "\" : " << vport->discardOVP() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << vport->vp_impl() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[VP_STATE] << "\" : " << BoolToString(vport->vp_stated()) << "," << std::endl;
-      os << "\"parameterClassName\" : \"dsagen2.sync.config.OVPNodeParameters\"," << std::endl;
-      os << "\"" << ADGKEY_NAMES[OVP_TASKFLOW] << "\" : " << vport->taskOVP() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[DEPTH_BYTE] << "\" : " << vport->delay_fifo_depth() << "," << std::endl;
-      os << "\"" << ADGKEY_NAMES[NODETYPE] << "\" : \"" << ADGKEY_NAMES[OVP_TYPE] << "\"," << std::endl;
-      os << "\"" << ADGKEY_NAMES[NODEID] << "\" : " << vport->localId() << std::endl;
-
-      os << "}" << std::endl;
-      os << "}";
-    }
   }
 
   void Visit(ssfu* fu) override {
@@ -179,8 +145,8 @@ struct JsonWriter : dsa::adg::Visitor {
     os << "\"" << ADGKEY_NAMES[PE_OP_TYPEENC] << "\" : [ ";
     
     int idx_inst = 0;
-    int num_inst = fu->fu_type_.capability.size();
-    for (auto& elem : fu->fu_type_.capability) {
+    int num_inst = fu->fu_type().capability.size();
+    for (auto& elem : fu->fu_type().capability) {
       os << "\"" << dsa::name_of_inst(elem.op) << "\"";
       if (idx_inst < num_inst - 1) {
         os << ", ";
@@ -224,7 +190,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "\"" << ADGKEY_NAMES[MEM_ATOMIC_OP] << "\" : [ ";
     for (int i = 0; i < dma->atomicOperations().size(); i++) {
-      os << dma->atomicOperations()[i];
+      os << "\"" << dma->atomicOperations()[i] << "\"";
       if (i < dma->atomicOperations().size() - 1) {
         os << ", ";
       }
@@ -280,7 +246,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "\"" << ADGKEY_NAMES[MEM_ATOMIC_OP] << "\" : [ ";
     for (int i = 0; i < spm->atomicOperations().size(); i++) {
-      os << spm->atomicOperations()[i];
+      os << "\"" << spm->atomicOperations()[i] << "\"";
       if (i < spm->atomicOperations().size() - 1) {
         os << ", ";
       }
@@ -335,7 +301,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "\"" << ADGKEY_NAMES[MEM_ATOMIC_OP] << "\" : [ ";
     for (int i = 0; i < rec->atomicOperations().size(); i++) {
-      os << rec->atomicOperations()[i];
+      os << "\"" << rec->atomicOperations()[i] << "\"";
       if (i < rec->atomicOperations().size() - 1) {
         os << ", ";
       }
@@ -390,7 +356,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "\"" << ADGKEY_NAMES[MEM_ATOMIC_OP] << "\" : [ ";
     for (int i = 0; i < gen->atomicOperations().size(); i++) {
-      os << gen->atomicOperations()[i];
+      os << "\"" << gen->atomicOperations()[i] << "\"";
       if (i < gen->atomicOperations().size() - 1) {
         os << ", ";
       }
@@ -445,7 +411,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     os << "\"" << ADGKEY_NAMES[MEM_ATOMIC_OP] << "\" : [ ";
     for (int i = 0; i < reg->atomicOperations().size(); i++) {
-      os << reg->atomicOperations()[i];
+      os << "\"" << reg->atomicOperations()[i] << "\"";
       if (i < reg->atomicOperations().size() - 1) {
         os << ", ";
       }

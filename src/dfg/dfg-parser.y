@@ -1,6 +1,8 @@
 %code requires {
 
 #include <stdint.h>
+#include <string.h>
+#include <string>
 #include "dsa/debug.h"
 #include "dsa/dfg/node.h"
 #include "dsa/dfg/ssdfg.h"
@@ -23,9 +25,20 @@ struct IODef {
   std::string name;
   int length;
   bool isTagged;
+  std::string source;
+  std::string destination;
   std::string penetrate;
-  IODef(const std::string &n, int l, bool t, const std::string &p) :
-    isTagged(t), name(n), length(l), penetrate(p) {}
+  IODef(const std::string &n, int l, bool t, const std::string &s, const std::string &d, const std::string &p) :
+    isTagged(t), name(n), length(l), source(s), destination(d), penetrate(p) {}
+};
+
+struct ArrayDef {
+  std::string name;
+  int size;
+  std::string type;
+
+  ArrayDef(const std::string &n, int s, const std::string &t) :
+    name(n), size(s), type(t) {}
 };
 
 }
@@ -63,6 +76,7 @@ static void yyerror(parse_param*, const char *);
 
   std::string* s;
   IODef* io;
+  ArrayDef* array;
   map_pair_t* map_pair;
   std::vector<ParseResult*> *sym_vec;
   dsa::dfg::ParseResult *sym_ent;
@@ -80,9 +94,10 @@ static void yyerror(parse_param*, const char *);
 %token	  EOLN NEW_DFG PRAGMA ARROW
 %token<s> IDENT STRING_LITERAL
 %token<d> F_CONST
-%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP TASKPROP
+%token<i> I_CONST INPUT OUTPUT INDIRECT TASKDEP TASKPROP ARRAY
 
 %type <io> io_def
+%type <array> array_def
 %type <map_vec> map_def
 %type <map_id> task_map_id_def
 %type <sym_vec> arg_list
@@ -104,6 +119,7 @@ statement_list: statement
 statement: INPUT ':' io_def  eol {
   DSA_CHECK($3->penetrate.empty()) << "Input port cannot have penetration.";
   auto name = $3->name;
+  DSA_CHECK($3->destination.empty()) << "Input port cannot have destination.";
   DSA_CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
   int len = $3->length;
   bool stated = $3->isTagged;
@@ -125,10 +141,33 @@ statement: INPUT ':' io_def  eol {
     // TODO(@were): Do I need to modularize these two clean up segment?
     p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i + stated, 0, width - 1));
   }
+  auto &in = p->dfg->vins.back();
+
+  // Create an edge from source to this input port
+  if (!$3->source.empty()) {
+    auto pve = p->symbols.Get($3->source);
+    DSA_CHECK(pve) << "Source port " << $3->source << " not found.";
+    if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(pve)) {
+      if (auto reg = dynamic_cast<dsa::dfg::Register*>(p->dfg->nodes[ve->vid])) {
+        DSA_CHECK(false) << "Register (" << $3->source << ") cannot be source of input port.";
+      }
+      // Create an edge from Array to this array
+      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, in.id(), ve->l, ve->r);
+
+      // Add Operand to this Input Port
+      std::vector<int> es{p->dfg->edges.back().id};
+      p->dfg->vins.back().ops().emplace_back(p->dfg, es, EdgeType::data);
+      
+      // Add Value User to the Array
+      //p->dfg->nodes[ve->nid]->values[0].uses.emplace_back(p->dfg->edges.back().id);
+    }
+  }
+
   p->meta.clear();
   delete $3;
 }
 | OUTPUT ':' io_def eol {
+  DSA_CHECK($3->source.empty()) << "Output port cannot have source.";
   DSA_CHECK(!$3->isTagged) << "An output cannot be stated!";
   using T = dsa::dfg::OutputPort;
   auto name = $3->name;
@@ -177,6 +216,61 @@ statement: INPUT ':' io_def  eol {
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
     }
   }
+  out.values.emplace_back(p->dfg, out.id(), 0);
+
+  // Add an edge from this output port to the destination
+  if (!$3->destination.empty()) {
+    auto pve = p->symbols.Get($3->destination);
+    DSA_CHECK(pve) << "Dest port " << $3->destination << " not found.";
+    if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(pve)) {
+      
+      // Add Edge from Output Port to Array
+      p->dfg->edges.emplace_back(p->dfg, out.id(), ve->vid, ve->nid, ve->l, ve->r);
+      
+      // Add Values to the OutputPort
+      std::vector<int> es{p->dfg->edges.back().id};
+      //out.values[0].uses.push_back(p->dfg->edges.back().id);
+      
+      // Add operand to the Array
+      p->dfg->nodes[ve->nid]->ops().emplace_back(p->dfg, es, EdgeType::data);
+    }
+  }
+  p->meta.clear();
+  delete $3;
+}
+| ARRAY ':' array_def eol {
+  auto name = $3->name;
+  DSA_CHECK(!p->symbols.Has(name)) << "Already has the symbol " << name;
+  int size = $3->size;
+  if (strcmp($3->type.c_str(), "dma") == 0) {
+    using T = dsa::dfg::DMA;
+    p->dfg->emplace_back<T>(size, name, p->dfg);
+    p->dfg->nodes.back()->values.emplace_back(p->dfg, p->dfg->nodes.back()->id(), 0);
+    p->symbols.Set(name, new ValueEntry(p->dfg->nodes.back()->id(), 0));
+  } else if (strcmp($3->type.c_str(), "spm") == 0 || strcmp($3->type.c_str(), "scratchpad") == 0) {
+    using T = dsa::dfg::Scratchpad;
+    p->dfg->emplace_back<T>(size, name, p->dfg);
+    p->dfg->nodes.back()->values.emplace_back(p->dfg, p->dfg->nodes.back()->id(), 0);
+    p->symbols.Set(name, new ValueEntry(p->dfg->nodes.back()->id(), 0));
+  } else if (strcmp($3->type.c_str(), "reg") == 0) {
+    using T = dsa::dfg::Register;
+    p->dfg->emplace_back<T>(size, name, p->dfg);
+    p->dfg->nodes.back()->values.emplace_back(p->dfg, p->dfg->nodes.back()->id(), 0);
+    p->symbols.Set(name, new ValueEntry(p->dfg->nodes.back()->id(), 0));
+  } else if (strcmp($3->type.c_str(), "gen") == 0) {
+    using T = dsa::dfg::Generate;
+    p->dfg->emplace_back<T>(size, name, p->dfg);
+    p->dfg->nodes.back()->values.emplace_back(p->dfg, p->dfg->nodes.back()->id(), 0);
+    p->symbols.Set(name, new ValueEntry(p->dfg->nodes.back()->id(), 0));
+  } else if (strcmp($3->type.c_str(), "rec") == 0) {
+    using T = dsa::dfg::Recurrance;
+    p->dfg->emplace_back<T>(size, name, p->dfg);
+    p->dfg->nodes.back()->values.emplace_back(p->dfg, p->dfg->nodes.back()->id(), 0);
+    p->symbols.Set(name, new ValueEntry(p->dfg->nodes.back()->id(), 0));
+  } else {
+    DSA_CHECK(false) << "Unsupported array type: " << $3->type;
+  }
+
   p->meta.clear();
   delete $3;
 }
@@ -304,36 +398,189 @@ eol : ';'
 	| EOLN
 	;
 
+// Array Definition
+// Array: NAME SIZE TYPE
+array_def: IDENT {
+  $$ = new ArrayDef(*$1, 64, "dma");
+  delete $1;
+}
+| IDENT I_CONST {
+  $$ = new ArrayDef(*$1, $2, "dma");
+  delete $1;
+}
+| IDENT I_CONST IDENT {
+  $$ = new ArrayDef(*$1, $2, *$3);
+  delete $1;
+  delete $3;
+}
+| IDENT IDENT {
+  $$ = new ArrayDef(*$1, 64, *$2);
+  delete $1;
+  delete $2;
+};
+
+
 // Input: A[8]
 io_def: IDENT {
-  $$ = new IODef(*$1, 0, false, "");
+  $$ = new IODef(*$1, 0, false, "", "", "");
   delete $1;
 }
 | IDENT '[' I_CONST ']' {
-  $$ = new IODef(*$1, $3, false, "");
+  $$ = new IODef(*$1, $3, false, "", "", "");
   delete $1;
 }
 | IDENT IDENT {
   DSA_CHECK(*$2 == "stated") << "'stated' expected";
-  $$ = new IODef(*$1, 0, true, "");
+  $$ = new IODef(*$1, 0, true, "", "", "");
   delete $1;
 }
 | IDENT '[' I_CONST ']' IDENT {
   DSA_CHECK(*$5 == "stated") << "'stated' expected";
-  $$ = new IODef(*$1, $3, true, "");
+  $$ = new IODef(*$1, $3, true, "", "", "");
   delete $1;
 }
 | IDENT IDENT '=' IDENT {
-  DSA_CHECK(*$2 == "state") << "'state=' expected";
-  $$ = new IODef(*$1, 0, false, *$4);
+  if (*$2 == "stated") {
+    $$ = new IODef(*$1, 0, false, "", "", *$4);
+  } else if (*$2 == "source") {
+    $$ = new IODef(*$1, 0, false, *$4, "", "");
+  } else if (*$2 == "destination") {
+    $$ = new IODef(*$1, 0, false, "", *$4, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$2 << "! Expected one of [stated, source, destination]";
+  }
   delete $1;
   delete $4;
 }
 | IDENT '[' I_CONST ']' IDENT '=' IDENT {
-  DSA_CHECK(*$5 == "stated") << "'state=' expected";
-  $$ = new IODef(*$1, $3, false, *$7);
+  if (*$5 == "stated") {
+    $$ = new IODef(*$1, $3, false, "", "", *$7);
+  } else if (*$5 == "source") {
+    $$ = new IODef(*$1, $3, false, *$7, "", "");
+  } else if (*$5 == "destination") {
+    $$ = new IODef(*$1, $3, false, "", *$7, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [stated, source, destination]";
+  }
   delete $1;
+  delete $5;
   delete $7;
+}
+| IDENT '[' I_CONST ']' IDENT '=' IDENT IDENT {
+  DSA_CHECK(*$8 == "stated") << "'stated' expected";
+  if (*$5 == "source") {
+    $$ = new IODef(*$1, $3, true, *$7, "", "");
+  } else if (*$5 == "destination") {
+    $$ = new IODef(*$1, $3, true, "", *$7, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [ source, destination]";
+  }
+  delete $1;
+  delete $5;
+  delete $7;
+  delete $8;
+}
+| IDENT IDENT '=' IDENT IDENT {
+  DSA_CHECK(*$5 == "stated") << "'stated' expected";
+  if (*$2 == "source") {
+    $$ = new IODef(*$1, 0, true, *$4, "", "");
+  } else if (*$2 == "destination") {
+    $$ = new IODef(*$1, 0, true, "", *$4, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$2 << "! Expected one of [source, destination]";
+  }
+  delete $1;
+  delete $2;
+  delete $4;
+  delete $5;
+}
+| IDENT '[' I_CONST ']' IDENT IDENT '=' IDENT {
+  DSA_CHECK(*$5 == "stated") << "'stated' expected";
+  if (*$6 == "source") {
+    $$ = new IODef(*$1, $3, true, *$8, "", "");
+  } else if (*$6 == "destination") {
+    $$ = new IODef(*$1, $3, true, "", *$8, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$6 << "! Expected one of [ source, destination]";
+  }
+  delete $1;
+  delete $5;
+  delete $6;
+  delete $8;
+}
+| IDENT IDENT IDENT '=' IDENT {
+  DSA_CHECK(*$2 == "stated") << "'stated' expected";
+  if (*$3 == "source") {
+    $$ = new IODef(*$1, 0, true, *$5, "", "");
+  } else if (*$3 == "destination") {
+    $$ = new IODef(*$1, 0, true, "", *$5, "");
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$3 << "! Expected one of [source, destination]";
+  }
+  delete $1;
+  delete $2;
+  delete $3;
+  delete $5;
+}
+| IDENT IDENT '=' IDENT IDENT '=' IDENT {
+  if (*$2 == "stated") {
+    if (*$5 == "source") {
+      $$ = new IODef(*$1, 0, false, *$7, "", *$4);
+    } else if (*$4 == "destination") {
+      $$ = new IODef(*$1, 0, false, "", *$7, *$4);
+    } else {
+      DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [source, destination]";
+    }
+  } else if (*$2 == "source") {
+    if (*$5 == "stated") {
+      $$ = new IODef(*$1, 0, false, *$4, "", *$7);
+    }  {
+      DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [stated]. (Hint can't have both source and dest declared).";
+    }
+  } else if (*$2 == "destination") {
+    if (*$5 == "stated") {
+      $$ = new IODef(*$1, 0, false, "", *$4, *$7);
+    }  {
+      DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [stated]. (Hint can't have both source and dest declared).";
+    }
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$2 << "! Expected one of [stated, source, destination]";
+  }
+  delete $1;
+  delete $2;
+  delete $4;
+  delete $5;
+  delete $7;
+}
+| IDENT '[' I_CONST ']' IDENT '=' IDENT IDENT '=' IDENT {
+  if (*$5 == "stated") {
+    if (*$8 == "source") {
+      $$ = new IODef(*$1, $3, false, *$10, "", *$7);
+    } else if (*$8 == "destination") {
+      $$ = new IODef(*$1, $3, false, "", *$10, *$7);
+    } else {
+      DSA_CHECK(false) << "Unknown IO type: " << *$8 << "! Expected one of [source, destination]";
+    }
+  } else if (*$5 == "source") {
+    if (*$8 == "stated") {
+      $$ = new IODef(*$1, $3, false, *$10, "", *$7);
+    }  {
+      DSA_CHECK(false) << "Unknown IO type: " << *$8 << "! Expected one of [stated]. (Hint can't have both source and dest declared).";
+    }
+  } else if (*$5 == "destination") {
+    if (*$8 == "stated") {
+      $$ = new IODef(*$1, $3, false, "", *$10, *$7);
+    }  {
+      DSA_CHECK(false) << "Unknown IO type: " << *$8 << "! Expected one of [stated]. (Hint can't have both source and dest declared).";
+    }
+  } else {
+    DSA_CHECK(false) << "Unknown IO type: " << *$5 << "! Expected one of [stated, source, destination]";
+  }
+  delete $1;
+  delete $5;
+  delete $7;
+  delete $8;
+  delete $10;
 }
 ;
 
@@ -552,6 +799,7 @@ edge: IDENT {
 
 int parse_dfg(const char* filename, SSDfg* _dfg) {
   FILE* dfg_file = fopen(filename, "r");
+  yylineno = 1;
   if (dfg_file == NULL) {
     perror(" Failed ");
     exit(1);

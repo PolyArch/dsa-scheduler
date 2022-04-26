@@ -54,7 +54,7 @@ void SSModel::parse_exec(std::istream& istream) {
 // Sihao @ Jian: I found this function is never used, can we delete it?
 ssnode* if_isVector(ssnode* n, std::string portname) {
   // In case source is a vector port, get I/O node instead
-  ssvport* s_vp = dynamic_cast<ssvport*>(n);
+  SyncNode* s_vp = dynamic_cast<SyncNode*>(n);
   if (s_vp != nullptr)
     return s_vp->convert_port2node(portname);
   else {
@@ -143,7 +143,7 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
   if (string_utils::String(filename).EndsWith(".json")) {
     _subModel = dsa::adg::Import(filename_);
     for (auto fu : subModel()->fu_list()) {
-      fu_types.push_back(new Capability(fu->fu_type_));
+      fu_types.push_back(new Capability(fu->fu_type()));
     }
 
     // TODO(@were): Deprecate this shit.

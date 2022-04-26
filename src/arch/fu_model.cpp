@@ -38,8 +38,22 @@ double Capability::area() { return pa_impl(*this, inst_area); }
 
 double Capability::power() { return pa_impl(*this, inst_power); }
 
+double Capability::TotalLut() { return pa_impl(*this, inst_total_lut); }
+
 double Capability::LogicLut() { return pa_impl(*this, inst_logic_lut); }
 
+double Capability::RamLut() { return pa_impl(*this, inst_ram_lut); }
+
+double Capability::SRL() { return pa_impl(*this, inst_srl); }
+
 double Capability::FlipFlop() { return pa_impl(*this, inst_flip_flop); }
+
+double Capability::RamB36() { return pa_impl(*this, inst_ram_b36); }
+
+double Capability::RamB18() { return pa_impl(*this, inst_ram_b18); }
+
+double Capability::URam() { return pa_impl(*this, inst_u_ram); }
+
+double Capability::DSP() { return pa_impl(*this, inst_dsp); }
 
 }  // namespace dsa

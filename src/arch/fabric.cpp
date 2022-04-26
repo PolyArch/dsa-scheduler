@@ -47,7 +47,7 @@ int sslink::slots(int slot, int width) {
    * check the one's in O(1) by bit operation.
    * */
   uint64_t res = 0;
-  int n = subnet.size();
+  int n = std::min((int) subnet.size(), sink()->lanes());
   auto f = [](uint64_t a, int bits) {
     auto full_mask = ~0ull >> (64 - bits);
     return (a & full_mask) == full_mask;
@@ -126,7 +126,7 @@ void SpatialFabric::parse_io(std::istream& istream) {
       is_input = 0;
     }
     if (is_input != -1) {
-      ssvport* nvp = add_vport(is_input, port_num);
+      SyncNode* nvp = add_vport(is_input, port_num);
       // Connect nodes to the vector, and also determine x/y
       nvp->set_port_vec(int_vec);
       int avgx = 0;
@@ -252,7 +252,7 @@ SpatialFabric::SpatialFabric(std::istream& istream,
                 if (fu->x() == i && fu->y() == j) {
                   for (auto& type : fu_types) {
                     if (type->name == fustring) {
-                      fu->fu_type_ = *type;
+                      fu->fu_type(*type);
                     }
                   }
                 }
@@ -280,8 +280,10 @@ SpatialFabric::SpatialFabric(const SpatialFabric& c) : _sizex(c._sizex), _sizey(
       _node_list[i] = new ssfu(*fu);
     } else if (auto sw = dynamic_cast<ssswitch*>(c._node_list[i])) {
       _node_list[i] = new ssswitch(*sw);
-    } else if (auto vp = dynamic_cast<ssvport*>(c._node_list[i])) {
-      _node_list[i] = new ssvport(*vp);
+    } else if (auto vp = dynamic_cast<ssivport*>(c._node_list[i])) {
+      _node_list[i] = new ssivport(*vp);
+    } else if (auto vp = dynamic_cast<ssovport*>(c._node_list[i])) {
+      _node_list[i] = new ssovport(*vp);
     } else {
       DSA_CHECK(false) << "Unknown node type " << c._node_list[i]->name();
     }
@@ -462,12 +464,7 @@ void SpatialFabric::DumpHwInJson(const char* name) {
         os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
       else if (auto ovp = dynamic_cast<ssovport*>(link->source()))
         os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      else if (auto vp = dynamic_cast<ssvport*>(link->source())) {
-        if (vp->isInputPort())
-          os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
-        else
-          os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      } else if (auto dma = dynamic_cast<ssdma*>(link->source()))
+      else if (auto dma = dynamic_cast<ssdma*>(link->source()))
         os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
       else if (auto spm = dynamic_cast<ssscratchpad*>(link->source()))
         os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
@@ -491,12 +488,7 @@ void SpatialFabric::DumpHwInJson(const char* name) {
         os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
       else if (auto ovp = dynamic_cast<ssovport*>(link->sink()))
         os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      else if (auto vp = dynamic_cast<ssvport*>(link->sink())) {
-        if (vp->isInputPort())
-          os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
-        else
-          os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      } else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
+      else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
         os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
       else if (auto spm = dynamic_cast<ssscratchpad*>(link->sink()))
         os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
@@ -527,7 +519,7 @@ void SpatialFabric::DumpHwInJson(const char* name) {
     for (ssnode* node : node_list()) {
       ssfu* fu_node = dynamic_cast<ssfu*>(node);
       if (fu_node != nullptr) {
-        for (auto& elem : fu_node->fu_type_.capability) {
+        for (auto& elem : fu_node->fu_type().capability) {
           ss_inst_set.insert(elem.op);
         }
       }
@@ -626,11 +618,12 @@ sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position) {
   if (source_position == -1) {
     olinks.push_back(link);
   } else {
-    DSA_CHECK(source_position < olinks.size()) << "Invalid sink position " << source_position;
-    olinks.insert(olinks.begin() + source_position, link);
+    DSA_CHECK(source_position < links_[0].size()) << "Invalid source position " << source_position << " " << links_[0].size();
+    links_[0].insert(links_[0].begin() + source_position, link);
   }
 
-  link->subnet.resize(link->bitwidth() / link->source()->granularity());
+  link->subnet.resize(link->sink()->lanes());
+  // TODO(@dylan): fix this.
   link->subnet[0] = ~0ull >> (64 - link->bitwidth());
   if (link->sink()->lanes() > 1) {
     link->subnet[1] = ~0ull >> (64 - link->bitwidth());
@@ -641,10 +634,38 @@ sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position) {
   if (sink_position == -1) {
     node->links_[1].push_back(link);
   } else {
-    DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid source position " << sink_position;
+    DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid sink position " << sink_position;
     node->links_[1].insert(node->links_[1].begin() + sink_position, link);
   }
   return link;
+}
+
+sslink* ssnode::set_link(ssnode* node, int source_position, int sink_position) {
+  sslink* link = new sslink(this, node);
+  DSA_CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
+
+  DSA_CHECK(source_position < links_[0].size()) << "Invalid source position " << source_position << " " << links_[0].size();
+  
+  links_[0][source_position] = link;
+
+  link->subnet.resize(link->bitwidth() / link->source()->granularity());
+  link->subnet[0] = ~0ull >> (64 - link->bitwidth());
+  if (link->sink()->lanes() > 1) {
+    link->subnet[1] = ~0ull >> (64 - link->bitwidth());
+  }
+
+  DSA_LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
+
+  DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid sink position " << sink_position;
+
+  node->links_[1][sink_position] = link;
+  
+  return link;
+}
+
+void ssnode::add_empty_link(ssnode* node) {
+  links_[0].push_back(nullptr);
+  node->links_[1].push_back(nullptr);
 }
 
 void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,

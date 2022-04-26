@@ -1,0 +1,16 @@
+Processing Element Model, trained on 54067 samples
+Trained using Pytorch, RayTune, and SciOptimize
+
+Parameters
+   Learning Rate: 0.005240864284416673
+   Batch Size: 4
+   Epochs: 60
+Best trial final validation loss: 1047.1723671106192
+Best trial l1 loss: tensor([19.1559, 19.1559, 19.1559, 19.1559])
+
+Average Loss with L1 [19.009956 19.009956 19.009956 19.009956]
+Average Loss with MSE loss: [1029.7565 1029.7565 1029.7565 1029.7565]
+Average Loss with RMS Loss: [24.805357 24.805357 24.805357 24.805357]
+
+Average Model: [1051.4779   963.29895   91.094    270.20358]
+Real: [1054.4768   965.8657    88.60985  269.8541 ]

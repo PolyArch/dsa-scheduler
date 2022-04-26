@@ -147,6 +147,9 @@ struct Edge {
   /*! \brief Helper function to check whether an edge is stated as defined by sink node */
   bool sinkStated();
 
+  /*! \brief Helper function to see if this edge is in the memory or spatial architecture */
+  bool memory();
+
   /*! \brief The index of the edge in the parent's edge list. */
   int id{-1};
   /*! \brief The DFG this edge belongs to. */
@@ -177,7 +180,7 @@ class Node {
 
   Node() {}
 
-  enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_NUM_TYPES };
+  enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_ARRAY, V_NUM_TYPES};
 
   virtual int slot_for_use(dsa::dfg::Edge* edge, int node_slot);
 

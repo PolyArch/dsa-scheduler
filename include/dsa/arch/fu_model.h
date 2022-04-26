@@ -32,7 +32,7 @@ class Capability {
    * \param count The number of FU's.
    */
   void Add(OpCode op, int count) {
-    DSA_CHECK(op != SS_ERR);
+    DSA_CHECK(op != SS_ERR) << op;
     for (auto& elem : capability) {
       if (elem.op == op) {
         DSA_WARNING << name_of_inst(op) << " already added to " << name << "! "
@@ -42,8 +42,8 @@ class Capability {
       }
     }
     capability.emplace_back(op, count);
-    if (num_ops[op] > max_num_operand) {
-      max_num_operand = num_ops[op];
+    if ( dsa::num_ops[op] > max_num_operand) {
+      max_num_operand =  dsa::num_ops[op];
     }
   }
 
@@ -52,14 +52,14 @@ class Capability {
    * \param j The index of the capability.
    */
   void Erase(int j) {
-    bool recompute = num_ops[capability[j].op] == max_num_operand;
+    bool recompute = dsa::num_ops[capability[j].op] == max_num_operand;
     capability.erase(capability.begin() + j);
     if (recompute) {
       int old = max_num_operand;
       max_num_operand = 0;
       for (auto& elem : capability) {
-        if (num_ops[elem.op] > max_num_operand) {
-          max_num_operand = num_ops[elem.op];
+        if ( dsa::num_ops[elem.op] > max_num_operand) {
+          max_num_operand =  dsa::num_ops[elem.op];
           if (max_num_operand == old) {
             break;
           }
@@ -90,8 +90,15 @@ class Capability {
   // Area and Power
   double area();
   double power();
-  double FlipFlop();
+  double TotalLut();
   double LogicLut();
+  double RamLut();
+  double SRL();
+  double FlipFlop();
+  double RamB36();
+  double RamB18();
+  double URam();
+  double DSP();
 };
 
 }  // namespace dsa

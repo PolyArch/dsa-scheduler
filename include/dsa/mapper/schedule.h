@@ -210,11 +210,25 @@ class Schedule {
     _vertexProp[node->id()].lat = lat;
   }
 
+  int lanes_involved(ssnode* node, int bitwidth) {
+    if (dynamic_cast<SpatialNode*>(node)) {
+      return bitwidth / node->granularity();
+    }
+    return 1;
+  }
+
   /*!
    * \brief Return the latency of the given node in DFG.
    * \param n The DFG node to query.
    */
   int latOf(dsa::dfg::Node* n) { return _vertexProp[n->id()].lat; }
+
+  /**
+   * @brief Return the unroll degree of the schedule
+   * 
+   * @return int the unroll degree
+   */
+  int unrollDegree();
 
   /*!
    * \brief Assign the bound of DFG latency for the purpose of timing.
@@ -242,6 +256,7 @@ class Schedule {
   }
 
   void assign_edge_pt(dsa::dfg::Edge* edge, std::pair<int, ssnode*> pt) {
+    DSA_LOG(ROUTE) << "Assigning passthrough: " <<  pt.second->name() << " " << pt.first;
     if ((int)_edgeProp.size() <= edge->id) {
       _edgeProp.resize(edge->id + 1);
     }
@@ -349,7 +364,7 @@ class Schedule {
   // locationOf is the same ssnode assigned...
   int vecPortOf(dsa::dfg::VectorPort* vec) {
     auto mi = locationOf(vec);
-    if (auto vport = dynamic_cast<ssvport*>(mi.node())) {
+    if (auto vport = dynamic_cast<SyncNode*>(mi.node())) {
       DSA_CHECK(vport) << vec->name() << " " << mi.node()->name();
       return vport->port();
     } else {
@@ -382,7 +397,7 @@ class Schedule {
     DSA_CHECK(snode->id() < (int)_nodeProp.size()) << snode->id() << "<" << (int)_nodeProp.size();
 
     // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
-    int num_slots = dfgnode->bitwidth() / snode->granularity();
+    int num_slots = lanes_involved(snode, dfgnode->bitwidth()); // dfgnode->bitwidth() / snode->granularity();
     for (int i = 0; i < num_slots; ++i) {
       int slot = orig_slot + i;
       _nodeProp[snode->id()].slots[slot].vertices.emplace_back(dfgnode, orig_slot);
@@ -393,13 +408,15 @@ class Schedule {
     auto& ep = _edgeProp[edge->id];
 
     _edge_links_mapped -= ep.links.size();
+    DSA_LOG(UNASSIGN) << "Unmapping " << edge->name() << " [" << edge->id << "]";
 
     // Remove all the edges for each of links
     for (auto& link : ep.links) {
       auto& lp = _linkProp[link.second->id()];
 
       int granularity = link.second->source()->granularity();
-      int last_slot = edge->bitwidth() / granularity;
+      int last_slot = lanes_involved(link.second->source(), edge->bitwidth());
+
       for (int i = 0; i < last_slot; ++i) {
         int slot_index = (link.first + i) % link.second->sink()->lanes();
         DSA_CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
@@ -443,11 +460,13 @@ class Schedule {
     }
 
     _edgeProp[edge->id].reset();
+
+    DSA_CHECK(link_count(edge) == 0);
   }
 
   // Delete all scheduling data associated with dfgnode, including its
   // mapped locations, and mapping information and metadata for edges
-  void unassign_dfgnode(dsa::dfg::Node* dfgnode) {
+  void unassign_dfgnode(dsa::dfg::Node* dfgnode, bool isDelete=false) {
     for (auto& op : dfgnode->ops()) {
       for (auto eid : op.edges) {
         auto* edge = &ssdfg()->edges[eid];
@@ -462,12 +481,13 @@ class Schedule {
     }
 
     auto& vp = _vertexProp[dfgnode->id()];
-    ssnode* node = vp.slot.ref;
+    ssnode* node = vp.node();
 
     if (node) {
       int orig_slot = vp.slot.lane_no;
       _num_mapped[dfgnode->type()]--;
-      int num_slots = dfgnode->bitwidth() / node->granularity();
+      int num_slots = lanes_involved(node, dfgnode->bitwidth());
+      // dfgnode->bitwidth() / node->granularity();
       for (int i = 0; i < num_slots; ++i) {
         int slot = orig_slot + i;
         auto& vertices = _nodeProp[node->id()].slots[slot].vertices;
@@ -476,8 +496,14 @@ class Schedule {
         vertices.erase(it);
       }
       vp.slot = {-1, nullptr};
+    } else if (node != nullptr) {
+      vp.slot = {-1, nullptr};
     }
+    DSA_CHECK(vp.node() == nullptr) << " Node is not null";
+
+    verify();
   }
+
 
   std::vector<EdgeSlice>& edge_list(int slot, sslink* link) {
     return _linkProp[link->id()].slots[slot].edges;
@@ -488,8 +514,8 @@ class Schedule {
     // TODO: can't get vertex/edge from id, need to modify dfg to maintain
     for (unsigned i = 0; i < _vertexProp.size(); ++i) {
       auto& v = _vertexProp[i];
-      if (v.slot.ref) {
-        std::cout << i << "->" << v.slot.ref->name() << " ";
+      if (v.node()) {
+        std::cout << i << "->" << v.node()->name() << " ";
       }
     }
     std::cout << "\nEdges: ";
@@ -512,7 +538,9 @@ class Schedule {
     int granularity = slink->source()->granularity();
     int lanes = slink->sink()->lanes();
 
-    for (int i = 0; i < dfgedge->bitwidth() / granularity; ++i) {
+    int slots = lanes_involved(slink->source(), dfgedge->bitwidth());
+
+    for (int i = 0; i < slots; ++i) {
       int cur_slot_index = (slot_index + i) % lanes;
       auto& slot = lp.slots[cur_slot_index];
       if (slot.edges.empty()) _links_mapped++;
@@ -620,7 +648,9 @@ class Schedule {
     auto& slots = _linkProp[link.second->id()].slots;
     // Check all slots will be occupied empty.
     bool num_edges = 0;
-    int last_slot = link.first + edge->bitwidth() / link.second->source()->granularity();
+    int last_slot = link.first + lanes_involved(link.second->source(), edge->bitwidth());
+    
+    //edge->bitwidth() / link.second->source()->granularity();
     for (int s = link.first; s < last_slot; ++s) {
       int slot = s;
       num_edges = slots[slot].edges.size();
@@ -676,6 +706,18 @@ class Schedule {
     }
     return nullptr;
   }
+
+  std::vector<dsa::dfg::Node*> dfgNodesOf(ssnode* node) {
+    std::vector<dsa::dfg::Node*> nodes;
+    for (int i = 0; i < num_slots(node); ++i) {
+      auto dfgNode = dfgNodeOf(i, node);
+      if (dfgNode != nullptr) {
+        nodes.push_back(dfgNode);
+      }
+    }
+    return nodes;
+  }
+
   // find first node for
   dsa::dfg::Node* dfgNodeOf(ssnode* node) { return dfgNodeOf(0, node); }
 
@@ -837,6 +879,7 @@ class Schedule {
   inline unsigned num_left();
 
   void allocate_space() {
+    verify();
     if (_ssDFG) {
       _vertexProp.resize(_ssDFG->nodes.size());
       _edgeProp.resize(_ssDFG->edges.size());
@@ -850,7 +893,8 @@ class Schedule {
       _linkProp.resize((size_t)_ssModel->subModel()->link_list().size());
       for (int i = 0, n = link_prop().size(); i < n; ++i) {
         link_prop()[i].slots.resize(
-            (size_t)_ssModel->subModel()->link_list()[i]->source()->lanes());
+            std::max(_ssModel->subModel()->link_list()[i]->source()->lanes(),
+                     _ssModel->subModel()->link_list()[i]->sink()->lanes()));
       }
     }
   }
@@ -858,13 +902,15 @@ class Schedule {
   int colorOf(dsa::dfg::Value* v);
 
   void get_overprov(int& ovr, int& agg_ovr, int& max_util);
+  int get_instruction_overprov(dfg::Instruction* inst);
   void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
 
   // Swaps the nodes from one schedule to another
   void swap_model(SpatialFabric* copy_sub) {
+    verify();
     for (auto& vp : _vertexProp) {
-      if (vp.slot.ref) {
-        vp.slot.ref = copy_sub->node_list()[vp.slot.ref->id()];  // bo ya
+      if (vp.node()) {
+        vp.slot.ref = copy_sub->node_list()[vp.node()->id()];  // bo ya
       }
     }
     for (auto& ep : _edgeProp) {
@@ -881,9 +927,43 @@ class Schedule {
     }
   }
 
+  void verify() {
+    for (int j = 0; j < _vertexProp.size(); ++j) {
+      auto& vp = _vertexProp[j];
+      if (vp.node()) {
+        bool found = false;
+        for (int i = 0; i < num_slots(vp.node()); ++i) {
+          auto vertices = _nodeProp[vp.node()->id()].slots[i].vertices;
+          for (auto& v : vertices) {
+            auto node = v.first;
+            auto other_vertex = _vertexProp[node->id()];
+            if (other_vertex.slot.ref == vp.slot.ref) {
+              found = true;
+              break;
+            }
+            
+          }
+        }
+        DSA_CHECK(found) << vp.node()->name() << " and " << _ssDFG->nodes[j]->name() << " are mismatched";
+      }
+    }
+  }
+
 
   void remove_link(int link_deleted_id) {
     _linkProp.erase(_linkProp.begin() + link_deleted_id);
+  }
+
+  void ensure_node_delete(int node_id) {
+    // Ensure that the node is removed from the vertexProp
+    for (int i = 0; i < _vertexProp.size(); ++i) {
+      auto& vp = _vertexProp[i];
+      if (vp.node() != nullptr) {
+        if (vp.node()->id() == node_id) {
+          unassign_dfgnode(_ssDFG->nodes[i]);
+        }
+      }
+    }
   }
   
   void remove_node(int node_deleted_id) {
@@ -906,7 +986,9 @@ class Schedule {
       num_links = 0;
       extra_lat = 0;
       links.clear();
+      links.shrink_to_fit();
       passthroughs.clear();
+      passthroughs.shrink_to_fit();
     }
   };
 
@@ -938,7 +1020,7 @@ class Schedule {
    * \brief Estimate the performance of this mapping.
    * \return The estimated instruction level parallelism on the fabric.
    */
-  double estimated_performance();
+  double estimated_performance(std::string& spm_performance, std::string&l2_performance, std::string& dram_performance, int num_cores=1, int num_banks=1, bool debug=false);
 
  public:
   /*! \brief If each nodes in the DFG requires dynamic control in the hardware. */
@@ -1003,7 +1085,7 @@ class Schedule {
 template <>
 inline int Schedule::num_mapped<dsa::dfg::Node*>() {
   return _num_mapped[dsa::dfg::Node::V_INST] + _num_mapped[dsa::dfg::Node::V_INPUT] +
-         _num_mapped[dsa::dfg::Node::V_OUTPUT];
+         _num_mapped[dsa::dfg::Node::V_OUTPUT] + _num_mapped[dsa::dfg::Node::V_ARRAY];
 }
 
 template <typename T>

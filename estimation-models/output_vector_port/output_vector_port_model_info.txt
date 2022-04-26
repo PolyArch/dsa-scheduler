@@ -1,0 +1,16 @@
+Output Vector Port Model, trained on 10707 samples
+Trained using Pytorch, RayTune, and SciOptimize
+
+Parameters
+   Learning Rate: 0.01579070858082782
+   Batch Size: 4
+   Epochs: 140
+Best trial final validation loss: 470642.2136995686
+Best trial l1 loss: tensor([350.1935, 350.1935, 350.1935, 350.1935])
+
+Average Loss with L1 [357.0431 357.0431 357.0431 357.0431]
+Average Loss with MSE loss: [489282. 489282. 489282. 489282.]
+Average Loss with RMS Loss: [482.1332 482.1332 482.1332 482.1332]
+
+Average Model: [11795.557   11483.879     318.1256    153.10793]
+Real: [12137.717   11813.502     323.74918   145.626  ]

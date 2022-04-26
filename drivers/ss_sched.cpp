@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
     ("w,sched-workers", "The number of workers for scheduling.", default_1)
     ("route-along", "Route along with a master lane when scheduling deomposable arch.", default_d0)
     ("a,compat-adg", "Parse the ADG in compatible version.", default_false)
+    ("c,vector", "Explore with max vector size.", default_neg_1)
     ("h,help", "Print the help information.");
   
   options.allow_unrecognised_options();
@@ -86,7 +87,15 @@ int main(int argc, char* argv[]) {
   ENFORCED_SYSTEM("mkdir -p viz;");
   if (parsed.count("design-explore")) {
     ENFORCED_SYSTEM("mkdir -p viz; mkdir -p viz/iters; touch viz/objectives.csv");
-    dsa::DesignSpaceExploration(ssmodel, args[1]);
+    if (parsed.count("vector")) {
+      if (parsed["vector"].as<int>() == -1) {
+        dsa::DesignSpaceExploration(ssmodel, args[1]);
+      } else {
+        dsa::VectorDesignSpaceExploration(ssmodel, args[1], parsed["vector"].as<int>());
+      }
+    } else {
+      dsa::DesignSpaceExploration(ssmodel, args[1]);
+    }
     return 0;
   }
 
