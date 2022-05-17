@@ -440,7 +440,7 @@ io_def: IDENT {
   delete $1;
 }
 | IDENT IDENT '=' IDENT {
-  if (*$2 == "stated") {
+  if (*$2 == "state") {
     $$ = new IODef(*$1, 0, false, "", "", *$4);
   } else if (*$2 == "source") {
     $$ = new IODef(*$1, 0, false, *$4, "", "");

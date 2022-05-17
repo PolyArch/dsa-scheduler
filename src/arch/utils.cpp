@@ -857,7 +857,10 @@ SpatialFabric* Import(std::string filename) {
           auto str = insts[i].asString();
           auto cnt = fu_array ? cgranode["fu count"][i].asInt() : 1;
           auto opcode = dsa::inst_from_string(str.c_str());
-          DSA_CHECK(opcode != SS_ERR) << str;
+          if (opcode == SS_ERR) {
+            DSA_WARNING << str << " skipped!";
+            continue;
+          }
           fu_type.Add(opcode, cnt);
         }
         node = new ssfu(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),

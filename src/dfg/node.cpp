@@ -87,7 +87,7 @@ bool Operand::ready() {
       DSA_LOG(FORWARD) << "fifo (" << e->name() << ") " << i << " no element!";
       return false;
     }
-    if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at) {
+    if (e->use()->ssdfg()->cur_cycle() < fifos[i].front().available_at + e->delay) {
       DSA_LOG(FORWARD) << "time away: " << e->use()->ssdfg()->cur_cycle() << " < "
                        << fifos[i].front().available_at;
       return false;

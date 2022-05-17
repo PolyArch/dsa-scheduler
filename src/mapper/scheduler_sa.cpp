@@ -485,9 +485,9 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
       }
     }
 
-    if (((iter - last_improvement_iter) > max_iters_no_improvement)) {
-      break;
-    }
+    // if (((iter - last_improvement_iter) > max_iters_no_improvement)) {
+    //   break;
+    // }
 
     if (best_succeeded) {
       break;

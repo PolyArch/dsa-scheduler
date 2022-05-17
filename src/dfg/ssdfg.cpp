@@ -272,7 +272,7 @@ int SSDfg::forward(bool asap) {
         DSA_LOG(FORWARD) << "Tick "<< elem->name();
         vec->forward();
       } else {
-        DSA_LOG(FORWARD) << "Not ticked: " << elem->name();
+        DSA_LOG(BLAME_COMP) << elem->name() << " no element!";
       }
     } else {
       DSA_LOG(FORWARD) << "Tick "<< elem->name();

@@ -175,7 +175,7 @@ bool Scheduler::check_feasible(SSDfg* ssDFG, SSModel* ssmodel) {
   }
 
   sort(dc.ports[1].begin(), dc.ports[1].end(), std::greater<int>());
-  sort(sc.fu_granularities.begin(), sc.fu_granularities.end(), std::greater<int>());
+  sort(sc.ports[1].begin(), sc.ports[1].end(), std::greater<int>());
   for (int j = 0, n = dc.ports[1].size(); j < n; ++j) {
     if (dc.ports[1][j] > sc.ports[1][j]) {
       DSA_LOG(COUNT) << "A " << dc.ports[1][j] << "-wide input port is required, but only have "
@@ -413,7 +413,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
 
   if (!succeed_sched || sched == nullptr) {
     DSA_CHECK(false) << "Cannot be scheduled, try a smaller DFG!";
-  } else if (ovr > 0) {
+  } else if (ovr > 0 && ContextFlags().bitstream) {
     DSA_CHECK(false) << "Overprovision detected, try a smaller DFG!";
   } else {
     if(verbose) DSA_INFO << "Spatial scheduling finished!";
