@@ -92,8 +92,8 @@ class InstModel {
   ConfigInst* getInst(int opcode);
 
  private:
-  std::vector<ConfigInst*> instList_;
-  std::vector<ConfigInst*> _instList;
+  std::vector<ConfigInst> instList_;
+  std::vector<ConfigInst> _instList;
   std::vector<FuType*> _fuTypeList;
   std::string filename_;
   std::string base_folder;

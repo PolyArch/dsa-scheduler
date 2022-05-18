@@ -51,7 +51,8 @@ InstModel::InstModel(char* filename) : filename_(filename) {
     if (existing_insts.count(str_name)) continue;
     existing_insts.insert(str_name);
 
-    ConfigInst* inst = new ConfigInst();
+    ConfigInst inst_;
+    ConfigInst *inst = &inst_;
     inst->name(str_name);
 
     token = strtok(nullptr, " ");
@@ -69,7 +70,7 @@ InstModel::InstModel(char* filename) : filename_(filename) {
     token = strtok(nullptr, " ");
     inst->throughput(atoi(token));
 
-    _instList.push_back(inst);
+    _instList.push_back(inst_);
   }
 }
 
@@ -145,7 +146,8 @@ void InstModel::readModel(char* filename) {
 
       bitwidth = std::max(1, bitwidth);
 
-      ConfigInst* inst = new ConfigInst();
+      ConfigInst inst_;
+      ConfigInst* inst = &inst_;
       inst->name(inst_name);
       inst->dtype(dtype);
       inst->bitwidth(bitwidth);
@@ -165,7 +167,7 @@ void InstModel::readModel(char* filename) {
       inst->ram_b18(ramB18);
       inst->u_ram(uRam);
       inst->dsp(dsp);
-      instList_.push_back(inst);
+      instList_.push_back(inst_);
     }
   }
 }
@@ -353,13 +355,13 @@ void InstModel::PowerAreaModel(char* filename) {
 
   // Add the power / area to inst list
   for (auto inst : _instList) {
-    string inst_name = inst->name();
+    string inst_name = inst.name();
     if (inst_to_power_area.count(inst_name) > 0) {
       auto power_area = inst_to_power_area[inst_name];
-      inst->area(power_area[1]);
-      inst->power(power_area[0]);
-      inst->logic_lut(power_area[2]);
-      inst->flip_flop(power_area[3]);
+      inst.area(power_area[1]);
+      inst.power(power_area[0]);
+      inst.logic_lut(power_area[2]);
+      inst.flip_flop(power_area[3]);
     }
   }
 }
@@ -368,8 +370,8 @@ void InstModel::PowerAreaModel(char* filename) {
 void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
   int max_opcode = -1;
   for (auto inst : instList_) {
-    if (inst->opcode() > max_opcode) {
-      max_opcode = inst->opcode();
+    if (inst.opcode() > max_opcode) {
+      max_opcode = inst.opcode();
     }
   }
 
@@ -429,7 +431,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
 
          "enum OpCode {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
-    ofs << "  SS_" << instList_[i]->name() << "=" << instList_[i]->opcode() << ", \n";
+    ofs << "  SS_" << instList_[i].name() << "=" << instList_[i].opcode() << ", \n";
   };
   ofs << "  SS_ERR,\n";
   ofs << "  SS_NUM_TYPES\n};\n\n";
@@ -552,8 +554,8 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "OpCode dsa::inst_from_string(const char* str) {\n";
 
   for (unsigned i = 0; i < instList_.size(); ++i) {
-    ofs << "  if(strcmp(str,\"" << instList_[i]->name() << "\")==0) return SS_"
-        << instList_[i]->name() << ";\n";
+    ofs << "  if(strcmp(str,\"" << instList_[i].name() << "\")==0) return SS_"
+        << instList_[i].name() << ";\n";
   }
   /*
   ofs << "  else { fprintf(stderr,\"Config Library does not understand "
@@ -570,7 +572,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return \"" << instList_[i]->name()
+        << "SS_" << instList_[i].name() << ": return \"" << instList_[i].name()
         << "\";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -582,7 +584,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return \"" << instList_[i]->dtype()
+        << "SS_" << instList_[i].name() << ": return \"" << instList_[i].dtype()
         << "\";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -594,7 +596,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->latency()
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].latency()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -606,7 +608,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->throughput()
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].throughput()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -618,7 +620,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->area() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].area() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -629,7 +631,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->power() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].power() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -640,7 +642,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->total_lut() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].total_lut() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -651,7 +653,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->logic_lut() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].logic_lut() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -662,7 +664,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->ram_lut() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].ram_lut() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -673,7 +675,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->srl() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].srl() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -684,7 +686,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->flip_flop() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].flip_flop() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -695,7 +697,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->ram_b36() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].ram_b36() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -706,7 +708,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->ram_b18() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].ram_b18() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -717,7 +719,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->u_ram() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].u_ram() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -728,7 +730,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->dsp() << ";\n";
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].dsp() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -739,7 +741,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < instList_.size(); ++i) {
     ofs << "    case "
-        << "SS_" << instList_[i]->name() << ": return " << instList_[i]->num_values()
+        << "SS_" << instList_[i].name() << ": return " << instList_[i].num_values()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -827,7 +829,7 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
            "  DSA_CHECK(ops.size() <=  (unsigned) (num_ops[inst]+1));\n"
            "  switch(inst) {\n";
     for (unsigned i = 0; i < instList_.size(); ++i) {
-      ConfigInst* inst = instList_[i];
+      ConfigInst* inst = &instList_[i];
 
       if (inst->bitwidth() != bitwidth)
         continue;  // TODO: later implement autovectorization
@@ -860,8 +862,8 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
 
 ConfigInst* InstModel::getInst(int opcode) {
   for (unsigned i = 0; i < instList_.size(); ++i) {
-    if (instList_[i]->opcode() == opcode) {
-      return instList_[i];
+    if (instList_[i].opcode() == opcode) {
+      return &instList_[i];
     }
   }
   return nullptr;
@@ -927,7 +929,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "SS_ERR,\n";
 
   for (unsigned i = 0; i < _instList.size(); ++i) {
-    ofs << "  SS_" << _instList[i]->name() << ", \n";
+    ofs << "  SS_" << _instList[i].name() << ", \n";
   };
 
   ofs << "  SS_NUM_TYPES\n};\n\n";
@@ -1038,8 +1040,8 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "OpCode dsa::inst_from_string(const char* str) {\n";
 
   for (unsigned i = 0; i < _instList.size(); ++i) {
-    ofs << "  else if(strcmp(str,\"" << _instList[i]->name() << "\")==0) return SS_"
-        << _instList[i]->name() << ";\n";
+    ofs << "  else if(strcmp(str,\"" << _instList[i].name() << "\")==0) return SS_"
+        << _instList[i].name() << ";\n";
   }
   /*
   ofs << "  else { fprintf(stderr,\"Config Library does not understand "
@@ -1058,7 +1060,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return \"" << _instList[i]->name()
+        << "SS_" << _instList[i].name() << ": return \"" << _instList[i].name()
         << "\";\n";
   }
   ofs << "  case SS_ERR:  DSA_CHECK(false) << \"Error opcode!\"; throw;\n";
@@ -1072,7 +1074,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->latency()
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].latency()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -1084,7 +1086,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->throughput()
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].throughput()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -1096,7 +1098,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->area() << ";\n";
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].area() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -1107,7 +1109,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->power() << ";\n";
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].power() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -1118,7 +1120,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->logic_lut() << ";\n";
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].logic_lut() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -1130,7 +1132,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->flip_flop() << ";\n";
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].flip_flop() << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
   ofs << "  }\n\n";
@@ -1187,7 +1189,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
          "  switch(inst) {\n";
   for (unsigned i = 0; i < _instList.size(); ++i) {
     ofs << "    case "
-        << "SS_" << _instList[i]->name() << ": return " << _instList[i]->num_values()
+        << "SS_" << _instList[i].name() << ": return " << _instList[i].num_values()
         << ";\n";
   }
   ofs << "    default: DSA_CHECK(false) << \"Unknown inst\" << inst; throw;\n";
@@ -1198,7 +1200,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "int dsa::num_ops[" << _instList.size() + 2 << "]={\n";
   ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
   for (unsigned i = 0; i < _instList.size(); ++i) {
-    ofs << ", " << _instList[i]->num_ops();
+    ofs << ", " << _instList[i].num_ops();
     if (i % 16 == 15) {
       ofs << "\n";
       ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
@@ -1210,7 +1212,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
   ofs << "int dsa::bitwidth[" << _instList.size() + 2 << "]={\n";
   ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
   for (unsigned i = 0; i < _instList.size(); ++i) {
-    ofs << ", " << _instList[i]->bitwidth();
+    ofs << ", " << _instList[i].bitwidth();
     if (i % 16 == 15) {
       ofs << "\n";
       ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
@@ -1239,7 +1241,7 @@ void InstModel::printCFiles(char* header_file, char* cpp_file) {
            "  switch(inst) {\n"
         << "    case SS_NONE: { return ops[0]; }\n";
     for (unsigned i = 0; i < _instList.size(); ++i) {
-      ConfigInst* inst = _instList[i];
+      ConfigInst* inst = &_instList[i];
 
       if (inst->bitwidth() != bitwidth)
         continue;  // TODO: later implement autovectorization
@@ -1277,13 +1279,13 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  InstModel* instModel = new InstModel(argv[1]);
+  InstModel instModel(argv[1]);
   DSA_INFO << "InstModel created";
   DSA_INFO << argv[2];
-  instModel->readModel(argv[2]);
+  instModel.readModel(argv[2]);
   //instModel->PowerAreaModel(argv[2]);
   DSA_INFO << "PowerAreaModel created";
   DSA_INFO << "Printing C Files";
-  instModel->newPrintCFiles(argv[3], argv[4]);
+  instModel.newPrintCFiles(argv[3], argv[4]);
   return 0;
 }
