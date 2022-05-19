@@ -24,7 +24,7 @@ class SpatialFabric {
 
   void Apply(adg::Visitor*);
 
-  void PrintGraphviz(std::ostream& os);
+  void PrintGraphviz(const std::string& name);
 
   void DumpHwInJson(const char* name);
 
@@ -282,7 +282,8 @@ class SpatialFabric {
 
     // Check if a link already exists
     for (auto link : src->out_links())
-      if (link->sink()->id() == dst->id()) return nullptr;
+      if (link->sink()->id() == dst->id()) 
+        return nullptr;
 
     sslink* link = src->add_link(dst, source_position, sink_position);
     link->id(_link_list.size());

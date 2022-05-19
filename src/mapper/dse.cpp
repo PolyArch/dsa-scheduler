@@ -667,7 +667,7 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
         // Otherwise, we do simulated annealing and randomly accept modification based on objective and temperature
         double p = (double)rand() / RAND_MAX;
         double target =
-            exp(-(best_obj.first - new_obj.first) / temperature);
+            exp(-((best_obj.first - new_obj.first) * 100) / temperature);
         if (p < target) {
           // Accept the modification
           DSA_INFO << p << " < " << target << ", accept a worse point!";

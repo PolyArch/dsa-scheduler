@@ -188,6 +188,6 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
       _subModel->parse_io(ifs);
     }
   }
-
   _subModel->post_process();
+  
 }

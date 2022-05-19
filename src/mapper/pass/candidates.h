@@ -193,7 +193,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
           if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
             spots.emplace_back(0, Slot<ssnode*>(0, cand));
           } else {
-            spots.emplace_back(0, Slot<ssnode*>(0, cand));
+            // Check to make sure amount of mapped bits isnt greater than the bandwidth
+            int bitwidth_mapped = 0;
+            for (auto elem : sched->node_prop()[cand->id()].slots[0].vertices) {
+              auto vectorPort  = dynamic_cast<dfg::VectorPort*>(elem.first);
+              DSA_CHECK(vectorPort) << "Node outside of port mapped to a VP";
+              bitwidth_mapped += vectorPort->bandwidth();
+            }
+            if (cand->bitwidth_capability() >= input->bandwidth() + bitwidth_mapped) {
+              spots.emplace_back(0, Slot<ssnode*>(0, cand));
+            }
           }
         }
       }
@@ -238,7 +247,16 @@ struct CandidateSpotVisitor : dfg::Visitor {
           if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
             spots.emplace_back(0, Slot<ssnode*>(0, cand));
           } else {
-            bad.emplace_back(0, Slot<ssnode*>(0, cand));
+            // Check to make sure amount of mapped bits isnt greater than the bandwidth
+            int bitwidth_mapped = 0;
+            for (auto elem : sched->node_prop()[cand->id()].slots[0].vertices) {
+              auto vectorPort  = dynamic_cast<dfg::VectorPort*>(elem.first);
+              DSA_CHECK(vectorPort) << "Node outside of port mapped to a VP";
+              bitwidth_mapped += vectorPort->bandwidth();
+            }
+            if (cand->bitwidth_capability() >= output->bandwidth() + bitwidth_mapped) {
+              spots.emplace_back(0, Slot<ssnode*>(0, cand));
+            }
           }
         }
       }

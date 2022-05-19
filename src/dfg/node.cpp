@@ -43,6 +43,7 @@ int Node::sourceEdgeIdx(dsa::dfg::Edge* sourceEdge) {
   int idx = -1;
   // Loop over all operands to see if edge id match
   for (int i = 0; i < operands.size(); ++i) {
+    
     if (sourceEdge->id == operands[i].edges[0]) {
       idx = i;
       break;
@@ -134,9 +135,16 @@ bool Operand::predicate() {
   return true;
 }
 
-Edge::Edge(SSDfg* parent, int sid, int vid, int uid, int l, int r)
-    : sid(sid), vid(vid), uid(uid), parent(parent), l(l), r(r) {
+Edge::Edge(SSDfg* parent, int sid, int vid, int uid, int oid, int l, int r, int outl, int outr)
+    : sid(sid), vid(vid), uid(uid), oid(oid), parent(parent), l(l), r(r), outl(outl), outr(outr) {
   id = parent->edges.size();
+  
+  if (dynamic_cast<dsa::dfg::Array*>(use())) {
+    _memory = true;
+  }
+  if (dynamic_cast<dsa::dfg::Array*>(def())) {
+    _memory = true;
+  }
 }
 
 Node* Edge::def() const {
@@ -178,13 +186,7 @@ bool Edge::sinkStated() {
 }
 
 bool Edge::memory() {
-  if (dynamic_cast<dsa::dfg::Array*>(use())) {
-    return true;
-  }
-  if (dynamic_cast<dsa::dfg::Array*>(def())) {
-    return true;
-  }
-  return false;
+  return _memory;
 }
 
 Value* Edge::val() const {
@@ -202,8 +204,8 @@ Node* Edge::get(int x) const { return x ? use() : def(); }
 
 std::string Edge::name() const {
   std::stringstream ss;
-  ss << def()->name() << "." << val()->index << "[" << l << ", " << r << "]"
-     << "->" << use()->name();
+  ss << def()->name() << "." << vid << "[" << l << ", " << r << "]"
+     << "->" << use()->name() << "." << oid << "[" << outl << ", " << outr << "]";
   return ss.str();
 }
 

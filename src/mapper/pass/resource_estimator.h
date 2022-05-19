@@ -335,7 +335,6 @@ struct ResourceEstimator : Visitor {
   void Visit(ssdma* dma) {
     switch (hw) {
       case Hardware::FPGA: {
-        break;
         std::vector<double> input = {
           (double) dma->in_links().size() + dma->out_links().size(),
           (double) dma->readWidth(),

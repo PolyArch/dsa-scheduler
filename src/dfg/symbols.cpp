@@ -38,7 +38,13 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
     if (auto data = dynamic_cast<ConstDataEntry*>(args[i])) {
       node->ops().emplace_back(dfg, data->data);
     } else if (auto ve = dynamic_cast<ValueEntry*>(args[i])) {
-      dfg->edges.emplace_back(dfg, ve->nid, ve->vid, iid, ve->l, ve->r);
+      int startWidth = 0;
+      for (auto operand : node->ops()) {
+        
+
+      }
+
+      dfg->edges.emplace_back(dfg, ve->nid, ve->vid, iid, node->ops().size(), ve->l, ve->r, 0, ve->r - ve->l);
       std::vector<int> es{dfg->edges.back().id};
       node->ops().emplace_back(dfg, es, OperandType::data);
     } else if (auto ne = dynamic_cast<NodeEntry*>(args[i])) {
@@ -60,7 +66,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       std::vector<int> es;
       for (auto elem : ce->entries) {
         if (auto ne = dynamic_cast<ValueEntry*>(elem)) {
-          dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
+          dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, 0, ne->l, ne->r, 0, ne->r - ne->l);
           es.push_back(dfg->edges.back().id);
         }
       }
@@ -71,7 +77,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
       // External control
       if (ce->controller) {
         auto ne = dynamic_cast<ValueEntry*>(ce->controller);
-        dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, ne->l, ne->r);
+        dfg->edges.emplace_back(dfg, ne->nid, ne->vid, iid, 0, ne->l, ne->r);
         inst->predicate = CtrlBits(ce->raw, ce->bmss);
         std::vector<int> es{dfg->edges.back().id};
         inst->ops().emplace_back(dfg, es, ce->flag);

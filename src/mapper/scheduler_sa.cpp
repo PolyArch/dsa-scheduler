@@ -305,7 +305,7 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst, in
   int num_workers = dsa::ContextFlags::Global().num_schedule_workers;
   if (num_workers > 1) {
     ctpl::thread_pool workers(num_workers);
-    std::cout << "Workers: " << num_workers << std::endl;
+    DSA_INFO << "Workers: " << num_workers;
 
     for (WorkloadSchedules& ws : inst.workload_array) {
       for (Schedule& sr : ws.sched_array) {
@@ -316,18 +316,16 @@ bool SchedulerSimulatedAnnealing::incrementalSchedule(CodesignInstance& inst, in
           DSA_CHECK(sched->ssModel() == _ssModel);
 
           SchedStats s;
-          std::stringstream startStream;
-          startStream << "### Start Schedule (" << 
-            sched->ssdfg()->filename << "): (Thread " << id << ") ###\n";
-          std::cout << startStream.str(); // Can't USE DSA_INFO due to multithreading
+          DSA_INFO << "### Start Schedule (" 
+                    << sched->ssdfg()->filename << "): (Thread "
+                    << id << ") ###";
 
           schedule(sched->ssdfg(), sched);
           auto p = obj(sched, s);
           
           std::stringstream endStream;
-          endStream <<  "### End Schedule (" << sched->ssdfg()->filename << "): " 
-                  << -p.second << " (Thread " << id << ") ###\n";
-          std::cout << endStream.str(); // Can't USE DSA_INFO due to multithreading
+          DSA_INFO << "### End Schedule (" << sched->ssdfg()->filename
+                    << "): " << -p.second << " (Thread " << id << ") ###";
         });
       }
     }
@@ -495,7 +493,7 @@ bool SchedulerSimulatedAnnealing::schedule(SSDfg* ssDFG, Schedule*& sched) {
   }
 
   if (verbose) {
-    std::cout << "Breaking at Iter " << iter << std::endl;
+    DSA_INFO << "Breaking at Iter " << iter;
               //<< ", candidates success / candidates tried:  " << this->candidates_succ
               //<< "/" << this->candidates_tried << std::endl;
   }
@@ -652,7 +650,7 @@ int SchedulerSimulatedAnnealing::routing_cost(dsa::dfg::Edge* edge, int from_slo
   bool is_temporal_out = is_temporal && is_out;
 
   int internet_dis = abs(from_slot - next_slot);
-  int num_of_slots = sched->lanes_involved(link->source(), link->bitwidth());
+  int num_of_slots = sched->lanes_involved(link, link->bitwidth());
   // link->bitwidth() / link->source()->granularity();
   internet_dis = min(internet_dis, num_of_slots - internet_dis);
 
@@ -789,10 +787,9 @@ int SchedulerSimulatedAnnealing::route(
 
   std::pair<int, ssnode*> source = {vps.lane(), vps.node()};
   std::pair<int, ssnode*> dest = {vpd.lane(), vpd.node()};
-  DSA_LOG(ROUTE) << "Routing edge " << edge->name()
-               << " (ID:" << edge->id << ") from " << source.second->name() 
-               << " to " << dest.second->name()
-               << " path lengthen: " << path_lengthen;
+  DSA_LOG(ROUTE) << "Routing edge " << edge->name() << " (ID:" << edge->id << ") from "
+                 << source.second->name() << "(" << source.first << ")"
+                 << " to " << dest.second->name() << "(" << dest.first << ")";
 
   int n_nodes = sched->ssModel()->subModel()->node_list().size();
   std::vector<std::vector<int>> node_dist(n_nodes);
@@ -846,7 +843,7 @@ int SchedulerSimulatedAnnealing::route(
       
       // Sanity Check
       DSA_CHECK(slot < vport->out_links().size())
-        << "Slot " << slot << " out of bounds for vport " << vport->name()
+        << "Slot " << slot << " out of bounds for ivport " << vport->name()
         << " with size: " << vport->out_links().size() << " and stated: " << vport->vp_stated();
 
       // Get node associated with slot
@@ -868,13 +865,13 @@ int SchedulerSimulatedAnnealing::route(
       dsa::dfg::OutputPort* outNode = dynamic_cast<dsa::dfg::OutputPort*> (edge->use());
 
       // get the slot that this edge must be mapped to
-      int sourceIdx = outNode->sourceEdgeIdx(edge);
+      int sourceIdx = edge->oid;
 
       if (vport->vp_stated() && outNode->penetrated_state == -1)
         sourceIdx++;
 
       // Sanity Check
-      DSA_CHECK(sourceIdx < vport->in_links().size()) << "Slot " << sourceIdx << " out of bounds for vport " << vport->name() << " with size: " << vport->in_links().size() << " and stated: " << vport->vp_stated();
+      DSA_CHECK(sourceIdx < vport->in_links().size()) << "Slot " << sourceIdx << " out of bounds for ovport " << vport->name() << " with size: " << vport->in_links().size() << " and stated: " << vport->vp_stated();
 
       // Bookkeeping for later
       removed_output_vport = {0, vport->in_links()[sourceIdx]};
@@ -884,9 +881,6 @@ int SchedulerSimulatedAnnealing::route(
       dest.second = vport->in_links()[sourceIdx]->source();
     }
   }
-
-  DSA_LOG(ROUTE) << "Source: " << source.second->name() << " " << source.first;
-  DSA_LOG(ROUTE) << "Dest: " << dest.second->name() << " " << dest.first;
 
   // Special Case where stated makes path shorter and become the same node
   if (source.second == dest.second && !path_lengthen) {
@@ -920,6 +914,8 @@ int SchedulerSimulatedAnnealing::route(
   came_from[source_node_id][source.first] = std::make_pair(0, nullptr);
   openset.emplace(0, new_rand_prio, source.first, source.second);
 
+  bool memEdge = edge->memory();
+
   while (!openset.empty()) {
     auto &front_elem = *openset.begin();
     int cur_dist = std::get<0>(front_elem);
@@ -937,12 +933,27 @@ int SchedulerSimulatedAnnealing::route(
     }
 
     for (auto link : node->out_links()) {
-      int slots = link->slots(slot, edge->bitwidth() / link->source()->granularity());
+      if (edge->memory()) {
+        if (link->sink()->spatial() || link->source()->spatial()) {
+          continue;
+        } 
+      } else {
+        if (link->sink()->data() && link->source()->data()) {
+          continue;
+        }
+      }
+
+      int granularity =
+          std::max(link->source()->granularity(), link->sink()->granularity());
+      int slots = link->slots(slot, edge->bitwidth() / granularity);
+      DSA_LOG(SLOTS) << "Link " << link->name() << " subnet size: " << link->subnet.size();
       while (slots) {
         int raw = slots & -slots;
         slots -= raw;
         int next_slot = 31 - __builtin_clz(raw);
-        if (next_slot * node->granularity() % edge->bitwidth()) {
+
+        if (next_slot * node->granularity() % edge->bitwidth()
+             && link->sink()->type() != ssnode::NodeType::Switch) {
           continue;
         }
         sslink* next_link = link;
@@ -954,21 +965,21 @@ int SchedulerSimulatedAnnealing::route(
 
         // Check to see if we are mapping to memory or the spatial architecture
         // We shouldn't have edges going through both
-        if (edge->memory()) {
-          if (dynamic_cast<SpatialNode*>(next)) {
+        if (memEdge) {
+          if(next->spatial()) {
             continue;
           }
         } else {
-          if (dynamic_cast<DataNode*>(next)) {
+          if (next->data()) {
             continue;
           }
         }
 
         std::pair<int, sslink*> next_pair(next_slot, next_link);
 
-        DSA_LOG(SLOTS) << "width: " << edge->bitwidth() << ", From " << link->source()->name()
-                   << "'s " << slot << " to " << link->sink()->name() << "'s "
-                   << next_slot << "\n";
+        DSA_LOG(SLOTS) << "width: " << edge->bitwidth() << ", From "
+                       << link->source()->name() << "'s " << slot << " to "
+                       << link->sink()->name() << "'s " << next_slot;
 
         int route_cost;
         if (!path_lengthen) {  // Normal thing
@@ -976,8 +987,7 @@ int SchedulerSimulatedAnnealing::route(
         } else {
           // For path lengthening, only route on free spaces
           route_cost = sched->routing_cost(next_pair, edge);
-          if (route_cost != 1 || sched->dfgNodeOf(next_slot, next)) route_cost = -1;
-          if (dynamic_cast<ssfu*>(link->sink()) && link->sink() != dest.second) {
+          if (sched->dfgNodeOf(next_slot, next)) {
             route_cost = -1;
           }
         }
@@ -985,11 +995,10 @@ int SchedulerSimulatedAnnealing::route(
         if (route_cost == -1) continue;
 
         int new_dist = cur_dist + route_cost;
-        
-        if (next_slot >= node_dist[next->id()].size()) {
-          DSA_INFO << "Out of range slot: " << next_slot << " lanes " << next->lanes() << " dist " << node_dist[next->id()].size() << " " << next->name(); 
-          continue;
-        }
+
+        DSA_CHECK(next_slot < node_dist[next->id()].size())
+          << "Next slot is out of range: " << node_dist[next->id()].size()
+          << " " << next_slot << " " << node->lanes();
 
         int next_dist = node_dist[next->id()][next_slot];
 
@@ -1256,13 +1265,13 @@ int SchedulerSimulatedAnnealing::try_candidates(
   for (size_t i = 0; i < candidates.size(); ++i) {
     // maybe here, that it will access the next index now..
     DSA_LOG(MAP)
-      << "Try: " << candidates[idx[i]].slot.lane_no << ", " << candidates[idx[i]].slot.ref->name();
+      << "  Try: " << candidates[idx[i]].slot.lane_no << ", " << candidates[idx[i]].slot.ref->name();
 
     if (scheduleHere(sched, node, candidates[idx[i]].slot)) {
       SchedStats s;
       CandidateRoute undo_path;
       pair<int, int> candScore = obj_creep(sched, s, undo_path);
-      DSA_LOG(MAP) << "Score: " << candScore.first << ", " << candScore.second;
+      DSA_LOG(MAP) << "  Score: " << candScore.first << ", " << candScore.second;
 
       if (!find_best) {
         return i;
@@ -1289,8 +1298,8 @@ int SchedulerSimulatedAnnealing::try_candidates(
   if (best_candidate != -1) {
     best_path.apply(sched);
     auto &cand = candidates[best_candidate];
-    DSA_LOG(MAP) << node->name() << " maps to " << candidates[best_candidate].slot.ref->name();
-    sched->assign_node(node, {cand.slot.lane_no, cand.slot.ref});
+    DSA_LOG(MAP) << node->name() << " maps to " << cand.node()->name() << " at slot: " << cand.lane();
+    sched->assign_node(node, {cand.lane(), cand.node()});
     // FIXME: is first not the assign port number???? need port for the hardware port
     // auto vport = candidates[best_candidate].second; // ssnode*
     // auto ne = dynamic_cast<SSDfgVec*>(node);

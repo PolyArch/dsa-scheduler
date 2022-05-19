@@ -767,7 +767,6 @@ class CodesignInstance {
         }
       });
     } else if (item_class < 60) { // 20% to change node granularity
-      return false;
       int index = rand() % sub->node_list().size();
       auto fu = sub->node_list()[index];
       
@@ -779,35 +778,44 @@ class CodesignInstance {
       while (new_one == fu->granularity() || new_one > fu->datawidth()) {
         new_one = (1 << (rand() % 4)) * 8;
       }
+
+      // Unassign everything from this node
+      unassign_node(fu);
+      for (auto link : fu->in_links()) {
+        unassign_link(link);
+      }
+      for (auto link : fu->out_links()) {
+        unassign_link(link);
+      }
+
+      // Change the granularity
+      fu->granularity(new_one);
+
+
+      // Redo the schedule data-structure according to new granularity
       for_each_sched([fu, this, new_one](Schedule& sched) {
         auto &np = sched.node_prop()[fu->id()];
-        for (auto &slot : np.slots) {
-          auto passthrus = slot.passthrus;
-          for (auto edge : passthrus) {
-            sched.unassign_edge(edge);
-          }
-          auto vertices = slot.vertices;
-          for (auto v : vertices) {
-            sched.unassign_dfgnode(v.first);
-          }
-        }
-        np.slots.resize(fu->datawidth() / new_one);
-        for (auto &link : fu->out_links()) {
-          unassign_link(link);
+        np.slots.resize(fu->lanes());
+        
+        for (auto link : fu->in_links()) {
           auto &lp = sched.link_prop()[link->id()];
-          for (auto &slot : sched.link_prop()[link->id()].slots) {
-            DSA_CHECK(slot.edges.empty());
-          }
-          lp.slots.resize(link->source()->datawidth() / new_one);
-          link->subnet.resize(link->bitwidth() / new_one);
-          if (link->subnet.size() >= 2) {
-            link->subnet[1] = ~0ull >> (64 - link->bitwidth());
-          }
+          lp.slots.resize(std::min(link->source()->lanes(), link->sink()->lanes()));
+        }
+
+        for (auto link : fu->out_links()) {
+          auto &lp = sched.link_prop()[link->id()];
+          lp.slots.resize(std::min(link->source()->lanes(), link->sink()->lanes()));
         }
       });
+      
+      for (auto link : fu->in_links()) {
+        link->resetSubnet();
+      }
+      for (auto link : fu->out_links()) {
+        link->resetSubnet();
+      }
 
-      s << "change FU " << fu->name() << " granularity from " << fu->granularity() << " to " << new_one;
-      fu->granularity(new_one);
+      s << "change " << fu->name() << " granularity from " << fu->granularity() << " to " << new_one;
 
     } else if (item_class < 65) { // 5% to change a input Vports stated
       if  (sub->input_list().empty()) return false;
@@ -973,21 +981,36 @@ class CodesignInstance {
    */
   void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
-      int slots = link->source()->datawidth() / link->source()->granularity();
-      //int slots = sched.link_prop()[link->id()].slots.size();
       
-      DSA_LOG(UNASSIGN) << "Unassign link " << link->id() << " with " << slots << " slots";
+      DSA_LOG(UNASSIGN) << "Unassign link " << link->id();
       sched.verify();
-      for (int slot = 0; slot < slots; ++slot) {
+      for (int slot = 0; slot < sched.num_slots(link); ++slot) {
         for (auto& p : sched.dfg_edges_of(slot, link)) {
           // TODO: consider just deleteting the edge, and having the scheduler
           // try to repair the edge schedule -- this might save some time
           // sched.unassign_edge(p.first);
+          DSA_CHECK(sched.ssdfg()->edges.size() > p.eid) << "Edge " << p.eid << " not found";
           sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].def());
           sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].use());
         }
       }
     });
+  }
+
+  bool check_link_used(sslink* link) {
+    bool used = false;
+    for_each_sched([&](Schedule& sched) {
+      auto edges = sched.edge_prop();
+      for (auto edge : edges) {
+        for (auto edge_links : edge.links) {
+          if (edge_links.second == link) {
+            used = true;
+            break;
+          }
+        }
+      }
+    });
+    return used;
   }
 
   /**
@@ -1051,6 +1074,7 @@ class CodesignInstance {
   void delete_link(sslink* link, bool unassign=true) {
     verify();
     
+    //bool used = check_link_used(link);
     auto* sub = _ssModel.subModel();
 
     if (auto ivport = dynamic_cast<ssivport*>(link->source())) {
@@ -1062,6 +1086,8 @@ class CodesignInstance {
       // Check if stated property must be changed due to deletion of link
       if (ivport->out_links().size() <= 2) {
         ivport->vp_stated(false);
+        if (unassign)
+          unassign_node(ivport);
       }
     }
 
@@ -1073,6 +1099,8 @@ class CodesignInstance {
       // Check if stated property must be changed due to deletion of link
       if (ovport->in_links().size() <= 2) {
         ovport->vp_stated(false);
+        if (unassign)
+          unassign_node(ovport);
       }
     }
 
@@ -1843,6 +1871,9 @@ class CodesignInstance {
         auto dst = next_link->sink();
         int sinkIndex = dst->link_index(next_link, true);
         sslink* collapsed_link = add_link(src, dst, sourceIndex, sinkIndex);
+
+        // Repair Schedule
+        
         
 
         if (collapsed_link != nullptr)
@@ -1851,6 +1882,65 @@ class CodesignInstance {
       }
     }
   }
+
+  void collapse_and_repair(ssnode* n, std::vector<sslink*> &collapsed_links) {
+    for_each_sched([&](Schedule& sched) {
+      bool not_collapsed = false;
+      auto& edge_prop = sched.edge_prop();
+      for (int i = 0; i < edge_prop.size(); i++) {
+        auto& edge = edge_prop[i];
+        for (int j = 0; j < edge.links.size(); j++) {
+          auto& link = edge.links[j];
+          if (link.second->sink()->id() != n->id()) {
+            continue;
+          }
+          if (j + 1 == edge.links.size()) {
+            not_collapsed = true;
+            continue;
+          }
+          DSA_INFO << "Collapsing node " << n->name() << " with link " << link.second->name() << " and link " << edge.links[j + 1].second->name() << " on edge " << i;
+          
+          ssnode* src = link.second->source();
+          int src_slot = link.first;
+          int sourceIndex = src->link_index(link.second, false);
+          auto next_link  = edge.links[j + 1];
+
+          ssnode* dst = next_link.second->sink();
+          int dst_slot = edge.links[j + 1].first;
+          int sinkIndex = dst->link_index(next_link.second, true);
+          sslink* collapsed_link = add_link(src, dst, sourceIndex, sinkIndex);
+          if (collapsed_link == nullptr)
+            continue;
+
+          // Allocate space for link
+          sched.allocate_space();
+
+          // Now repair schedule
+
+          // First Remove old links from schedule
+          sched.remove_link_from_edge(&sched.ssdfg()->edges[i], link);
+          sched.remove_link_from_edge(&sched.ssdfg()->edges[i], next_link);
+          edge.links.erase(edge.links.begin() + j + 1);
+          edge.links.erase(edge.links.begin() + j);
+
+          // Remove passthrough if functional unit
+          if (n->type() == ssnode::NodeType::FunctionUnit) {
+            for (auto& passthrough : edge.passthroughs) {
+              if (passthrough.second->id() == n->id()) {
+                sched.remove_passthrough_from_edge(&sched.ssdfg()->edges[i], passthrough);
+              }
+            }
+          }
+
+          // Now add new link to schedule
+          sched.assign_edgelink(&sched.ssdfg()->edges[i], src_slot, collapsed_link, j);
+          collapsed_links.push_back(collapsed_link);
+        }
+      }
+      return;
+    });
+  }
+
 
   /**
    * @brief Schedule-preserving Transformation for Stated Vector Ports
@@ -1960,7 +2050,10 @@ class CodesignInstance {
     
     std::unordered_set<ssfu*> fifos;
     std::vector<sslink*> collapsed_links;
-    int links_collapsed = 0;
+
+    if (collapse_links) {
+      collapse_and_repair(n, collapsed_links);
+    }
     
     for_each_sched([&](Schedule& sched) {
       auto edges = sched.ssdfg()->edges;
@@ -1969,16 +2062,8 @@ class CodesignInstance {
         if (add_fifo && sched.edge_delay(&edges[i]) < 1) {
           add_fifo_edge(fifos, n, edgeProp, sched);
         }
-        if (collapse_links) {
-          collapse_edge_links(n, edgeProp, sched, collapsed_links);
-          links_collapsed++;
-        }
       }
     });
-
-    if (collapse_links && dynamic_cast<SyncNode*>(n)) {
-      //collapse_vport(dynamic_cast<SyncNode*>(n));
-    }
 
     for_each_sched([&](Schedule& sched) { sched.allocate_space(); });
 
@@ -1999,9 +2084,9 @@ class CodesignInstance {
     for_each_sched([&](Schedule& sched) { sched.remove_node(n->id()); });
     for_each_sched([&](Schedule& sched) { sched.verify(); });
 
-    if (links_collapsed > 0) {
+    if (collapsed_links.size() > 0) {
       std::ostringstream s;
-      s << dse_changes_log.back() << " collapsed " << "(" << links_collapsed << ") ";
+      s << dse_changes_log.back() << " collapsed " << "(" << collapsed_links.size() << ") ";
       
       for (int i = 0; i < collapsed_links.size(); ++i) {
         int inIndex = collapsed_links[i]->source()->link_index(collapsed_links[i], false);

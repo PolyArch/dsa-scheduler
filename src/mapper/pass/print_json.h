@@ -445,5 +445,134 @@ struct JsonWriter : dsa::adg::Visitor {
   
 };
 
+void print_json(const std::string& name, SpatialFabric* fabric) {
+  ofstream os(name);
+  DSA_CHECK(os.good()) << "ADG (json) File" << name << "has bad output stream";
+  DSA_INFO << "Emit ADG (Json) File: " << name;
+
+  os << "{" << std::endl;
+  os << "\"" << adg::ADGKEY_NAMES[adg::DSANODES] << "\" : { " << std::endl;
+  dsa::adg::JsonWriter writer(os);
+  
+  // First Dump Processing Elements
+  for (auto* node : fabric->fu_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Switches
+  for (auto* node : fabric->switch_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Reccurrance
+  for (auto* node : fabric->recur_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Register
+  for (auto* node : fabric->reg_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Generate
+  for (auto* node : fabric->gen_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Scratchpad
+  for (auto* node : fabric->scratch_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump DMA
+  for (auto* node : fabric->dma_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Input VectorPorts
+  for (auto* node : fabric->input_list()) {
+    node->Accept(&writer);
+    os << "," << std::endl;
+  }
+
+  // Then Dump Output VectorPorts
+  for (int i = 0; i < fabric->output_list().size(); i++) {
+    fabric->output_list()[i]->Accept(&writer);
+    if (i != fabric->output_list().size() - 1) {
+      os << ",";
+    }
+    os << std::endl;
+  }
+
+  os << "}," << std::endl;
+  os << "\"" << adg::ADGKEY_NAMES[adg::DSAEDGES] << "\" : [ ";
+  // Print Edges
+  for (int i = 0; i < fabric->link_list().size(); i++) {
+    auto link = fabric->link_list()[i];
+    os << "{" << std::endl;
+    os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODETYPE] << "\" : \"";
+    if (auto fu = dynamic_cast<ssfu*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+    else if (auto sw = dynamic_cast<ssswitch*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+    else if (auto ivp = dynamic_cast<ssivport*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+    else if (auto ovp = dynamic_cast<ssovport*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+    else if (auto dma = dynamic_cast<ssdma*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+    else if (auto spm = dynamic_cast<ssscratchpad*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+    else if (auto ovp = dynamic_cast<ssrecurrence*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+    else if (auto ovp = dynamic_cast<ssgenerate*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+    else if (auto ovp = dynamic_cast<ssregister*>(link->source()))
+      os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+    os << "\"," << std::endl;
+
+    os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODEID] << "\" : " << link->source()->localId() << "," << std::endl;
+    os << "\"" << adg::ADGKEY_NAMES[adg::SOURCEINDEX] << "\" : " << link->source()->link_index(link, false) << "," << std::endl;
+
+    os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODETYPE] << "\" : \"";
+    if (auto fu = dynamic_cast<ssfu*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+    else if (auto sw = dynamic_cast<ssswitch*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+    else if (auto ivp = dynamic_cast<ssivport*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+    else if (auto ovp = dynamic_cast<ssovport*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+    else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+    else if (auto spm = dynamic_cast<ssscratchpad*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+    else if (auto ovp = dynamic_cast<ssrecurrence*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+    else if (auto ovp = dynamic_cast<ssgenerate*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+    else if (auto ovp = dynamic_cast<ssregister*>(link->sink()))
+      os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+    os << "\"," << std::endl;
+
+    os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODEID] << "\" : " << link->sink()->localId() << "," << std::endl;
+    os << "\"" << adg::ADGKEY_NAMES[adg::SINKINDEX] << "\" : " << link->sink()->link_index(link, true) << std::endl;
+    os << "}";
+    if (i < fabric->link_list().size() - 1)
+      os << ",";
+    os << " ";
+  }
+
+  os << "]" << std::endl;
+  os << "}" << std::endl;
+}
+
 }  // namespace adg
 }  // namespace dsa

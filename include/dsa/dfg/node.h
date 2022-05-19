@@ -127,7 +127,7 @@ struct Edge {
    * \param l The left slicing.
    * \param r The right slicing.
    */
-  Edge(SSDfg* parent, int sid, int vid, int uid, int l = 0, int r = 63);
+  Edge(SSDfg* parent, int sid, int vid, int uid, int oid, int l = 0, int r = 63, int outl = 0, int outr = 63);
 
   /*! \brief Helper function to get the source node. */
   Node* def() const;
@@ -161,14 +161,19 @@ struct Edge {
   int sid{-1}, vid{-1};
   /*! \brief The consumer of this edge. 
    * uid: The node id of sink node to this edge
+   * oid: The output index of this edge to its sink node
   */
-  int uid{-1};
+  int uid{-1}, oid{-1};
   /*! \brief The slicing applied on the source value. */
   int l{-1}, r{-1};
+  /*! \brief The slicing applied on the sink value. */
+  int outl{-1}, outr{-1};
   /*! \brief Size of the FIFO buffer. */
   int buf_len{9};
   /*! \brief The delay of the FIFO buffer. */
   int delay{0};
+
+  bool _memory{false};
 };
 
 /*! \brief The abstract class for all DFG nodes. */

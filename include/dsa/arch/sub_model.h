@@ -129,6 +129,8 @@ class sslink {
    */
   int slots(int slot, int width);
 
+  void resetSubnet();
+
  protected:
   int id_{-1};
   int max_util_{1};
@@ -146,16 +148,12 @@ class sslink {
 
 class ssnode {
  public:
-  enum NodeType { FU, Switch, InPort, OutPort, DMA, Unknown };
+  enum NodeType { FunctionUnit, Switch, InputVectorPort, OutputVectorPort, Scratchpad, DirectMemoryAccess, Register, Generate, Recurrance, None };
 
   ssnode() {}
 
-  ssnode(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : datawidth_(datawidth),
-        granularity_(granularity),
-        max_util_(util),
-        flow_control_(dynamic_timing),
-        max_delay_(fifo) {}
+  ssnode(NodeType type)
+      : type_(type) {}
 
   // TODO(@were): Deprecate this in the visitor pattern.
   virtual ssnode* copy() = 0;
@@ -171,6 +169,30 @@ class ssnode {
     return this->id_ != other.id_;
   }
 
+  bool spatial() {
+    if (type_ == FunctionUnit || type_ == Switch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  bool sync() {
+    if (type_ == InputVectorPort || type_ == OutputVectorPort) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  bool data() {
+    if (type_ == Scratchpad || type_ == DirectMemoryAccess || type_ == Register || type_ == Generate || type_ == Recurrance) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   /*!
    * \brief The entrance for visitor pattern.
    */
@@ -179,12 +201,7 @@ class ssnode {
   /*!
    * \brief Connect this and the given node with a link.
    */
-  sslink* add_link(ssnode* node, int source_position=-1, int sink_position=-1);
-
-  /*!
-   * \brief Set a link at given position. Used during ADG Construction
-   */
-  sslink* set_link(ssnode* node, int source_position, int sink_position);
+  sslink* add_link(ssnode* node, int source_position=-1, int sink_position=-1, bool insert=true);
 
   /*!
    * \brief Add Empty Link to fill link slot. Used during ADG Construction
@@ -292,6 +309,8 @@ class ssnode {
    */
   std::vector<sslink*> links_[2];  // {output, input}
 
+  NodeType type_{None};
+
   friend class SpatialFabric;
   friend class sslink;
   friend class CodesignInstance;
@@ -304,6 +323,7 @@ class ssnode {
   DEF_ATTR(localId)
   DEF_ATTR(x)
   DEF_ATTR(y)
+  DEF_ATTR(type);
   DEF_ATTR(datawidth)
   DEF_ATTR(granularity)
   DEF_ATTR(max_util)
@@ -320,10 +340,11 @@ class ssnode {
 
 class SpatialNode : public ssnode {
  public:
-  SpatialNode(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  SpatialNode(NodeType type)
+      : ssnode(type) {}
 
-  SpatialNode() {}
+  SpatialNode() 
+      : ssnode() {}
 
   virtual std::string name() const = 0;
   virtual void Accept(adg::Visitor* visitor) = 0;
@@ -334,10 +355,11 @@ class SpatialNode : public ssnode {
 
 class SyncNode : public ssnode {
  public:
-  SyncNode(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  SyncNode(NodeType type)
+      : ssnode(type) {}
 
-  SyncNode() {}
+  SyncNode() 
+      : ssnode() {}
 
   virtual std::string name() const = 0;
   virtual void Accept(adg::Visitor* visitor) = 0;
@@ -387,10 +409,11 @@ class SyncNode : public ssnode {
 
 class DataNode : public ssnode {
  public:
-  DataNode(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : ssnode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  DataNode(NodeType type)
+      : ssnode(type) {}
 
-  DataNode() {}
+  DataNode() 
+      : ssnode() {}
 
   virtual std::string name() const = 0;
   virtual void Accept(adg::Visitor* visitor) = 0;
@@ -477,10 +500,9 @@ public:
 
 class ssswitch : public SpatialNode {
  public:
-  ssswitch() : SpatialNode() {}
 
-  ssswitch(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : SpatialNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssswitch()
+      : SpatialNode(NodeType::Switch) {}
 
   void Accept(adg::Visitor* visitor) override;
 
@@ -590,10 +612,7 @@ class ssswitch : public SpatialNode {
 
 class ssfu : public SpatialNode {
  public:
-  ssfu() : SpatialNode() {}
-
-  ssfu(int datawidth, int granularity, int util, bool dynamic_timing, int fifo,
-       const Capability& fu_type) : SpatialNode(datawidth, granularity, util, dynamic_timing, fifo), fu_type_(fu_type) {}
+  ssfu() : SpatialNode(NodeType::FunctionUnit) {}
 
   SpatialNode* copy() override {
     auto res = new ssfu();
@@ -783,6 +802,60 @@ class ssfu : public SpatialNode {
 
 };
 
+class ssconverge : public SpatialNode {
+ public:
+
+  ssconverge()
+      : SpatialNode(NodeType::Switch) {}
+
+  void Accept(adg::Visitor* visitor) override;
+
+  ssnode* copy() override {
+    auto *res = new ssconverge();
+    *res = *this;
+    return res;
+  }
+
+  virtual std::string name() const override {
+    std::stringstream ss;
+    ss << "CONV" << localId_;
+    return ss.str();
+  }
+  void dumpIdentifier(ostream& os) override {
+  }
+  void dumpFeatures(ostream& os) override {
+  }
+
+  virtual ~ssconverge() {}
+};
+
+class ssdiverge : public SpatialNode {
+ public:
+
+  ssdiverge()
+      : SpatialNode(NodeType::Switch) {}
+
+  void Accept(adg::Visitor* visitor) override;
+
+  ssnode* copy() override {
+    auto *res = new ssdiverge();
+    *res = *this;
+    return res;
+  }
+
+  virtual std::string name() const override {
+    std::stringstream ss;
+    ss << "CONV" << localId_;
+    return ss.str();
+  }
+  void dumpIdentifier(ostream& os) override {
+  }
+  void dumpFeatures(ostream& os) override {
+  }
+
+  virtual ~ssdiverge() {}
+};
+
 
 class ssivport : public SyncNode {
  public:
@@ -793,10 +866,8 @@ class ssivport : public SyncNode {
     return res;
   }
 
-  ssivport() {}
-
-  ssivport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : SyncNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssivport()
+      : SyncNode(NodeType::InputVectorPort) {}
 
   void Accept(adg::Visitor* vistor) override;
   
@@ -933,10 +1004,8 @@ class ssovport : public SyncNode {
     return res;
   }
 
-  ssovport() {}
-
-  ssovport(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : SyncNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssovport()
+      : SyncNode(NodeType::OutputVectorPort) {}
 
   void Accept(adg::Visitor* vistor) override;
   
@@ -1062,10 +1131,9 @@ class ssovport : public SyncNode {
 
 class ssscratchpad : public DataNode {
  public:
-  ssscratchpad() {}
 
-  ssscratchpad(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : DataNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssscratchpad()
+      : DataNode(NodeType::Scratchpad) {}
 
   void Accept(adg::Visitor* visitor) override;
 
@@ -1152,10 +1220,8 @@ class ssdma : public DataNode {
     return res;
   }
 
-  ssdma() {}
-
-  ssdma(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : DataNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssdma()
+      : DataNode(NodeType::DirectMemoryAccess) {}
 
   void Accept(adg::Visitor* vistor) override;
 
@@ -1232,10 +1298,8 @@ class ssrecurrence : public DataNode {
     return res;
   }
 
-  ssrecurrence() {}
-
-  ssrecurrence(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : DataNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssrecurrence()
+      : DataNode(NodeType::Recurrance) {}
 
   void Accept(adg::Visitor* vistor) override;
 
@@ -1310,10 +1374,8 @@ class ssgenerate : public DataNode {
     return res;
   }
 
-  ssgenerate() {}
-
-  ssgenerate(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : DataNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssgenerate()
+      : DataNode(NodeType::Generate) {}
 
   void Accept(adg::Visitor* vistor) override;
 
@@ -1390,10 +1452,8 @@ class ssregister : public DataNode {
     return res;
   }
 
-  ssregister() {}
-
-  ssregister(int datawidth, int granularity, int util, bool dynamic_timing, int fifo)
-      : DataNode(datawidth, granularity, util, dynamic_timing, fifo) {}
+  ssregister()
+      : DataNode(NodeType::Register) {}
 
   void Accept(adg::Visitor* vistor) override;
 

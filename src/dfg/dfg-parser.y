@@ -134,12 +134,23 @@ statement: INPUT ':' io_def  eol {
     auto symbol_id = "$" + name + "State";
     p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 63));
   }
-  for (int i = 0, cnt = 0; i < n; ++i) {
+  for (int i = 0, cnt = 0, startWidth = 0, vid = stated; i < n; ++i) {
     std::stringstream ss;
     ss << name;
     if (len) ss << cnt++;
     // TODO(@were): Do I need to modularize these two clean up segment?
-    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), i + stated, 0, width - 1));
+
+    int endWidth = startWidth + width - 1;
+    if (endWidth > 63) {
+      endWidth -= startWidth;
+      startWidth = 0;
+      vid++;
+    }
+
+    DSA_LOG(PARSE) << "Input port " << ss.str() << " with stated " << stated <<" is created with vid " << vid << " and width " << width << ": " << startWidth << "-" << endWidth;
+
+    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), vid, startWidth, endWidth));
+    startWidth = endWidth + 1;
   }
   auto &in = p->dfg->vins.back();
 
@@ -152,7 +163,7 @@ statement: INPUT ':' io_def  eol {
         DSA_CHECK(false) << "Register (" << $3->source << ") cannot be source of input port.";
       }
       // Create an edge from Array to this array
-      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, in.id(), ve->l, ve->r);
+      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, in.id(), 0, ve->l, ve->r);
 
       // Add Operand to this Input Port
       std::vector<int> es{p->dfg->edges.back().id};
@@ -186,13 +197,13 @@ statement: INPUT ':' io_def  eol {
   p->dfg->emplace_back<T>(n, width, name, p->dfg, p->meta, penetrate);
   if (penetrate != -1) {
     p->dfg->edges.emplace_back(
-      p->dfg, pve->nid, pve->vid, p->dfg->vouts.back().id(), pve->l, pve->r);
+      p->dfg, pve->nid, pve->vid, p->dfg->vouts.back().id(), 0, pve->l, pve->r);
     std::vector<int> es{p->dfg->edges.back().id};
     p->dfg->vouts.back().ops().emplace_back(p->dfg, es, EdgeType::data);
   }
   auto &out = p->dfg->vouts.back();
   int left_len = 0;
-  for (int i = 0, cnt = 0; i < n; ++i) {
+  for (int i = 0, cnt = 0, oid = (penetrate != -1), startWidth = 0; i < n; ++i) {
     std::stringstream ss;
     ss << name;
     // at output, we make the connectivity because the previous edge would already be there..
@@ -204,16 +215,35 @@ statement: INPUT ':' io_def  eol {
       DSA_CHECK(num_entries > 0 && num_entries <= 16);
       std::vector<int> es;
       for (auto elem : ce->entries) {
-        // printf("nid: %d vid: %d l: %d r: %d", elem->nid, elem->vid, elem->l, elem->r);
-        p->dfg->edges.emplace_back(p->dfg, elem->nid, elem->vid, out.id(), elem->l, elem->r);
+        int endWidth = startWidth + elem->r - elem->l;
+        if (endWidth > 63) {
+          startWidth = 0;
+          oid++;
+        }
+
+        DSA_LOG(PARSE) << "Output port " << ss.str() << " with oid " << oid<< " and width " << startWidth << "-" << endWidth << " and value entry " << elem->l << "-" << elem->r;
+
+        p->dfg->edges.emplace_back(p->dfg, elem->nid, elem->vid, out.id(), oid, elem->l, elem->r, startWidth, endWidth);
         es.push_back(p->dfg->edges.back().id);
+
+        startWidth = endWidth + 1;
       }
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
     } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
-      DSA_LOG(PARSE) << p->dfg->nodes[ve->nid]->values[ve->vid].name();
-      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, out.id(), ve->l, ve->r);
+      int endWidth = startWidth + ve->r - ve->l;
+      if (endWidth > 63) {
+        startWidth = 0;
+        oid++;
+      }
+
+      DSA_LOG(PARSE) << "Output port " << ss.str() << " with oid " << oid << " and width " << startWidth << "-" << endWidth << " and value entry " << ve->l << "-" << ve->r;
+
+      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, out.id(), oid, ve->l, ve->r, startWidth, endWidth);
+
       std::vector<int> es{p->dfg->edges.back().id};
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
+      
+      startWidth = endWidth + 1;
     }
   }
   out.values.emplace_back(p->dfg, out.id(), 0);
@@ -225,7 +255,7 @@ statement: INPUT ':' io_def  eol {
     if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(pve)) {
       
       // Add Edge from Output Port to Array
-      p->dfg->edges.emplace_back(p->dfg, out.id(), ve->vid, ve->nid, ve->l, ve->r);
+      p->dfg->edges.emplace_back(p->dfg, out.id(), ve->vid, ve->nid, 0, ve->l, ve->r);
       
       // Add Values to the OutputPort
       std::vector<int> es{p->dfg->edges.back().id};
@@ -294,12 +324,13 @@ statement: INPUT ':' io_def  eol {
   int nid = p->dfg->vins.back().id();
   p->symbols.Set(std::string(name), new ValueEntry(nid, 0));
   int vid = 0;
+  int oid = 0;
   int iid = p->dfg->vouts.back().id();
   int l=0, r=63;
 
   p->dfg->edges.emplace_back(
     p->dfg, nid, vid,
-    iid, l, r);
+    iid, oid, l, r);
 
   std::vector<int> es{p->dfg->edges.back().id};
 

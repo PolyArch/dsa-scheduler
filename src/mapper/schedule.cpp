@@ -22,6 +22,7 @@
 #include "dsa/mapper/dse.h"
 #include "json/json.h"
 #include "pass/bitstream.h"
+#include "pass/sched_graphviz.h"
 
 using namespace std;
 using namespace dsa;
@@ -591,194 +592,22 @@ void Schedule::printEdge() {
     auto edge = edge_prop()[i];
     if (auto outputPort = dynamic_cast<dsa::dfg::OutputPort*>(edges[i].use())) {
       int sourceIdx = outputPort->sourceEdgeIdx(&edges[i]);
-      std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << "," << sourceIdx << ")" << std::endl;
+      DSA_INFO << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << "," << sourceIdx << ")";
     } else {
-      std::cout << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << ")" << std::endl;
+      DSA_INFO << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << ")";
     }
     for (int i = 0; i < edge.links.size(); ++i) {
       auto link = edge.links[i].second;
-      std::cout << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << " (" << link->source()->link_index(link, false) << "," << link->sink()->link_index(link, true) << ")" << std::endl;
+      auto slot = edge.links[i].first;
+      //auto sourceSlot = node_prop()[link->source()->id()];
+      
+      DSA_INFO << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << " S:(" << slot << ") I:(" << link->source()->link_index(link, false) << "," << link->sink()->link_index(link, true) << ")";
     }
   }
-}
-
-void Schedule::printMvnGraphviz(std::ofstream& ofs, ssnode* node) {
-  auto& np = _nodeProp[node->id()];
-
-  for (int i = 0; i < (int) np.slots.size(); ++i) {
-    std::vector<dsa::dfg::Node*> vertices;
-    for (auto elem : np.slots[i].vertices) {
-      if (elem.second == i) {
-        vertices.push_back(elem.first);
-      }
-    }
-
-    if (vertices.size() == 0) {
-      if (dynamic_cast<SpatialNode*>(node)) {
-        ofs << "<tr><td border=\"1\"> " << node->name() << " </td></tr>";
-      }
-    } else {
-      for (auto v : vertices) {
-        if (!v->values.empty()) {
-          ofs << "<tr><td port=\"" << v->name() << "\" border=\"1\" bgcolor=\"#"
-              << std::hex << std::setfill('0') << std::setw(6) << colorOf(&v->values[0]) << std::dec << "\">" << v->name()
-              << "</td></tr>";
-        }
-      }
-    }
-  }
-}
-
-void Schedule::printMelGraphviz(std::ofstream& ofs, ssnode* node) {
-  for (auto link : node->out_links()) {
-    int ovr = 0, agg_ovr = 0, max_util = 0;
-    get_link_overprov(link, ovr, agg_ovr, max_util);
-
-    std::vector<int> empty_slots;
-
-    // show unique values and slices:  Value, l(), r()
-    std::set<std::tuple<dsa::dfg::Value*, int, int>> seen_values;
-
-    auto& lp = _linkProp[link->id()];
-
-    // First Get all the Empty Slots
-    for (int slot = 0; slot < (int) lp.slots.size(); ++slot) {
-      if (lp.slots[slot].edges.size() == 0) empty_slots.push_back(slot);
-    }
-
-    for (int slot = 0; slot < (int) lp.slots.size(); ++slot) {
-      for (auto it : lp.slots[slot].edges) {
-        dsa::dfg::Edge* e = &ssdfg()->edges[it.eid];
-        auto print_tuple = make_tuple(e->val(), e->l, e->r);
-        if (!seen_values.count(print_tuple)) {
-          seen_values.insert(print_tuple);
-
-          // First Print the Name of Link Source Node and Sink Node
-          ofs << link->source()->name() << "->" << link->sink()->name();
-          
-          // Print the Color of the link
-          ofs << " [color=\"#" << std::hex << std::setfill('0') 
-              << std::setw(6) << colorOf(e->val()) << std::dec << "\" ";
-          
-          // If the link is overutilized, make it dotted
-          if (link->max_util() > 1) {
-            ofs << "style=dotted";
-          }
-          
-          // Print the label of the link
-          ofs << " label=\"";
-          if (slot != 0) {
-            ofs << "s:" << slot << "-" << slot + e->bitwidth() / 8 - 1;
-          }
-          if (agg_ovr != 0) {
-            ofs << "OVR:" << agg_ovr << " ";
-          }
-          ofs << "D:" << edge_delay(e) << "/" << max_edge_delay(e) << " ";
-          if (empty_slots.size() > 0 && empty_slots.size() != 8) {
-            ofs << "S:";
-            printCondensedVector(empty_slots, ofs);
-          }
-
-          ofs << "\"];\n";
-        }
-      }
-    }
-    
-    if (seen_values.size() == 0) {
-      ofs << link->source()->name() << "->" << link->sink()->name()
-          << " [color=gray style=dotted, label=\"";
-      if (empty_slots.size() != 8) {
-        printCondensedVector(empty_slots, ofs);
-      }
-      ofs << "\" fontcolor=gray]"
-          << "\n";
-    }
-  }
-}
-
-void Schedule::printCondensedVector(std::vector<int>& vec, std::ostream& os) {
-  int prev_i = -100;
-  bool printed_dash = false;
-  for (unsigned ind = 0; ind < vec.size(); ind++) {
-    int i = vec[ind];
-    if (ind == 0) {
-      os << i;
-    } else if (ind == vec.size() - 1) {
-      if (printed_dash)
-        os << i;
-      else
-        os << "," << i;
-    } else if (prev_i + 1 == i) {
-      if (!printed_dash) {
-        os << "-";
-        printed_dash = true;
-      }
-    } else {
-      if (printed_dash) {
-        os << prev_i << "," << i;
-      } else {
-        os << "," << i;
-      }
-      printed_dash = false;
-    }
-    prev_i = i;
-  }
-}
-
-void Schedule::printNodeGraphviz(std::ofstream& ofs, ssnode* node) {
-  int sy = _ssModel->subModel()->sizey();
-
-  if (dynamic_cast<SyncNode*>(node)) {
-    auto& np = _nodeProp[node->id()];
-    if (np.slots[0].vertices.size() == 0) return;
-  }
-
-  ofs << node->name() << "[shape=plaintext, ";
-  ofs << "label = <<table border=\"0\" cellspacing=\"0\">";
-
-  printMvnGraphviz(ofs, node);
-
-  ofs << "\n</table>>, pos = \"" << gvsf * node->x() + gvsf / 2.0 << ","
-      << sy - gvsf * node->y() - 1 - gvsf / 2.0 << "!\"";
-  ofs << ", pin=true];\n";
-}
-
-void Schedule::printSwitchGraphviz(std::ofstream& ofs, ssswitch* sw) {
-  int sy = _ssModel->subModel()->sizey();
-
-  ofs << sw->name() << " [shape=diamond, ";
-  ofs << "pos = \"" << gvsf * sw->x() << "," << sy - gvsf * sw->y() - 1 << "!\"";
-  ofs << ", pin=true];\n";
 }
 
 void Schedule::printGraphviz(const char* name) {
-  std::ofstream ofs = ofstream(name);
-  DSA_CHECK(ofs.good()) << name << " not opened!";
-
-  dsa::SpatialFabric* sub = _ssModel->subModel();
-
-  ofs << "digraph sched {\n";
-
-  for (auto* elem : sub->dma_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->recur_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->gen_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->scratch_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->input_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->output_list()) printNodeGraphviz(ofs, elem);
-
-  for (auto* elem : sub->switch_list()) printSwitchGraphviz(ofs, elem);
-
-  for (auto* elem : sub->fu_list()) printNodeGraphviz(ofs, elem);
-
-  for (ssnode* node : sub->node_list()) printMelGraphviz(ofs, node);
-
-  ofs << "}\n\n";
-  ofs.close();
+  mapper::pass::sched_graphviz(name, _ssModel->subModel(), this);
 }
 
 void Schedule::stat_printOutputLatency() {
@@ -976,7 +805,7 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
   if (dynamic_cast<DataNode*>(link->sink()))
     return;
   
-  int n = link->source()->datawidth() / link->source()->granularity();
+  int n = std::min(link->source()->lanes(), link->sink()->lanes());
   for (int slot = 0; slot < n; ++slot) {
     auto& lp = _linkProp[link->id()];
     int util = 0;

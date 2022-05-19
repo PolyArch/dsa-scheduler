@@ -9,6 +9,7 @@
 
 #include "../utils/model_parsing.h"
 #include "../mapper/pass/print_json.h"
+#include "../mapper/pass/adg_graphviz.h"
 #include "dsa/arch/sub_model.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/debug.h"
@@ -26,6 +27,26 @@ std::string sslink::name() const {
   std::stringstream ss;
   ss << source_->name() << "_to_" << sink_->name();
   return ss.str();
+}
+/**
+ * @brief 
+ * 
+ * @param slot the 
+ * @param width the number of lanes required
+ * @return int bitmask of acceptable routes
+ */
+
+void sslink::resetSubnet() {
+  // Resize the subnetwork
+  subnet.resize(std::min(source()->lanes(), sink()->lanes()));
+  for (int i = 0; i < subnet.size(); i++) {
+    // We want to set diagonal and 1 plus diagonal to 1 by default
+    if (i < 2) {
+      subnet[i] =  ~0ull >> (64 - bitwidth());
+    } else {
+      subnet[i] = 0;
+    }
+  }
 }
 
 int sslink::slots(int slot, int width) {
@@ -47,7 +68,11 @@ int sslink::slots(int slot, int width) {
    * check the one's in O(1) by bit operation.
    * */
   uint64_t res = 0;
-  int n = std::min((int) subnet.size(), sink()->lanes());
+
+  // Number of lanes
+  int n = std::min(source()->lanes(), sink()->lanes());
+  DSA_CHECK(n <= subnet.size());
+  
   auto f = [](uint64_t a, int bits) {
     auto full_mask = ~0ull >> (64 - bits);
     return (a & full_mask) == full_mask;
@@ -306,211 +331,23 @@ SpatialFabric::SpatialFabric(const SpatialFabric& c) : _sizex(c._sizex), _sizey(
   }
 }
 
-// Graph of the configuration or substrate
-void SpatialFabric::PrintGraphviz(ostream& os) {
-  os << "Digraph G { \n";
-
-  // DMA
-  for (auto* dma : dma_list()) {
-    os << dma->name() << " [shape=\"circle\"]" << ";\n";
-    for (auto& elem : dma->out_links()) {
-      const ssnode* dest_node = elem->sink();
-      os << dma->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  // Recurrance
-  for (auto* rec : recur_list()) {
-    os << rec->name() << " [shape=\"circle\"]" << ";\n";
-    for (auto& elem : rec->out_links()) {
-      const ssnode* dest_node = elem->sink();
-      os << rec->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  // Generate
-  for (auto* gen : gen_list()) {
-    os << gen->name() << " [shape=\"circle\"]" << ";\n";
-    for (auto& elem : gen->out_links()) {
-      const ssnode* dest_node = elem->sink();
-      os << gen->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  // Scratchpad
-  for (auto* spm : scratch_list()) {
-    os << spm->name() << " [shape=\"circle\"]" << ";\n";
-    for (auto& elem : spm->out_links()) {
-      const ssnode* dest_node = elem->sink();
-      os << spm->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-  
-  // VPorts
-  for (auto* vport : vport_list()) {
-    os << vport->name() << " [shape=\"circle\"]" << ";\n";
-    for (auto& elem : vport->out_links()) {
-      const ssnode* dest_node = elem->sink();
-      os << vport->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  // switches
-  for (auto* sw : switch_list()) {
-    // output links
-    os << sw->name() << " [shape=\"diamond\"]" << ";\n";
-    for (auto& elem : sw->out_links()) {
-      const ssnode* dest_node = elem->sink();  // FUs and output nodes
-      os << sw->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  // fus
-  for (auto* fu : fu_list()) {
-    os << fu->name() << " [shape=\"box\"]" << ";\n";
-    for (auto& elem : fu->out_links()) {
-      const ssnode* dest_node = elem->sink();  // Output link of each FU
-      os << fu->name() << " -> " << dest_node->name() << ";\n";
-    }
-  }
-
-  os << "}\n";
+void SpatialFabric::PrintGraphviz(const std::string& name) {
+  dsa::mapper::pass::adg_graphviz(name, this);
 }
 
 void SpatialFabric::DumpHwInJson(const char* name) {
-  // Sanity Check for the output stream file
-  ofstream os(name);
-  DSA_CHECK(os.good()) << "ADG (json) File has bas output stream";
-  DSA_INFO << "Emit ADG (Json) File: " << name;
-
   // Check the version of ADG (new version: include the Memory Node Info; legacy version: just CGRA)
   bool newVersionADG = !ContextFlags::Global().adg_compat;
 
   // Switch between the different version of ADG
   if (newVersionADG) {
-    os << "{" << std::endl;
-    os << "\"" << adg::ADGKEY_NAMES[adg::DSANODES] << "\" : { " << std::endl;
-    dsa::adg::JsonWriter writer(os);
-    
-    // First Dump Processing Elements
-    for (auto* node : fu_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Switches
-    for (auto* node : switch_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Reccurrance
-    for (auto* node : recur_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Register
-    for (auto* node : reg_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Generate
-    for (auto* node : gen_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Scratchpad
-    for (auto* node : scratch_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump DMA
-    for (auto* node : dma_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Input VectorPorts
-    for (auto* node : input_list()) {
-      node->Accept(&writer);
-      os << "," << std::endl;
-    }
-
-    // Then Dump Output VectorPorts
-    for (int i = 0; i < output_list().size(); i++) {
-      output_list()[i]->Accept(&writer);
-      if (i != output_list().size() - 1) {
-        os << ",";
-      }
-      os << std::endl;
-    }
-
-    os << "}," << std::endl;
-    os << "\"" << adg::ADGKEY_NAMES[adg::DSAEDGES] << "\" : [ ";
-    // Print Edges
-    for (int i = 0; i < link_list().size(); i++) {
-      auto link = link_list()[i];
-      os << "{" << std::endl;
-      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODETYPE] << "\" : \"";
-      if (auto fu = dynamic_cast<ssfu*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
-      else if (auto sw = dynamic_cast<ssswitch*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
-      else if (auto ivp = dynamic_cast<ssivport*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
-      else if (auto ovp = dynamic_cast<ssovport*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      else if (auto dma = dynamic_cast<ssdma*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
-      else if (auto spm = dynamic_cast<ssscratchpad*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
-      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
-      else if (auto ovp = dynamic_cast<ssgenerate*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
-      else if (auto ovp = dynamic_cast<ssregister*>(link->source()))
-        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
-      os << "\"," << std::endl;
-
-      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODEID] << "\" : " << link->source()->localId() << "," << std::endl;
-      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCEINDEX] << "\" : " << link->source()->link_index(link, false) << "," << std::endl;
-
-      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODETYPE] << "\" : \"";
-      if (auto fu = dynamic_cast<ssfu*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
-      else if (auto sw = dynamic_cast<ssswitch*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
-      else if (auto ivp = dynamic_cast<ssivport*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
-      else if (auto ovp = dynamic_cast<ssovport*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
-      else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
-      else if (auto spm = dynamic_cast<ssscratchpad*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
-      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
-      else if (auto ovp = dynamic_cast<ssgenerate*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
-      else if (auto ovp = dynamic_cast<ssregister*>(link->sink()))
-        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
-      os << "\"," << std::endl;
-
-      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODEID] << "\" : " << link->sink()->localId() << "," << std::endl;
-      os << "\"" << adg::ADGKEY_NAMES[adg::SINKINDEX] << "\" : " << link->sink()->link_index(link, true) << std::endl;
-      os << "}";
-      if (i < link_list().size() - 1)
-        os << ",";
-      os << " ";
-    }
-
-    os << "]" << std::endl;
-    os << "}" << std::endl;
+    dsa::adg::print_json(name, this);
   } else {
+    // Sanity Check
+    ofstream os(name);
+    DSA_CHECK(os.good()) << "ADG (json) File has bas output stream";
+    DSA_INFO << "Emit ADG (Json) File: " << name;
+
     os << "{\n";  // Start of the JSON file
     // Instruction Set
     int start_enc = 3;
@@ -611,61 +448,49 @@ void SpatialFabric::build_substrate(int sizex, int sizey) {
  * @param sink_position 
  * @return sslink* 
  */
-sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position) {
-  sslink* link = new sslink(this, node);
+sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position, bool insert) {
+  // Check for cycle
   DSA_CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
-  auto& olinks = links_[0];
+
+  // Create the link
+  sslink* link = new sslink(this, node);
+  
+  // get link parameters
+  auto& src_links = out_links();
+  auto& dst_links = node->in_links();
+
+  // Set the Source Link
   if (source_position == -1) {
-    olinks.push_back(link);
+    src_links.push_back(link);
   } else {
-    DSA_CHECK(source_position < links_[0].size()) << "Invalid source position " << source_position << " " << links_[0].size();
-    links_[0].insert(links_[0].begin() + source_position, link);
+    DSA_CHECK(source_position < src_links.size()) << "Invalid source position " << source_position << " " << src_links.size();
+    if (insert) {
+      src_links.insert(src_links.begin() + source_position, link);
+    } else {
+      src_links[source_position] = link;
+    }
   }
 
-  link->subnet.resize(link->sink()->lanes());
-  // TODO(@dylan): fix this.
-  link->subnet[0] = ~0ull >> (64 - link->bitwidth());
-  if (link->sink()->lanes() > 1) {
-    link->subnet[1] = ~0ull >> (64 - link->bitwidth());
-  }
-
-  DSA_LOG(SUBNET) << link->subnet[0];
-
+  // Set the Sink Link
   if (sink_position == -1) {
-    node->links_[1].push_back(link);
+    dst_links.push_back(link);
   } else {
-    DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid sink position " << sink_position;
-    node->links_[1].insert(node->links_[1].begin() + sink_position, link);
-  }
-  return link;
-}
-
-sslink* ssnode::set_link(ssnode* node, int source_position, int sink_position) {
-  sslink* link = new sslink(this, node);
-  DSA_CHECK(this != node) << "Cycle link is not allowed! " << id() << " " << node->id();
-
-  DSA_CHECK(source_position < links_[0].size()) << "Invalid source position " << source_position << " " << links_[0].size();
-  
-  links_[0][source_position] = link;
-
-  link->subnet.resize(link->bitwidth() / link->source()->granularity());
-  link->subnet[0] = ~0ull >> (64 - link->bitwidth());
-  if (link->sink()->lanes() > 1) {
-    link->subnet[1] = ~0ull >> (64 - link->bitwidth());
+    DSA_CHECK(sink_position < dst_links.size()) << "Invalid sink position " << sink_position << " " << dst_links.size();
+    if (insert) {
+      dst_links.insert(dst_links.begin() + sink_position, link);
+    } else {
+      dst_links[sink_position] = link;
+    }
   }
 
-  DSA_LOG(SUBNET) << link->subnet[0] << link->subnet[1] << "\n";
+  link->resetSubnet();
 
-  DSA_CHECK(sink_position < node->links_[1].size()) << "Invalid sink position " << sink_position;
-
-  node->links_[1][sink_position] = link;
-  
   return link;
 }
 
 void ssnode::add_empty_link(ssnode* node) {
-  links_[0].push_back(nullptr);
-  node->links_[1].push_back(nullptr);
+  out_links().push_back(nullptr);
+  node->in_links().push_back(nullptr);
 }
 
 void SpatialFabric::connect_substrate(int _sizex, int _sizey, PortType portType, int ips,

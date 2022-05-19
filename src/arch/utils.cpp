@@ -295,8 +295,14 @@ SpatialFabric* Import(std::string filename) {
 
           // Not all of the parameter above is used, I will add them later in the ssfu
           // definition after submission
-          ssfu* fu = new ssfu(compBits, compUnitBits, fuInstSlotSize, fuOpDynamic,
-                              fuDelayFifoDepth, fu_type);
+          ssfu* fu = new ssfu();
+          
+          fu->datawidth(compBits);
+          fu->granularity(compUnitBits);
+          fu->max_util(fuInstSlotSize);
+          fu->flow_control(fuOpDynamic);
+          fu->max_delay(fuDelayFifoDepth);
+          fu->fu_type(fu_type);
 
           // Set operation related parameter above
           fu->maxOpRepeat(fuOpMaxRepeat);
@@ -357,10 +363,16 @@ SpatialFabric* Import(std::string filename) {
           Json::Value routeParam = (*dsaNode)[ADGKEY_NAMES[SW_ROUTE]];
           // TODO: the fine grain subnet routing connectivity matrix is not used in
           // scheduler let me add it after the submission
-          node =
-              new ssswitch(compBits, compUnitBits, 1 /*Switch cannot be shared now*/,
-                           !staticOutBuff /*if static switch, outbuffer will be ignore*/,
-                           outBuffDepth);
+          ssswitch* sw = new ssswitch();
+          
+          sw->datawidth(compBits);
+          sw->granularity(compUnitBits);
+          sw->max_util(1);
+          sw->flow_control(!staticOutBuff);
+          sw->max_delay(outBuffDepth);
+
+          node = sw;
+
           // Add the node to spatial fabric
           node->localId(localNodeId);
           sf->add_node(node);
@@ -391,10 +403,15 @@ SpatialFabric* Import(std::string filename) {
           // Get the suggest depth for the vector port
           int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
-          auto vp = new ssivport(compBits, compUnitBits,
-                                /* max_util */ 1,
-                                /* dynamic timing */ true,
-                                /* fifo depth=*/suggestDepth);
+          auto vp = new ssivport();
+
+          
+          vp->datawidth(compBits);
+          vp->granularity(compUnitBits);
+          vp->max_util(1);
+          vp->flow_control(true);
+          vp->max_delay(suggestDepth);
+          
           // Set the vector port implementation
           int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
           vp->vp_impl(vpImpl);
@@ -441,10 +458,14 @@ SpatialFabric* Import(std::string filename) {
           // Get the suggest depth for the vector port
           int suggestDepth = nodeParam[ADGKEY_NAMES[DEPTH_BYTE]].asInt();
           // Create the vector port
-          auto vp = new ssovport(compBits, compUnitBits,
-                                /* max_util */ 1,
-                                /* dynamic timing */ true,
-                                /* fifo depth=*/suggestDepth);
+          auto vp = new ssovport();
+
+          vp->datawidth(compBits);
+          vp->granularity(compUnitBits);
+          vp->max_util(1);
+          vp->flow_control(true);
+          vp->max_delay(suggestDepth);
+
           // Set the vector port implementation
           int vpImpl = nodeParam[ADGKEY_NAMES[VP_IMPL]].asInt();
           vp->vp_impl(vpImpl);
@@ -634,186 +655,112 @@ SpatialFabric* Import(std::string filename) {
       auto sf = res;
       DSA_CHECK(jsonLinks.isArray());
 
-      // First loop through and set links
-      for (int i = 0; i < jsonLinks.size(); ++i) {
-        auto& dsaLink = jsonLinks[i];
-        DSA_CHECK(dsaLink.isObject());
-        // Get the Source and Sink Node Type
-        std::string sourceNodeType = dsaLink[ADGKEY_NAMES[SOURCENODETYPE]].asString();
-        std::string sinkNodeType = dsaLink[ADGKEY_NAMES[SINKNODETYPE]].asString();
-        // Get the Souce and Sink Node Local ID
-        int sourceNodeId = dsaLink[ADGKEY_NAMES[SOURCENODEID]].asInt();
-        int sinkNodeId = dsaLink[ADGKEY_NAMES[SINKNODEID]].asInt();
-        // Get the source and sink edge index
-        int sourceIndex = dsaLink[ADGKEY_NAMES[SOURCEINDEX]].asInt();
-        int sinkIndex = dsaLink[ADGKEY_NAMES[SINKINDEX]].asInt();
+      for (int iter = 0; iter < 2; iter++) {
+        // Now Loop Through and add the links
+        for (int i = 0; i < jsonLinks.size(); ++i) {
+          auto& dsaLink = jsonLinks[i];
+          DSA_CHECK(dsaLink.isObject());
+          // Get the Source and Sink Node Type
+          std::string sourceNodeType = dsaLink[ADGKEY_NAMES[SOURCENODETYPE]].asString();
+          std::string sinkNodeType = dsaLink[ADGKEY_NAMES[SINKNODETYPE]].asString();
+          // Get the Souce and Sink Node Local ID
+          int sourceNodeId = dsaLink[ADGKEY_NAMES[SOURCENODEID]].asInt();
+          int sinkNodeId = dsaLink[ADGKEY_NAMES[SINKNODEID]].asInt();
+          // Get the source and sink edge index
+          int sourceIndex = dsaLink[ADGKEY_NAMES[SOURCEINDEX]].asInt();
+          int sinkIndex = dsaLink[ADGKEY_NAMES[SINKINDEX]].asInt();
 
-        // Get the source Module from the table
-        ssnode* sourceModule;
-        bool sourceDefined = false;
-        if (sourceNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
-          sourceModule = fu_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
-          sourceModule = sw_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
-          sourceModule = ivp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
-          sourceModule = ovp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
-          sourceModule = dma_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
-          sourceModule = sp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
-          sourceModule = rec_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
-          sourceModule = gen_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
-          sourceModule = reg_tab[sourceNodeId];
-          sourceDefined = true;
-        } else {
-          DSA_CHECK(false) << "Unknown source node type: " << sourceNodeType;
-        }
+          // Get the source Module from the table
+          ssnode* sourceModule;
+          bool sourceDefined = false;
+          if (sourceNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
+            sourceModule = fu_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
+            sourceModule = sw_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
+            sourceModule = ivp_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
+            sourceModule = ovp_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
+            sourceModule = dma_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
+            sourceModule = sp_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
+            sourceModule = rec_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
+            sourceModule = gen_tab[sourceNodeId];
+            sourceDefined = true;
+          } else if (sourceNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
+            sourceModule = reg_tab[sourceNodeId];
+            sourceDefined = true;
+          } else {
+            DSA_CHECK(false) << "Unknown source node type: " << sourceNodeType;
+          }
 
-        // Get the sink Module from the table
-        ssnode* sinkModule;
-        bool sinkDefined = false;
-        if (sinkNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
-          sinkModule = fu_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
-          sinkModule = sw_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
-          sinkModule = ovp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
-          sinkModule = ivp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
-          sinkModule = dma_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
-          sinkModule = sp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
-          sinkModule = rec_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
-          sinkModule = gen_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
-          sinkModule = reg_tab[sinkNodeId];
-          sinkDefined = true;
-        } else {
-          DSA_CHECK(false) << "Unknown sink node type: " << sinkNodeType;
-        }
-        if (sourceDefined && sinkDefined) {
-          DSA_CHECK(sourceModule != nullptr) << "Source Module is null: " << sourceNodeType << " " << sourceNodeId;
-          DSA_CHECK(sinkModule != nullptr) << "Sink Module is null: " << sinkNodeType << " " << sinkNodeId;
-          sourceModule->add_empty_link(sinkModule);
-        }
+          // Get the sink Module from the table
+          ssnode* sinkModule;
+          bool sinkDefined = false;
+          if (sinkNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
+            sinkModule = fu_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
+            sinkModule = sw_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
+            sinkModule = ovp_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
+            sinkModule = ivp_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
+            sinkModule = dma_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
+            sinkModule = sp_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
+            sinkModule = rec_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
+            sinkModule = gen_tab[sinkNodeId];
+            sinkDefined = true;
+          } else if (sinkNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
+            sinkModule = reg_tab[sinkNodeId];
+            sinkDefined = true;
+          } else {
+            DSA_CHECK(false) << "Unknown sink node type: " << sinkNodeType;
+          }
+
+          // Connect between node
+          if (sourceDefined && sinkDefined) {
+            DSA_CHECK(sourceModule != nullptr) << "Source Module is null: " << sourceNodeType << " " << sourceNodeId;
+            DSA_CHECK(sinkModule != nullptr) << "Sink Module is null: " << sinkNodeType << " " << sinkNodeId;
+
+            if (iter == 0) {
+              sourceModule->add_empty_link(sinkModule);
+            } else {
+              DSA_LOG(ADG) << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId
+                           << "[" << sourceIndex << "]"
+                           << " --> " << sinkNodeType << "." << sinkNodeId << "["
+                           << sinkIndex << "]";
+              DSA_CHECK(sourceModule->out_links().size() > sourceIndex)
+                  << "Source module In links out of bounds: "
+                  << sourceModule->out_links().size() << " " << sourceIndex;
+              DSA_CHECK(sinkModule->in_links().size() > sinkIndex)
+                  << "Sink Module Out Links out of bounds: "
+                  << sinkModule->in_links().size() << " " << sinkIndex;
+              sourceModule->add_link(sinkModule, sourceIndex, sinkIndex, false);
+            }
+          }
+        }  // End of loop over all links
       }
-
-      // Now Loop Through and add the links
-      for (int i = 0; i < jsonLinks.size(); ++i) {
-        auto& dsaLink = jsonLinks[i];
-        DSA_CHECK(dsaLink.isObject());
-        // Get the Source and Sink Node Type
-        std::string sourceNodeType = dsaLink[ADGKEY_NAMES[SOURCENODETYPE]].asString();
-        std::string sinkNodeType = dsaLink[ADGKEY_NAMES[SINKNODETYPE]].asString();
-        // Get the Souce and Sink Node Local ID
-        int sourceNodeId = dsaLink[ADGKEY_NAMES[SOURCENODEID]].asInt();
-        int sinkNodeId = dsaLink[ADGKEY_NAMES[SINKNODEID]].asInt();
-        // Get the source and sink edge index
-        int sourceIndex = dsaLink[ADGKEY_NAMES[SOURCEINDEX]].asInt();
-        int sinkIndex = dsaLink[ADGKEY_NAMES[SINKINDEX]].asInt();
-
-        // Get the source Module from the table
-        ssnode* sourceModule;
-        bool sourceDefined = false;
-        if (sourceNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
-          sourceModule = fu_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
-          sourceModule = sw_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
-          sourceModule = ivp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
-          sourceModule = ovp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
-          sourceModule = dma_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
-          sourceModule = sp_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
-          sourceModule = rec_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
-          sourceModule = gen_tab[sourceNodeId];
-          sourceDefined = true;
-        } else if (sourceNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
-          sourceModule = reg_tab[sourceNodeId];
-          sourceDefined = true;
-        } else {
-          DSA_CHECK(false) << "Unknown source node type: " << sourceNodeType;
-        }
-
-        // Get the sink Module from the table
-        ssnode* sinkModule;
-        bool sinkDefined = false;
-        if (sinkNodeType.compare(ADGKEY_NAMES[PE_TYPE]) == 0) {
-          sinkModule = fu_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[SW_TYPE]) == 0) {
-          sinkModule = sw_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[OVP_TYPE]) == 0) {
-          sinkModule = ovp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[IVP_TYPE]) == 0) {
-          sinkModule = ivp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[DMA_TYPE]) == 0) {
-          sinkModule = dma_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[SPM_TYPE]) == 0) {
-          sinkModule = sp_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[REC_TYPE]) == 0) {
-          sinkModule = rec_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[GEN_TYPE]) == 0) {
-          sinkModule = gen_tab[sinkNodeId];
-          sinkDefined = true;
-        } else if (sinkNodeType.compare(ADGKEY_NAMES[REG_TYPE]) == 0) {
-          sinkModule = reg_tab[sinkNodeId];
-          sinkDefined = true;
-        } else {
-          DSA_CHECK(false) << "Unknown sink node type: " << sinkNodeType;
-        }
-
-        // Connect between node
-        if (sourceDefined && sinkDefined) {
-          DSA_LOG(ADG) << "\tConnect:\t" << sourceNodeType << "." << sourceNodeId << "["
-                   << sourceIndex << "]"
-                   << " --> " << sinkNodeType << "." << sinkNodeId << "[" << sinkIndex
-                   << "]";
-          // Use Set Link to ensure proper indexing
-          sourceModule->set_link(sinkModule, sourceIndex, sinkIndex);
-        }
-      }  // End of loop over all links
     }    // End of parsing all json links
   } else {
 
@@ -841,9 +788,13 @@ SpatialFabric* Import(std::string filename) {
       // Initialize Different Module
       if (nodeType == "switch") {
         bool timing = cgranode["flow_control"].asBool();
-        node = new ssswitch(cgranode["data_width"].asInt(),
-                            cgranode["granularity"].asInt(), cgranode["max_util"].asInt(),
-                            /*dynamic timing=*/timing, /*fifo depth=*/2);
+        node = new ssswitch();
+
+        node->datawidth(cgranode["data_width"].asInt());
+        node->granularity(cgranode["granularity"].asInt());
+        node->max_util(cgranode["max_util"].asInt());
+        node->flow_control(timing);
+        node->max_delay(2);
       } else if (nodeType == "processing element" || nodeType == "function unit") {
         bool timing = cgranode["flow_control"].asBool();
         DSA_CHECK(cgranode["instructions"].isArray());
@@ -863,10 +814,14 @@ SpatialFabric* Import(std::string filename) {
           }
           fu_type.Add(opcode, cnt);
         }
-        node = new ssfu(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
-                        cgranode["max_util"].asInt(),
-                        /*dynamic timing=*/timing, /*fifo depth=*/2,
-                        /*fu capability=*/fu_type);
+        ssfu* fu = new ssfu();
+        fu->datawidth(cgranode["data_width"].asInt());
+        fu->granularity(cgranode["granularity"].asInt());
+        fu->max_util(cgranode["max_util"].asInt());
+        fu->flow_control(timing);
+        fu->max_delay(2);
+        fu->fu_type(fu_type);
+        node = fu;
       } else if (nodeType == "vector port") {
         bool is_input = false;
         int in_vec_width = cgranode["num_input"].asInt();
@@ -888,19 +843,23 @@ SpatialFabric* Import(std::string filename) {
         }
         if (is_input) {
           auto vp =
-              new ssivport(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
-                          cgranode["max_util"].asInt(),
-                          /*dynamic timing=*/true,
-                          /*fifo depth=*/2);
+              new ssivport();
+          vp->datawidth(cgranode["data_width"].asInt());
+          vp->granularity(cgranode["granularity"].asInt());
+          vp->max_util(cgranode["max_util"].asInt());
+          vp->flow_control(true);
+          vp->max_delay(2);
           vp->port(port_num);
           vp->vp_stated(true);
           node = vp;
         } else {
           auto vp =
-              new ssovport(cgranode["data_width"].asInt(), cgranode["granularity"].asInt(),
-                          cgranode["max_util"].asInt(),
-                          /*dynamic timing=*/true,
-                          /*fifo depth=*/2);
+              new ssovport();
+          vp->datawidth(cgranode["data_width"].asInt());
+          vp->granularity(cgranode["granularity"].asInt());
+          vp->max_util(cgranode["max_util"].asInt());
+          vp->flow_control(true);
+          vp->max_delay(2);
           vp->port(port_num);
           vp->vp_stated(true);
           node = vp;
