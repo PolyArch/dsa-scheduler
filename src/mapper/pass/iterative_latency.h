@@ -43,7 +43,8 @@ inline void inject_noop_impl(SSDfg* dfg, int eid, Instruction* inst) {
     dfg->emplace_back<Instruction>(dfg, SS_NONE);
     inst = &dfg->instructions.back();
     // Create a edge from source to noop
-    dfg->edges.emplace_back(dfg, dfg->edges[eid].sid, dfg->edges[eid].vid, inst->id(),
+    auto &e = dfg->edges[eid];
+    dfg->edges.emplace_back(dfg, e.sid, e.vid, inst->id(), e.oid,
                             dfg->edges[eid].l, dfg->edges[eid].r);
     std::vector<int> es{dfg->edges.back().id};
     inst->ops().emplace_back(dfg, es, OperandType::data);

@@ -38,6 +38,7 @@ struct Exporter : Visitor {
           edge_obj["src_id"] = edge->def()->id();
           edge_obj["src_val"] = edge->val()->index;
           edge_obj["delay"] = edge->delay;
+          edge_obj["oid"] = edge->oid;
           edge_obj["l"] = edge->l;
           edge_obj["r"] = edge->r;
           edges.append(edge_obj);
@@ -431,9 +432,10 @@ SSDfg* Import(const std::string& s) {
           int src_id = edge_obj["src_id"].asInt();
           int src_val = edge_obj["src_val"].asInt();
           int delay = edge_obj["delay"].asInt();
+          int oid = edge_obj["oid"].asInt();
           int l = edge_obj["l"].asInt();
           int r = edge_obj["r"].asInt();
-          Edge e_instance(res, src_id, src_val, i, l, r);
+          Edge e_instance(res, src_id, src_val, i, oid, l, r);
           es.push_back(edge_obj["id"].asInt());
           if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
           e_instance.delay = delay;
