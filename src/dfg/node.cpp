@@ -138,7 +138,6 @@ bool Operand::predicate() {
 Edge::Edge(SSDfg* parent, int sid, int vid, int uid, int oid, int l, int r, int outl, int outr)
     : sid(sid), vid(vid), uid(uid), oid(oid), parent(parent), l(l), r(r), outl(outl), outr(outr) {
   id = parent->edges.size();
-  DSA_INFO << l << ", " << r;
   
   if (dynamic_cast<dsa::dfg::Array*>(use())) {
     _memory = true;
