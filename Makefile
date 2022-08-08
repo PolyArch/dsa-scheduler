@@ -2,6 +2,7 @@ CMAKE_BUILD_TYPE ?= Release
 all: 3rd-party/libtorch json dsa
 
 # Get the download zip URL of libtorch
+.PHONY: libtorch-download
 libtorch-download:
 ifeq ($(OS),Windows_NT)
     TORCH_URL := https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.11.0%2Bcpu.zip
@@ -18,10 +19,8 @@ endif
 
 # Install LibTorch
 3rd-party/libtorch: libtorch-download
-ifneq ($(OS),Windows_NT)
 ifeq ($(UNAME_P),arm)
-ifeq ($(UNAME_S),Darwin)
-	# Build LibTorch from source for Apple Silicon
+    ifeq ($(UNAME_S),Darwin)
 	if [ ! -d "pytorch" ]; then \
 		git clone -b master --recurse-submodule https://github.com/pytorch/pytorch.git; \
 	fi
@@ -30,11 +29,10 @@ ifeq ($(UNAME_S),Darwin)
 	cmake -DBUILD_SHARED_LIBS:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=Release -DPYTHON_EXECUTABLE:PATH=`which python3` -DCMAKE_INSTALL_PREFIX:PATH=../install .. && \
 	cmake --build . --target install -j && cd ../..
 	mv pytorch/install $@
-endif
-endif
+    endif
 else
-	# Download pre-built libtorch
-	wget -O $@.zip $(TORCH_URL) && unzip $@.zip
+	wget -O $@.zip $(TORCH_URL)
+	unzip $@.zip
 	rm $@.zip
 	mv libtorch $@
 endif
