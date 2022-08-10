@@ -28,3 +28,4 @@ sched/*
 .metals/*
 tests/
 pytorch
+libtorch.zip

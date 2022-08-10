@@ -1,11 +1,8 @@
 CMAKE_BUILD_TYPE ?= Release
-all: 3rd-party/libtorch json dsa
 
-# Get the download zip URL of libtorch
-.PHONY: libtorch-download
-libtorch-download:
 ifeq ($(OS),Windows_NT)
     TORCH_URL := https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.11.0%2Bcpu.zip
+	wget -O $@ $(TORCH_URL)
 else
     UNAME_S := $(shell uname -s)
     UNAME_P := $(shell uname -p)
@@ -17,8 +14,14 @@ else
     endif
 endif
 
+all: 3rd-party/libtorch json dsa
+
+# Get the download zip URL of libtorch
+libtorch.zip:
+	wget -O $@ $(TORCH_URL)
+
 # Install LibTorch
-3rd-party/libtorch: libtorch-download
+3rd-party/libtorch: libtorch.zip
 ifeq ($(UNAME_P),arm)
     ifeq ($(UNAME_S),Darwin)
 	if [ ! -d "pytorch" ]; then \
@@ -31,9 +34,7 @@ ifeq ($(UNAME_P),arm)
 	mv pytorch/install $@
     endif
 else
-	wget -O $@.zip $(TORCH_URL)
-	unzip $@.zip
-	rm $@.zip
+	unzip $^
 	mv libtorch $@
 endif
 
@@ -49,6 +50,8 @@ dsa: json 3rd-party/libtorch
 
 clean:
 	rm -rf build
+
+ultraclean: clean
 	rm -rf 3rd-party/libtorch
 
 uninstall:

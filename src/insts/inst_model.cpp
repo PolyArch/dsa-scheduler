@@ -446,8 +446,8 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
   ofs << "\n";
   
   
-  ofs << "extern int num_ops[" << max_opcode + 2 << "];\n";
-  ofs << "extern int bitwidth[" << max_opcode + 2 << "];\n";
+  ofs << "extern int num_ops[" << max_opcode + 3 << "];\n";
+  ofs << "extern int bitwidth[" << max_opcode + 3 << "];\n";
 
   ofs << "\n"
          "// OpCode\n"
@@ -773,38 +773,31 @@ void InstModel::newPrintCFiles(char* header_file, char* cpp_file) {
   */
 
   // num_ops_array
-  ofs << "int dsa::num_ops[" << max_opcode + 2 << "]={\n";
-  ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
-  for (unsigned i = 0; i < max_opcode; ++i) {
+  ofs << "int dsa::num_ops[" << max_opcode + 3 << "]={\n";
+  for (unsigned i = 0; i <= max_opcode; ++i) {
     auto instruction = getInst(i);
     int num_ops = 0;
     if (instruction != nullptr)
       num_ops = instruction->num_ops();
-    if (i != 0)
-      ofs << ", ";
 
-    ofs << num_ops;
+    ofs << num_ops << ", ";
     if (i % 16 == 15) {
       ofs << "\n";
-      ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
     }
   }
   ofs << "0, 0};\n\n";
 
   // bitwidth_array
-  ofs << "int dsa::bitwidth[" << max_opcode + 2 << "]={\n";
-  ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
-  for (unsigned i = 0; i < max_opcode; ++i) {
+  ofs << "int dsa::bitwidth[" << max_opcode + 3 << "]={\n";
+  for (unsigned i = 0; i <= max_opcode; ++i) {
     auto instruction = getInst(i);
     int bitwidth = 0;
-    if (instruction != nullptr)
+    if (instruction != nullptr) {
       bitwidth = instruction->bitwidth();
-    if (i != 0)
-      ofs << ", ";
-    ofs << bitwidth;
+    }
+    ofs << bitwidth << ", ";
     if (i % 16 == 15) {
       ofs << "\n";
-      ofs << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
     }
   }
   ofs << "0, 0};\n\n";
