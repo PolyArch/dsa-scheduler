@@ -15,7 +15,7 @@ inline void Dfs(Node* node, std::vector<bool>& visited, std::vector<Node*>& orde
 
   visited[node->id()] = true;
 
-  for (auto op : node->ops()) {
+  for (auto &op : node->ops()) {
     for (auto eid : op.edges) {
       auto edge = &node->ssdfg()->edges[eid];
       Dfs(edge->def(), visited, order);

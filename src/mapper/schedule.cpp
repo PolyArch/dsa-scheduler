@@ -949,10 +949,8 @@ void Schedule::normalize() {
   allocate_space();
   reversed_topo = dsa::dfg::pass::ReversedTopology(dfg);
   needs_dynamic = dsa::dfg::pass::PropagateControl(reversed_topo);
-  auto redundancy = dsa::dfg::pass::CollectRedundancy(dfg);
+  dsa::dfg::pass::CollectRedundancy(dfg, operands, users);
   distances = dsa::arch::pass::ShortestPaths(model->subModel());
-  operands = std::get<0>(redundancy);
-  users = std::get<1>(redundancy);
   group_throughput = dsa::dfg::pass::GroupThroughput(dfg, reversed_topo);
   dsa::mapper::CandidateSpotVisitor cpv(this, 50);
   dfg->Apply(&cpv);
