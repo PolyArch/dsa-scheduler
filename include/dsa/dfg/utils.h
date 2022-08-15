@@ -20,7 +20,7 @@ void Export(SSDfg* dfg, const std::string& fname);
  * \param fname The filename to load
  * \return The DFG loaded.
  */
-SSDfg* Import(const std::string& fname);
+SSDfg Import(const std::string& fname);
 
 }  // namespace dfg
 }  // namespace dsa

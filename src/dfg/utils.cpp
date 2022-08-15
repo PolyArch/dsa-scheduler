@@ -239,8 +239,9 @@ void Export(SSDfg* dfg, const std::string& fname) {
   ofs << nodes;
 }
 
-SSDfg* Import(const std::string& s) {
-  SSDfg* res = new SSDfg();
+SSDfg Import(const std::string& s) {
+  SSDfg instance;
+  SSDfg *res = &instance;
   MetaPort meta;
 
   Json::CharReaderBuilder crb;
@@ -345,7 +346,9 @@ SSDfg* Import(const std::string& s) {
       auto name = node["name"].asString();
 
       if (group_id != last_group) {
-        res->meta.emplace_back();
+        res->meta.resize(std::max(group_id + 1, (int) res->meta.size() + 1));
+        DSA_CHECK(group_id >= 0 && group_id < res->meta.size())
+          << group_id << " out of bound " << res->meta.size();
         res->meta[group_id].is_temporal = node["temporal"].asInt();
         last_group = group_id;
       }
@@ -440,6 +443,7 @@ SSDfg* Import(const std::string& s) {
           if (es.back() >= res->edges.size()) res->edges.resize(es.back() + 1);
           e_instance.delay = delay;
           e_instance.id = es.back();
+          DSA_CHECK(es.back() >= 0 && es.back() < res->edges.size());
           res->edges[es.back()] = e_instance;
           //DSA_INFO << "Adding Edge" << e_instance.id << ": " << src_id << "(" << src_val << ")->" << i;
 
@@ -460,7 +464,7 @@ SSDfg* Import(const std::string& s) {
     }
   } fa;
   res->Apply(&fa);
-  return res;
+  return instance;
 }
 }  // namespace dfg
 }  // namespace dsa

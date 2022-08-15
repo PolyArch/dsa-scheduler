@@ -96,8 +96,12 @@ class SSDfg {
   /*! \brief The default consturctor. */
   SSDfg();
 
+  ~SSDfg();
+
   /*! \brief Copy the given DFG*/
   SSDfg(const SSDfg&);
+
+  SSDfg &operator=(const SSDfg &);
 
   /*! \brief Parse a DFG from the given file. */
   SSDfg(std::string filename);

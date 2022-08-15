@@ -24,6 +24,8 @@ using namespace dsa;
 
 /// { SSDfg
 
+SSDfg::~SSDfg() {}
+
 void SSDfg::check_for_errors() {
   struct ErrorChecker : dsa::dfg::Visitor {
     bool HasUse(dsa::dfg::Node* node) {
@@ -309,4 +311,33 @@ SSDfg::SSDfg(const SSDfg& dfg)
   for (auto& edge : edges) {
     edge.parent = this;
   }
+}
+
+SSDfg &SSDfg::operator=(const SSDfg &dfg) {
+  const_cast<std::string&>(filename) = dfg.filename;
+  instructions = dfg.instructions;
+  operations = dfg.operations;
+  vins = dfg.vins;
+  vouts = dfg.vouts;
+  spms = dfg.spms;
+  dmas = dfg.dmas;
+  regs = dfg.regs;
+  recs = dfg.recs;
+  gens = dfg.gens;
+  edges = dfg.edges;
+  meta = dfg.meta;
+  normalize();
+  for (auto node : nodes) {
+    node->ssdfg() = this;
+    for (auto& value : node->values) {
+      value.parent = this;
+    }
+    for (auto& op : node->ops()) {
+      op.parent = this;
+    }
+  }
+  for (auto& edge : edges) {
+    edge.parent = this;
+  }
+  return *this;
 }

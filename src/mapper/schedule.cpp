@@ -37,30 +37,9 @@ bool Range::operator==(const Range &b) {
 }
 }
 
-
+Schedule::~Schedule() {}
 
 int Schedule::colorOf(dsa::dfg::Value* v) { return cm::ColorOf(v); }
-
-std::map<dsa::OpCode, int> Schedule::interpretConfigBits(int size, uint64_t* bits) {
-  // Figure out if this configuration is real or not
-  // NOTE: the first 9 characters of the configuration must spell filename
-  // for this hack to work!
-  DSA_CHECK(strncmp((char*)bits, "filename:", 9) == 0)
-      << "Hardware configuration not supported yet!";
-  char* c_bits = ((char*)bits) + 9;
-  return interpretConfigBitsCheat(c_bits);
-}
-
-std::map<dsa::OpCode, int> Schedule::interpretConfigBitsCheat(char* s) {
-  auto filename = std::string(".sched/") + s;
-  _ssDFG = dsa::dfg::Import(filename);
-  struct Counter : dfg::Visitor {
-    void Visit(dsa::dfg::Instruction* inst) { ++inst_histo[inst->inst()]; }
-    std::map<dsa::OpCode, int> inst_histo;
-  } counter;
-  _ssDFG->Apply(&counter);
-  return counter.inst_histo;
-}
 
 void Schedule::LoadMappingInJson(const std::string& mapping_filename) {
   Json::CharReaderBuilder crb;
@@ -113,6 +92,9 @@ void Schedule::DumpMappingInJson(const std::string& mapping_filename) {
     auto loc = locationOf(nodes[i]);
     Json::Value mapping;
     mapping["op"] = "assign_node";
+    mapping["dfgnode"] = nodes[i]->id();
+    mapping["adgnode"] = loc.node()->id();
+    mapping["adgslot"] = loc.lane();
     mapping["dfgnode"] = nodes[i]->id();
     mapping["adgnode"] = loc.node()->id();
     mapping["adgslot"] = loc.lane();
@@ -319,7 +301,7 @@ void Schedule::printConfigHeader(ostream& os, std::string cfg_name, bool use_che
           DSA_CHECK(nextLink) << "Switch cannot be the end node of one edge, only OVP or PE can";
           int out_idx = dsa::vector_utils::indexing(nextLink, sinkSwNode->out_links());
           DSA_CHECK(in_idx >= 0);
-          DSA_CHECK(out_idx >= 0);
+          DSA_CHECK(out_idx >= 0) << nextLink->name() << " is not a successor of " << sinkSwNode->name();
           info[sw_id].outputRoute[out_idx] = (in_idx + 1); // + 1 since 0 means ground
           // os << "input size = " << sinkSwNode -> in_links().size()
           //   << ", output size = " << sinkSwNode -> out_links().size()<< endl;
@@ -861,6 +843,8 @@ Schedule::Schedule(SSModel* model, SSDfg* dfg) : _ssModel(model), _ssDFG(dfg) {
   normalize();
 }
 
+Schedule::Schedule() : _ssModel(nullptr), _ssDFG(nullptr) {}
+
 Schedule::Schedule(const Schedule& s, bool dup_)
     : _ssModel(s._ssModel),
       _ssDFG(s._ssDFG),
@@ -1153,7 +1137,6 @@ double Schedule::estimated_performance(std::string& spm_performance, std::string
 
 
   for (int i = 0; i < dfg->meta.size(); ++i) {
-
     double mismatch = ((double)fifo / (_groupMismatch[i] + fifo));
     double min_performace = std::min(spm_performance_factor, dma_performance_factor);
     min_performace = std::min(min_performace, rec_performance[i]);

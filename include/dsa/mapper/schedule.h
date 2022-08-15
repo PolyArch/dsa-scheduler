@@ -167,6 +167,10 @@ class Schedule {
    */
   Schedule(SSModel* model, SSDfg* dfg);
 
+  Schedule();
+
+  ~Schedule();
+
   /*! \brief Deep copy a schedule. */
   Schedule(const Schedule& c, bool dup_dfg);
 
@@ -811,15 +815,6 @@ class Schedule {
 
     allocate_space();
   }
-
-  // NOTE/WARN: interpretConfigBits creates a dfg object that should
-  // be cleaned up later by the schedule object
-  std::map<dsa::OpCode, int> interpretConfigBits(int size, uint64_t* bits);
-
-  std::map<dsa::OpCode, int> interpretConfigBitsCheat(char* s);
-
-  // TODO: Implement it to support MGRA
-  // std::map<dsa::OpCode,int> interpretConfigBitsDedicated();
 
   void print_bit_loc() {
     std::cout << "Primary Config\n";
