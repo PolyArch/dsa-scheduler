@@ -350,7 +350,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   string model_base =
       model_rawname.substr(model_rawname.find_last_of("\\/") + 1, model_rawname.size());
     
-  int ovr = 0, agg_ovr = 0, max_util = 0;
+  int64_t ovr = 0, agg_ovr = 0, max_util = 0;
 
   if (check_feasible(dfg, model)) {
     auto sigint_handler = [](int) { exit(1); };

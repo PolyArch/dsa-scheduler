@@ -372,8 +372,8 @@ inline void assign_latency(SSDfg* dfg, SSModel* model, std::vector<Node*>& non_t
 
 inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_temp,
                          std::vector<int>& edge_latency, std::vector<int>& edge_delay,
-                         std::vector<int>& latency, int& max_lat, int& max_lat_mis,
-                         int& total_vio, std::vector<int>& group_mismatch,
+                         std::vector<int>& latency, int64_t& max_lat, int64_t& max_lat_mis,
+                         int64_t& total_vio, std::vector<int>& group_mismatch,
                          std::vector<int>& node_violation,
                          std::pair<int, int>& delay_violation) {
   max_lat = max_lat_mis = total_vio = 0;
@@ -447,8 +447,8 @@ inline void calc_mis_vio(SSDfg* dfg, Schedule* sched, std::vector<Node*>& non_te
   }
 }
 
-inline SSDfg* IterativeLatency(Schedule* sched, int& max_lat, int& max_lat_mis,
-                               int& total_vio, std::vector<int>& group_mismatch,
+inline SSDfg* IterativeLatency(Schedule* sched, int64_t& max_lat, int64_t& max_lat_mis,
+                               int64_t& total_vio, std::vector<int>& group_mismatch,
                                bool is_export, std::pair<int, int>& delay_violation) {
   DSA_LOG(LAT_PASS) << "IterativeLatency Beginning";
   SSDfg dfg_(*sched->ssdfg());

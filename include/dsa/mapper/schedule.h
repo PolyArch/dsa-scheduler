@@ -800,7 +800,7 @@ class Schedule {
   // Assert error if problem with consistency of schedule
   void validate();
 
-  bool fixLatency(int& lat, int& latmis, std::pair<int, int>& delay_violation);
+  bool fixLatency(int64_t& lat, int64_t& latmis, std::pair<int, int>& delay_violation);
 
   void clearAll() {
     _totalViolation = 0;
@@ -920,9 +920,9 @@ class Schedule {
 
   int colorOf(dsa::dfg::Value* v);
 
-  void get_overprov(int& ovr, int& agg_ovr, int& max_util);
+  void get_overprov(int64_t& ovr, int64_t& agg_ovr, int64_t& max_util);
   int get_instruction_overprov(dfg::Instruction* inst);
-  void get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util);
+  void get_link_overprov(sslink* link, int64_t& ovr, int64_t& agg_ovr, int64_t& max_util);
 
   // Swaps the nodes from one schedule to another
   void swap_model(SpatialFabric* copy_sub) {
@@ -1073,7 +1073,7 @@ class Schedule {
   SSDfg* _ssDFG;
 
   /*! \brief The gatherd sum of timing mismatch. */
-  int _totalViolation = 0;
+  int64_t _totalViolation = 0;
   /*! \brief The max latency of the DFG, and the max timing mismatch. */
   int _max_lat = -1, _max_lat_mis = -1;
   // TODO(@were): For simulation purpose, compute the mis of each group.

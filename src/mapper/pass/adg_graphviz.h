@@ -64,7 +64,7 @@ struct GPLink : adg::Visitor {
   std::ostream& os;
 };
 
-void adg_graphviz(const std::string& name, SpatialFabric* fabric) {
+inline void adg_graphviz(const std::string& name, SpatialFabric* fabric) {
   DSA_INFO << "Generating Graphvis at " << name;
   ofstream ofs(name);
   DSA_CHECK(ofs.good());

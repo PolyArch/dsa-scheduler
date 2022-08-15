@@ -641,7 +641,7 @@ int Schedule::unrollDegree() {
 
 #include "./pass/iterative_latency.h"
 
-bool Schedule::fixLatency(int& max_lat, int& max_lat_mis, std::pair<int, int>& delay_violation) {
+bool Schedule::fixLatency(int64_t& max_lat, int64_t& max_lat_mis, std::pair<int, int>& delay_violation) {
   for (auto& i : _edgeProp) {
     i.extra_lat = 0;
   }
@@ -687,7 +687,7 @@ void Schedule::validate() {
   }
 }
 
-void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
+void Schedule::get_overprov(int64_t& ovr, int64_t& agg_ovr, int64_t& max_util) {
   ovr = 0;
   agg_ovr = 0;
   max_util = 0;
@@ -745,8 +745,8 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
 
       int unique_io = vector_utils::count_unique(io);
 
-      int cur_util = cnt + instruction_ovr + slot.passthrus.size() + unique_io + (ops.size() != 0);
-      int cur_ovr = cur_util - v.node()->max_util();
+      int64_t cur_util = cnt + instruction_ovr + slot.passthrus.size() + unique_io + (ops.size() != 0);
+      int64_t cur_ovr = cur_util - v.node()->max_util();
 
       if (cur_ovr > 0) {
         DSA_LOG(OVERPROV) << v.node()->name() << ": "
@@ -759,7 +759,7 @@ void Schedule::get_overprov(int& ovr, int& agg_ovr, int& max_util) {
           DSA_LOG(OVERPROV) << elem->name();
         }
       }
-      agg_ovr += std::max(cur_ovr, 0);
+      agg_ovr += std::max(cur_ovr, (int64_t)0);
       ovr = max(ovr, cur_ovr);
       max_util = std::max(cur_util, max_util);
     }
@@ -798,7 +798,7 @@ int Schedule::get_instruction_overprov(dfg::Instruction* inst) {
   return std::max(current_results - max_num_results, 0);
 }
 
-void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_util) {
+void Schedule::get_link_overprov(sslink* link, int64_t& ovr, int64_t& agg_ovr, int64_t& max_util) {
   // As Memory serves as a bus, no need to check for overprov
   if (dynamic_cast<DataNode*>(link->source()))
     return;
@@ -808,7 +808,7 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
   int n = std::min(link->source()->lanes(), link->sink()->lanes());
   for (int slot = 0; slot < n; ++slot) {
     auto& lp = _linkProp[link->id()];
-    int util = 0;
+    int64_t util = 0;
 
     std::vector<dsa::dfg::VectorPort*> vecs;
     std::vector<std::pair<dsa::dfg::Value*, int>> values;
@@ -831,7 +831,7 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
       }
     }
     util = vector_utils::count_unique(values) + vector_utils::count_unique(vecs);
-    int cur_ovr = util - link->max_util();
+    int64_t cur_ovr = util - link->max_util();
     if (cur_ovr > 0) {
       DSA_LOG(OVERPROV) << link->name() << ": " << values.size()
                     << " + " << vecs.size() << " > " << link->max_util();
@@ -843,7 +843,7 @@ void Schedule::get_link_overprov(sslink* link, int& ovr, int& agg_ovr, int& max_
       }
     }
     ovr = std::max(cur_ovr, ovr);
-    agg_ovr += std::max(cur_ovr, 0);
+    agg_ovr += std::max(cur_ovr, (int64_t)0);
     max_util = std::max(util, max_util);
   }
 }

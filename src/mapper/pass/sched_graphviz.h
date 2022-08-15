@@ -1,4 +1,5 @@
-#include <ostream>
+#include <iostream>
+#include <iomanip>
 
 #include "dsa/arch/visitor.h"
 #include "dsa/arch/fabric.h"
@@ -86,7 +87,7 @@ struct Sched_GPLink : adg::Visitor {
 
   void Visit(ssnode* node) override {
     for (auto link : node->out_links()) {
-      int ovr = 0, agg_ovr = 0, max_util = 0;
+      int64_t ovr = 0, agg_ovr = 0, max_util = 0;
       sched->get_link_overprov(link, ovr, agg_ovr, max_util);
 
       std::vector<int> empty_slots;
@@ -204,7 +205,7 @@ struct Sched_GPLink : adg::Visitor {
   Schedule* sched;
 };
 
-void sched_graphviz(const std::string& name, SpatialFabric* fabric, Schedule* sched) {
+inline void sched_graphviz(const std::string& name, SpatialFabric* fabric, Schedule* sched) {
   DSA_INFO << "Generating Schedule Graphvis at " << name;
   ofstream ofs(name);
   DSA_CHECK(ofs.good());

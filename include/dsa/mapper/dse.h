@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <limits>
 #include <torch/script.h>
 
 #include "dsa/arch/estimation.h"
@@ -30,8 +31,11 @@ static unsigned int log2 (unsigned int val) {
 
 class SchedStats {
  public:
-  int lat = INT_MAX, latmis = INT_MAX;
-  int agg_ovr = INT_MAX, ovr = INT_MAX, max_util = INT_MAX;
+  int64_t lat = std::numeric_limits<int64_t>::max();
+  int64_t latmis = std::numeric_limits<int64_t>::max();
+  int64_t agg_ovr = std::numeric_limits<int64_t>::max();
+  int64_t ovr = std::numeric_limits<int64_t>::max();
+  int64_t max_util = std::numeric_limits<int64_t>::max();
 };
 
 // Class which captures a codesign between hardware and software through

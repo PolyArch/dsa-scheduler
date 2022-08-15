@@ -72,9 +72,9 @@ class SchedulerSimulatedAnnealing : public Scheduler {
   int schedule_internal(SSDfg* ssDFG, Schedule*& sched);
 
  protected:
-  std::pair<int, int> obj(Schedule*& sched, SchedStats& s);
+  std::pair<int64_t, int64_t> obj(Schedule*& sched, SchedStats& s);
 
-  std::pair<int, int> obj_creep(Schedule*& sched, SchedStats& s,
+  std::pair<int64_t, int64_t> obj_creep(Schedule*& sched, SchedStats& s,
                                 CandidateRoute& undo_path);
 
   bool length_creep(Schedule* sched, dsa::dfg::Edge* edge, int& num,
