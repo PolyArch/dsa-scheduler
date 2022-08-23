@@ -967,7 +967,7 @@ class ssivport : public SyncNode {
 
   int bitwidth_capability() override {
     int result = 0;
-    for (int i = 0; i < out_links().size(); ++i) {
+    for (int i = 0; i < (int) out_links().size(); ++i) {
       // If this vectorport is stated, then the first link should be reserved
       // for the stated edge and not count toward capability
       if (i == 0 && vp_stated())
@@ -1103,7 +1103,7 @@ class ssovport : public SyncNode {
 
   int bitwidth_capability() override {
     int result = 0;
-    for (int i = 0; i < in_links().size(); ++i) {
+    for (int i = 0; i < (int) in_links().size(); ++i) {
       // If this vectorport is stated, then the first link should be reserved
       // for the stated edge and not count toward capability
       if (i == 0 && vp_stated())
