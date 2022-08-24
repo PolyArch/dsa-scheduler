@@ -83,7 +83,7 @@ void UpdateNodeByArgs(Node* node, std::vector<ParseResult*>& args) {
         inst->ops().emplace_back(dfg, es, ce->flag);
       } else {
         // Self control
-        inst->self_predicate = CtrlBits(ce->raw, -1);
+        inst->self_predicate = CtrlBits(ce->raw, ce->bmss);
       }
     } else if (auto re = dynamic_cast<RegisterEntry*>(args[i])) {
       auto inst = dynamic_cast<Instruction*>(node);

@@ -704,12 +704,12 @@ arg_expr : expr {
   $$ = new dsa::dfg::ControlEntry(*$1, $3);
 }
 | IDENT '=' expr '{' ctrl_list  '}' {
-  $$ = new dsa::dfg::ControlEntry(*$1, *$5, $3);
+  $$ = new dsa::dfg::ControlEntry(*$1, *$5, $3, 7);
   delete $1;
   delete $5;
 }
 | IDENT '=' '{' ctrl_list  '}' {
-  $$ = new dsa::dfg::ControlEntry(*$1, *$4, nullptr);
+  $$ = new dsa::dfg::ControlEntry(*$1, *$4, nullptr, 7);
   delete $1;
   delete $4;
 }
