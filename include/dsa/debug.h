@@ -42,8 +42,6 @@ class EnvCache {
       std::map<std::string, bool> cache_entries;
 };
 
-static EnvCache ENV_CACHE;
-
 class LOGGER {
   bool abort_;
 
@@ -92,7 +90,7 @@ class LOGGER {
 #define DSA_INFO dsa::LOGGER("[INFO]", __FILE__, __LINE__, false)
 
 #define DSA_LOG(S) \
-  if (dsa::ENV_CACHE.get_env(#S))  \
+  if (getenv(#S))  \
     dsa::LOGGER("[" #S "]", __FILE__, __LINE__, false)
 
 
