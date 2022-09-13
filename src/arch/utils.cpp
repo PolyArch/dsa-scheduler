@@ -509,6 +509,9 @@ SpatialFabric* Import(std::string filename) {
           ssdma* dma = new ssdma();
           dma = SetMemoryParameters<ssdma>(nodeParam, dma);
           dma->localId(localNodeId);
+          dma->indirect_idx = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_INDEX]].asBool();
+          dma->indirect_l1d = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          dma->indirect_s2d = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asBool();
 
           node = dma;
           sf->add_node(node);
@@ -537,6 +540,9 @@ SpatialFabric* Import(std::string filename) {
           auto sp = new ssscratchpad();
           sp = SetMemoryParameters<ssscratchpad>(nodeParam, sp);
           sp->localId(localNodeId);
+          sp->indirect_idx = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_INDEX]].asBool();
+          sp->indirect_l1d = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_L1D]].asBool();
+          sp->indirect_s2d = (*dsaNode)[ADGKEY_NAMES[MEM_INDIRECT_S2D]].asBool();
 
           node = sp;
           sf->add_node(node);
