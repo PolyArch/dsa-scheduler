@@ -1135,11 +1135,6 @@ class ssscratchpad : public DataNode {
   ssscratchpad()
       : DataNode(NodeType::Scratchpad) {}
 
-  /*!
-   * \brief The supported indirect memory access.
-   */
-  bool indirect_idx{false}, indirect_s2d{false}, indirect_l1d{false};
-
   void Accept(adg::Visitor* visitor) override;
 
   ssnode* copy() override {
@@ -1224,11 +1219,6 @@ class ssdma : public DataNode {
     *res = *this;
     return res;
   }
-
-  /*!
-   * \brief The supported indirect memory access.
-   */
-  bool indirect_idx{false}, indirect_s2d{false}, indirect_l1d{false};
 
   ssdma()
       : DataNode(NodeType::DirectMemoryAccess) {}
