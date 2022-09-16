@@ -132,25 +132,19 @@ statement: INPUT ':' io_def  eol {
    */
   if (stated) {
     auto symbol_id = "$" + name + "State";
-    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 63));
+    p->symbols.Set(symbol_id, new ValueEntry(p->dfg->vins.back().id(), 0, 0, 7));
   }
-  for (int i = 0, cnt = 0, startWidth = 0, vid = stated; i < n; ++i) {
+  for (int i = 0, cnt = 0, vid = stated; i < n; ++i) {
     std::stringstream ss;
     ss << name;
     if (len) ss << cnt++;
     // TODO(@were): Do I need to modularize these two clean up segment?
 
-    int endWidth = startWidth + width - 1;
-    if (endWidth > 63) {
-      endWidth -= startWidth;
-      startWidth = 0;
-      vid++;
-    }
+    DSA_LOG(PARSE) << "Input port " << ss.str() << " with stated " << stated <<" is created with vid " << vid << " and width " << width;
 
-    DSA_LOG(PARSE) << "Input port " << ss.str() << " with stated " << stated <<" is created with vid " << vid << " and width " << width << ": " << startWidth << "-" << endWidth;
+    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), vid, 0, width - 1));
 
-    p->symbols.Set(ss.str(), new ValueEntry(p->dfg->vins.back().id(), vid, startWidth, endWidth));
-    startWidth = endWidth + 1;
+    vid++;
   }
   auto &in = p->dfg->vins.back();
 
@@ -203,7 +197,7 @@ statement: INPUT ':' io_def  eol {
   }
   auto &out = p->dfg->vouts.back();
   int left_len = 0;
-  for (int i = 0, cnt = 0, oid = (penetrate != -1), startWidth = 0; i < n; ++i) {
+  for (int i = 0, cnt = 0, oid = (penetrate != -1); i < n; ++i) {
     std::stringstream ss;
     ss << name;
     // at output, we make the connectivity because the previous edge would already be there..
@@ -215,35 +209,25 @@ statement: INPUT ':' io_def  eol {
       DSA_CHECK(num_entries > 0 && num_entries <= 16);
       std::vector<int> es;
       for (auto elem : ce->entries) {
-        int endWidth = startWidth + elem->r - elem->l;
-        if (endWidth > 63) {
-          startWidth = 0;
-          oid++;
-        }
 
-        DSA_LOG(PARSE) << "Output port " << ss.str() << " with oid " << oid<< " and width " << startWidth << "-" << endWidth << " and value entry " << elem->l << "-" << elem->r;
+         DSA_LOG(PARSE) << "Output port " << ss.str() << " with stated " << (penetrate != -1) << ", oid " << oid << ", and width " << elem->r;
 
-        p->dfg->edges.emplace_back(p->dfg, elem->nid, elem->vid, out.id(), oid, elem->l, elem->r, startWidth, endWidth);
+        p->dfg->edges.emplace_back(p->dfg, elem->nid, elem->vid, out.id(), oid, elem->l, elem->r, elem->l, elem->r);
         es.push_back(p->dfg->edges.back().id);
-
-        startWidth = endWidth + 1;
+        oid++;
       }
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
     } else if (auto ve = dynamic_cast<dsa::dfg::ValueEntry*>(sym)) {
-      int endWidth = startWidth + ve->r - ve->l;
-      if (endWidth > 63) {
-        startWidth = 0;
-        oid++;
-      }
 
-      DSA_LOG(PARSE) << "Output port " << ss.str() << " with oid " << oid << " and width " << startWidth << "-" << endWidth << " and value entry " << ve->l << "-" << ve->r;
+      DSA_LOG(PARSE) << "Output port " << ss.str() << " with stated " << (penetrate != -1) << ", oid " << oid << ", and width " << ve->r;
 
-      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, out.id(), oid, ve->l, ve->r, startWidth, endWidth);
+      p->dfg->edges.emplace_back(p->dfg, ve->nid, ve->vid, out.id(), oid, ve->l, ve->r, ve->l, ve->r);
+      
 
       std::vector<int> es{p->dfg->edges.back().id};
       out.ops().emplace_back(p->dfg, es, EdgeType::data);
-      
-      startWidth = endWidth + 1;
+
+      oid++;
     }
   }
   out.values.emplace_back(p->dfg, out.id(), 0);

@@ -8,6 +8,7 @@
 
 #include "../utils/model_parsing.h"
 #include "../utils/vector_utils.h"
+#include "../mapper/pass/print_graphviz.h"
 #include "dfg-parser.tab.h"
 #include "dsa/core/singleton.h"
 #include "dsa/dfg/instruction.h"
@@ -153,6 +154,10 @@ void SSDfg::add_new_task_dependence_map(std::vector<std::string> producer, std::
   } else {
     assert(0 && "unknown task type, currently only argument or coal or direct is allowed");
   }
+}
+
+void SSDfg::print_graphviz(std::string output_filename) {
+  dsa::mapper::pass::print_graphviz(output_filename, this);
 }
 
 void SSDfg::add_new_task_property(std::string property, std::string value) { 

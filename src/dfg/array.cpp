@@ -74,7 +74,7 @@ std::vector<double> Array::Consumption(bool checkInput, bool repeat, bool reuse)
 
 DMA::DMA(int size, const std::string& name,
                        SSDfg* ssdfg)
-    : Array(size, name, ssdfg) {}
+    : Array(size, name, ssdfg) { _ntype = NodeType::DMA; }
 
 
 bool DMA::recurrant() {
@@ -122,19 +122,19 @@ double DMA::reuse() {
 
 Scratchpad::Scratchpad(int size, const std::string& name,
                        SSDfg* ssdfg)
-    : Array(size, name, ssdfg) {}
+    : Array(size, name, ssdfg) { _ntype = NodeType::SPAD; }
 
 Recurrance::Recurrance(int size, const std::string& name,
                        SSDfg* ssdfg)
-    : Array(size, name, ssdfg) {}
+    : Array(size, name, ssdfg) { _ntype = NodeType::REC; }
 
 Register::Register(int size, const std::string& name,
                        SSDfg* ssdfg)
-    : Array(size, name, ssdfg) {}
+    : Array(size, name, ssdfg) { _ntype = NodeType::REG; }
 
 Generate::Generate(int size, const std::string& name,
                        SSDfg* ssdfg)
-    : Array(size, name, ssdfg) {}
+    : Array(size, name, ssdfg) { _ntype = NodeType::GEN; }
 
 }  // namespace dfg
 }  // namespace dsa

@@ -18,6 +18,8 @@ Node::Node(SSDfg* ssdfg, V_TYPE v, const std::string& name)
     : _ssdfg(ssdfg), _name(name), _vtype(v) {
   _ID = ssdfg->nodes.size();
   _group_id = _ssdfg->meta.size() - 1;
+
+  DSA_LOG(PARSE) << "Creating Node: " << name << " " << _ID;
 }
 
 dsa::dfg::Edge* Node::getLinkTowards(Node* to) {

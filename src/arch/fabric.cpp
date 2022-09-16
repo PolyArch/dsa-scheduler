@@ -21,76 +21,20 @@ using namespace std;
 
 bool sslink::flow_control() { return sink_->flow_control(); }
 
-int sslink::bitwidth() { return sink_->datawidth(); }
+int sslink::bitwidth() {
+  if (source_->type() == ssnode::InputVectorPort || source_->type() == ssnode::OutputVectorPort) {
+    return sink_->datawidth();
+  }
+  if (sink_->type() == ssnode::InputVectorPort || sink_->type() == ssnode::OutputVectorPort) {
+    return source_->datawidth();
+  }
+  return std::max(source_->datawidth(), sink_->datawidth());
+}
 
 std::string sslink::name() const {
   std::stringstream ss;
   ss << source_->name() << "_to_" << sink_->name();
   return ss.str();
-}
-/**
- * @brief 
- * 
- * @param slot the 
- * @param width the number of lanes required
- * @return int bitmask of acceptable routes
- */
-
-void sslink::resetSubnet() {
-  // Resize the subnetwork
-  subnet.resize(std::min(source()->lanes(), sink()->lanes()));
-  for (int i = 0; i < subnet.size(); i++) {
-    // We want to set diagonal and 1 plus diagonal to 1 by default
-    if (i < 2) {
-      subnet[i] =  ~0ull >> (64 - bitwidth());
-    } else {
-      subnet[i] = 0;
-    }
-  }
-}
-
-int sslink::slots(int slot, int width) {
-  /* To check the connectivity in O(1), here we apply a tricky idea:
-   * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
-   * This is unfriendly to check a bulk of connectivity: when the width is `w', and we
-   * want to go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1),
-   * which is O(w).
-   *
-   * Here we first transform the meaning of subnet[i][delta], which means
-   * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity
-   * between `i' and `j', under width `w', where delta=j-i, the check becomes:
-   * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
-   *
-   * Then two tricks together enables O(1) check:
-   * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access
-   * continuous.
-   * 2. Squeezing the inner dimension of subnet to bit representation, so that we can
-   * check the one's in O(1) by bit operation.
-   * */
-  uint64_t res = 0;
-
-  // Number of lanes
-  int n = std::min(source()->lanes(), sink()->lanes());
-  DSA_CHECK(n <= subnet.size());
-  
-  auto f = [](uint64_t a, int bits) {
-    auto full_mask = ~0ull >> (64 - bits);
-    return (a & full_mask) == full_mask;
-  };
-  for (int i = 0; i < n; ++i) {
-    if (slot + width <= n) {
-      if (f(subnet[i] >> slot, width)) {
-        res |= 1 << (i + slot) % n;
-      }
-    } else {
-      int high = n - slot;
-      int low = width - high;
-      if (f(subnet[i] >> slot, high) && f(subnet[i], low)) {
-        res |= 1 << (i + slot) % n;
-      }
-    }
-  }
-  return res;
 }
 
 sslink::~sslink() {
@@ -100,10 +44,17 @@ sslink::~sslink() {
     DSA_CHECK(iter != links.end()) << "Cannot find this link!";
     links.erase(iter);
   };
+
+  source()->removeLinkFronRoutingTable(this);
+  sink()->removeLinkFronRoutingTable(this);
   
   // delete links
   f(source()->links_[0]);
   f(sink()->links_[1]);
+}
+
+int sslink::granularity() {
+  return std::max(source_->granularity(), sink_->granularity()); 
 }
 
 // ---------------------- ssswitch --------------------------------------------
@@ -482,9 +433,7 @@ sslink* ssnode::add_link(ssnode* node, int source_position, int sink_position, b
       dst_links[sink_position] = link;
     }
   }
-
-  link->resetSubnet();
-
+  
   return link;
 }
 

@@ -121,6 +121,7 @@ Instruction::Instruction(SSDfg* ssdfg, dsa::OpCode inst)
   for (int i = 0; i < n; ++i) {
     values.emplace_back(ssdfg, id(), i);
   }
+  _ntype = NodeType::INST;
 }
 
 int Instruction::bitwidth() {

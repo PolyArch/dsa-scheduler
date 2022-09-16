@@ -12,6 +12,8 @@ class ParseResult;
 
 namespace dsa {
 
+class EnvCache;
+
 struct ContextFlags {
   /*!
    * \brief If this execution instance is verbose on logs.
@@ -69,6 +71,8 @@ struct ContextFlags {
   ContextFlags();
 
   static ContextFlags &Global();
+
+  static EnvCache &CachedEnv();
 
   void Load(const cxxopts::ParseResult &pr);
 

@@ -9,6 +9,7 @@
 #include "dse.h"
 #include "scheduler.h"
 
+
 #define DEBUG_SCHED (false)
 
 struct CandidateRoute {
@@ -61,15 +62,19 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   SchedulerSimulatedAnnealing(dsa::SSModel* ssModel,
                               std::string mapping_file_ = "",
-                              bool dump_mapping_if_improved_ = false)
+                              bool dump_mapping_if_improved_ = false,
+                              bool deterministic_ = false,
+                              bool allow_overprov_ = true)
       : Scheduler(ssModel), mapping_file(mapping_file_),
-        dump_mapping_if_improved(dump_mapping_if_improved_) {}
+        dump_mapping_if_improved(dump_mapping_if_improved_), routing_times(0), allow_overprov(allow_overprov_), deterministic(deterministic_) {}
 
-  virtual bool schedule(SSDfg*, Schedule*&) override;
+  virtual bool schedule(SSDfg*, Schedule*&, int stopping=-1) override;
 
-  virtual bool incrementalSchedule(CodesignInstance& incr_table, int max_vector=-1) override;
+  virtual bool incrementalSchedule(CodesignInstance& incr_table, int stopping=-1) override;
 
   int schedule_internal(SSDfg* ssDFG, Schedule*& sched);
+
+  bool scheduleHere(Schedule*, dsa::dfg::Node*, mapper::Slot<ssnode*>);
 
  protected:
   std::pair<int64_t, int64_t> obj(Schedule*& sched, SchedStats& s);
@@ -95,11 +100,9 @@ class SchedulerSimulatedAnnealing : public Scheduler {
     return true;
   }
 
-  bool scheduleHere(Schedule*, dsa::dfg::Node*, mapper::Slot<ssnode*>);
-
   int route(Schedule* sched, dsa::dfg::Edge* dfgnode,
             mapper::VertexProp &vps, mapper::VertexProp &vpd,
-            std::vector<std::pair<int, sslink*>>::iterator* ins_it,
+            int insert_position,
             int max_path_lengthen);
 
   int routing_cost(dsa::dfg::Edge*, int, int, sslink*, Schedule*,
@@ -121,7 +124,9 @@ class SchedulerSimulatedAnnealing : public Scheduler {
 
   std::string mapping_file{""};
   bool dump_mapping_if_improved{false};
-  int max_iters;
+  int max_iters; 
+  bool deterministic{false};
+  bool allow_overprov{true};
   std::unordered_map<std::string, std::pair<int, ssnode*>> indirect_map_to_index;
 };
 

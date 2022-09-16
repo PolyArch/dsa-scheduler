@@ -57,7 +57,6 @@ struct ConstDataEntry : ParseResult {
 struct ValueEntry : ParseResult {
   ValueEntry(int nid_, int vid_, int l_ = 0, int r_ = 63)
       : nid(nid_), vid(vid_), l(l_), r(r_) {
-        DSA_CHECK(r_ < 64);
       }
   int nid, vid;
   int l, r;

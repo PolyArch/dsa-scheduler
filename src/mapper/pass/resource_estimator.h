@@ -15,9 +15,17 @@ namespace dsa {
 namespace adg {
 namespace estimation {
 
+
+#if defined(__clang__) || defined (__GNUC__)
+# define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+# define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
 struct WrappedModule {
   torch::jit::script::Module m;
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   WrappedModule(const std::string& path) {
     try {
       m = torch::jit::load(path);
@@ -34,8 +42,10 @@ struct WrappedModule {
   }
 
 DEFINE_WRAPPED_MODEL(switch_model, TORCH_MODEL_PREFIX "switch/switch_model.pt");
+
 DEFINE_WRAPPED_MODEL(pe_model,
                      TORCH_MODEL_PREFIX "processing_element/processing_element_model.pt");
+
 DEFINE_WRAPPED_MODEL(ovp_model,
                      TORCH_MODEL_PREFIX "output_vector_port/output_vector_port_model.pt");
 DEFINE_WRAPPED_MODEL(ivp_model,
@@ -82,6 +92,7 @@ std::pair<double, double> FIFOEst(int depth) {
 }
 
 struct ResourceEstimator : Visitor {
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   ResourceEstimator(SSModel* arch_, Hardware hw_) : arch(arch_), hw(hw_) {
     switch (hw) {
       case Hardware::ASIC: {
@@ -99,6 +110,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssswitch* sw) {
     switch (hw) {
       case Hardware::ASIC: {
@@ -115,7 +127,9 @@ struct ResourceEstimator : Visitor {
             (float)sw->in_links().size(), 
             (float)sw->out_links().size(),
             (float)sw->delay_fifo_depth(), 
-            (float)!sw->flow_control()
+            (float)!sw->flow_control(),
+            (float)sw->granularity(),
+            (float)sw->datawidth()
         };
 
         // Convert to Torch Tensor
@@ -141,6 +155,7 @@ struct ResourceEstimator : Visitor {
       }
     }
   }
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssovport* vp) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -205,6 +220,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssivport* vp) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -217,7 +233,7 @@ struct ResourceEstimator : Visitor {
             (float)vp->repeatIVP(),
             (float)vp->broadcastIVP(),
             (float)vp->busWidth(),
-            (float)vp->padded(),
+            (float)vp->padded()
         };
         
         std::vector<torch::jit::IValue> inputs;
@@ -258,6 +274,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssfu* fu) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -268,7 +285,8 @@ struct ResourceEstimator : Visitor {
             (float)fu->flow_control() ? 1.0f : 0.0f,
             (float)fu->delay_fifo_depth(),
             (float)fu->regFileSize(),
-            (float)fu->ctrlLUTSize() > 0 ? 1.0f : 0.0f
+            (float)fu->datawidth(),
+            (float)fu->granularity()
         };
     
 
@@ -310,6 +328,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssscratchpad* spm) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -352,6 +371,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssgenerate* gen) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -380,6 +400,7 @@ struct ResourceEstimator : Visitor {
     }
   }
   
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssrecurrence* rec) {
     switch (hw) {
       case Hardware::FPGA: {
@@ -407,6 +428,7 @@ struct ResourceEstimator : Visitor {
     }
   }
 
+  ATTRIBUTE_NO_SANITIZE_ADDRESS
   void Visit(ssregister* reg) {
     switch (hw) {
       case Hardware::FPGA: {

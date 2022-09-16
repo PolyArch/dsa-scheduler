@@ -3,12 +3,17 @@
 #include <ostream>
 
 #include "dsa/arch/sub_model.h"
+#include "dsa/mapper/dse.h"
+#include "dsa/mapper/schedule.h"
 #include "dsa/arch/visitor.h"
+#include "dsa/dfg/node.h"
+#include "dsa/dfg/visitor.h"
 #include "dsa/arch/utils.h"
 
 
 namespace dsa {
 namespace adg {
+  
 
 inline const char * const BoolToString(bool b)
 {
@@ -48,9 +53,59 @@ struct JsonWriter : dsa::adg::Visitor {
 
     // Switch Routing
     os << "\"" << ADGKEY_NAMES[SW_ROUTE] << "\" : {" << std::endl;
-    os << "\"" << ADGKEY_NAMES[SW_ROUTE_FULLMAT] << "\" : [ ]," << std::endl;
+    os << "\"" << ADGKEY_NAMES[SW_ROUTE_FULLMAT] << "\" : ";
+    for (int i = 0; i < sw->in_links().size(); i++) {
+      if (i == 0)
+              os << "[ ";
+      for (int j = 0; j < sw->out_links().size(); j++) {
+        if (j == 0)
+              os << "[ ";
+        auto connectivity_matrix = sw->printableRoutingTable(i, j);
+        for (int k = 0; k < connectivity_matrix.size(); k++) {
+          if (k == 0)
+              os << "[ ";
+          
+          for (int l = 0; l < connectivity_matrix[k].size(); l++) {
+            if (l == 0)
+              os << "[ ";
+            
+            os << connectivity_matrix[k][l];
+            if (l != connectivity_matrix[k].size() - 1) {
+              os << ", ";
+            } else {
+              os << "] ";
+            }
+          }
+          
+          if (k != connectivity_matrix.size() - 1) {
+            if (connectivity_matrix[k].size() != 0) {
+              os << ", ";
+            }
+          } else {
+            os << "] ";
+          }
+        }
+
+        if (j < sw->out_links().size() - 1) {
+          if (connectivity_matrix.size() != 0) {
+            os << ", ";
+          }
+        } else {
+          os << "] ";
+        }
+
+      }
+      if (i < sw->in_links().size() - 1) {
+        os << ",";
+      } else {
+        os << "] ";
+      }
+    }
+    os << ", " << std::endl;
+    
     os << "\"parameterClassName\" : \"dsagen2.comp.config.switch.SWRoutingParameters\"," << std::endl;
-    os << "\"" << ADGKEY_NAMES[SW_ROUTE_INDIMAT] << "\" : [ ]" << std::endl;
+    os << "\"" << ADGKEY_NAMES[SW_ROUTE_INDIMAT] << "\" : [ ] " << std::endl;
+   
     os << "}" << std::endl;
 
     os << "}";  
@@ -62,7 +117,7 @@ struct JsonWriter : dsa::adg::Visitor {
     os << "\"" << ADGKEY_NAMES[IVP_NODE] << "\" : {" << std::endl;
 
     // VectorPort Parameters
-    os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << vport->vp_impl() << "," << std::endl;
+    os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << 2 << "," << std::endl;
     os << "\"" << ADGKEY_NAMES[VP_STATE] << "\" : " << BoolToString(vport->vp_stated()) << "," << std::endl;
     os << "\"parameterClassName\" : \"dsagen2.sync.config.IVPNodeParameters\"," << std::endl;
     os << "\"" << ADGKEY_NAMES[DEPTH_BYTE] << "\" : " << vport->delay_fifo_depth() << "," << std::endl;
@@ -80,7 +135,7 @@ struct JsonWriter : dsa::adg::Visitor {
 
     // VectorPort Parameters
     os << "\"" << ADGKEY_NAMES[OVP_DISCARD] << "\" : " << vport->discardOVP() << "," << std::endl;
-    os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << vport->vp_impl() << "," << std::endl;
+    os << "\"" << ADGKEY_NAMES[VP_IMPL] << "\" : " << 2 << "," << std::endl;
     os << "\"" << ADGKEY_NAMES[VP_STATE] << "\" : " << BoolToString(vport->vp_stated()) << "," << std::endl;
     os << "\"parameterClassName\" : \"dsagen2.sync.config.OVPNodeParameters\"," << std::endl;
     os << "\"" << ADGKEY_NAMES[OVP_TASKFLOW] << "\" : " << vport->taskOVP() << "," << std::endl;
@@ -442,13 +497,187 @@ struct JsonWriter : dsa::adg::Visitor {
     os << "}";
   }
 
-  
 };
 
-void print_json(const std::string& name, SpatialFabric* fabric) {
-  ofstream os(name);
-  DSA_CHECK(os.good()) << "ADG (json) File" << name << "has bad output stream";
-  DSA_INFO << "Emit ADG (Json) File: " << name;
+struct SchedWriter : dfg::Visitor {  
+  std::ostream& os;
+  Schedule* sched;
+
+  SchedWriter(std::ostream& os_, Schedule* sched_) : os(os_), sched(sched_) {} 
+
+  void Visit(dfg::Node* node) override {
+    auto adg_node = sched->vex_prop()[node->id()].node();
+    auto lane = sched->vex_prop()[node->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << node->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Unknown\"," << std::endl;
+    os << "\"MappedNodeId\" : " << "\"node\"" << "," << std::endl;
+    os << "\"MappedNodeLane\" : " << lane << std::endl; 
+    os << "}" << std::endl;
+  }
+
+  void Visit(dfg::Instruction* inst) {
+    auto adg_node = sched->vex_prop()[inst->id()].node();
+    auto lane = sched->vex_prop()[inst->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << inst->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Instruction\"," << std::endl;
+    os << "\"Instruction Name\" : \"" << dsa::name_of_inst(inst->inst()) << "\"," << std::endl;
+    os << "\"Instruction OpCode\" : " << inst->inst() << "," << std::endl;
+
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[PE_TYPE] << "." <<  adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::Operation* oper) {
+    auto adg_node = sched->vex_prop()[oper->id()].node();
+    auto lane = sched->vex_prop()[oper->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << oper->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Instruction\"," << std::endl;
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[PE_TYPE] << "." <<  adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::InputPort* ivp) {
+    auto adg_node = sched->vex_prop()[ivp->id()].node();
+    auto lane = sched->vex_prop()[ivp->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << ivp->id() << "," << std::endl;
+    os << "\"VertexType\" : \"InputPort\"," << std::endl;
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[IVP_TYPE] << "." <<   adg_node->id() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::OutputPort* ovp) {
+    auto adg_node = sched->vex_prop()[ovp->id()].node();
+    auto lane = sched->vex_prop()[ovp->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << ovp->id() << "," << std::endl;
+    os << "\"VertexType\" : \"OutputPort\"," << std::endl;
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[OVP_TYPE] << "." <<   adg_node->id() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+
+  void Visit(dfg::DMA* dma) {
+    auto adg_node = sched->vex_prop()[dma->id()].node();
+    auto lane = sched->vex_prop()[dma->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << dma->id() << "," << std::endl;
+    os << "\"VertexType\" : \"DirectMemoryAccess\"," << std::endl;
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[DMA_TYPE] << "." <<   adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+
+  void Visit(dfg::Scratchpad* spad) {
+    auto adg_node = sched->vex_prop()[spad->id()].node();
+    auto lane = sched->vex_prop()[spad->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << spad->id() << "," << std::endl;
+    os << "\"VertexType\" : \"ScratchpadMemory\"," << std::endl;
+
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[SPM_TYPE] << "." << adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::Recurrance* rec) {
+    auto adg_node = sched->vex_prop()[rec->id()].node();
+    auto lane = sched->vex_prop()[rec->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << rec->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Recurrance\"," << std::endl;
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[REC_TYPE] << "." << adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::Register* reg) {
+    auto adg_node = sched->vex_prop()[reg->id()].node();
+    auto lane = sched->vex_prop()[reg->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << reg->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Register\"," << std::endl;
+    
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[REG_TYPE] << "." << adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    }
+  }
+  void Visit(dfg::Generate* gen) {
+    auto adg_node = sched->vex_prop()[gen->id()].node();
+    auto lane = sched->vex_prop()[gen->id()].lane();
+    os << "{" << std::endl;
+    os << "\"VertexId\" : " << gen->id() << "," << std::endl;
+    os << "\"VertexType\" : \"Generate\"," << std::endl;
+    
+    if (adg_node) {
+      os << "\"MappedNodeId\" : \"" << ADGKEY_NAMES[GEN_TYPE] << "." << adg_node->localId() << "\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl; 
+      os << "}" << std::endl;
+    } else {
+      os << "\"MappedNodeId\" : " << "\"\"," << std::endl;
+      os << "\"MappedNodeLane\" : " << lane << std::endl;
+      os << "}" << std::endl;
+    } 
+  }
+
+};
+
+inline void print_spatial_json(std::ostream& os, SpatialFabric* fabric, bool end=true) {
+  DSA_CHECK(os.good()) << "ADG (json) File has bad output stream";
 
   os << "{" << std::endl;
   os << "\"" << adg::ADGKEY_NAMES[adg::DSANODES] << "\" : { " << std::endl;
@@ -570,6 +799,167 @@ void print_json(const std::string& name, SpatialFabric* fabric) {
     os << " ";
   }
 
+  if (end) {
+    os << "]" << std::endl;
+    os << "}" << std::endl;
+  } else {
+    os << "] ," << std::endl;
+  }
+}
+
+inline void print_schedule_json(ofstream& os, Schedule* sched, bool end=true, int number_of_cores=1, int number_of_banks=1) {
+  DSA_CHECK(os.good()) << "ADG (json) File has bad output stream";
+  dsa::adg::SchedWriter sched_writer(os, sched);
+
+  std::string dram_performance = "";
+  std::string l2_performance = "";
+  std::string spm_performance = "";
+
+  os << "{" << std::endl;
+  os << "\"Name\" : \"" << sched->ssdfg()->filename << "\"," << std::endl;
+  os << "\"Performance\" : " << sched->estimated_performance(spm_performance, l2_performance, dram_performance, number_of_cores, number_of_banks) << "," << std::endl;
+
+  os << "\"SPM Performance\" : " << spm_performance << "," << std::endl;
+  os << "\"L2 Performance\" : " << l2_performance << "," << std::endl;
+  os << "\"DRAM Performance\" : " << dram_performance << "," << std::endl;
+
+  os << "\"Vertices\" : [" << std::endl;
+  for (auto elem : sched->ssdfg()->nodes) {
+    elem->Accept(&sched_writer);
+    if (elem != sched->ssdfg()->nodes.back())
+      os << ",";
+    os << std::endl;
+  }
+  os << "]," << std::endl;
+  os << "\"Edges\" : [" << std::endl;
+  for (auto edge : sched->ssdfg()->edges) {
+    auto links = sched->edge_prop()[edge.id].links;
+    os << "{" << std::endl;
+    os << "\"EdgeId\" : " << edge.id << "," << std::endl; 
+    os << "\"ValueNode\" : " << edge.val()->nid << "," << std::endl;
+    os << "\"ValueIndex\" : " << edge.val()->index << "," << std::endl;
+    os << "\"Bitwidth\" : " << edge.bitwidth() << "," << std::endl;
+    os << "\"Startbit\" : " <<  sched->edge_prop()[edge.id].source_bit << "," << std::endl;
+    os << "\"SourceId\" : " << edge.def()->id() << "," << std::endl;
+    os << "\"SinkId\" : " << edge.use()->id() << "," << std::endl;
+    os << "\"Links\" : [" << std::endl;
+    for (auto link_slot : links) {
+      auto link = link_slot.second;
+      os << "{" << std::endl;
+      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODETYPE] << "\" : \"";
+      if (auto fu = dynamic_cast<ssfu*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+      else if (auto sw = dynamic_cast<ssswitch*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+      else if (auto ivp = dynamic_cast<ssivport*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+      else if (auto ovp = dynamic_cast<ssovport*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      else if (auto dma = dynamic_cast<ssdma*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+      else if (auto spm = dynamic_cast<ssscratchpad*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+      else if (auto ovp = dynamic_cast<ssgenerate*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+      else if (auto ovp = dynamic_cast<ssregister*>(link->source()))
+        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+      os << "\"," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SOURCENODEID] << "\" : " << link->source()->localId() << "," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODETYPE] << "\" : \"";
+      if (auto fu = dynamic_cast<ssfu*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::PE_TYPE];
+      else if (auto sw = dynamic_cast<ssswitch*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::SW_TYPE];
+      else if (auto ivp = dynamic_cast<ssivport*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::IVP_TYPE];
+      else if (auto ovp = dynamic_cast<ssovport*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::OVP_TYPE];
+      else if (auto dma = dynamic_cast<ssdma*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::DMA_TYPE];
+      else if (auto spm = dynamic_cast<ssscratchpad*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::SPM_TYPE];
+      else if (auto ovp = dynamic_cast<ssrecurrence*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::REC_TYPE];
+      else if (auto ovp = dynamic_cast<ssgenerate*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::GEN_TYPE];
+      else if (auto ovp = dynamic_cast<ssregister*>(link->sink()))
+        os << adg::ADGKEY_NAMES[adg::REG_TYPE];
+      os << "\"," << std::endl;
+
+      os << "\"" << adg::ADGKEY_NAMES[adg::SINKNODEID] << "\" : " << link->sink()->localId() << "," << std::endl;
+      os << "\"StartBit\"" << " : " << link_slot.first << "" << std::endl;
+      os << "}";
+      if (link->id() != links.back().second->id())
+        os << ",";
+      os << " ";
+    }
+
+    os << "]" << std::endl;
+    os << "}";
+    if (edge.id != sched->ssdfg()->edges.back().id)
+      os << ",";
+    os << std::endl;
+
+  }
+  os << "]" << std::endl;
+  
+  if (!end)
+    os << "}," << std::endl;
+  else
+    os << "}" << std::endl;
+}
+
+inline void print_json(const std::string& name, SpatialFabric* fabric) {
+  ofstream os(name);
+  DSA_CHECK(os.good()) << "ADG (json) File" << name << "has bad output stream";
+  print_spatial_json(os, fabric, true);
+}
+
+inline void print_sched_json(const std::string& name, SpatialFabric* fabric, std::vector<WorkloadSchedules> workloads, int num_cores=1, int num_banks=1, int system_bus_width=64) {
+  ofstream os(name);
+  DSA_CHECK(os.good()) << "ADG (json) File" << name << "has bad output stream";
+  print_spatial_json(os, fabric, false);
+
+  os << "\"SystemParameters\" : {" << std::endl;
+  os << "\"NumberOfCores\" : " << num_cores << "," << std::endl;
+  os << "\"NumberOfBanks\" : " << num_banks << "," << std::endl;
+  os << "\"SystemBusWidth\" : " << system_bus_width << std::endl;
+  os << "}," << std::endl;
+
+  os << "\"Workloads\" : [ " << std::endl;
+  for (auto schedules = workloads.begin(); schedules != workloads.end(); schedules++) {
+    os << "{" << std::endl;
+    os << "\"Schedules\" : [ " << std::endl;
+    auto &sched_array = schedules->sched_array;
+    for (auto sched = sched_array.begin(); sched!= sched_array.end(); sched++) {
+      bool end = (std::next(sched) == sched_array.end());
+      print_schedule_json(os, &(*sched), end);
+    }
+    os << "]" << std::endl;
+    if (std::next(schedules) != workloads.end())
+      os << "}," << std::endl;
+    else 
+      os << "}" << std::endl;
+  }
+  os << "]" << std::endl;
+  os << "}" << std::endl;
+}
+
+inline void print_sched_json(const std::string& name, SpatialFabric* fabric, Schedule* sched) {
+  ofstream os(name);
+  DSA_CHECK(os.good()) << "ADG (json) File" << name << "has bad output stream";
+  print_spatial_json(os, fabric, false);
+
+  os << "\"Workloads\" : [ " << std::endl;
+  os << "{" << std::endl;
+  os << "\"Schedules\" : [ " << std::endl;
+  print_schedule_json(os, sched, false);
+  os << "]" << std::endl;
+  os << "}" << std::endl;
   os << "]" << std::endl;
   os << "}" << std::endl;
 }

@@ -5,9 +5,6 @@
 #include <vector>
 #include <map>
 
-
-#include "dsa/debug.h"
-
 namespace dsa {
 
 class SSModel;
@@ -51,18 +48,7 @@ struct FPGAResource : Resource {
   /*! \brief The estimated resource. */
   double total_lut, logic_lut, ram_lut, srl, ff, ramb36, ramb18, uram, dsp;
 
-  FPGAResource(const std::vector<double> &v = {0, 0, 0, 0, 0, 0, 0, 0, 0}) {
-    DSA_CHECK(v.size() == 9);
-    total_lut = v[0];
-    logic_lut = v[1];
-    ram_lut = v[2];
-    srl = v[3];
-    ff = v[4];
-    ramb36 = v[5];
-    ramb18 = v[6];
-    uram = v[7];
-    dsp = v[8];
-  }
+  FPGAResource(const std::vector<double> &v = {0, 0, 0, 0, 0, 0, 0, 0, 0});
 
   void scale_cores(int numcores) override;
   void normalize() override;

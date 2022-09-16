@@ -273,13 +273,6 @@ class SpatialFabric {
     if (dynamic_cast<ssivport*>(src) && dynamic_cast<DataNode*>(dst))
       return nullptr;
 
-    /*
-    if (dynamic_cast<ssivport*>(src))
-      if (src->out_links().size() == 8) return nullptr;
-    if (dynamic_cast<ssovport*>(dst))
-      if (dst->in_links().size() == 8) return nullptr;
-    */
-
     // Check if a link already exists
     for (auto link : src->out_links())
       if (link->sink()->id() == dst->id()) 
@@ -288,6 +281,12 @@ class SpatialFabric {
     sslink* link = src->add_link(dst, source_position, sink_position);
     link->id(_link_list.size());
     _link_list.push_back(link);
+
+    src->setRoutingTableSize();
+    dst->setRoutingTableSize();
+      
+    link->source()->addLinkToRoutingTable(link);
+    link->sink()->addLinkToRoutingTable(link);
 
     return link;
   }

@@ -113,23 +113,9 @@ class sslink {
    */
   int bitwidth();
 
-  /*!
-   * \brief The connectivity of the sub-network lanes. Refer the method
-   *        below for more details.
-   */
-  // TODO(@were): Extend this to bitset for wider decomposability.
-  std::vector<uint64_t> subnet;
+  int granularity();
 
-  /*!
-   * \brief Giving a starting lane, and the required width, return the
-   *        connected lanes.
-   * \param slot The starting lane.
-   * \param width The width of lanes on the subnetwork.
-   * \return int The bitmask of feasible lanes.
-   */
-  int slots(int slot, int width);
-
-  void resetSubnet();
+  int lanes() { return bitwidth() / granularity(); }
 
  protected:
   int id_{-1};
@@ -267,6 +253,176 @@ class ssnode {
    */
   SpatialFabric* parent{nullptr};
 
+  void setRoutingTableSize() {
+    routing_table_.resize(in_links().size());
+    for (int i = 0; i < in_links().size(); i++) {
+      routing_table_[i].resize(out_links().size());
+    }
+  }
+
+  std::vector<uint64_t> createRoutingTableEntry(int i, int j) {
+    std::vector<uint64_t> entry;
+    // int in_granularity = in_links()[i]->granularity();
+    int out_granularity = out_links()[j]->granularity();
+    int in_slots = datawidth() / out_granularity;
+    int out_slots = out_links()[j]->sink()->datawidth() / out_granularity;
+
+    // Make Sure that Out Slots doesnt exceed int64_t capacity
+    DSA_CHECK(64 >= out_slots);
+    
+    entry.resize(in_slots);
+    for (int k = 0; k < in_slots; k++) {
+      if (k == 0) {
+        // Set the routing table to only ones in slots that are visitable
+        entry[k] = ~0ull >> (64 - out_slots);
+      } else if (k == 1 && type() == NodeType::Switch) {
+        // Set the routing table to only ones in slots that are visitable
+        entry[k] = ~0ull >> (64 - out_slots);
+      } else {
+        entry[k] = 0;
+      }
+    }
+
+    return entry;
+  }
+
+  void printRoutingTable(sslink* i, sslink* j) {
+    /*
+    auto table = routing_table(i, j);
+    for (int k = 0; k < table.size(); k++) {
+      DSA_INFO << std::bitset<64>(table[k]);
+    }
+    */
+  }
+
+  void resetAllRoutingTables() {
+    setRoutingTableSize();
+    for (int i = 0; i < in_links().size(); i++) {
+      for (int j = 0; j < out_links().size(); j++) {
+        routing_table_[i][j] = createRoutingTableEntry(i, j);
+      }
+    }
+  }
+
+  void removeLinkFronRoutingTable(sslink* link) {
+    int in_index = link_index(link, true);
+    int out_index = link_index(link, false);
+    if (in_index != -1) {
+      routing_table_.erase(in_index + routing_table_.begin());
+    } else if (out_index != -1) {
+      for (int i = 0; i < in_links().size(); i++) {
+        routing_table_[i].erase(out_index + routing_table_[i].begin());
+      }
+    }
+  }
+
+  void addLinkToRoutingTable(sslink* link) {
+    int in_index = link_index(link, true);
+    int out_index = link_index(link, false);
+    if (in_index != -1) {
+      std::vector<std::vector<uint64_t>> row;
+      for (int j = 0; j < out_links().size(); j++) {
+        row.push_back(createRoutingTableEntry(in_index, j));
+      }
+      routing_table_.insert(in_index + routing_table_.begin(), row);
+
+    } else if (out_index != -1) {
+      for (int i = 0; i < in_links().size(); i++) {
+        routing_table_[i].insert(out_index + routing_table_[i].begin(), createRoutingTableEntry(i, out_index));
+      }
+    }
+  }
+
+  void resetNodeTable(ssnode* node) {
+    for (int i = 0; i < in_links().size(); i++) {
+      for (int j = 0; j < out_links().size(); j++) {
+        if (in_links()[i]->source() == node || out_links()[j]->sink() == node) {
+          routing_table_[i][j] = createRoutingTableEntry(i, j);
+        }
+      }
+    }
+  }
+
+  std::vector<std::vector<std::bitset<1>>> printableRoutingTable(int i, int j) {
+    auto table = routing_table(i, j);
+
+    int out_granularity = out_links()[j]->granularity();
+    int in_slots = datawidth() / out_granularity;
+    int out_slots = out_links()[j]->sink()->datawidth() / out_granularity;
+
+    DSA_CHECK(table.size() == in_slots) << "Routing Table Size Mismatch: " << table.size() << " != " << in_slots << ", " << out_slots << ", " << out_granularity << ", " << datawidth() << ", " << out_links()[j]->sink()->datawidth() << " " << granularity() << " " << out_links()[j]->granularity();
+
+    std::vector<std::vector<std::bitset<1>>> printable_table;
+
+    printable_table.resize(in_slots);
+    for (int k = 0; k < printable_table.size(); k++) {
+      printable_table[k].resize(out_slots);
+    }
+
+    for (int i = 0; i < in_slots; i++) {
+      for (int j = 0; j < out_slots; j++) {
+        int l = j - i;
+        if (l < 0) {
+          l += in_slots;
+        } else {
+          l %= in_slots;
+        }
+        DSA_CHECK(l < in_slots) << "l: " << l << " i: " << i << " j: " << j << " in_slots: " << in_slots << " out_slots: " << out_slots;
+        printable_table[i][j] = (table[l] & (1 << i) >> i);
+      }
+    }
+    
+    return printable_table;
+  }
+
+  uint64_t slots(sslink* first, sslink* second, int slot, int width) {
+    return slots(link_index(first, true), link_index(second, false), slot, width);
+  }
+
+  uint64_t slots(int x, int y, int slot, int width) {
+    /* To check the connectivity in O(1), here we apply a tricky idea:
+    * Originally, subnet[i][j] indicates subnet `i' is connected to subnet `j'.
+    * This is unfriendly to check a bulk of connectivity: when the width is `w', and we
+    * want to go from `i' to `j', we need to check subnet[i+k][j+k] where k = 0..(w-1),
+    * which is O(w).
+    *
+    * Here we first transform the meaning of subnet[i][delta], which means
+    * it is able to go from `i' to `i+delta' subnet. If we want to check connectivity
+    * between `i' and `j', under width `w', where delta=j-i, the check becomes:
+    * subnet[i+k][delta], where k=0..(w-1), which is still O(w).
+    *
+    * Then two tricks together enables O(1) check:
+    * 1. Transposing the matrix makes the check subnet[delta][i+k], this makes access
+    * continuous.
+    * 2. Squeezing the inner dimension of subnet to bit representation, so that we can
+    * check the one's in O(1) by bit operation.
+    * */
+    DSA_CHECK(width > 0);
+    uint64_t res = 0;
+
+    auto table = routing_table(x, y);
+    int n = table.size();
+    
+    auto f = [](uint64_t a, int bits) {
+      auto full_mask = ~0ull >> (64 - bits);
+      return (a & full_mask) == full_mask;
+    };
+    for (int i = 0; i < n; ++i) {
+      if (slot + width <= n) {
+        if (f(table[i] >> slot, width)) {
+          res |= 1 << (i + slot) % n;
+        }
+      } else {
+        int high = n - slot;
+        int low = width - high;
+        if (f(table[i] >> slot, high) && f(table[i], low)) {
+          res |= 1 << (i + slot) % n;
+        }
+      }
+    }
+    return res;
+  }
+
  protected:
   /*!
    * \brief The identifier of this node.
@@ -309,6 +465,8 @@ class ssnode {
    */
   std::vector<sslink*> links_[2];  // {output, input}
 
+  std::vector<std::vector<std::vector<uint64_t>>> routing_table_;
+
   NodeType type_{None};
 
   friend class SpatialFabric;
@@ -330,6 +488,8 @@ class ssnode {
   DEF_ATTR(flow_control)
   DEF_ATTR(max_delay)
   const std::vector<sslink*> &links(int x) { return links_[x]; }
+  const std::vector<uint64_t> &routing_table(int x, int y) { return routing_table_[x][y]; }
+  const std::vector<uint64_t> &routing_table(sslink* in_link, sslink* out_link) { return routing_table_[link_index(in_link, true)][link_index(out_link, false)]; }
 };
 
 ////////////////////////////////////////////////////////////////
@@ -345,12 +505,15 @@ class SpatialNode : public ssnode {
 
   SpatialNode() 
       : ssnode() {}
-
+  
   virtual std::string name() const = 0;
   virtual void Accept(adg::Visitor* visitor) = 0;
   virtual void dumpIdentifier(ostream& os) = 0;
   virtual void dumpFeatures(ostream& os) = 0;
   virtual ~SpatialNode() {}
+
+
+
 };
 
 class SyncNode : public ssnode {
@@ -419,7 +582,7 @@ class DataNode : public ssnode {
   virtual void Accept(adg::Visitor* visitor) = 0;
   virtual void dumpIdentifier(ostream& os) = 0;
   virtual void dumpFeatures(ostream& os) = 0;
-  virtual ~DataNode() {}
+  virtual ~DataNode() {} 
 
  protected:
 

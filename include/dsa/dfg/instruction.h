@@ -114,7 +114,7 @@ class Instruction : public Node {
   void Accept(dsa::dfg::Visitor*) final;
 
   /*! \brief The default constructor. */
-  Instruction() {}
+  Instruction() { _ntype = NodeType::INST; }
 
   /*!
    * \brief The constructor with instruction opcode.
@@ -183,7 +183,7 @@ class Operation : public Node {
   void Accept(dsa::dfg::Visitor*) final;
 
   /*! \brief The default constructor. */
-  Operation() {}
+  Operation() { _ntype = NodeType::INST; }
 
   /*!
    * \brief Construct a new Operation object.
@@ -192,7 +192,7 @@ class Operation : public Node {
    * \param cnt The number of each compute resource.
    */
   Operation(SSDfg* ssdfg, const std::vector<OpCode>& ops_, const std::vector<int>& cnt_)
-      : Node(ssdfg, V_INST), opcodes(ops_), cnt(cnt_) {}
+      : Node(ssdfg, V_INST), opcodes(ops_), cnt(cnt_) { _ntype = NodeType::INST; }
 
   /*! \brief The name of this instruction. */
   // TODO(@were): Do we want to rename this to ToString?

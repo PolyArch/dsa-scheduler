@@ -19,7 +19,6 @@ else()
   endif()
 endif()
 
-
 # Build assumptions
 set(BUILD_SHARED_LIBS ON)
 if (DEFINED ENV{SS_TOOLS})
@@ -39,12 +38,10 @@ add_definitions(-DREPO_PREFIX="${REPO_PREFIX}")
 # set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_options(-fno-strict-aliasing)
 
-
 # Find dependencies: Parser
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 find_package(Torch REQUIRED)
-
 
 FLEX_TARGET(DFG_LEXER ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.l
   ${CMAKE_SOURCE_DIR}/src/dfg/dfg-parser.yy.cc
@@ -61,6 +58,7 @@ target_include_directories(inst_model PRIVATE ${CMAKE_SOURCE_DIR}/include)
 set(SS_INSTS_H ${CMAKE_SOURCE_DIR}/include/dsa/arch/ssinst.h)
 set(SS_INSTS_CXX ${CMAKE_SOURCE_DIR}/src/insts/ssinst.cpp)
 set(PA_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.overhead.csv")
+
 # set(PA_MODEL ${CMAKE_SOURCE_DIR}/src/insts/"full.ssinst.power_area.csv")
 
 
@@ -72,22 +70,31 @@ add_custom_command(
 
 # Build the library
 file(GLOB_RECURSE SRCS ${CMAKE_SOURCE_DIR}/src/*.cpp)
+file(GLOB_RECURSE HEADERS ${CMAKE_SOURCE_DIR}/include/*.h)
 
 add_library(dsa
   ${SRCS}
   ${SS_INSTS_CXX}
   ${FLEX_DFG_LEXER_OUTPUTS}
-  ${BISON_DFG_PARSER_OUTPUTS})
+  ${BISON_DFG_PARSER_OUTPUTS}
+)
 
-target_include_directories(dsa PRIVATE
+target_compile_definitions(dsa PRIVATE ENV_CACHE)
+
+set_target_properties(dsa PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_include_directories(dsa PUBLIC
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/3rd-party/cxxopts/include
   ${CMAKE_SOURCE_DIR}/3rd-party/ctpl/
   ${CMAKE_SOURCE_DIR}/3rd-party/libtorch/include/torch/csrc/api/include
   ${CMAKE_INSTALL_PREFIX}/include
-  )
+)
 
-target_link_directories(dsa PRIVATE ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
+target_link_directories(dsa PRIVATE 
+  ${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64
+)
+
 target_link_libraries(dsa PRIVATE jsoncpp ${TORCH_LIBRARIES})
 
 # Install the header files and library

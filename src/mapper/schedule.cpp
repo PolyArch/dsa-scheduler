@@ -572,18 +572,49 @@ void Schedule::printEdge() {
 
   for (int i = 0; i < edge_prop().size(); ++i) {
     auto edge = edge_prop()[i];
-    if (auto outputPort = dynamic_cast<dsa::dfg::OutputPort*>(edges[i].use())) {
-      int sourceIdx = outputPort->sourceEdgeIdx(&edges[i]);
-      DSA_INFO << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << "," << sourceIdx << ")";
-    } else {
-      DSA_INFO << "Edge " << i << ": " << edges[i].def()->name() << " -> " << edges[i].use()->name() << " (" << edges[i].vid << ")";
+    std::string stated = "";
+    if (edges[i].sourceStated() || edges[i].sinkStated()) {
+      stated = "stated";
     }
-    for (int i = 0; i < edge.links.size(); ++i) {
-      auto link = edge.links[i].second;
-      auto slot = edge.links[i].first;
-      //auto sourceSlot = node_prop()[link->source()->id()];
+
+    DSA_INFO << "Edge " << i << ": " << edges[i].name() << " (" << edges[i].vid << "," << edges[i].bitwidth() << ") : " << stated;
+    for (int j = 0; j < edge.links.size(); ++j) {
+      auto link = edge.links[j].second;
+      auto slot = edge.links[j].first;
+      int sourceStartSlot = -1;
+      int sourceEndSlot = -1;
+      int sinkStartSlot = -1;
+      int sinkEndSlot = -1;
+
+      if (j == 0) {
+        sourceStartSlot = edge.source_bit / edge.links[j].second->source()->granularity();
+        sourceEndSlot = sourceStartSlot + std::ceil(edges[i].bitwidth() / (float) edge.links[j].second->source()->granularity());
+      } else {
+        sourceStartSlot = startSlot(edge.links[j - 1]);
+        sourceEndSlot = endSlot(edge.links[j - 1], &edges[i]);
+        sourceEndSlot = sourceEndSlot % link->source()->lanes();
+
+        if (sourceEndSlot == 0)
+          sourceEndSlot = link->source()->lanes();
+      }
+
+      sinkStartSlot = startSlot(edge.links[j]);
+      sinkEndSlot = endSlot(edge.links[j], &edges[i]);
+      sinkEndSlot = sinkEndSlot % link->sink()->lanes();
+      if (sinkEndSlot == 0)
+        sinkEndSlot = link->sink()->lanes();
+
+      /*
+      if (j == edge.links.size() - 1) {
+        sinkStartSlot = startSlot(link->sink(), edges[i].use());
+        sinkEndSlot = endSlot(link->sink(), edges[i].use());
+      } else {
+        sinkStartSlot = startSlot(edge.links[j]);
+        sinkEndSlot = endSlot(edge.links[j], &edges[i]);
+        sinkEndSlot = sinkEndSlot % link->sink()->lanes();
+      }*/
       
-      DSA_INFO << "\tLink " << i << ": " << link->name() << " (" << link->id() << ")" << " S:(" << slot << ") I:(" << link->source()->link_index(link, false) << "," << link->sink()->link_index(link, true) << ")";
+      DSA_INFO << "\tLink " << j << ": " << link->name() << " (" << link->id() << ")" << " S:(" << sourceStartSlot << "-" << sourceEndSlot << "," << sinkStartSlot << "-" << sinkEndSlot << "_" <<  edge.links[j].first << ") I:(" << link->source()->link_index(link, false) << "," << link->sink()->link_index(link, true) << ")";
     }
   }
 }
@@ -594,7 +625,7 @@ void Schedule::printGraphviz(const char* name) {
 
 void Schedule::stat_printOutputLatency() {
   int n = _ssDFG->type_filter<dsa::dfg::OutputPort>().size();
-  cout << "** Output Vector Latencies **\n";
+  DSA_INFO << "** Output Vector Latencies **";
   for (int i = 0; i < n; i++) {
     auto* vec_out = &_ssDFG->type_filter<dsa::dfg::OutputPort>()[i];
     if (vec_out == nullptr) continue;
@@ -630,12 +661,52 @@ bool Schedule::fixLatency(int64_t& max_lat, int64_t& max_lat_mis, std::pair<int,
 
   max_lat = 0;
   max_lat_mis = 0;
+
   dsa::dfg::pass::IterativeLatency(this, max_lat, max_lat_mis, _totalViolation,
                                    _groupMismatch, false, delay_violation);
   this->_max_lat = max_lat;
   this->_max_lat_mis = max_lat_mis;
 
   return max_lat_mis == 0;
+}
+
+double Schedule::spmPerformance() {
+    std::vector<double> nmlz_freq;
+  for (int i = 0; i < ssdfg()->meta.size(); ++i) {
+    nmlz_freq.push_back(ssdfg()->meta[i].frequency);
+  }
+  int max_frequency = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
+  for (int i = 0; i < ssdfg()->meta.size(); ++i) {
+    nmlz_freq[i] = nmlz_freq[i] / max_frequency;
+  }
+
+  double spm_performance_factor = 1.0;
+  for (auto spad : ssModel()->subModel()->scratch_list()) {
+    // the production rate for this scratchpad node
+    int productionRate = spad->readWidth() * spad->memUnitBits();
+
+    double inputConsumption = 0;
+    double outputConsumption = 0;
+
+    // Populate input and output consumption rates
+    auto vertices = node_prop()[spad->id()].slots[0].vertices;
+    for (auto vertex : vertices) {
+      if (dfg::Array* arr = dynamic_cast<dfg::Array*>(vertex.first)) {
+        auto input_consumtion = arr->Consumption(true);
+        auto output_consumption = arr->Consumption(false);
+        for (int i = 0; i < ssdfg()->meta.size(); ++i) {
+          inputConsumption += input_consumtion[i] * nmlz_freq[i];
+          outputConsumption += output_consumption[i] * nmlz_freq[i];
+        }
+      }
+    }
+  
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / inputConsumption));
+    spm_performance_factor =
+        std::min(spm_performance_factor, (productionRate / outputConsumption));
+  }
+  return spm_performance_factor;
 }
 
 void Schedule::validate() {
@@ -682,6 +753,7 @@ void Schedule::get_overprov(int64_t& ovr, int64_t& agg_ovr, int64_t& max_util) {
       continue;
     DSA_CHECK(v.node() != nullptr) << "Vertex node is null";
     DSA_CHECK(v.node()->id() < _nodeProp.size()) << "Vertex node id is out of range: " << v.node()->id() << " " << _nodeProp.size();
+    DSA_CHECK(v.node()->type() != ssnode::NodeType::Switch) << "Vertex node is a switch";
     // First get the nodeProp associated with this vertex
     const auto& np = _nodeProp[v.node()->id()];
 
@@ -712,7 +784,7 @@ void Schedule::get_overprov(int64_t& ovr, int64_t& agg_ovr, int64_t& max_util) {
         } else if (auto inst = dynamic_cast<dsa::dfg::Instruction*>(v)) {
           cnt++;
           insts.push_back(inst);
-        } else{
+        } else {
           cnt++;
           other.push_back(v);
         }
@@ -786,9 +858,11 @@ void Schedule::get_link_overprov(sslink* link, int64_t& ovr, int64_t& agg_ovr, i
     return;
   if (dynamic_cast<DataNode*>(link->sink()))
     return;
+  auto& linkProp = _linkProp[link->id()];
+  int slots = linkProp.slots.size();
   
   int n = std::min(link->source()->lanes(), link->sink()->lanes());
-  for (int slot = 0; slot < n; ++slot) {
+  for (int slot = 0; slot < slots; ++slot) {
     auto& lp = _linkProp[link->id()];
     int64_t util = 0;
 
@@ -815,7 +889,7 @@ void Schedule::get_link_overprov(sslink* link, int64_t& ovr, int64_t& agg_ovr, i
     util = vector_utils::count_unique(values) + vector_utils::count_unique(vecs);
     int64_t cur_ovr = util - link->max_util();
     if (cur_ovr > 0) {
-      DSA_LOG(OVERPROV) << link->name() << ": " << values.size()
+       DSA_LOG(OVERPROV) << link->name() << " (" << slot << "," << link->id() << ")" << ": " << values.size()
                     << " + " << vecs.size() << " > " << link->max_util();
       for (auto &value : values) {
         DSA_LOG(OVERPROV) << value.second << " " << value.first->name();
@@ -949,21 +1023,14 @@ double Schedule::estimated_performance(std::string& spm_performance, std::string
   for (int i = 0; i < dfg->meta.size(); ++i) {
     nmlz_freq.push_back(dfg->meta[i].frequency);
   }
-  double nmlz = std::accumulate(nmlz_freq.begin(), nmlz_freq.end(), 0);
-  for (int i = 0; (long unsigned int) i < dfg->meta.size(); ++i) {
-    nmlz_freq[i] /= nmlz;
+  int max_frequency = *std::max_element(nmlz_freq.begin(), nmlz_freq.end());
+  for (int i = 0; i < dfg->meta.size(); ++i) {
+    nmlz_freq[i] = nmlz_freq[i] / max_frequency;
   }
 
-  // ArgSort nmlz frequency
-  std::vector<double> nmlz_freq_args(dfg->meta.size(), 0);
-  std::size_t n(0);
-  std::generate(std::begin(nmlz_freq_args), std::end(nmlz_freq_args), [&]{ return n++; });
-  std::sort(  std::begin(nmlz_freq_args), 
-              std::end(nmlz_freq_args),
-              [&](int i1, int i2) { return nmlz_freq[i1] > nmlz_freq[i2]; } );
+  
   
   DSA_LOG(PERFORMANCE) << "Normalized Frequency " << nmlz_freq;
-  DSA_LOG(PERFORMANCE) << "Normalized Frequency args " << nmlz_freq_args;
 
   // Get the performance of scratchpad in each code region
   double spm_performance_factor = 1.0;
@@ -981,8 +1048,8 @@ double Schedule::estimated_performance(std::string& spm_performance, std::string
         auto input_consumtion = arr->Consumption(true);
         auto output_consumption = arr->Consumption(false);
         for (int i = 0; i < dfg->meta.size(); ++i) {
-          inputConsumption += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
-          outputConsumption += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          inputConsumption += (input_consumtion[i] * nmlz_freq[i]);
+          outputConsumption += (output_consumption[i] * nmlz_freq[i]);
         }
       }
     }
@@ -1024,8 +1091,8 @@ double Schedule::estimated_performance(std::string& spm_performance, std::string
           }
         }
         for (int i = 0; i < dfg->meta.size(); ++i) {
-          consumptionRate += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
-          consumptionRate += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          consumptionRate += input_consumtion[i] * nmlz_freq[i];
+          consumptionRate += output_consumption[i] * nmlz_freq[i];
         }
       }
     }
@@ -1055,8 +1122,8 @@ double Schedule::estimated_performance(std::string& spm_performance, std::string
         auto input_consumtion = arr->Consumption(true, true, true);
         auto output_consumption = arr->Consumption(false, true, true);
         for (int i = 0; i < dfg->meta.size(); ++i) {
-          consumptionRate += (input_consumtion[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
-          consumptionRate += (output_consumption[i] * nmlz_freq[i] / nmlz_freq[nmlz_freq_args[0]]);
+          consumptionRate += input_consumtion[i] * nmlz_freq[i];
+          consumptionRate += output_consumption[i] * nmlz_freq[i];
         }
       }
     }

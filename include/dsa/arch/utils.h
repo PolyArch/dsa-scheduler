@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include "dsa/arch/fabric.h"
 

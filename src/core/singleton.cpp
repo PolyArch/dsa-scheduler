@@ -17,6 +17,12 @@ ContextFlags &ContextFlags::Global() {
   return *instance_;
 }
 
+EnvCache &ContextFlags::CachedEnv() {
+  static EnvCache *instance_ = new EnvCache();
+  return *instance_;
+}
+
+
 void ContextFlags::Load(const cxxopts::ParseResult &parsed) {
   this->dummy = parsed.count("dummy");
   this->verbose = parsed.count("verbose");

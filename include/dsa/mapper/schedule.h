@@ -132,7 +132,7 @@ struct VertexProp {
 //   struct NodeSlot {
 //     /*! \brief Edges pass through this node slot to route. */
 //     std::vector<dsa::dfg::Edge*> passthrus;
-//     /*! \brief Byte slot of the dfg node (inst/vec) that is mapped to this node slot. */
+//     /*! \brief bit slot of the dfg node (inst/vec) that is mapped to this node slot. */
 //     std::vector<std::pair<dsa::dfg::Node*, int>> vertices;
 //   };
 //   /*! \brief The mapping information of each lane hardware lane. */
@@ -212,20 +212,6 @@ class Schedule {
     _vertexProp[node->id()].lat = lat;
   }
 
-  int lanes_involved(ssnode* node, int bitwidth) {
-    if (node->data()) {
-      return 1;
-    }
-    return bitwidth / node->granularity();
-  }
-
-  int lanes_involved(sslink* link, int bitwidth) {
-    if (link->source()->data() || link->sink()->data()) {
-      return 1;
-    }
-    return bitwidth / std::max(link->source()->granularity(), link->sink()->granularity());
-  }
-
   /*!
    * \brief Return the latency of the given node in DFG.
    * \param n The DFG node to query.
@@ -265,12 +251,20 @@ class Schedule {
   }
 
   void assign_edge_pt(dsa::dfg::Edge* edge, std::pair<int, ssnode*> pt) {
-    DSA_LOG(ROUTE) << "Assigning passthrough: " <<  pt.second->name() << " " << pt.first;
-    if ((int)_edgeProp.size() <= edge->id) {
-      _edgeProp.resize(edge->id + 1);
+    std::pair<dsa::dfg::Edge*, int> assigned = std::make_pair(edge, pt.first);
+
+    int startSlot = pt.first / pt.second->granularity();
+    int endSlot = startSlot + std::ceil(edge->bitwidth() / (float) pt.second->granularity());
+    DSA_CHECK(endSlot > startSlot);
+
+    for (int i = startSlot; i < endSlot; i++) {
+      int slot = i % _nodeProp[pt.second->id()].slots.size();
+      _nodeProp[pt.second->id()].slots[slot].passthrus.push_back(assigned);
     }
-    _nodeProp[pt.second->id()].slots[pt.first].passthrus.push_back(edge);
-    ++total_passthrough;
+
+    if (pt.second->type() == ssnode::FunctionUnit)
+      ++total_passthrough;
+    
     _edgeProp[edge->id].passthroughs.push_back(pt);
   }
 
@@ -381,6 +375,47 @@ class Schedule {
     }
   }
 
+  int startSlot(ssnode* assigned, dfg::Node* dfgnode) {
+    auto assignedNodeProp = _nodeProp[assigned->id()];
+    
+    for (int i = 0; i < assignedNodeProp.slots.size(); ++i) {
+      for (auto vertex : assignedNodeProp.slots[i].vertices) {
+        // Return the first slot assigned to this node
+        if (vertex.first->id() == dfgnode->id()) {
+          return vertex.second;
+        }
+      }
+    }
+    return -1;
+  }
+
+  int startSlot(std::pair<int, sslink*> edgelink) {
+    return edgelink.first / edgelink.second->sink()->granularity();
+  }
+
+  int endSlot(ssnode* assigned, dfg::Node* dfgnode) {
+    auto assignedNodeProp = _nodeProp[assigned->id()];
+    
+    for (int i = 0; i < assignedNodeProp.slots.size(); ++i) {
+      for (auto vertex : assignedNodeProp.slots[i].vertices) {
+        // Return the final slot assigned to this node by calculating
+        // start slot + dfgnode width / slot_size
+        if (vertex.first->id() == dfgnode->id()) {
+          int final = vertex.second + std::ceil(dfgnode->bitwidth() / (float) assigned->granularity());
+          DSA_CHECK(final <= assignedNodeProp.slots.size());
+          return final;
+        }
+      }
+    }
+    return -1;
+  }
+
+  int endSlot(std::pair<int, sslink*> edgelink, dfg::Edge* edge) {
+    int start = startSlot(edgelink);
+    return start + std::ceil(edge->bitwidth() / (float) edgelink.second->sink()->granularity());
+
+  }
+
 
   /*!
    * \brief Assign the given DFG node to the hardware resource.
@@ -404,47 +439,83 @@ class Schedule {
 
     DSA_CHECK(dfgnode);
     DSA_CHECK(snode->id() < (int)_nodeProp.size()) << snode->id() << "<" << (int)_nodeProp.size();
+  
+    int startSlot = orig_slot;
+    int endSlot = orig_slot + std::ceil(dfgnode->bitwidth() / (float) snode->granularity());
+    DSA_CHECK(endSlot > startSlot);
 
-    // here dfg node is assigned to the hardware. Is it the second one? What is the slot?
-    int num_slots = lanes_involved(snode, dfgnode->bitwidth());
-    for (int i = 0; i < num_slots; ++i) {
-      int slot = orig_slot + i;
-      _nodeProp[snode->id()].slots[slot].vertices.emplace_back(dfgnode, orig_slot);
+    auto assign_node = std::make_pair(dfgnode, startSlot);
+
+    //DSA_INFO << " Assigning Node: " << snode->name() << " " << startSlot << "-" << endSlot << " for DFGNode: " << dfgnode->name();
+
+    for (int i = startSlot; i < endSlot; ++i) {
+      auto vertices = _nodeProp[snode->id()].slots[i].vertices;
+      auto it = std::find(vertices.begin(), vertices.end(), assign_node);
+      DSA_CHECK(it == vertices.end());
+      if (it == vertices.end()) {
+        _nodeProp[snode->id()].slots[i].vertices.push_back(assign_node);
+      } else {
+        DSA_INFO << "REPEAT: " << snode->name() << " " << i << " " << dfgnode->name();
+      }
     }
   }
 
   void remove_link_from_edge(dsa::dfg::Edge* edge, std::pair<int, sslink*> link) {
     auto& lp = _linkProp[link.second->id()];
 
-    int granularity = std::max(link.second->source()->granularity(), link.second->sink()->granularity());
-    int last_slot = std::min(lanes_involved(link.second, edge->bitwidth()), (int) lp.slots.size());
+    int startSlot = link.first / link.second->granularity();
+    int endSlot = startSlot + std::ceil(edge->bitwidth() / (float) link.second->granularity());
 
-    for (int i = 0; i < last_slot; ++i) {
-      int slot_index = (link.first + i) % link.second->sink()->lanes();
-      DSA_CHECK(slot_index >= 0 && slot_index < (int) lp.slots.size());
+    DSA_CHECK(endSlot > startSlot);
+
+    for (int slotIndex = startSlot; slotIndex < endSlot; ++slotIndex) {
+      int slot_index = slotIndex % lp.slots.size();
       auto& slot = lp.slots[slot_index];
-
       auto& edges = slot.edges;
-      EdgeSlice es(edge->id, edge->l + i * granularity, edge->l + (i + 1) * granularity - 1);
+
+      int startEdge = link.second->granularity() * (slotIndex - startSlot);
+      int l = edge->l + startEdge;
+      int r = edge->l + (startEdge + link.second->granularity()) - 1;
+
+      EdgeSlice es(edge->id, l, r);
       auto it = std::find(edges.begin(), edges.end(), es);
+      
+      DSA_CHECK(it != edges.end()) << startSlot << " " << endSlot << " " << slotIndex << " " << slot_index << " " << link.second->name() << " " << edge->name() << " " << link.first << " " << link.second->granularity() << " " << link.second->bitwidth();
       edges.erase(it);
+
       if (slot.edges.empty()) {
         _links_mapped--;
         DSA_CHECK(_links_mapped >= 0);
       }
     }
+
+    auto &links = _edgeProp[edge->id].links;
+    auto it = std::find(links.begin(), links.end(), link);
+    DSA_CHECK(it != links.end());
+    links.erase(it);
   }
 
   void remove_passthrough_from_edge(dsa::dfg::Edge* edge, std::pair<int, ssnode*> pt) {
-    auto& np = _nodeProp[pt.second->id()];
-    auto& passthrus = np.slots[pt.first].passthrus;
-    for (auto iter = passthrus.begin(), end = passthrus.end(); iter != end; ++iter) {
-      if (*iter == edge) {
-        passthrus.erase(iter);
-        --total_passthrough;
-        break;
-      }
+    DSA_CHECK(_nodeProp[pt.second->id()].slots.size() == pt.second->lanes());
+    int startSlot = pt.first / pt.second->granularity();
+    int endSlot = startSlot + std::ceil(edge->bitwidth() / (float) pt.second->granularity());
+    DSA_CHECK(endSlot > startSlot);
+
+    for (int i = startSlot; i < endSlot; ++i) {
+      int slot = i % _nodeProp[pt.second->id()].slots.size();
+      auto &passthrus = _nodeProp[pt.second->id()].slots[slot].passthrus;
+      auto it = std::find(passthrus.begin(), passthrus.end(), std::make_pair(edge, pt.first));
+      DSA_CHECK(it != passthrus.end()) << "Could not find passthrough for edge: " << edge->name() << " " << pt.first << " " << pt.second->name();
+      passthrus.erase(it);
     }
+    
+    if (pt.second->type() == ssnode::FunctionUnit)
+      --total_passthrough;
+    
+    auto &passthroughs = _edgeProp[edge->id].passthroughs;
+    auto it = std::find(passthroughs.begin(), passthroughs.end(), pt);
+    DSA_CHECK(it != passthroughs.end());
+    passthroughs.erase(it);
   }
 
   void unassign_edge(dsa::dfg::Edge* edge) {
@@ -454,14 +525,16 @@ class Schedule {
     DSA_LOG(UNASSIGN) << "Unmapping " << edge->name() << " [" << edge->id << "]";
 
     // Remove all the edges for each of links
-    for (auto& link : ep.links) {
-      remove_link_from_edge(edge, link);
+    for (auto i = ep.links.begin(); i != ep.links.end();) {
+      remove_link_from_edge(edge, *i);
     }
-
-    // Remove all passthroughs associated with this edge
-    for (auto& pt : ep.passthroughs) {
-      remove_passthrough_from_edge(edge, pt);
+    DSA_CHECK(_edgeProp[edge->id].links.empty());
+    
+    // Remove all the passthroughs for each of passthroughs
+    for (auto i = ep.passthroughs.begin(); i != ep.passthroughs.end();) {
+      remove_passthrough_from_edge(edge, *i);
     }
+    DSA_CHECK(_edgeProp[edge->id].passthroughs.empty());
 
     _edgeProp[edge->id].reset();
 
@@ -470,7 +543,7 @@ class Schedule {
 
   // Delete all scheduling data associated with dfgnode, including its
   // mapped locations, and mapping information and metadata for edges
-  void unassign_dfgnode(dsa::dfg::Node* dfgnode, bool isDelete=false) {
+  void unassign_dfgnode(dsa::dfg::Node* dfgnode) {
     for (auto& op : dfgnode->ops()) {
       for (auto eid : op.edges) {
         auto* edge = &ssdfg()->edges[eid];
@@ -488,23 +561,26 @@ class Schedule {
     ssnode* node = vp.node();
 
     if (node) {
-      int orig_slot = vp.slot.lane_no;
       _num_mapped[dfgnode->type()]--;
-      int num_slots = lanes_involved(node, dfgnode->bitwidth());
-      for (int i = 0; i < num_slots; ++i) {
-        int slot = orig_slot + i;
-        auto& vertices = _nodeProp[node->id()].slots[slot].vertices;
-        auto it = std::find(vertices.begin(), vertices.end(), std::make_pair(dfgnode, orig_slot));
+
+      int start = startSlot(node, dfgnode);
+      int end = endSlot(node, dfgnode);
+      DSA_CHECK(end > start);
+
+      DSA_CHECK(start >= 0 && end >= 0) << "DFGNode " << dfgnode->name() << " not assigned to node " << node->name() << " from slots [" << start << ", " << end << "]";
+
+      for (int i = start; i < end; i++) {
+        auto& vertices = _nodeProp[node->id()].slots[i].vertices;
+        auto it = std::find(vertices.begin(), vertices.end(), std::make_pair(dfgnode, start));
         DSA_CHECK(it != vertices.end());
-        vertices.erase(it);
+        _nodeProp[node->id()].slots[i].vertices.erase(it);
       }
+
       vp.slot = {-1, nullptr};
     } else if (node != nullptr) {
       vp.slot = {-1, nullptr};
     }
     DSA_CHECK(vp.node() == nullptr) << " Node is not null";
-
-    verify();
   }
 
 
@@ -531,78 +607,48 @@ class Schedule {
     std::cout << "\n";
   }
 
-  void assign_link_to_edge(dsa::dfg::Edge* dfgedge, int slot_index, sslink* slink) {
-    DSA_CHECK(slink);
-    DSA_CHECK(dfgedge);
-
+  void assign_link_to_edge(dsa::dfg::Edge* dfgedge, int bit, sslink* link) {
     _edge_links_mapped++;
-    auto& lp = _linkProp[slink->id()];
+    auto& lp = _linkProp[link->id()];
 
-    int granularity =
-        std::max(slink->source()->granularity(), slink->sink()->granularity());
-    int lanes = std::min(slink->source()->lanes(), slink->sink()->lanes());
+    int startSlot  = bit / link->granularity();
+    int endSlot = startSlot + std::ceil(dfgedge->bitwidth() / (float) link->granularity());
+    DSA_CHECK(endSlot > startSlot);
 
-    int slots = lanes_involved(slink, dfgedge->bitwidth());
-
-    for (int i = 0; i < slots; ++i) {
-      int cur_slot_index = (slot_index + i) % lanes;
-      auto& slot = lp.slots[cur_slot_index];
+    for (int slotIndex = startSlot; slotIndex < endSlot; ++slotIndex) {
+      int current_slot = slotIndex % lp.slots.size();
+      auto& slot = lp.slots[current_slot];
       if (slot.edges.empty()) _links_mapped++;
-      int l = dfgedge->l + granularity * i;
-      int r = dfgedge->l + granularity * (i + 1) - 1;
-      slot.edges.emplace_back(dfgedge->id, l, r);
-      DSA_LOG(ASSIGN)
-        << "assign " << dfgedge->name() << " [" << l << ", " << r << "]"
-        << " to " << cur_slot_index << "," << slink->name();
-    }
 
-    if ((int)_edgeProp.size() <= dfgedge->id) {
-      _edgeProp.resize(dfgedge->id + 1);
+      int startEdge = link->granularity() * (slotIndex - startSlot);
+      int l = dfgedge->l + startEdge;
+      int r = dfgedge->l + (startEdge + link->granularity()) - 1;
+      slot.edges.emplace_back(dfgedge->id, l, r);
     }
   }
 
   // pdg edge to sslink
-  void assign_edgelink(dsa::dfg::Edge* dfgedge, int slot, sslink* slink,
+  void assign_edgelink(dsa::dfg::Edge* dfgedge, int bit, sslink* link,
                        std::vector<std::pair<int, sslink*>>::iterator it) {
-    assign_link_to_edge(dfgedge, slot, slink);
+    assign_link_to_edge(dfgedge, bit, link);
     int idx = it - _edgeProp[dfgedge->id].links.begin();
     DSA_CHECK(idx >= 0 && idx <= (int)_edgeProp[dfgedge->id].links.size()) << idx;
     // TODO: Performance
-    _edgeProp[dfgedge->id].links.insert(it, std::make_pair(slot, slink));
+    _edgeProp[dfgedge->id].links.insert(it, std::make_pair(bit, link));
   }
 
   // pdg edge to sslink
-  void assign_edgelink(dsa::dfg::Edge* dfgedge, int slot, sslink* slink) {
-    assign_link_to_edge(dfgedge, slot, slink);
-    _edgeProp[dfgedge->id].links.push_back(std::make_pair(slot, slink));
+  void assign_edgelink(dsa::dfg::Edge* dfgedge, int bit, sslink* link) {
+    assign_link_to_edge(dfgedge, bit, link);
+    _edgeProp[dfgedge->id].links.push_back(std::make_pair(bit, link));
   }
 
-  void assign_edgelink(dsa::dfg::Edge* dfgedge, int slot, sslink* slink, int edge_slot) {
-    assign_link_to_edge(dfgedge, slot, slink);
+  void assign_edgelink(dsa::dfg::Edge* dfgedge, int bit, sslink* link, int offset) {
+    assign_link_to_edge(dfgedge, bit, link);
     _edgeProp[dfgedge->id].links.insert(
-      _edgeProp[dfgedge->id].links.begin() + edge_slot,
-      std::make_pair(slot, slink));
+      _edgeProp[dfgedge->id].links.begin() + offset,
+      std::make_pair(bit, link));
   }
-
-  int linkSourceSlot(dsa::dfg::Edge* edge, sslink* link) {
-    auto linkProp = &_linkProp[link->id()];
-    for (int slot = 0; slot < linkProp->slots.size(); ++slot) {
-      auto linkSlot = linkProp->slots[slot];
-      for (auto& edge_slice : linkSlot.edges) {
-        if (edge_slice.eid == edge->id) {
-          return slot;
-        }
-      }
-    }
-    return 0;
-  }
-
-  // void print_links(dsa::dfg::Edge* dfgedge) {
-  //  for(auto& i : _assignLinkEdge[dfgedge]) {
-  //    cout << i->name() << " ";
-  //  }
-  //  cout << "\n";
-  //}
 
   int link_count(dsa::dfg::Edge* dfgedge) { return _edgeProp[dfgedge->id].links.size(); }
 
@@ -646,12 +692,19 @@ class Schedule {
   dsa::dfg::Edge* alt_edge_for_link(std::pair<int, sslink*> link, dsa::dfg::Edge* e) {
     DSA_CHECK(link.second != nullptr) << "Alternate Edge for Link is null";
     auto& slots = _linkProp[link.second->id()].slots;
-    int granularity = link.second->source()->granularity();
-    for (auto it : slots[link.first].edges) {
+
+    int slot = (link.first / link.second->granularity()) % slots.size();
+    
+    for (auto it : slots[slot].edges) {
+      // Can't be the same edge
+      if (e->id == it.eid)
+        continue;
+      
       dsa::dfg::Edge* alt_e = &ssdfg()->edges[it.eid];
       // Only relevant edges are 1. same value, 2. same slice, 3. same slot
-      if (alt_e->val() == e->val() && link.first * granularity == it.l &&
-          (link.first + 1) * granularity - 1 == it.r) {
+      int edgeStart = link.first * link.second->granularity();
+      if (alt_e->val() == e->val() && edgeStart == it.l &&
+          (edgeStart + link.second->granularity()) - 1 == it.r) {
         return alt_e;
       }
     }
@@ -663,8 +716,6 @@ class Schedule {
   // 1: empty
   //>2: already there
   int routing_cost(std::pair<int, sslink*> link, dsa::dfg::Edge* edge) {
-    DSA_CHECK(link.second);
-
     if (needs_dynamic[edge->uid] && !link.second->flow_control()) {
       return -1;
     }
@@ -672,11 +723,12 @@ class Schedule {
     auto& slots = _linkProp[link.second->id()].slots;
     // Check all slots will be occupied empty.
     bool num_edges = 0;
-    int last_slot = link.first + lanes_involved(link.second, edge->bitwidth());
-    
+    int first_slot = link.first / link.second->granularity();
+    int last_slot = first_slot + std::ceil(edge->bitwidth() /
+                                           link.second->granularity());
+
     //edge->bitwidth() / link.second->source()->granularity();
-    for (int s = link.first; s < last_slot; ++s) {
-      int slot = s;
+    for (int slot = first_slot; slot < last_slot; ++slot) {
       num_edges = slots[slot].edges.size();
       if (num_edges != 0) break;
     }
@@ -700,8 +752,8 @@ class Schedule {
   // Routing cost for outputs, but based on nodes instead of values
   int routing_cost_temporal_out(std::pair<int, sslink*> link, dsa::dfg::Node* node,
                                 dsa::dfg::OutputPort* out_v) {
-    DSA_CHECK(link.second);
-    auto& vec = _linkProp[link.second->id()].slots[link.first].edges;
+    auto& vec =
+        _linkProp[link.second->id()].slots[link.first / link.second->granularity()].edges;
     if (vec.empty()) return 1;
     // It's free if the node is the same, or one of the use vectors is the same.
     for (auto elem : vec) {
@@ -747,6 +799,10 @@ class Schedule {
 
   std::vector<std::pair<dsa::dfg::Node*, int>>& dfg_nodes_of(int slot, ssnode* node) {
     return _nodeProp[node->id()].slots[slot].vertices;
+  }
+
+  std::vector<std::pair<dsa::dfg::Edge*, int>>& dfg_passthroughs_of(int slot, ssnode* node) {
+    return _nodeProp[node->id()].slots[slot].passthrus;
   }
 
   /**
@@ -806,8 +862,18 @@ class Schedule {
 
   bool fixLatency(int64_t& lat, int64_t& latmis, std::pair<int, int>& delay_violation);
 
+  double spmPerformance();
+
   void clearAll() {
     _totalViolation = 0;
+    total_passthrough = 0;
+    _links_mapped = 0;
+    _edge_links_mapped = 0;
+    
+    for (int i = 0; i < dsa::dfg::Node::V_NUM_TYPES; ++i) {
+      _num_mapped[i] = 0;
+    }
+
     _vertexProp.clear();
     _edgeProp.clear();
     _nodeProp.clear();
@@ -893,6 +959,8 @@ class Schedule {
 
   inline unsigned num_left();
 
+  double scheduled_seconds = -1;
+
   void allocate_space() {
     if (_ssDFG) {
       _vertexProp.resize(_ssDFG->nodes.size());
@@ -906,9 +974,7 @@ class Schedule {
       }
       _linkProp.resize((size_t)_ssModel->subModel()->link_list().size());
       for (int i = 0, n = link_prop().size(); i < n; ++i) {
-        link_prop()[i].slots.resize(
-            std::min(_ssModel->subModel()->link_list()[i]->source()->lanes(),
-                     _ssModel->subModel()->link_list()[i]->sink()->lanes()));
+        _linkProp[i].slots.resize(_ssModel->subModel()->link_list()[i]->lanes());
       }
     }
   }
@@ -921,7 +987,6 @@ class Schedule {
 
   // Swaps the nodes from one schedule to another
   void swap_model(SpatialFabric* copy_sub) {
-    verify();
     for (auto& vp : _vertexProp) {
       if (vp.node()) {
         vp.slot.ref = copy_sub->node_list()[vp.node()->id()];  // bo ya
@@ -929,38 +994,158 @@ class Schedule {
     }
     for (auto& ep : _edgeProp) {
       for (auto& p : ep.links) {
-        if (p.second) {
-          p.second = copy_sub->link_list()[p.second->id()];
-        }
+        DSA_CHECK(p.second);
+        p.second = copy_sub->link_list()[p.second->id()];
       }
       for (auto& p : ep.passthroughs) {
-        if (p.second) {
-          p.second = copy_sub->node_list()[p.second->id()];
+        DSA_CHECK(p.second);
+        p.second = copy_sub->node_list()[p.second->id()];
+      }
+    }
+  }
+
+  void verify_vertices() {
+    for (int i = 0; i < _nodeProp.size(); i++) {
+      auto np = _nodeProp[i];
+      auto node = _ssModel->subModel()->node_list()[i];
+      for (int j = 0; j < np.slots.size(); j++) {
+        for (auto vertex : np.slots[j].vertices) {
+          // Check to make sure the vertex is valid
+          DSA_CHECK(vertex.first);
+          DSA_CHECK(_vertexProp[vertex.first->id()].node() == node);
+          DSA_CHECK(_vertexProp[vertex.first->id()].lane() == vertex.second);
+          
+          // Check to make sure all the slots line up
+          int startSlot = vertex.second;
+          int endSlot = startSlot + std::ceil(vertex.first->bitwidth() / (float) node->granularity());
+          DSA_CHECK(endSlot > startSlot);
+    
+          for (int k = startSlot; k < endSlot; k++) {
+            auto slot_index = k % node->lanes();
+            auto slot = np.slots[slot_index];
+            auto foundVx = std::find(slot.vertices.begin(), slot.vertices.end(), vertex);
+            DSA_CHECK(foundVx != slot.vertices.end());
+          }
+        }
+      }
+    }
+  }
+
+  void verify_link_deleted(sslink* link) {
+    auto ep = _edgeProp;
+    for (int i = 0; i < ep.size(); i++) {
+      auto edge = ep[i];
+      for (auto edge_link : edge.links) {
+        DSA_CHECK(edge_link.second != link);
+      }
+    }
+  }
+
+
+  void verify_links() {
+    auto ep = _edgeProp;
+    for (int i = 0; i < ep.size(); i++) {
+      auto edge = ep[i];
+      for (auto link : edge.links) {
+        DSA_CHECK(link.second);
+        DSA_CHECK(link.second == _ssModel->subModel()->link_list()[link.second->id()]);
+        DSA_CHECK(link.second->source() == _ssModel->subModel()->node_list()[link.second->source()->id()]);
+        DSA_CHECK(link.second->sink() == _ssModel->subModel()->node_list()[link.second->sink()->id()]);
+        auto lp = _linkProp[link.second->id()].slots[link.first / link.second->granularity()];
+        bool found = false;
+        for (auto edge_link : lp.edges) {
+          if (edge_link.eid == i) {
+            found = true;
+            break;
+          }
+        }
+        DSA_CHECK(found) << "Link " << link.second->name() << " in edge " << i << " not found in link_prop[" << link.second->id() << "]";
+      }
+    }
+  }
+
+  void verify_passthroughs() {
+    for (int i = 0; i < _nodeProp.size(); i++) {
+      auto np = _nodeProp[i];
+      auto node = _ssModel->subModel()->node_list()[i];
+      DSA_CHECK(np.slots.size() == node->lanes());
+
+      for (int j = 0; j < np.slots.size(); j++) {
+        for (auto passthrough : np.slots[j].passthrus) {
+          // Check to see that an edge is assigned
+          DSA_CHECK(passthrough.first);
+
+          // Check to see that the edge prop assigned the passthrough
+          auto ep = _edgeProp[passthrough.first->id];
+          bool found = false;
+          for (auto& p : ep.passthroughs) {
+            if (p.second == node && p.first == passthrough.second) {
+              found = true;
+              break;
+            }
+          }
+          DSA_CHECK(found) << node->name() << " with edge " << passthrough.first->id << " " << passthrough.second << " and slot: " << j;
+
+          // Check to make sure all the slots line up
+          int startSlot = passthrough.second / node->granularity();
+          int endSlot = startSlot + std::ceil(passthrough.first->bitwidth() / (float) node->granularity());
+          DSA_CHECK(endSlot > startSlot);
+    
+          for (int k = startSlot; k < endSlot; k++) {
+            auto slot_index = k % node->lanes();
+            auto slot = np.slots[slot_index];
+            auto foundPt = std::find(slot.passthrus.begin(), slot.passthrus.end(), passthrough);
+            DSA_CHECK(foundPt != slot.passthrus.end());
+          }
+        }
+      }
+    }
+  }
+
+  void verify_links_consistency() {
+     auto ep = _edgeProp;
+    for (int i = 0; i < ep.size(); i++) {
+      auto edge = ep[i];
+      auto edge_ = ssdfg()->edges[i];
+
+      auto src_vertex =  _vertexProp[edge_.def()->id()].node();
+      auto dest_vertex = _vertexProp[edge_.use()->id()].node();
+
+      if (dest_vertex && src_vertex) {
+        DSA_CHECK(edge.links.size() > 0) << "Edge: " << edge_.name() << " has no links! src: " << src_vertex->name() << " dst: " << dest_vertex->name();
+      } else {
+        DSA_CHECK(edge.links.size() == 0) << "Edge: " << edge_.name() << " has links besides a vertex is mapped!";
+      }
+
+      for (auto it = edge.links.begin(); it != edge.links.end(); it++) {
+        auto link = it->second;
+        if (it == edge.links.begin()) {
+          DSA_CHECK(link->source() == src_vertex);
+          if (std::next(it) == edge.links.end()) {
+            DSA_CHECK(link->sink() == dest_vertex);
+          } else {
+            auto next_link = std::next(it)->second;
+            DSA_CHECK(link->sink() == next_link->source()) << link->name() << " " << next_link->name();
+          }
+        } else {
+          auto prev_link = std::prev(it)->second;
+          DSA_CHECK(link->source() == prev_link->sink()) << link->name() << " " << prev_link->name();
+          if (std::next(it) == edge.links.end()) {
+            DSA_CHECK(link->sink() == dest_vertex);
+          } else {
+            auto next_link = std::next(it)->second;
+            DSA_CHECK(link->sink() == next_link->source()) << link->name() << " " << next_link->name();
+          }
         }
       }
     }
   }
 
   void verify() {
-    for (int j = 0; j < _vertexProp.size(); ++j) {
-      auto& vp = _vertexProp[j];
-      if (vp.node()) {
-        bool found = false;
-        for (int i = 0; i < num_slots(vp.node()); ++i) {
-          auto vertices = _nodeProp[vp.node()->id()].slots[i].vertices;
-          for (auto& v : vertices) {
-            auto node = v.first;
-            auto other_vertex = _vertexProp[node->id()];
-            if (other_vertex.slot.ref == vp.slot.ref) {
-              found = true;
-              break;
-            }
-            
-          }
-        }
-        DSA_CHECK(found) << vp.node()->name() << " and " << _ssDFG->nodes[j]->name() << " are mismatched";
-      }
-    }
+    verify_links();
+    verify_passthroughs();
+    verify_vertices();
+    verify_links_consistency();
   }
 
 
@@ -985,8 +1170,8 @@ class Schedule {
   }
 
   struct EdgeProp {
-    int num_links = 0;
     int extra_lat = 0;
+    int source_bit = 0;
     int vio = 0;  // temporary variable
 
     /*!
@@ -997,12 +1182,7 @@ class Schedule {
     std::vector<std::pair<int, ssnode*>> passthroughs;
 
     void reset() {
-      num_links = 0;
       extra_lat = 0;
-      links.clear();
-      links.shrink_to_fit();
-      passthroughs.clear();
-      passthroughs.shrink_to_fit();
     }
   };
 
@@ -1010,8 +1190,8 @@ class Schedule {
     /*! \brief To support the decomposability, we break a whole ssnode into slots. */
     struct NodeSlot {
       /*! \brief Edges pass through this node slot to route. */
-      std::vector<dsa::dfg::Edge*> passthrus;
-      /*! \brief Byte slot of the dfg node (inst/vec) that is mapped to this node slot. */
+      std::vector<std::pair<dsa::dfg::Edge*, int>> passthrus;
+      /*! \brief bit slot of the dfg node (inst/vec) that is mapped to this node slot. */
       std::vector<std::pair<dsa::dfg::Node*, int>> vertices;
     };
     /*! \brief The mapping information of each lane hardware lane. */
@@ -1109,6 +1289,5 @@ inline bool Schedule::is_complete() {
 
 inline unsigned Schedule::num_left() {
   int num = _ssDFG->nodes.size() - num_mapped<dsa::dfg::Node*>();
-  DSA_CHECK(num >= 0);
   return num;
 }

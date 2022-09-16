@@ -145,6 +145,8 @@ class SSDfg {
 
   void check_for_errors();
 
+  void print_graphviz(std::string output_filename);  
+
   void inc_total_dyn_insts(bool is_temporal) { dyn_issued[is_temporal]++; }
 
   int total_dyn_insts(bool is_temporal) { return dyn_issued[is_temporal]; }

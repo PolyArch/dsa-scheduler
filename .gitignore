@@ -26,6 +26,9 @@ sched/*
 .cache/*
 3rd-party/*.zip
 .metals/*
-tests/
 pytorch
 libtorch.zip
+libtorch/
+__pycache__/
+dist/
+ 

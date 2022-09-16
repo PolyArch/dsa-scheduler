@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <vector>
 #include <iostream>
 #include <string>
 #include <map>
@@ -17,21 +18,71 @@
 #define DSA_OSTREAM std::cerr
 #define DSA_NEWLINE std::endl
 #endif
+
+#include "dsa/core/singleton.h"
+
 namespace dsa {
 
 class EnvCache {
   public:
     const bool &get_env(const std::string &key) {
       auto it = cache_entries.find(key);
-      if(it == cache_entries.end()) {
+      if (it == cache_entries.end()) {
         const char *ptr = getenv(key.c_str());
-        it = cache_entries.insert({key, (bool) (ptr)}).first;
+        if (ptr == nullptr) {
+          it = cache_entries.insert({key, false}).first;
+        } else {
+          it = cache_entries.insert({key, true}).first;
+        }
       }
       return it->second;
     }
 
     void clear() {
       cache_entries.clear();
+    }
+
+    EnvCache() {
+      std::vector<std::string> common_entries = {
+        "CAND",
+        "MAP",
+        "TRYMAP",
+        "ROUTE",
+        "OVERPROV",
+        "UNASSIGN",
+        "ASSIGN",
+        "PARSE",
+        "COLLAPSE",
+        "PA",
+        "ADG",
+        "CF",
+        "COMP",
+        "FORWARD",
+        "PRED",
+        "PA_MODEL",
+        "BLAME_COMP",
+        "WARNING",
+        "COLLECT",
+        "EDGES",
+        "LAT_PASS",
+        "SLICE",
+        "LOAD",
+        "PERFORMANCE",
+        "COUNT",
+        "STR",
+        "PASSTHRU",
+        "ROUTING"
+      };
+
+      for (const std::string &key : common_entries) {
+        const char *ptr = getenv(key.c_str());
+        if (ptr == nullptr) {
+          cache_entries.insert({key, false});
+        } else {
+          cache_entries.insert({key, true});
+        }
+      }
+
     }
 
     ~EnvCache() {
@@ -89,9 +140,15 @@ class LOGGER {
 
 #define DSA_INFO dsa::LOGGER("[INFO]", __FILE__, __LINE__, false)
 
+#ifdef ENV_CACHE
 #define DSA_LOG(S) \
-  if (getenv(#S))  \
+  if (dsa::ContextFlags::CachedEnv().get_env(#S))  \
     dsa::LOGGER("[" #S "]", __FILE__, __LINE__, false)
+#else
+#define DSA_LOG(S) \
+  if (getenv(#S)) \
+    dsa::LOGGER("[" #S "]", __FILE__, __LINE__, false)
+#endif
 
 
 #define ENFORCED_SYSTEM(CMD)                        \

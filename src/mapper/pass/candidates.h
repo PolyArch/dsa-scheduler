@@ -9,6 +9,92 @@ namespace mapper {
 
 using std::ostringstream;
 
+inline bool inputCreep(int &currentBit, int &currentLink, dfg::InputPort* input, ssivport* cand) {
+  // Return false if there isn't anymore links
+  if (currentLink >= cand->out_links().size())
+    return false;
+
+  // Get the current link
+  sslink* link = cand->out_links()[currentLink];
+
+  // The number of lanes needed to map
+  int lanes = input->vectorLanes();
+  // The bitwidth of each lane
+  int bitwidth = input->bitwidth();
+
+  // Add the first stated edge
+  if (cand->vp_stated()) {
+    if (link->bitwidth() < 8) {
+      return false;
+    }
+    currentLink++;
+    currentBit = 0;
+    if (currentLink >= cand->out_links().size()) {
+      return false;
+    }
+    link = cand->out_links()[currentLink];
+  }
+
+  // Creep through all the lanes
+  for (int currentLane = 0; currentLane < lanes; currentLane++) {
+    while (link->bitwidth() < currentBit + bitwidth) {
+      currentLink++;
+      currentBit = 0;
+      if (currentLink >= cand->out_links().size()) {
+        return false;
+      }
+      link = cand->out_links()[currentLink];
+    }
+    currentBit += bitwidth;
+  }
+  // Now we are at the end and it can map
+  return true;
+}
+
+inline bool outputCreep(int &currentBit, int &currentLink, dfg::OutputPort* output, ssovport* cand) {
+  bool stated = output->penetrated_state >= 0;
+  // Return false if there isn't anymore links
+  if (currentLink >= cand->in_links().size())
+    return false;
+
+  // Get the current link
+  sslink* link = cand->in_links()[currentLink];
+  // The number of lanes needed to map
+  int lanes = output->vectorLanes();
+  // The bitwidth of each lane
+  int bitwidth = output->bitwidth();
+
+  // First add the stated edges if needed
+  if (cand->vp_stated()) {
+    if (link->bitwidth() < 8) {
+      return false;
+    }
+    currentLink++;
+    if (currentLink >= cand->in_links().size()) {
+      return false;
+    }
+    link = cand->in_links()[currentLink];
+  }
+
+
+  // Creep through all the lanes
+  for (int currentLane = 0; currentLane < lanes; currentLane++) {
+    while (link->bitwidth() < currentBit + bitwidth) {
+      currentLink++;
+      currentBit = 0;
+      if (currentLink >= cand->in_links().size()) {
+        return false;
+      }
+      link = cand->in_links()[currentLink];
+    }
+    currentBit += bitwidth;
+  }
+  // Now we are at the end and it can map
+  return true;
+}
+
+
+
 struct CandidateSpotVisitor : dfg::Visitor {
 
   void Visit(dfg::Instruction* inst) override {
@@ -59,10 +145,19 @@ struct CandidateSpotVisitor : dfg::Visitor {
           continue;
         }
 
+        if (inst->bitwidth() > cand_fu->datawidth()) {
+          DSA_LOG(CAND) << "Instruction bitwidth grater than fu datawidth " << cand_fu->name() << " " << inst->name();
+          continue;
+        }
+
         bool routing_along = rand() & 1;
 
         for (int k = 0; k < cand_fu->datawidth(); k += cand_fu->granularity()) {
           if (k % inst->bitwidth() != 0) {
+            continue;
+          }
+
+          if (k + inst->bitwidth() > cand_fu->datawidth()) {
             continue;
           }
 
@@ -106,7 +201,7 @@ struct CandidateSpotVisitor : dfg::Visitor {
     std::random_shuffle(spots.begin(), spots.end());
 
     int n = spots.size();
-    if (n > max_candidates) n = max_candidates;
+    //if (n > max_candidates) n = max_candidates;
 
     cnt[inst->id()] = n;
     candidates[inst->id()] = spots;
@@ -186,27 +281,21 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
+      // Multiple inputs can't map to the same hardware vector port
+      if (!sched->node_prop()[cand->id()].slots[0].vertices.empty())
+        continue;
+      // Stated inputs must map to stated hardware vector ports
+      if (input->stated && !cand->vp_stated())
+        continue;
 
-      if (cand->bitwidth_capability() >= input->bandwidth()) {
-        // Ensure that we are not mapping a stated software port to a non-stated hardware port
-        if (!input->stated || cand->vp_stated()) {
-          if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-            spots.emplace_back(0, Slot<ssnode*>(0, cand));
-          } else {
-            // Check to make sure amount of mapped bits isnt greater than the bandwidth
-            int bitwidth_mapped = 0;
-            for (auto elem : sched->node_prop()[cand->id()].slots[0].vertices) {
-              auto vectorPort  = dynamic_cast<dfg::VectorPort*>(elem.first);
-              DSA_CHECK(vectorPort) << "Node outside of port mapped to a VP";
-              bitwidth_mapped += vectorPort->bandwidth();
-            }
-            if (cand->bitwidth_capability() >= input->bandwidth() + bitwidth_mapped) {
-              spots.emplace_back(0, Slot<ssnode*>(0, cand));
-            }
-          }
-        }
+      int currentBit  = 0;
+      int currentLink = 0;
+      
+      if (inputCreep(currentBit, currentLink, input, cand)) {
+        spots.emplace_back(0, Slot<ssnode*>(0, static_cast<ssnode*>(cand)));
       }
     }
+    
     if (spots.empty()) {
       spots = bad;
       if (input->stated) {
@@ -237,30 +326,20 @@ struct CandidateSpotVisitor : dfg::Visitor {
     spots.clear();
     for (size_t i = 0; i < vports.size(); ++i) {
       auto cand = vports[i];
-
-      if (cand->bitwidth_capability() >= output->bandwidth()) {
-        // Get whether this output-port is stated
-        bool stated = output->penetrated_state >= 0;
-
-        // Make sure we are not mapping a stated software port to a non-stated hardware vport
-        if (!stated || cand->vp_stated()) {
-          if (sched->node_prop()[cand->id()].slots[0].vertices.empty()) {
-            spots.emplace_back(0, Slot<ssnode*>(0, cand));
-          } else {
-            // Check to make sure amount of mapped bits isnt greater than the bandwidth
-            int bitwidth_mapped = 0;
-            for (auto elem : sched->node_prop()[cand->id()].slots[0].vertices) {
-              auto vectorPort  = dynamic_cast<dfg::VectorPort*>(elem.first);
-              DSA_CHECK(vectorPort) << "Node outside of port mapped to a VP";
-              bitwidth_mapped += vectorPort->bandwidth();
-            }
-            if (cand->bitwidth_capability() >= output->bandwidth() + bitwidth_mapped) {
-              spots.emplace_back(0, Slot<ssnode*>(0, cand));
-            }
-          }
-        }
+      // We can't have multiple outputs on the same vport
+      if (!sched->node_prop()[cand->id()].slots[0].vertices.empty())
+        continue;
+      // Stated output must be mapped to a stated vport
+      if ((output->penetrated_state >= 0) && !cand->vp_stated())
+        continue;
+      
+      int currentBit  = 0;
+      int currentLink = 0;
+      if (outputCreep(currentBit, currentLink, output, cand)) {
+        spots.emplace_back(0, Slot<ssnode*>(0, static_cast<ssnode*>(cand)));
       }
     }
+    
     if (spots.empty()) {
       spots = bad;
       if (output->penetrated_state >= 0) {
@@ -398,6 +477,149 @@ struct CandidateSpotVisitor : dfg::Visitor {
   std::vector<int> cnt;
   std::vector<std::vector<MapSpot>> candidates;
 };
+
+struct IsCandidateVisitor : dfg::Visitor {
+
+  void Visit(dfg::Instruction* inst) override {
+    if (spot.node()->type() == ssnode::NodeType::FunctionUnit) {
+      ssfu* fu = dynamic_cast<ssfu*>(spot.node());
+      if (!sched->node_prop()[fu->id()].slots[0].vertices.empty()) 
+        return;
+
+      // Check to make sure instruction works
+      if (!fu->fu_type().Capable(inst->inst())) {
+        return;
+      }
+
+      if (sched->isPassthrough(0, fu))  {
+        return;
+      }
+
+      if (inst->bitwidth() < fu->granularity()) {
+        return;
+      }
+
+      if (inst->bitwidth() > fu->datawidth()) {
+        return;
+      }
+
+      if (spot.lane() % inst->bitwidth() != 0) {
+        return;
+      }
+
+      if (spot.lane() + inst->bitwidth() > fu->datawidth()) {
+        return;
+      }
+
+      is_candidate = true;
+    }
+  }
+
+  void Visit(dfg::Operation* op) override {
+    if (spot.node()->type() == ssnode::NodeType::FunctionUnit) {
+      is_candidate = true;
+    } 
+  }
+  
+  void Visit(dfg::InputPort* input) override {
+    if (spot.node()->type() == ssnode::NodeType::InputVectorPort) {
+      ssivport* ivport = dynamic_cast<ssivport*>(spot.node());
+      
+      // We can't have multiple inputs on the same vport
+      if (!sched->node_prop()[ivport->id()].slots[0].vertices.empty())
+        return;
+      
+      // Stated input must be mapped to a stated vport
+      if (input->stated && !ivport->vp_stated())
+        return;
+      
+      int currentBit  = 0;
+      int currentLink = 0;
+      if (inputCreep(currentBit, currentLink, input, ivport)) {
+        is_candidate = true;
+      }
+    } 
+  }
+
+  void Visit(dfg::OutputPort* output) override {
+    if (spot.node()->type() == ssnode::NodeType::OutputVectorPort) {
+      ssovport* ovport = dynamic_cast<ssovport*>(spot.node());
+      
+      // We can't have multiple outputs on the same vport
+      if (!sched->node_prop()[ovport->id()].slots[0].vertices.empty())
+        return;
+      
+      // Stated output must be mapped to a stated vport
+      if ((output->penetrated_state >= 0) && !ovport->vp_stated())
+        return;
+      
+      int currentBit  = 0;
+      int currentLink = 0;
+      if (outputCreep(currentBit, currentLink, output, ovport)) {
+        is_candidate = true;
+      }
+    } 
+  }
+
+  void Visit(dfg::DMA* dma) override {
+    if (spot.node()->type() == ssnode::NodeType::DirectMemoryAccess) {
+      ssdma* dma_node = dynamic_cast<ssdma*>(spot.node());
+      if (dma_node->capacity() >= dma->size()) {
+        is_candidate = true;
+      }
+    } 
+  }
+
+  void Visit(dfg::Scratchpad* spm) override {
+    if (spot.node()->type() == ssnode::NodeType::Scratchpad) {
+      ssscratchpad* spm_node = dynamic_cast<ssscratchpad*>(spot.node());
+      if (spm_node->capacity() >= spm->size()) {
+        is_candidate = true;
+      }
+    }
+  }
+
+  void Visit(dfg::Register* reg) override {
+    if (spot.node()->type() == ssnode::NodeType::Register) {
+      ssregister* reg_node = dynamic_cast<ssregister*>(spot.node());
+      if (reg_node->capacity() >= reg->size()) {
+        is_candidate = true;
+      }
+    }
+  }
+
+  void Visit(dfg::Recurrance* rec) override {
+    if (spot.node()->type() == ssnode::NodeType::Recurrance) {
+      ssrecurrence* rec_node = dynamic_cast<ssrecurrence*>(spot.node());
+      if (rec_node->capacity() >= rec->size()) {
+        is_candidate = true;
+      }
+    }
+  }
+
+  void Visit(dfg::Generate* gen) override {
+    if (spot.node()->type() == ssnode::NodeType::Generate) {
+      ssgenerate* gen_node = dynamic_cast<ssgenerate*>(spot.node());
+      if (gen_node->capacity() >= gen->size()) {
+        is_candidate = true;
+      }
+    }
+  }
+
+  IsCandidateVisitor(Schedule* sched_, MapSpot spot_)
+      : sched(sched_),
+        spot(spot_) {}
+
+  Schedule* sched{nullptr};
+  MapSpot spot;
+  bool is_candidate{false};
+};
+
+inline bool is_candidate(Schedule* sched, dfg::Node* node, MapSpot spot) {
+  IsCandidateVisitor visitor(sched, spot);
+  node->Accept(&visitor);
+  return visitor.is_candidate;
+}
 
 }  // namespace mapper
 }  // namespace dsa

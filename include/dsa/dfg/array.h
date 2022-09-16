@@ -51,7 +51,7 @@ class Array : public Node {
 
 class DMA : public Array {
  public:
-  DMA() {}
+  DMA() { _ntype = NodeType::DMA; }
 
   DMA(int size, const std::string& name, SSDfg* ssdfg);
 
@@ -72,7 +72,7 @@ class DMA : public Array {
 
 class Scratchpad : public Array {
  public:
-  Scratchpad() {}
+  Scratchpad() { _ntype = NodeType::SPAD; }
 
   Scratchpad(int size, const std::string& name, SSDfg* ssdfg);
 
@@ -91,7 +91,7 @@ class Scratchpad : public Array {
 
 class Recurrance : public Array {
  public:
-  Recurrance() {}
+  Recurrance() { _ntype = NodeType::REC; }
 
   Recurrance(int size, const std::string& name, SSDfg* ssdfg);
 
@@ -109,7 +109,7 @@ class Recurrance : public Array {
 
 class Register : public Array {
  public:
-  Register() {}
+  Register() { _ntype = NodeType::REG; }
 
   Register(int size, const std::string& name, SSDfg* ssdfg);
 
@@ -127,7 +127,7 @@ class Register : public Array {
 
 class Generate : public Array {
  public:
-  Generate() {}
+  Generate() { _ntype = NodeType::GEN; }
 
   Generate(int size, const std::string& name, SSDfg* ssdfg);
 

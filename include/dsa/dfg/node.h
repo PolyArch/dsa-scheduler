@@ -114,6 +114,7 @@ struct Operand {
   // @}
 };
 
+
 struct Edge {
   /*! \brief A default constructor for serialized load. */
   Edge() {}
@@ -187,6 +188,8 @@ class Node {
 
   enum V_TYPE { V_INVALID, V_INPUT, V_OUTPUT, V_INST, V_ARRAY, V_NUM_TYPES};
 
+  enum NodeType { DMA, SPAD, REC, REG, GEN, INPUT, OUTPUT, INST, OPER, NUM_TYPES, INVALID };
+
   virtual int slot_for_use(dsa::dfg::Edge* edge, int node_slot);
 
   virtual int slot_for_op(dsa::dfg::Edge* edge, int node_slot) { return node_slot; }
@@ -224,6 +227,8 @@ class Node {
     return _vtype;
   }
 
+  NodeType node_type() { return _ntype; }
+
   int group_id() { return _group_id; }
 
   void set_group_id(int id) { _group_id = id; }
@@ -246,6 +251,7 @@ class Node {
   int _group_id = 0;  // which group do I belong to
 
   V_TYPE _vtype;
+  NodeType _ntype = NodeType::INVALID;
 };
 
 }  // namespace dfg

@@ -16,6 +16,11 @@ namespace dsa {
 namespace adg {
 namespace estimation {
 
+#if defined(__clang__) || defined (__GNUC__)
+# define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+# define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
 
 void ASICResource::normalize() {
   auto resource = ContextFlags::Global().budget;
@@ -41,6 +46,19 @@ void FPGAResource::normalize() {
   }
   DSA_CHECK(false);
   return;
+}
+
+FPGAResource::FPGAResource(const std::vector<double> &v) {
+  DSA_CHECK(v.size() == 9);
+  total_lut = v[0];
+  logic_lut = v[1];
+  ram_lut = v[2];
+  srl = v[3];
+  ff = v[4];
+  ramb36 = v[5];
+  ramb18 = v[6];
+  uram = v[7];
+  dsp = v[8];
 }
 
 Resource* FPGAResource::clone() const {
@@ -352,6 +370,7 @@ struct Estimator : Visitor {
 };
 */
 
+ATTRIBUTE_NO_SANITIZE_ADDRESS
 Result EstimatePowerAera(SSModel* arch) {
   ResourceEstimator est(arch, ContextFlags::Global().dse_target);
   //Estimator estimator(arch, ContextFlags::Global().dse_target);
@@ -412,7 +431,10 @@ void Result::add(Breakdown k, double power, double area) {
 
 void Result::add(Breakdown k, const std::vector<double> &v) {
   auto fpga = dynamic_cast<FPGAResource*>(brkd[(int) k]);
-  DSA_CHECK(fpga);
+  if (!fpga) {
+    return;
+  }
+  DSA_CHECK(fpga) << "FPGA resource expected for " << BRKD_NAME[(int) k];
   fpga->total_lut += v[0];
   fpga->logic_lut += v[1];
   fpga->ram_lut += v[2];

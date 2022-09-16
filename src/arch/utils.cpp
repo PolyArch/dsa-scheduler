@@ -760,8 +760,13 @@ SpatialFabric* Import(std::string filename) {
             }
           }
         }  // End of loop over all links
+
       }
     }    // End of parsing all json links
+
+    for (auto node : res->node_list()) {
+      node->resetAllRoutingTables();
+    }
   } else {
 
     /** 

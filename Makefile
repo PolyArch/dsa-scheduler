@@ -7,7 +7,7 @@ else
     UNAME_S := $(shell uname -s)
     UNAME_P := $(shell uname -p)
     ifeq ($(UNAME_S),Linux)
-        TORCH_URL := https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.9.0%2Bcpu.zip
+        TORCH_URL := https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-static-with-deps-1.11.0%2Bcpu.zip
     endif
     ifeq ($(UNAME_S),Darwin)
         TORCH_URL := https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.11.0.zip

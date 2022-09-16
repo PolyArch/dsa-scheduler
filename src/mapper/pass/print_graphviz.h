@@ -10,37 +10,32 @@ namespace pass {
 struct GPNode : dfg::Visitor {
   GPNode(Schedule* sched_, std::ostream& os_) : sched(sched_), os(os_) {}
   ~GPNode() {}
-  void Visit(dfg::Node* node) override {
-    std::string ncolor = "black";
+
+  void printNode(dfg::Node* node, std::string color) {
     os << "N" << node->id() << " [ label = \"" << node->name();
+    
     if (node->is_temporal()) {
       os << ":TMP";
     }
+    
     if (sched) {
       if (sched->needs_dynamic[node->id()]) {
         os << ":C";
       }
-    }
-
-    if (sched) {
       os << "\\n lat=" << sched->latOf(node) << " ";
-    }
-
-    if (sched) {
       auto p = sched->lat_bounds(node);
       os << "\\n bounds=" << p.first << " to " << p.second;
       os << "\\n vio=" << sched->vioOf(node);
     }
 
-    os << "\", color= \"" << ncolor << "\"]; ";
-
+    os << "\", style = \"filled\", color= \"" << color << "\"]; ";
     os << "\n";
 
     // print edges
     for (auto& v : node->values) {
       for (auto eid : v.uses) {
         auto e = &node->ssdfg()->edges[eid];
-        ncolor = "black";
+        std::string ncolor = "black";
 
         auto* n = e->use();
         os << "N" << node->id() << " -> N" << n->id() << "[ color=";
@@ -59,6 +54,57 @@ struct GPNode : dfg::Visitor {
     }
     os << "\n";
   }
+
+  void Visit(dfg::DMA* port) override {
+    std::string ncolor = "#00B7EB";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::Scratchpad* port) override {
+    std::string ncolor = "#89CFF0";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::Register* port) override {
+    std::string ncolor = "#0F3D92";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::Recurrance* port) override {
+    std::string ncolor = "#1e9ae0";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::Generate* port) override {
+    std::string ncolor = "#0067A5";
+    printNode(port, ncolor);
+  }
+
+
+  void Visit(dfg::InputPort* port) override {
+    std::string ncolor = "#c895f6";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::OutputPort* port) override {
+    std::string ncolor = "#571a8e";
+    printNode(port, ncolor);
+  }
+
+  void Visit(dfg::Instruction* inst) override {
+    std::string ncolor = "#f46049";
+    printNode(inst, ncolor);
+  }
+
+  void Visit(dfg::Operation* inst) override {
+    std::string ncolor = "#f46049";
+    printNode(inst, ncolor);
+  }
+
+  void Visit(dfg::Node* node) override {
+    std::string ncolor = "black";
+    printNode(node, ncolor);
+  }
   Schedule* sched;
   std::ostream& os;
 };
@@ -74,9 +120,9 @@ struct GPVec : dfg::Visitor {
   std::ostream& os;
 };
 
-void print_graphviz(const std::string& name, SSDfg* dfg, Schedule* sched = nullptr) {
+inline void print_graphviz(const std::string& name, SSDfg* dfg, Schedule* sched = nullptr) {
   ofstream ofs(name);
-  ofs << "Digraph G { \nnewrank=true;\n ";
+  ofs << "Digraph G { \nnewrank=true;\n overlap = false;\n";
   GPNode gpn(sched, ofs);
   dfg->Apply(&gpn);
   GPVec<dfg::InputPort> gpvi(sched, ofs);

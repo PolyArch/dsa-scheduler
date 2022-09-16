@@ -206,7 +206,6 @@ struct Sched_GPLink : adg::Visitor {
 };
 
 inline void sched_graphviz(const std::string& name, SpatialFabric* fabric, Schedule* sched) {
-  DSA_INFO << "Generating Schedule Graphvis at " << name;
   ofstream ofs(name);
   DSA_CHECK(ofs.good());
   ofs << "Digraph G {" << std::endl;

@@ -1,15 +1,41 @@
 #include <iostream>
 #include <iomanip>
-#include <ctpl_stl.h>
-
 #include "dsa/core/singleton.h"
 #include "dsa/dfg/node.h"
 #include "dsa/mapper/dse.h"
 #include "dsa/mapper/scheduler_sa.h"
+#include "../mapper/pass/print_json.h"
 
 CodesignInstance::CodesignInstance(SSModel* model) : _ssModel(*model) {
   unused_nodes = std::vector<bool>(model->subModel()->node_list().size(), true);
   unused_links = std::vector<bool>(model->subModel()->link_list().size(), true);
+}
+
+void CodesignInstance::printJson(std::string filename) {
+  DSA_INFO << "Dumping Sched-ADG to: " << filename;
+  dsa::adg::print_sched_json(filename, ss_model()->subModel(), workload_array, num_cores, num_banks, system_bus);
+}
+
+void CodesignInstance::add_workloads(const std::string &filename, bool is_list) {
+  if (is_list) {
+    std::string curline;
+    std::ifstream dfg_names(filename);
+    while (std::getline(dfg_names, curline)) {
+      if (curline == "%%") {
+        workload_array.emplace_back();
+        weight.push_back(1);
+      } else if (curline.find("weight=") == 0) {
+        weight.back() = std::stod(curline.substr(curline.find("=") + 1));
+      } else {
+        DSA_INFO << "Parsing: " << curline;
+        workload_array.back().sched_array.emplace_back(ss_model(), new SSDfg(curline));
+      }
+    }
+  } else {
+    workload_array.emplace_back();
+    weight.push_back(1);
+    workload_array.back().sched_array.emplace_back(ss_model(), new SSDfg(filename));
+  }
 }
 
 namespace dsa {
@@ -289,32 +315,6 @@ std::string dump_log(const double& time, const int& iteration, const int& last_i
   return s.str();
 }
 
-void dump_hw(CodesignInstance*& ci, int i, int max_vector_size) {
-  std::stringstream hw_ss;
-  if (max_vector_size=-1)
-    hw_ss << "viz/iters/dse-sched-" << i << ".json";
-  else
-    hw_ss << "viz/iters/" << max_vector_size << "/dse-sched-" << i << ".json";
-  
-  ci->ss_model()->subModel()->DumpHwInJson(hw_ss.str().c_str());
-}
-
-void initialize_workloads(CodesignInstance*& ci, const std::string &pdg_filename) {
-  std::string curline;
-  std::ifstream dfg_names(pdg_filename);
-  while (std::getline(dfg_names, curline)) {
-    if (curline == "%%") {
-      ci->workload_array.emplace_back();
-      ci->weight.push_back(1);
-    } else if (curline.find("weight=") == 0) {
-      ci->weight.back() = std::stod(curline.substr(curline.find("=") + 1));
-    } else {
-      DSA_INFO << "Parsing: " << curline;
-      ci->workload_array.back().sched_array.emplace_back(ci->ss_model(), new SSDfg(curline));
-    }
-  }
-}
-
 bool checkIndirect(CodesignInstance*& ci) {
   for (auto& w : ci->workload_array) {
     for (auto& sched : w.sched_array) {
@@ -348,29 +348,10 @@ void initialize_indirect(CodesignInstance*& ci) {
   }
 }
 
-
-void dump_schedules(CodesignInstance*& ci, std::string base_path) {
-  for (int i = 0; i < ci->workload_array.size(); i++) {
-    std::string path = base_path + std::to_string(i);
-    auto sched = ci->res[i];
-    if (sched == nullptr) continue;
-    
-    DSA_INFO << "Dumping "<< sched->ssdfg()->filename 
-              << " at " << path;
-    ENFORCED_SYSTEM(("mkdir -p " + path).c_str());
-    std::string filename = path + "/" + std::to_string(i);
-    sched->printGraphviz((path + "/graph.gv").c_str());
-    std::ofstream ofs(filename + ".dfg.h");
-    DSA_CHECK(ofs.good()) << filename << ".dfg.h" << " not opened!";
-    sched->printConfigHeader(ofs, std::to_string(i));
-    ofs.close();
-  }
-}
-
-void setup_indirect(CodesignInstance*& ci, SchedulerSimulatedAnnealing*& scheduler, int max_vector_size) {
+void setup_indirect(CodesignInstance*& ci, SchedulerSimulatedAnnealing*& scheduler) {
   double best_indir = -1;
   std::pair<double, double> best_obj{-1, -1};
-  scheduler->incrementalSchedule(*ci, max_vector_size);
+  scheduler->incrementalSchedule(*ci);
   for (int indirect = 0; indirect <= 2; ++indirect) {
     ci->ss_model()->indirect(indirect);
     std::pair<double, double> indir_obj = ci->dse_obj(false);
@@ -455,53 +436,14 @@ bool Compare(std::pair<double, double> a, std::pair<double, double> b) {
   return false;
 }
 
-void VectorDesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_size) {
-  std::vector<int> sizes = {};
-  int max_size_log = std::log2(max_size);
-  for (int i = 0; i <= max_size_log; ++i) {
-    sizes.push_back(1 << i);
-  }
-
-
-  CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
-  initialize_workloads(cur_ci, pdg_filename);
-
-  ctpl::thread_pool workers(sizes.size());
-  for (int size : sizes) {
-    DSA_INFO << "Starting size: " << size;
-    ENFORCED_SYSTEM(("mkdir -p viz/" + std::to_string(size)).c_str());
-    ENFORCED_SYSTEM(("mkdir -p viz/iters/" + std::to_string(size)).c_str());
-    CodesignInstance* vector_ci = new CodesignInstance(*cur_ci, true);
-    vector_ci->max_vector = size;
-    if (vector_ci->countSchedules() == 0) {
-      delete vector_ci;
-      continue;
-    }
-    workers.push([&ssmodel, vector_ci, size](int id) {
-      ExploreDesign(vector_ci, ssmodel, size);
-    });
-  }
+int add(int a, int b) {
+  return a + b;
 }
 
-void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_vector_size) {
-
-  // Set up Codesign Instance
-  CodesignInstance* cur_ci = new CodesignInstance(&ssmodel);
-  initialize_workloads(cur_ci, pdg_filename);
-  cur_ci->max_vector = max_vector_size;
-
-  ExploreDesign(cur_ci, ssmodel, max_vector_size);
-}
-
-
-void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_size) {
-  DSA_INFO << "Vector Size: " << max_vector_size;
+void DesignSpaceExploration(CodesignInstance* cur_ci) {
   // Create Objective CSV File
   std::string path;
-  if (max_vector_size == -1)
-    path = "viz/objectives.csv";
-  else 
-    path = "viz/objectives_" + std::to_string(max_vector_size) + ".csv";
+  path = "viz/objectives.csv";
   
   ofstream objectives(path);
 
@@ -510,11 +452,11 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
 
   // Set up Scheduler
   auto &ci = dsa::ContextFlags::Global();
-  auto scheduler = new SchedulerSimulatedAnnealing(&ssmodel);
+  auto scheduler = new SchedulerSimulatedAnnealing(cur_ci->ss_model());
   clock_t start_time = clock();
   scheduler->set_start_time();
 
-  setup_indirect(cur_ci, scheduler, max_vector_size);
+  setup_indirect(cur_ci, scheduler);
   initialize_indirect(cur_ci);
   filter_useless_function_units(cur_ci);
 
@@ -531,7 +473,13 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
 
   // Schedule First Node
   clock_t StartSchedule = clock();
-  scheduler->incrementalSchedule(*cur_ci, max_vector_size);
+  scheduler->incrementalSchedule(*cur_ci, 10000);
+  if (cur_ci->dse_obj().first < 2) {
+    objectives << dump_log(0, 0, 0, 0, cur_ci, cur_ci) << std::endl;
+    DSA_INFO << "Failed to schedule first node (" << cur_ci->dse_obj().first << ")";
+    DSA_CHECK(false) << "Failed to schedule!";
+  } 
+
   clock_t ScheduleCollapse = clock() - StartSchedule;
 
   CodesignInstance* best_ci = cur_ci;
@@ -545,7 +493,6 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
 
   // Dump Start log and hw;
   objectives << dump_log(static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC, i, last_improve, temperature, cur_ci, cur_ci) << std::endl;
-  dump_hw(cur_ci, i, max_vector_size);
 
   // Start DSE Iterations. Will end if it doesn't improve in 750 meaningful iterations
   while (last_improve < 750) {
@@ -584,16 +531,13 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
 
     // Schedule the Modification
     clock_t StartSchedule = clock();
-    scheduler->incrementalSchedule(*cand_ci, max_vector_size);
+    scheduler->incrementalSchedule(*cand_ci);
     clock_t ScheduleCollapse = clock() - StartSchedule;
-    cand_ci->verify();
 
     // Calcuate Objective
     std::pair<double, double> new_obj = cand_ci->weight_obj();
     std::pair<double, double> best_obj = best_ci->weight_obj();
     std::pair<double, double> init_obj = cur_ci->weight_obj();
-
-    DSA_CHECK(Compare(best_obj, last_best_obj)) << " best obj went down from " << last_best_obj << " to " << best_obj;
 
     // Print Objectives
     DSA_INFO << "DSE OBJ: " << std::setprecision(4) << new_obj << "(Best:" << best_obj << ") (Iteration:" << init_obj << ")";
@@ -617,9 +561,6 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
       ++i;
       continue;
     }
-    
-
-    cand_ci->dump_breakdown(ci.verbose);
 
     if (Compare(new_obj, best_obj)) {
       // Yay! We have improved the solution
@@ -631,25 +572,15 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
       best_ci = cur_ci = cand_ci;
 
       // Print the Improvement
-      DSA_INFO << "----------------- IMPROVED OBJ! --------------------\n" <<
-                  "New Objective: " << new_obj << " (from: " << best_obj << ")";
+      DSA_INFO << "----------------- IMPROVED OBJ! --------------------";
+      DSA_INFO << "New Objective: " << new_obj << " (from: " << best_obj << ")";
       DSA_INFO << "Execution Time: " << std::setprecision(6)
                 << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC 
                 << ", "
                 << static_cast<double>(ScheduleCollapse) / CLOCKS_PER_SEC;
 
-      // dump the new hw json
-      dump_hw(best_ci, i, max_vector_size);
-
-      if (max_vector_size == -1) {
-        std::ostringstream oss;
-        oss << "viz/iters/iter_" << i << "/sched_";
-        dump_schedules(best_ci, oss.str());
-      } else {
-        std::ostringstream oss;
-        oss << "viz/iters/" << max_vector_size << "/iter_" << i << "/sched_";
-        dump_schedules(best_ci, oss.str());
-      }
+      // Dump the improved hardware into the json
+      best_ci->printJson("viz/iters/hw_" + std::to_string(i) + ".json");
 
       // Modify the temperature
       ++improv_iter;
@@ -685,8 +616,8 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
     ++last_improve;
     ++i;
   }
-  // We have completed everything! Yay!
 
+  // We have completed everything! Yay!
   DSA_INFO << "DSE Complete!";
   DSA_INFO << "Improv Iters: " << improv_iter;
   best_ci->verify();
@@ -731,28 +662,12 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
            << std::get<1>(final_util) << ", links: " 
            << std::get<2>(final_util) << std::setprecision(7);
 
-  if (max_vector_size == -1) {
-    dump_schedules(prunned_ci, "viz/final_prunned_");
-    dump_schedules(best_ci, "viz/final_");
-  } else {
-    dump_schedules(prunned_ci, "viz/" + std::to_string(max_vector_size) + "/final_prunned_");
-    dump_schedules(best_ci, "viz/" + std::to_string(max_vector_size) + "/final_");
-  }
+  best_ci->printJson("viz/final-schedadg.json");
+  prunned_ci->printJson("viz/prunned-schedadg.json");
 
-  if (max_vector_size == -1) {
-    best_ci->ss_model()->subModel()->DumpHwInJson("viz/final.json");
-    prunned_ci->ss_model()->subModel()->DumpHwInJson("viz/prunned.json");
-  } else {
-    std::string final = "viz/" + std::to_string(max_vector_size) + "/final.json";
-    std::string prunned = "viz/" + std::to_string(max_vector_size) + "/prunned.json";
-    best_ci->ss_model()->subModel()->DumpHwInJson(final.c_str());
-    prunned_ci->ss_model()->subModel()->DumpHwInJson(prunned.c_str());
-  }
-  best_ci->dump_breakdown(ci.verbose);
   if (prunned_ci->dse_obj().first < 2) {
     DSA_INFO << "Prunned Obj is less than 1";
   }
-  //DSA_CHECK(prunned_ci->dse_obj() > 1) << "Pruned obj is less than 1";
 
   DSA_INFO << "Total Time: " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC;
 
@@ -760,6 +675,7 @@ void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_si
   if (objectives.is_open()) {
     objectives.close();
   }
+  
   delete best_ci;
   delete prunned_ci;
   DSA_INFO << "DSE Finished!";

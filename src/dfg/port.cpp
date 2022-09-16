@@ -43,6 +43,7 @@ InputPort::InputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
   for (int i = 0; i < n + stated; ++i) {
     values.emplace_back(ssdfg, id(), i);
   }
+  _ntype = NodeType::INPUT;
 }
 
 void InputPort::forward() {

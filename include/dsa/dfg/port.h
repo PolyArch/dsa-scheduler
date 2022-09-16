@@ -70,7 +70,7 @@ class InputPort : public VectorPort {
 
   void Accept(Visitor*) final;
 
-  InputPort() {}
+  InputPort() { _ntype = NodeType::INPUT; }
 
   InputPort(int len, int width, const std::string& name, SSDfg* ssdfg, const MetaPort& meta,
             bool stated);
@@ -100,11 +100,11 @@ class OutputPort : public VectorPort {
 
   static const int KindValue = V_OUTPUT;
 
-  OutputPort() {}
+  OutputPort() { _ntype = NodeType::OUTPUT; }
 
   OutputPort(int len, int width, const std::string& name, SSDfg* ssdfg,
              const MetaPort& meta, int sid)
-      : VectorPort(V_OUTPUT, len, width, name, ssdfg, meta), penetrated_state(sid) {}
+      : VectorPort(V_OUTPUT, len, width, name, ssdfg, meta), penetrated_state(sid) { _ntype = NodeType::OUTPUT; }
 
   void Accept(Visitor*) override;
 

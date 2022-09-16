@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "./pass/print_graphviz.h"
+#include "./pass/print_json.h"
 #include "dsa/arch/visitor.h"
 #include "dsa/core/singleton.h"
 #include "dsa/debug.h"
@@ -366,29 +367,28 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
 
+    int lat = 0, latmis = 0;
     succeed_sched = schedule_timed(dfg, sched);
     sched->get_overprov(ovr, agg_ovr, max_util);
-
-    int lat = 0, latmis = 0;
+    int violation = sched->violation();
 
     if (dsa::ContextFlags::Global().verbose) {
-      sched->get_overprov(ovr, agg_ovr, max_util);
-      int violation = sched->violation();
 
       if (succeed_sched) {
         // Also check final latency
-        cout << "latency: " << lat << "\n";
-        cout << "lat-mismatch-max: " << latmis << "\n";
-        cout << "lat-mismatch-sum: " << violation << "\n";
-        cout << "overprov-max: " << ovr << "\n";
-        cout << "overprov-sum: " << agg_ovr << "\n";
+        DSA_INFO << "latency: " << lat;
+        DSA_INFO << "lat-mismatch-max: " << latmis;
+        DSA_INFO << "lat-mismatch-sum: " << violation;
+        DSA_INFO << "overprov-max: " << ovr;
+        DSA_INFO << "overprov-sum: " << agg_ovr;
+        sched->stat_printOutputLatency();
       } else {
-        cout << "latency: " << -1 << "\n";
-        cout << "latency mismatch: " << -1 << "\n";
-        cout << "Scheduling Failed!\n";
+        DSA_INFO << "latency: " << -1;
+        DSA_INFO << "latency mismatch: " << -1;
+        DSA_INFO << "Scheduling Failed!\n";
       }
-      sched->stat_printOutputLatency();
       dsa::mapper::pass::print_graphviz("viz/final.dot", dfg, sched);
+      dsa::adg::print_sched_json("viz/final-sched_adg.json", model->subModel(), sched);
     }
 
     dsa::mapper::pass::print_graphviz(viz_dir + "/" + dfg_base + ".dot", dfg);
@@ -416,6 +416,7 @@ int Scheduler::invoke(SSModel* model, SSDfg* dfg) {
   } else if (ovr > 0 && ContextFlags().bitstream) {
     DSA_CHECK(false) << "Overprovision detected, try a smaller DFG!";
   } else {
+    if (ovr > 0) DSA_INFO << "Overprovision detected! Ovr-Max: " << ovr << " Ovr-Sum: " << agg_ovr;
     if(verbose) DSA_INFO << "Spatial scheduling finished!";
   }
 

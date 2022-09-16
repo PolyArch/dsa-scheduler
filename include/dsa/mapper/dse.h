@@ -10,6 +10,7 @@
 #include "scheduler.h"
 
 #include "dsa/core/singleton.h"
+
 // This class contains all info which you might want to remember about
 class WorkloadSchedules {
  public:
@@ -81,6 +82,7 @@ class CodesignInstance {
  public:
   SSModel* ss_model() { return &_ssModel; }
   ~CodesignInstance() {}
+  void add_workloads(const std::string &filename, bool is_list);
   std::vector<WorkloadSchedules> workload_array;
   std::vector<double> weight;
 
@@ -89,7 +91,6 @@ class CodesignInstance {
   int num_cores = 1;
   int num_banks = 8;
   int system_bus = 8;
-  int max_vector = -1;
 
   /*
     Vector of unused nodes and links.
@@ -118,6 +119,74 @@ class CodesignInstance {
 
   CodesignInstance(SSModel* model);
 
+  void printJson(std::string filename);
+
+  void printScheduleStats() {
+    for_each_sched([&](Schedule& sched) {
+      bool succeed_sched = sched.num_left() == 0;
+      SchedStats s;
+      sched.get_overprov(s.ovr, s.agg_ovr, s.max_util);
+      sched.fixLatency(s.lat, s.latmis, sched.violation_penalty);
+      int violation = sched.violation();
+
+      std::string name = basename(sched.ssdfg()->filename);
+
+      DSA_INFO << "Printing Schedule: " << name;
+      DSA_INFO << "Schedule Took: " << sched.scheduled_seconds << " seconds";
+
+      if (dsa::ContextFlags::Global().verbose) {
+        if (succeed_sched) {
+          // Also check final latency
+          DSA_INFO << "latency: " << s.lat;
+          DSA_INFO << "lat-mismatch-max: " << s.latmis;
+          DSA_INFO << "lat-mismatch-sum: " << violation;
+          DSA_INFO << "overprov-max: " << s.ovr;
+          DSA_INFO << "overprov-sum: " << s.agg_ovr;
+          sched.stat_printOutputLatency();
+        } else {
+          DSA_INFO << "Scheduling Failed";
+        }
+      }
+
+      DSA_INFO << "Printing Edges:";
+      sched.printEdge();
+
+      if (dsa::ContextFlags::Global().verbose) {
+        std::string spm_performance = "";
+        std::string l2_performance = "";
+        std::string dram_performance = "";
+        DSA_INFO << "Performance: " << sched.estimated_performance(spm_performance, l2_performance, dram_performance);
+        DSA_INFO << "  SPM Bandwidth: " << spm_performance;
+        DSA_INFO << "  L2 Bandwidth: " << l2_performance;
+        DSA_INFO << "  DRAM Bandwidth: " << dram_performance;
+      }
+      
+      std::string config_header = name + ".dfg.h";
+      std::ofstream osh(config_header);
+      DSA_CHECK(osh.good());
+      sched.printConfigHeader(osh, name);
+
+
+      if (dsa::ContextFlags::Global().bitstream) {
+        std::string config_header_bits = name + ".dfg.bits.h";
+        std::ofstream oshb(config_header_bits);
+        DSA_CHECK(oshb.good());
+        sched.printConfigHeader(oshb, name, true);
+      }
+    });
+  }
+
+
+  adg::estimation::Result EstimatePowerArea() {
+    auto resource_estimation = dsa::adg::estimation::EstimatePowerAera(ss_model());
+    
+    resource_estimation.add_core_overhead();
+    resource_estimation.scale_cores(num_cores);
+    resource_estimation.add_system_bus_overhead(num_cores, num_banks, system_bus);
+
+    return resource_estimation;
+  }
+
   // Check that everything is okay
   void verify() {
     if (!sanity_check) return;
@@ -129,7 +198,7 @@ class CodesignInstance {
     
     // Check Schedules
     for_each_sched([&](Schedule& sched) {
-      sched.validate();
+      sched.verify();
 
       DSA_CHECK(&_ssModel == sched.ssModel()) << &_ssModel << " " << sched.ssModel();
       DSA_CHECK(_ssModel.subModel()->node_list().size() >= sched.node_prop().size());
@@ -340,7 +409,7 @@ class CodesignInstance {
    * @return true if something is deleted
    * @return false otherwise
    */
-  bool delete_hangers(bool unassign=true) {
+  bool delete_hangers() {
     bool deleted_something = false;
 
     //TODO: Convert from set once memory is added
@@ -367,7 +436,6 @@ class CodesignInstance {
       }
     }
 
-    // TODO: ovport == ivport if input_size & ouput_size = 0
     for (ssivport* ivport : sub->input_list()) {
       if (ivport->out_links().size() == 0) {
         nodes_to_delete.insert(ivport);
@@ -420,7 +488,7 @@ class CodesignInstance {
       if (auto sync = dynamic_cast<SyncNode*>(n)) {
         if (sync->vp_stated()) {
           if (!stated_mapped(sync)) {
-            stated_collapse(sync, false);
+            stated_collapse(sync);
           }
         }
       }
@@ -443,6 +511,9 @@ class CodesignInstance {
       return;
     }
 
+    // Uncache objective
+    objective = std::make_pair<double, double>(-1, -1);
+
     std::vector<ssnode*> nodes_to_delete;
     std::vector<sslink*> links_to_delete;
 
@@ -454,17 +525,17 @@ class CodesignInstance {
     }
 
     for (auto link : links_to_delete) {
-      delete_link(link, false); 
+      delete_link(link, false);
     }
 
     // Add all nodes that are unused to a vector then delete them
     for (int i = 0; i < unused_nodes.size(); i++) {
-      if (unused_nodes[i]) 
+      if (unused_nodes[i])
         nodes_to_delete.push_back(sub->node_list()[i]);
     }
 
     for (auto node : nodes_to_delete) {
-      delete_node(node, false, false, false, false);
+      delete_node(node, false, false, false);
     }
     
     while (delete_hangers()) {  }
@@ -495,6 +566,11 @@ class CodesignInstance {
         }
       }
     }
+
+    for_each_sched([&](Schedule& sched) {
+      sched.verify();
+    });
+
     if (add_iterations > remove_iterations && add_iterations > modify_iterations) {
       dse_change = "add";
       if (rand() % 100 <= temperature * temperature)
@@ -558,12 +634,10 @@ class CodesignInstance {
     } else if (item_class < 85) { //  10% to add a random input vector port
       ssivport* vport = sub->add_input_vport();
       add_random_edges_to_node(vport, 0, 1, 5, 12);
-      check_stated(vport, false);
       s << "adding input vport " << vport->name();
     } else if (item_class < 95) { // 10% to add a random output vector port
       ssovport* vport = sub->add_output_vport();
       add_random_edges_to_node(vport, 5, 12, 0, 1);
-      check_stated(vport, false);
       s << "adding output vport " << vport->name();
     } else { // 5% to add a scratchpad
       ssscratchpad* spm = sub->add_scratchpad();
@@ -770,56 +844,134 @@ class CodesignInstance {
           }
         }
       });
-    } else if (item_class < 60) { // 20% to change node granularity
+    } else if (item_class < 50) { // 20% to change node granularity
+      return false;
       int index = rand() % sub->node_list().size();
-      auto fu = sub->node_list()[index];
+      auto &node = sub->node_list()[index];
+
+      if (node->datawidth() == 8) {
+        return false;
+      }
       
       // Doesn't make sense to change a memory or sync nodes granularity
-      if (dynamic_cast<DataNode*>(fu)) return false;
-      if (dynamic_cast<SyncNode*>(fu)) return false;
+      if (dynamic_cast<DataNode*>(node)) return false;
+      if (dynamic_cast<SyncNode*>(node)) return false;
 
       int new_one = (1 << (rand() % 4)) * 8;
-      while (new_one == fu->granularity() || new_one > fu->datawidth()) {
+      while (new_one == node->granularity() || new_one > node->datawidth()) {
         new_one = (1 << (rand() % 4)) * 8;
+        
       }
 
       // Unassign everything from this node
-      unassign_node(fu);
-      for (auto link : fu->in_links()) {
+      unassign_node(node);
+      for (auto link : node->in_links()) {
         unassign_link(link);
       }
-      for (auto link : fu->out_links()) {
+      for (auto link : node->out_links()) {
         unassign_link(link);
       }
+      int prev_gran = node->granularity();
 
       // Change the granularity
-      fu->granularity(new_one);
+      node->granularity(new_one);
 
 
       // Redo the schedule data-structure according to new granularity
-      for_each_sched([fu, this, new_one](Schedule& sched) {
-        auto &np = sched.node_prop()[fu->id()];
-        np.slots.resize(fu->lanes());
+      for_each_sched([node, this, new_one](Schedule& sched) {
+        auto &np = sched.node_prop()[node->id()];
+        np.slots.resize(node->lanes());
         
-        for (auto link : fu->in_links()) {
+        for (auto link : node->in_links()) {
           auto &lp = sched.link_prop()[link->id()];
-          lp.slots.resize(std::min(link->source()->lanes(), link->sink()->lanes()));
+          lp.slots.resize(link->lanes());
         }
 
-        for (auto link : fu->out_links()) {
+        for (auto link : node->out_links()) {
           auto &lp = sched.link_prop()[link->id()];
-          lp.slots.resize(std::min(link->source()->lanes(), link->sink()->lanes()));
+          lp.slots.resize(link->lanes());
         }
       });
       
-      for (auto link : fu->in_links()) {
-        link->resetSubnet();
+      node->resetAllRoutingTables();
+      for (auto link : node->in_links()) {
+        link->source()->resetNodeTable(node);
+        if (link->source()->type() == ssnode::NodeType::InputVectorPort) {
+          unassign_node(link->source());
+        }
       }
-      for (auto link : fu->out_links()) {
-        link->resetSubnet();
+      for (auto link : node->out_links()) {
+        link->sink()->resetNodeTable(node);
+        if (link->sink()->type() == ssnode::NodeType::OutputVectorPort) {
+          unassign_node(link->sink());
+        }
       }
 
-      s << "change " << fu->name() << " granularity from " << fu->granularity() << " to " << new_one;
+      s << "change " << node->name() << " granularity from " << prev_gran << " to " << new_one;
+
+    } else if (item_class < 60) { // 10% chance to change a nodes datawidth
+      return false;
+      int index = rand() % sub->node_list().size();
+      auto node = sub->node_list()[index];
+
+      // Doesn't make sense to change a memory or sync nodes datawidth
+      if (dynamic_cast<DataNode*>(node)) return false;
+      if (dynamic_cast<SyncNode*>(node)) return false;
+      
+      int new_one = (1 << (rand() % 5)) * 8;
+      while (new_one == node->datawidth()) {
+        new_one = (1 << (rand() % 4)) * 8;
+      }
+
+      if (node->granularity() > new_one) {
+        return false;
+      }
+
+      // Unassign everything from this node
+      unassign_node(node);
+      for (auto link : node->in_links()) {
+        unassign_link(link);
+      }
+      for (auto link : node->out_links()) {
+        unassign_link(link);
+      }
+      int prev_data = node->datawidth();
+
+      // Change the datawidth
+      node->datawidth(new_one);
+
+
+      // Redo the schedule data-structure according to new datawidth
+      for_each_sched([node, this, new_one](Schedule& sched) {
+        auto &np = sched.node_prop()[node->id()];
+        np.slots.resize(node->lanes());
+        
+        for (auto link : node->in_links()) {
+          auto &lp = sched.link_prop()[link->id()];
+          lp.slots.resize(link->lanes());
+        }
+
+        for (auto link : node->out_links()) {
+          auto &lp = sched.link_prop()[link->id()];
+          lp.slots.resize(link->lanes());
+        }
+      });
+
+      node->resetAllRoutingTables();
+      for (auto link : node->in_links()) {
+        link->source()->resetNodeTable(node);
+        if (link->source()->type() == ssnode::NodeType::InputVectorPort) {
+          unassign_node(link->source());
+        }
+      }
+      for (auto link : node->out_links()) {
+        link->sink()->resetNodeTable(node);
+        if (link->sink()->type() == ssnode::NodeType::OutputVectorPort) {
+          unassign_node(link->sink());
+        }
+      }
+
+      s << "change " << node->name() << " datawidth from " << prev_data << " to " << new_one;
 
     } else if (item_class < 65) { // 5% to change a input Vports stated
       if  (sub->input_list().empty()) return false;
@@ -830,12 +982,10 @@ class CodesignInstance {
 
       if (vport->vp_stated()) {
         stated_collapse(vport);
-        if (stated_mapped(vport))
-          unassign_node(vport);
       } else {
         vport->vp_stated(true);
-        unassign_node(vport);
       }
+      unassign_node(vport);
 
       s << "change Input vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
     }  else if (item_class < 75) { // 10% to change scratchpad capacity
@@ -897,12 +1047,10 @@ class CodesignInstance {
 
       if (vport->vp_stated()) {
         stated_collapse(vport);
-        if (stated_mapped(vport))
-          unassign_node(vport);
       } else {
         vport->vp_stated(true);
-        unassign_node(vport);
       }
+      unassign_node(vport);
 
       s << "change Output vport " << vport->name() << " state from " << !vport->vp_stated() << " to " << vport->vp_stated();
     }
@@ -937,8 +1085,6 @@ class CodesignInstance {
   void for_each_sched(const std::function<void(Schedule&)>& f) {
     for (auto& ws : workload_array) {
       for (Schedule& sched : ws.sched_array) {
-        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
-          continue;
         f(sched);
       }
     }
@@ -956,7 +1102,6 @@ class CodesignInstance {
     num_cores = c.num_cores;
     num_banks = c.num_banks;
     system_bus = c.system_bus;
-    max_vector = c.max_vector;
     
     if (from_scratch) {
       for (auto& work : c.workload_array) {
@@ -978,6 +1123,139 @@ class CodesignInstance {
     unused_links = c.unused_links;
   }
 
+
+  bool inputCreep(dfg::InputPort* input, ssivport* cand, sslink* skip) {
+    int currentBit = 0;
+    int currentLink = 0;
+
+    if (currentLink >= cand->out_links().size())
+      return false;
+
+    // The number of lanes needed to map
+    int lanes = input->vectorLanes();
+    // The bitwidth of each lane
+    int bitwidth = input->bitwidth();
+
+    // Get the current link
+    sslink* link = cand->out_links()[currentLink];
+
+    // First Case when link is the skip link
+    if (link == skip && cand->vp_stated()) {
+      return false;
+    }
+
+    if (cand->vp_stated()) {
+      if (link->bitwidth() < 8) {
+        return false;
+      }
+      currentLink++;
+      currentBit = 0;
+      if (currentLink >= cand->out_links().size()) {
+        return false;
+      }
+      link = cand->out_links()[currentLink];
+    }
+
+    // Creep through all the lanes
+    for (int currentLane = 0; currentLane < lanes; currentLane++) {
+      while (link->bitwidth() < currentBit + bitwidth) {
+        currentLink++;
+        currentBit = 0;
+        if (currentLink >= cand->out_links().size()) {
+          return false;
+        }
+        link = cand->out_links()[currentLink];
+      }
+
+      if (link == skip) {
+        return false;
+      }
+      currentBit += bitwidth;
+    }
+    // Now we are at the end and it can map
+    return true;
+  }
+
+
+  bool outputCreep(dfg::OutputPort* output, ssovport* cand, sslink* skip) {
+    bool stated = output->penetrated_state >= 0;
+    int currentBit = 0;
+    int currentLink = 0;
+
+    if (currentLink >= cand->in_links().size())
+      return false;
+
+    // Get the current link
+    sslink* link = cand->in_links()[currentLink];
+    // The number of lanes needed to map
+    int lanes = output->vectorLanes();
+    // The bitwidth of each lane
+    int bitwidth = output->bitwidth();
+
+    // First Case when link is the skip link
+    if (link == skip && cand->vp_stated()) {
+      return false;
+    }
+
+    // First add the stated edges if needed
+    if (cand->vp_stated()) {
+      if (link->bitwidth() < 8) {
+        return false;
+      }
+      currentLink++;
+      if (currentLink >= cand->in_links().size()) {
+        return false;
+      }
+      link = cand->in_links()[currentLink];
+    }
+
+
+    // Creep through all the lanes
+    for (int currentLane = 0; currentLane < lanes; currentLane++) {
+      while (link->bitwidth() < currentBit + bitwidth) {
+        currentLink++;
+        currentBit = 0;
+        if (currentLink >= cand->in_links().size()) {
+          return false;
+        }
+        link = cand->in_links()[currentLink];
+      }
+      if (link == skip) {
+        return false;
+      }
+      currentBit += bitwidth;
+    }
+    // Now we are at the end and it can map
+    return true;
+  }
+
+  void check_vport_link_unassign(ssivport* ivport, sslink* link) {
+    for_each_sched([&](Schedule& sched) {
+      auto dfgnodes = sched.dfg_nodes_of(0, ivport);
+      if (dfgnodes.size() != 1)
+        return;
+
+      auto input = dynamic_cast<dfg::InputPort*>(dfgnodes[0].first);
+
+      if (!inputCreep(input, ivport, link)) {
+        sched.unassign_dfgnode(dfgnodes[0].first); 
+      }
+    });
+  }
+
+  void check_vport_link_unassign(ssovport* ovport, sslink* link) {
+    for_each_sched([&](Schedule& sched) {
+      auto dfgnodes = sched.dfg_nodes_of(0, ovport);
+      if (dfgnodes.size() != 1)
+        return;
+      auto output = dynamic_cast<dfg::OutputPort*>(dfgnodes[0].first);
+
+      if (!outputCreep(output, ovport, link)) {
+        sched.unassign_dfgnode(dfgnodes[0].first); 
+      }
+    });
+  }
+
   /**
    * @brief Unassigns a link from all schedules
    * 
@@ -985,18 +1263,17 @@ class CodesignInstance {
    */
   void unassign_link(sslink* link) {
     for_each_sched([&](Schedule& sched) {
-      
-      DSA_LOG(UNASSIGN) << "Unassign link " << link->id();
-      sched.verify();
       for (int slot = 0; slot < sched.num_slots(link); ++slot) {
-        for (auto& p : sched.dfg_edges_of(slot, link)) {
-          // TODO: consider just deleteting the edge, and having the scheduler
-          // try to repair the edge schedule -- this might save some time
-          // sched.unassign_edge(p.first);
-          DSA_CHECK(sched.ssdfg()->edges.size() > p.eid) << "Edge " << p.eid << " not found";
-          sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].def());
-          sched.unassign_dfgnode(sched.ssdfg()->edges[p.eid].use());
+        auto& edges = sched.dfg_edges_of(slot, link);
+        for (auto it = edges.begin(); it != edges.end();) {
+          
+          auto& edge = sched.ssdfg()->edges[it->eid];
+
+          sched.unassign_dfgnode(edge.def());
+          sched.unassign_dfgnode(edge.use());
+          //sched.unassign_edge(&edge);
         }
+        DSA_CHECK(sched.link_prop()[link->id()].slots[slot].edges.empty());
       }
     });
   }
@@ -1025,11 +1302,17 @@ class CodesignInstance {
   void unassign_node(ssnode* node) {
     for_each_sched([&](Schedule& sched) {
       for (int slot = 0; slot < sched.num_slots(node); ++slot) {
-        for (auto& p : sched.dfg_nodes_of(slot, node)) {
-          if (p.first) {
-            sched.unassign_dfgnode(p.first); 
-          }
+        auto& vertices = sched.dfg_nodes_of(slot, node);
+        for (auto i = vertices.begin(); i != vertices.end();) {
+          sched.unassign_dfgnode(i->first);
         }
+        DSA_CHECK(sched.dfg_nodes_of(slot, node).empty());
+
+        auto& passthroughs = sched.dfg_passthroughs_of(slot, node);
+        for (auto i = passthroughs.begin(); i != passthroughs.end();) {
+          sched.remove_passthrough_from_edge(i->first, {i->second, node});
+        }
+        DSA_CHECK(sched.dfg_passthroughs_of(slot, node).empty());
       }
     });
   }
@@ -1040,18 +1323,17 @@ class CodesignInstance {
    * @param node the node to check
    * @param deleting whether a link will be deleted from the schedule
    */
-  void check_stated(ssnode* node, bool checkUnassign=true) {
+  void check_stated(ssnode* node) {
     if (auto vport = dynamic_cast<SyncNode*>(node)) {
-      int prev_capability = vport->bitwidth_capability();
+      bool prev_stated = vport->vp_stated();
       if (vport->isInputPort() && vport->out_links().size() < 2) {
         vport->vp_stated(false);
       }
       if (vport->isOutputPort() && vport->in_links().size() < 2) {
         vport->vp_stated(false);
       }
-      if (checkUnassign) {
+      if (prev_stated != vport->vp_stated())
         unassign_node(vport);
-      }
     }
   }
 
@@ -1059,13 +1341,8 @@ class CodesignInstance {
    * @brief Adds a link to the ADG
    * 
    */
-  sslink* add_link(ssnode* source, ssnode* sink, int souceSlot=-1, int sinkSlot=-1, bool unassign=false) {
-    verify();
+  sslink* add_link(ssnode* source, ssnode* sink, int souceSlot=-1, int sinkSlot=-1) {
     auto* sub = _ssModel.subModel();
-    
-    check_stated(source, unassign);
-    check_stated(sink, unassign);
-    
     auto* link = sub->add_link(source, sink, souceSlot, sinkSlot);
     return link;
   }
@@ -1075,36 +1352,21 @@ class CodesignInstance {
    * 
    * @param link link to delete
    */
-  void delete_link(sslink* link, bool unassign=true) {
-    verify();
-    
+  void delete_link(sslink* link, bool unassign_vport=true) {
     //bool used = check_link_used(link);
     auto* sub = _ssModel.subModel();
 
     if (auto ivport = dynamic_cast<ssivport*>(link->source())) {
-      
-      if (unassign) 
-        unassign_node(ivport);
-
-
-      // Check if stated property must be changed due to deletion of link
-      if (ivport->out_links().size() <= 2) {
-        ivport->vp_stated(false);
-        if (unassign)
-          unassign_node(ivport);
+      if (unassign_vport) {
+        check_vport_link_unassign(ivport, link);
+        check_stated(link->source());
       }
     }
 
     if (auto ovport = dynamic_cast<ssovport*>(link->sink())) {
-
-      if (unassign) 
-        unassign_node(ovport);
-
-      // Check if stated property must be changed due to deletion of link
-      if (ovport->in_links().size() <= 2) {
-        ovport->vp_stated(false);
-        if (unassign)
-          unassign_node(ovport);
+      if (unassign_vport) {
+        check_vport_link_unassign(ovport, link);
+        check_stated(link->sink());
       }
     }
 
@@ -1113,10 +1375,10 @@ class CodesignInstance {
 
     sub->delete_link(link->id());
 
-    for_each_sched([&](Schedule& sched) { 
+    for_each_sched([&](Schedule& sched) {
       sched.remove_link(link->id());
     });
-
+    
     delete link;
 
     verify();
@@ -1142,14 +1404,13 @@ class CodesignInstance {
     return overprovisioned;
   }
 
-  int check_schedules() {
+  std::pair<int, std::vector<std::string>> check_schedules() {
     int num_not_working = 0;
+    std::vector<std::string> not_working_schedules;
     for (int i = 0; i < workload_array.size(); ++i) {
       bool working_schedule = false;
       auto& ws = workload_array[i];
       for (Schedule& sched : ws.sched_array) {
-        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
-          continue;
         if (sched.is_complete<dfg::Node*>()) {
           working_schedule = true;
           break;
@@ -1157,9 +1418,10 @@ class CodesignInstance {
       }
       if (!working_schedule) {
         num_not_working++;
+        not_working_schedules.push_back(ws.sched_array[0].ssdfg()->filename);
       }
     }
-    return num_not_working;
+    return std::make_pair(num_not_working, not_working_schedules);
   }
 
   double configuration_performance(int num_cores_local, int num_banks_local, int system_bus_width_local) {
@@ -1177,8 +1439,6 @@ class CodesignInstance {
       auto& ws = workload_array[i];
       double score = (double)1e-3;     
       for (Schedule& sched : ws.sched_array) {
-        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
-          continue;
         std::string spm_performance = "";
         std::string l2_performance = "";
         std::string dram_read_performance = "";
@@ -1347,21 +1607,6 @@ class CodesignInstance {
     double total_score = 1.0;
     res.resize(workload_array.size());
 
-    // First Check to make sure that everything schedules
-    int num_not_scheduled = check_schedules();
-    if (num_not_scheduled != 0) {
-      dse_fail_reason = std::to_string(num_not_scheduled) + " schedules not working";
-      return std::make_pair<double, double>(1.0, 0.0);
-    }
-
-    // Now Check to make sure that everything is not overprovisioned
-    int num_overproved = check_overprovisioning();
-    if  (num_overproved != 0) {
-      dse_fail_reason = std::to_string(num_overproved) + " schedules overprovisioned";
-      // The objective should be slightly bigger than failing schedules
-      return std::make_pair<double, double>(1.25, 0.0);
-    }
-
     int best_system_bus_size = -1;
     int best_num_cores = -1;
     int best_num_banks = -1;
@@ -1398,8 +1643,6 @@ class CodesignInstance {
       std::vector<std::pair<std::string, std::string>> dram_performance;
       std::vector<std::pair<std::string, std::string>> l2_performance;        
       for (Schedule& sched : ws.sched_array) {
-        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector)
-          continue;
         
         std::string spm_performance_local = "";
         std::string l2_performance_local = "";
@@ -1432,6 +1675,30 @@ class CodesignInstance {
     dfg_dram_performances = _dfg_dram_performances;
     workload_weights = _workload_weights;
     workload_performances = _workload_performances;
+
+    // First Check to make sure that everything schedules
+    std::pair<int, std::vector<std::string>> num_not_scheduled = check_schedules();
+    if (num_not_scheduled.first != 0) {
+      std::ostringstream s;
+      s << std::to_string(num_not_scheduled.first) << " schedules not working (";
+      for (auto& dfg : num_not_scheduled.second) {
+        s << dfg << " ";
+      }
+      s << ")";
+
+
+      dse_fail_reason = s.str();
+
+      return std::make_pair<double, double>(1.0, 0.0);
+    }
+
+    // Now Check to make sure that everything is not overprovisioned
+    int num_overproved = check_overprovisioning();
+    if  (num_overproved != 0) {
+      dse_fail_reason = std::to_string(num_overproved) + " schedules overprovisioned";
+      // The objective should be slightly bigger than failing schedules
+      return std::make_pair<double, double>(1.25, 0.0);
+    }
 
     double total_weights = std::accumulate(workload_weights.begin(), workload_weights.end(), 0.0);
     total_score = pow(total_score, (1.0 / total_weights));
@@ -1571,9 +1838,6 @@ class CodesignInstance {
     int count = 0;
     for (auto workload : workload_array) {
       for (auto sched : workload.sched_array) {
-        if (max_vector != -1 && sched.unrollDegree() > (int) max_vector) {
-          continue;
-        }
         count++;
       }
     }
@@ -1798,63 +2062,6 @@ class CodesignInstance {
   }
 
   /**
-   * @brief Create a adjacency matrix object of the current ADG
-   * Nodes with an ingoing or outgoing connection will have a one
-   * Otherwise, a zero
-   * 
-   * @return torch::Tensor the adjacency matrix
-   */
-  torch::Tensor create_adjacency_matrix() {
-    auto* sub = _ssModel.subModel();
-
-    int num_nodes = sub->node_list().size();
-    torch::Tensor adjacency_matrix = torch::zeros({num_nodes, num_nodes});
-
-    // Loop through all the nodes
-    for (auto& node : sub->node_list()) {
-      // Set all the in_links to 1
-      for (auto& link : node->in_links()) {
-        adjacency_matrix.index_put_({node->id(), link->source()->id()}, 1);
-        adjacency_matrix.index_put_({link->source()->id(), node->id()}, 1);
-      }
-      // Set all the out_links to 1
-      for (auto& link : node->out_links()) {
-        adjacency_matrix.index_put_({node->id(), link->sink()->id()}, 1);
-        adjacency_matrix.index_put_({link->sink()->id(), node->id()}, 1);
-      }
-    }
-
-    return adjacency_matrix;
-  }
-
-  /**
-   * @brief Creates a feature vector for each node in the ADG
-   * 
-   * 
-   * 
-   * 
-   * @param node the node to create a feature vector for
-   * @return torch::Tensor 
-   */
-
-  /*
-  torch::Tensor node_features(ssnode* node) {
-    torch::Tensor features = torch::zeros({1, 10});
-    
-    if (auto sw = dynamic_cast<ssswitch*>(node)) {
-    } else if (auto fu = dynamic_cast<ssfu*>(node)) {
-    } else if (auto ivport = dynamic_cast<ssivport*>(node)) {
-    } else if (auto ovport = dynamic_cast<ssovport*>(node)) {
-    } else if (auto dma = dynamic_cast<ssdma*>(node)) {
-    } else if (auto rec = dynamic_cast<ssrecurrence*>(node)) {
-    } else if (auto gen = dynamic_cast<ssgenerate*>(node)) {
-    } else if (auto spm = dynamic_cast<ssscratchpad*>(node)) {
-    } else {
-      DSA_CHECK(false) << "Unknown node type";
-    }
-  } */
-
-  /**
    * @brief Collapses the links through a node, of a given edge
    * 
    * @param n node to collapse
@@ -1878,8 +2085,6 @@ class CodesignInstance {
 
         // Repair Schedule
         
-        
-
         if (collapsed_link != nullptr)
           collapsed_links.push_back(collapsed_link);
         return;
@@ -1902,7 +2107,7 @@ class CodesignInstance {
             not_collapsed = true;
             continue;
           }
-          DSA_INFO << "Collapsing node " << n->name() << " with link " << link.second->name() << " and link " << edge.links[j + 1].second->name() << " on edge " << i;
+          DSA_LOG(COLLAPSE) << "Collapsing node " << n->name() << " with link " << link.second->name() << " and link " << edge.links[j + 1].second->name() << " on edge " << i;
           
           ssnode* src = link.second->source();
           int src_slot = link.first;
@@ -1918,27 +2123,25 @@ class CodesignInstance {
 
           // Allocate space for link
           sched.allocate_space();
-
+          
+          /*
           // Now repair schedule
 
           // First Remove old links from schedule
           sched.remove_link_from_edge(&sched.ssdfg()->edges[i], link);
           sched.remove_link_from_edge(&sched.ssdfg()->edges[i], next_link);
-          edge.links.erase(edge.links.begin() + j + 1);
-          edge.links.erase(edge.links.begin() + j);
 
           // Remove passthrough if functional unit
-          if (n->type() == ssnode::NodeType::FunctionUnit) {
-            for (auto& passthrough : edge.passthroughs) {
-              if (passthrough.second->id() == n->id()) {
-                sched.remove_passthrough_from_edge(&sched.ssdfg()->edges[i], passthrough);
-              }
+          for (auto& passthrough : edge.passthroughs) {
+            if (passthrough.second->id() == n->id()) {
+              sched.remove_passthrough_from_edge(&sched.ssdfg()->edges[i], passthrough);
             }
           }
 
           // Now add new link to schedule
           sched.assign_edgelink(&sched.ssdfg()->edges[i], src_slot, collapsed_link, j);
           collapsed_links.push_back(collapsed_link);
+          */
         }
       }
       return;
@@ -1957,7 +2160,7 @@ class CodesignInstance {
    * This property is important for prunning which requires schedulability
    * remains
    */
-  void stated_collapse(ssnode* n, bool preserve_schedule=true, bool unassign=true) {
+  void stated_collapse(ssnode* n) {
     auto* sub = _ssModel.subModel();
     if (auto sync = dynamic_cast<SyncNode*>(n)) {
       if (sync->vp_stated()) {
@@ -1967,22 +2170,30 @@ class CodesignInstance {
         // If it doesn't use a crossbar then the first link must be deleted
         // Otherwise we should delete a random link
         if (sync->isInputPort()) {
-          if (sync->vp_impl() == 2) 
-            delete_link(sync->out_links()[0], unassign);
-          else if (!preserve_schedule) {
-            int linkToDelete = rand() % sync->out_links().size();
-            delete_link(sync->out_links()[linkToDelete], unassign);
-          }
+          delete_link(sync->out_links()[0], false);
         } else {
-          if (sync->vp_impl() == 2)
-            delete_link(sync->in_links()[0], unassign);
-          else if (!preserve_schedule) {
-            int linkToDelete = rand() % sync->in_links().size();
-            delete_link(sync->in_links()[linkToDelete], unassign);
-          }
+          delete_link(sync->in_links()[0], false);
         }
-        if (unassign && stated_mapped(sync)) 
-          unassign_node(sync);
+
+        for_each_sched([&](Schedule& sched) {
+          auto dfgnodes = sched.dfg_nodes_of(0, n);
+
+          if (dfgnodes.size() != 1)
+            return;
+
+          if (auto input = dynamic_cast<dfg::InputPort*>(dfgnodes[0].first)) {
+            if (input->stated) {
+              sched.unassign_dfgnode(dfgnodes[0].first); 
+            }
+          } else if (auto output = dynamic_cast<dfg::OutputPort*>(dfgnodes[0].first)) {
+            bool stated = output->penetrated_state >= 0;
+            if (stated) {
+              sched.unassign_dfgnode(dfgnodes[0].first); 
+            }
+          } else {
+            DSA_CHECK(false) << "Unknown node type";
+          }
+        });
       }
     }
   }
@@ -2048,8 +2259,7 @@ class CodesignInstance {
    * @param forward_vport whether to forward the links of vport
    * @param add_fifo whether to add fifo depths to all nodes after
    */
-  void delete_node(ssnode* n, bool collapse_links=false, bool forward_vport=false, bool add_fifo=false, bool unassign=true) {
-
+  void delete_node(ssnode* n, bool collapse_links=false, bool forward_vport=false, bool add_fifo=false) {
     auto* sub = _ssModel.subModel();
     
     std::unordered_set<ssfu*> fifos;
@@ -2058,6 +2268,7 @@ class CodesignInstance {
     if (collapse_links) {
       collapse_and_repair(n, collapsed_links);
     }
+    
     
     for_each_sched([&](Schedule& sched) {
       auto edges = sched.ssdfg()->edges;
@@ -2071,14 +2282,12 @@ class CodesignInstance {
 
     for_each_sched([&](Schedule& sched) { sched.allocate_space(); });
 
-    verify();
-
     while (n->in_links().size() > 0) {
-      delete_link(n->in_links()[0], unassign);
+      delete_link(n->in_links()[0]);
     }
 
     while (n->out_links().size() > 0) {
-      delete_link(n->out_links()[0], unassign);
+      delete_link(n->out_links()[0]);
     }
 
     unassign_node(n);
@@ -2086,7 +2295,6 @@ class CodesignInstance {
 
     sub->delete_node(n->id());
     for_each_sched([&](Schedule& sched) { sched.remove_node(n->id()); });
-    for_each_sched([&](Schedule& sched) { sched.verify(); });
 
     if (collapsed_links.size() > 0) {
       std::ostringstream s;
@@ -2124,10 +2332,5 @@ class CodesignInstance {
 };
 
 namespace dsa {
-
-void VectorDesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_size=8);
-
-void DesignSpaceExploration(SSModel &ssmodel, const std::string &pdg_filename, int max_vector_size=-1);
-
-void ExploreDesign(CodesignInstance* cur_ci, SSModel& ssmodel, int max_vector_size);
+void DesignSpaceExploration(CodesignInstance* cur_ci);
 } // namespace dsa

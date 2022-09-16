@@ -1,11 +1,13 @@
 #pragma once
 
 #include <iostream>
+#include <cstdio>
 #include <map>
 #include <ostream>
 #include <set>
 #include <string>
 #include <vector>
+
 #include "dsa/arch/utils.h"
 #include "dsa/arch/fabric.h"
 #include "dsa/arch/fu_model.h"
