@@ -19,7 +19,9 @@
 #define DSA_NEWLINE std::endl
 #endif
 
+#ifdef ENV_CACHE
 #include "dsa/core/singleton.h"
+#endif
 
 namespace dsa {
 

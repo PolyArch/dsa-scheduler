@@ -4,17 +4,6 @@
 namespace dsa {
 namespace dfg {
 
-const char* MetaPort::DataText[] = {
-    "memory",
-    "spad",
-    "localport",
-    "remoteport",
-};
-
-const char* MetaPort::OperationText[] = {
-    "read", "write", "indread", "indwrite", "atomic",
-};
-
 CompileMeta::CompileMeta(const MetaPort& meta, VectorPort* parent)
     : MetaPort(meta), parent(parent) {
   DSA_CHECK(parent);

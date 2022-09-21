@@ -22,6 +22,8 @@ class SSModel {
 
   SpatialFabric* subModel() { return (_subModel); }
 
+  void extract_llvm_flags();
+
   void set_dispatch_inorder(bool d) { _dispatch_inorder = d; }
   bool dispatch_inorder() { return _dispatch_inorder; }
 

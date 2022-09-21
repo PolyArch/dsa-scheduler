@@ -191,3 +191,56 @@ SSModel::SSModel(const char* filename_) : filename(filename_) {
   _subModel->post_process();
   
 }
+
+void SSModel::extract_llvm_flags() {
+
+  dsa::SSModel &Model = *this;
+
+  {
+    bool RecBusFound = false;
+    bool IndirectFound = false;
+    bool TemporalFound = false;
+    int MostFineGrainFU = 64;
+    for (auto *Elem : Model.subModel()->node_list()) {
+      switch (Elem->type()) {
+      case dsa::ssnode::NodeType::Recurrance: {
+        RecBusFound = true;
+        break;
+      }
+      case dsa::ssnode::NodeType::DirectMemoryAccess: {
+        auto *DMA = dynamic_cast<dsa::ssdma*>(Elem);
+        IndirectFound = IndirectFound || (DMA->indirectLength1DStream() || DMA->indirectIndexStream() || DMA->indirectStride2DStream());
+        break;
+      }
+      case dsa::ssnode::NodeType::Scratchpad: {
+        auto *SPM = dynamic_cast<dsa::ssscratchpad*>(Elem);
+        IndirectFound = IndirectFound || (SPM->indirectIndexStream() || SPM->indirectLength1DStream() || SPM->indirectStride2DStream());
+        break;
+      }
+      case dsa::ssnode::NodeType::FunctionUnit: {
+        auto *FU = dynamic_cast<dsa::ssfu*>(Elem);
+        TemporalFound = TemporalFound || FU->is_shared();
+        MostFineGrainFU = std::min(MostFineGrainFU, FU->granularity());
+        break;
+      }
+      default:
+        break;
+      }
+    }
+    std::ofstream ofs(".extracted-llvm-flags");
+
+    // MC.REC = MC.REC && RecBusFound;
+    ofs << "REC " << RecBusFound << std::endl;
+    if (!RecBusFound) {
+      DSA_WARNING << "Recurrence bus capability not found!";
+    }
+    // MC.IND = MC.IND && IndirectFound;
+    ofs << "IND " << IndirectFound << std::endl;
+    if (!IndirectFound) {
+      DSA_WARNING << "Indirect memory capability not found!";
+    }
+    // MC.GRANULARITY = MostFineGrainFU;
+    ofs << "FU-GRAN " << MostFineGrainFU << std::endl;
+    DSA_WARNING << "ADG finest granularity is " << MostFineGrainFU;
+  }
+}

@@ -54,6 +54,7 @@ int main(int argc, char* argv[]) {
     ("w,sched-workers", "The number of workers for scheduling.", default_1)
     ("route-along", "Route along with a master lane when scheduling deomposable arch.", default_d0)
     ("a,compat-adg", "Parse the ADG in compatible version.", default_false)
+    ("extract-llvm-flags", "Extract LLVM flags.")
     ("h,help", "Print the help information.");
   
   //options.allow_unrecognised_options();
@@ -77,6 +78,13 @@ int main(int argc, char* argv[]) {
 
   // Get array of all args inputted
   auto args = parsed.unmatched();
+
+  if (parsed.count("extract-llvm-flags")) {
+    DSA_CHECK(args.size() == 1) << "Usage: ss_sched --extract-llvm-flags [dfg]";
+    SSModel ssmodel(args[0].c_str());
+    ssmodel.extract_llvm_flags();
+    return 0;
+  }
 
   // See if the Argument List is Invalid
   if (args.size() != 1 && args.size() != 2) {

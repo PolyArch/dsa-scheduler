@@ -14,6 +14,10 @@ enum class OperandType { data, ctrl, self, ctrl_true, ctrl_false, local_reg, unk
 constexpr char const* OPERAND_TYPE[] = {"data", "ctrl", "self",
                                         "pred", "inv_pred", "register", "<unknown>"};
 
+constexpr char const* MetaDataText[] = {"memory", "spad", "localport", "remoteport"};
+
+constexpr char const* MetaOperationText[] = {"read", "write", "indread", "indwrite", "atomic"};
+
 struct MetaPort {
   enum class Data {
     Memory,
@@ -23,7 +27,6 @@ struct MetaPort {
     Unknown,
   };
 
-  static const char* DataText[(int)Data::Unknown];
 
   enum class Operation {
     Read,
@@ -34,7 +37,6 @@ struct MetaPort {
     Unknown,
   };
 
-  static const char* OperationText[(int)Operation::Unknown];
 
   Data source, dest;
 
@@ -67,7 +69,7 @@ struct MetaPort {
     if (key == "src" || key == "dest") {
       auto& ref = key == "src" ? source : dest;
       for (int i = 0; i < (int)Data::Unknown; ++i) {
-        if (val == DataText[i]) {
+        if (val == MetaDataText[i]) {
           ref = (Data)i;
           success = true;
           break;
@@ -79,7 +81,7 @@ struct MetaPort {
       }
     } else if (key == "op") {
       for (int i = 0; i < (int)Operation::Unknown; ++i) {
-        if (val == OperationText[i]) {
+        if (val == MetaOperationText[i]) {
           op |= 1 << i;
           success = true;
           break;
@@ -107,17 +109,17 @@ struct MetaPort {
 
   void to_pragma(std::ostream& os) const {
     if (source != Data::Unknown) {
-      os << "#pragma src=" << DataText[(int)source] << "\n";
+      os << "#pragma src=" << MetaDataText[(int)source] << "\n";
     }
     if (dest != Data::Unknown) {
-      os << "#pragma dest=" << DataText[(int)dest] << "\n";
+      os << "#pragma dest=" << MetaDataText[(int)dest] << "\n";
     }
     if (!dest_port.empty()) {
       os << "#pragma dest=" << dest_port << "\n";
     }
     for (int i = 0; i < (int)Operation::Unknown; ++i) {
       if (op >> i & 1) {
-        os << "#pragma op=" << OperationText[i] << "\n";
+        os << "#pragma op=" << MetaOperationText[i] << "\n";
       }
     }
     if (conc) {
