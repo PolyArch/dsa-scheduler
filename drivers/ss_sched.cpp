@@ -202,6 +202,7 @@ int main(int argc, char* argv[]) {
     // Print the overall scheduled adg
     codesign->printJson("viz/sched_adg.json");
     
+    
     // Now print the individual schedule stats
     codesign->printScheduleStats();
 

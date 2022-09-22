@@ -211,37 +211,22 @@ inline void sched_graphviz(const std::string& name, SpatialFabric* fabric, Sched
   ofs << "Digraph G {" << std::endl;
   Sched_GVNode gpn(ofs, sched);
   Sched_GPLink gpl(ofs, sched);
-
-  ofs << "rankdir=LR;" << std::endl;
-  ofs << "packMode=\"clust\";" << std::endl;
   ofs << "splines=true;" << std::endl;
-  ofs << "subgraph cluster_spatial {" << std::endl;
-  ofs << "style=invis" << std::endl;
+
   for (auto* sw : fabric->switch_list()) {
     sw->Accept(&gpn);
   }
   for (auto* fu : fabric->fu_list()) {
     fu->Accept(&gpn);
   }
-  ofs << "}" << std::endl;
 
-  ofs << "subgraph cluster_input_ports {" << std::endl;
-  ofs << "style=invis" << std::endl;
   for (auto* ivp : fabric->input_list()) {
     ivp->Accept(&gpn);
   }
-  ofs << "}" << std::endl;
-
-  ofs << "subgraph cluster_output_ports {" << std::endl;
-  ofs << "style=invis" << std::endl;
-  // OVPort
   for (auto* ovp : fabric->output_list()) {
     ovp->Accept(&gpn);
   }
-  ofs << "}" << std::endl;
 
-  ofs << "subgraph cluster_data {" << std::endl;
-  ofs << "style=invis" << std::endl;
   for (auto* dma : fabric->dma_list()) {
     dma->Accept(&gpn);
   }
@@ -257,13 +242,12 @@ inline void sched_graphviz(const std::string& name, SpatialFabric* fabric, Sched
   for (auto* reg : fabric->reg_list()) {
     reg->Accept(&gpn);
   }
-  ofs << "}" << std::endl;
 
   for (auto node : fabric->node_list()) {
     node->Accept(&gpl);
   }
-
-  ofs << "}";
+  
+  ofs << "}" << std::endl;
 }
 
 }  // namespace pass

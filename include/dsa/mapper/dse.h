@@ -173,6 +173,11 @@ class CodesignInstance {
         DSA_CHECK(oshb.good());
         sched.printConfigHeader(oshb, name, true);
       }
+
+      std::string graphviz_sched = "viz/" +  name + ".gv";
+      sched.printGraphviz(graphviz_sched.c_str());
+      DSA_INFO << "Sched GV Generated. Print with Command:";
+      DSA_INFO << "dot -Tpng -o viz/" + name + ".png " + graphviz_sched; 
     });
   }
 
